@@ -1,4 +1,6 @@
 from curatarr import db
+from curatarr.integrations import IntegrationError
+from curatarr.lifecycle import execute_action
 from curatarr.models import (
     AcquisitionState,
     Library,
@@ -6,6 +8,7 @@ from curatarr.models import (
     LifecycleAction,
     MediaIdentity,
     MediaPart,
+    utcnow,
 )
 from curatarr.services import ingest_event, process_pending_events
 
@@ -163,3 +166,66 @@ def test_two_users_same_episode_count_once(app):
             .count()
             == 1
         )
+
+
+def test_sonarr_timeout_after_accepted_command_does_not_search_twice(app, monkeypatch):
+    with app.app_context():
+        library = Library(jellyfin_library_id="timeout-tv", name="TV", media_type="tv")
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="series",
+            title="Timed out series",
+            sonarr_id=21,
+            tvdb_id=123,
+        )
+        db.session.add(media)
+        db.session.flush()
+        db.session.add(
+            AcquisitionState(media_identity_id=media.id, state="PREFETCHING_NEXT")
+        )
+        action = LifecycleAction(
+            idempotency_key="season-search-timeout",
+            action_type="sonarr_season_search",
+            state="PENDING",
+            media_identity_id=media.id,
+            reason_text="Prefetch Season 2",
+            payload_json={
+                "episode_ids": [],
+                "search_now": True,
+                "sonarr_id": 21,
+                "season": 2,
+                "current_season": 1,
+            },
+        )
+        db.session.add(action)
+        db.session.commit()
+        searches = []
+
+        class FakeSonarr:
+            def queue(self):
+                return {"records": []}
+
+            def commands(self):
+                if not searches:
+                    return []
+                return [
+                    {
+                        "name": "SeasonSearch",
+                        "seriesId": 21,
+                        "seasonNumber": 2,
+                        "status": "queued",
+                        "queued": utcnow().isoformat(),
+                    }
+                ]
+
+            def season_search(self, series_id, season):
+                searches.append((series_id, season))
+                raise IntegrationError("Timeout after command was accepted")
+
+        monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: FakeSonarr())
+        assert execute_action(action.id) == "failed"
+        assert action.state == "FAILED_RETRYABLE"
+        assert execute_action(action.id) == "succeeded"
+        assert searches == [(21, 2)]
