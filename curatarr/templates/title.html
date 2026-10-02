@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>{{ media.title }}</h1><p>{{ media.media_type|title }} · {{ media.library.name }}</p>
+<form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="row g-3">
+  {% set fields = [('never_purge','Never Purge','choice'),('tv_inactivity_days','TV inactivity days','number'),('movie_inactivity_days','Movie inactivity days','number'),('minimum_mode','Minimum footprint','choice'),('minimum_episodes','First N episodes','number'),('acquisition_threshold','Completed episode trigger','number'),('meaningful_threshold','Meaningful watch threshold','number'),('grace_days','Grace days','number'),('review_mode','Review mode','choice'),('purge_strategy','Purge strategy','choice')] %}
+  {% set choices = {'never_purge':['true','false'],'minimum_mode':['first_n_episodes','season_1','entire_series'],'review_mode':['recommend','require_review','automatic'],'purge_strategy':['oldest_unwatched_first','oldest_watched_nonfavorite_first','weighted']} %}
+  {% for key, label, kind in fields %}<div class="col-md-6"><label class="form-label w-100">{{ label }}
+    {% if kind == 'number' %}<input class="form-control" type="number" min="0" name="{{ key }}" value="{{ values[key] if sources[key] == 'title' else '' }}" placeholder="Inherit {{ values[key] }}">
+    {% else %}<select class="form-select" name="{{ key }}"><option value="inherit" {% if sources[key] != 'title' %}selected{% endif %}>Inherit ({{ values[key] }})</option>{% for value in choices[key] %}<option value="{{ value }}" {% if sources[key] == 'title' and values[key]|string|lower == value %}selected{% endif %}>{{ value.replace('_',' ')|title }}</option>{% endfor %}</select>{% endif %}
+    <small class="text-secondary">Effective: {{ values[key] }} · {{ sources[key] }}</small>
+  </label></div>{% endfor %}
+</div><button class="btn btn-primary mt-3">Save overrides</button></form>
+<h2 class="h5 mt-4">Effective policy</h2><div class="table-responsive"><table class="table"><thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead><tbody>{% for key, value in values.items() %}<tr><td>{{ key.replace('_', ' ')|title }}</td><td>{{ value }}</td><td>{{ sources[key] }}</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

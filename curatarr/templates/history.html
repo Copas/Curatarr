@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>History</h1><form method="get" class="row g-2 mb-4"><div class="col-md-4"><input class="form-control" name="q" value="{{ title_query }}" placeholder="Title"></div><div class="col-md-3"><input class="form-control" name="type" value="{{ action_type }}" placeholder="Action type"></div><div class="col-md-3"><input class="form-control" name="state" value="{{ state }}" placeholder="State"></div><div class="col-md-2"><button class="btn btn-outline-light w-100">Filter</button></div></form><div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Action</th><th>State</th><th>Reason</th></tr></thead><tbody>
+{% for action in actions %}<tr><td>{{ action.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type }}</a></td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="4">No history yet.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Title overrides</h1><form method="get" class="d-flex gap-2 mb-4"><input class="form-control" type="search" name="q" value="{{ query }}" placeholder="Search title"><button class="btn btn-primary">Search</button></form>
+<div class="list-group">{% for media in rows %}<a class="list-group-item list-group-item-action" href="{{ url_for('main.title', media_id=media.id) }}">{{ media.title }} <span class="text-secondary">{{ media.media_type }}</span></a>{% endfor %}</div>
+{% endblock %}
+

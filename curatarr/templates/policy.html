@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>{{ library.name }} policy</h1><p class="text-secondary">Leave a field blank to inherit the global default.</p>
+<form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="row g-3">
+{% for key, label, type in [('minimum_mode','Minimum footprint','select'),('minimum_episodes','First N episodes','number'),('acquisition_threshold','Completed episode trigger','number'),('meaningful_threshold','Meaningful watch threshold','number'),('tv_inactivity_days','TV inactivity days','number'),('movie_inactivity_days','Movie inactivity days','number'),('grace_days','Grace days','number'),('notice_days','Leaving Soon days','number'),('purge_strategy','Purge strategy','select'),('review_mode','Review mode','select'),('review_expiry','Review expiration','select'),('quota_enabled','Quota enabled','select'),('high_water_bytes','High-water bytes','number'),('low_water_bytes','Low-water bytes','number'),('free_space_enabled','Free-space enforcement','select'),('disk_path','Arr-side disk path','text'),('low_free_percent','Low free-space threshold %','number'),('critical_free_percent','Critical free-space threshold %','number'),('low_pressure_review_mode','Low-pressure review mode','select'),('critical_pressure_review_mode','Critical-pressure review mode','select'),('dry_run','Dry run','select')] %}
+  <div class="col-md-6"><label class="form-label">{{ label }}
+  {% if type == 'number' %}<input class="form-control" type="number" min="0" name="{{ key }}" value="{{ policy.get(key, '') }}">
+  {% elif type == 'text' %}<input class="form-control" type="text" name="{{ key }}" value="{{ policy.get(key, '') }}" placeholder="/media/movies">
+  {% else %}<select class="form-select" name="{{ key }}"><option value="">Inherit</option>
+  {% set choices = {'minimum_mode':['first_n_episodes','season_1','entire_series'],'purge_strategy':['oldest_unwatched_first','oldest_watched_nonfavorite_first','weighted'],'review_mode':['recommend','require_review','automatic'],'low_pressure_review_mode':['recommend','require_review','automatic'],'critical_pressure_review_mode':['recommend','require_review','automatic'],'review_expiry':['manual_forever','auto_delete_after_notice'],'quota_enabled':['false','true'],'free_space_enabled':['false','true'],'dry_run':['true','false']} %}
+  {% for value in choices[key] %}<option value="{{ value }}" {% if policy.get(key)|string|lower == value %}selected{% endif %}>{{ value.replace('_',' ')|title }}</option>{% endfor %}</select>{% endif %}</label></div>
+{% endfor %}
+</div><button class="btn btn-primary mt-3">Save policy</button></form>
+<h2 class="h5 mt-4">Effective values</h2><div class="table-responsive"><table class="table"><thead><tr><th>Setting</th><th>Value</th><th>Source</th></tr></thead><tbody>{% for key, value in effective.items() %}<tr><td>{{ key.replace('_',' ')|title }}</td><td>{{ value }}</td><td>{{ sources[key] }}</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

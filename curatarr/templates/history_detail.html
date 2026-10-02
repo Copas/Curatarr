@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block content %}
+<p><a href="{{ url_for('main.history') }}">← History</a></p>
+<h1>{{ action.action_type.replace('_',' ')|title }}</h1>
+<div class="card p-3 mb-3"><dl class="row mb-0"><dt class="col-sm-3">When</dt><dd class="col-sm-9">{{ action.created_at }}</dd><dt class="col-sm-3">State</dt><dd class="col-sm-9">{{ action.state }}</dd><dt class="col-sm-3">Title</dt><dd class="col-sm-9">{{ media.title if media else '—' }}</dd><dt class="col-sm-3">Reason</dt><dd class="col-sm-9">{{ action.reason_text }}</dd>{% if action.last_error %}<dt class="col-sm-3">Last error</dt><dd class="col-sm-9">{{ action.last_error }}</dd>{% endif %}</dl></div>
+{% if action.payload_json %}<h2 class="h5">Decision inputs</h2><pre class="card p-3 overflow-auto">{{ action.payload_json|tojson(indent=2) }}</pre>{% endif %}
+{% if event %}<h2 class="h5">Observed event</h2><pre class="card p-3 overflow-auto">{{ event.normalized_json|tojson(indent=2) }}</pre>{% endif %}
+{% endblock %}

@@ -1,0 +1,10 @@
+body { background: #101923; color: #e7edf2; }
+.card { background: #172431; border: 1px solid #314357; }
+.curatarr-wordmark { display: block; width: 6.875rem; height: auto; overflow: visible; }
+.curatarr-logo .curatarr-arrow { transform-box: view-box; transform-origin: 50% 50%; animation: curatarr-spin 1.2s cubic-bezier(.4,0,.2,1) 100ms 1; }
+.curatarr-arrow-top { fill: #48b8ef; }
+.curatarr-arrow-bottom { fill: #ffb85c; }
+@keyframes curatarr-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .curatarr-logo .curatarr-arrow { animation: none; } }
+html[data-bs-theme="light"] .curatarr-arrow-top { fill: #087aaa; }
+html[data-bs-theme="light"] .curatarr-arrow-bottom { fill: #b46208; }

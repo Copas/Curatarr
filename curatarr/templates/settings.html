@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Settings</h1><p class="text-secondary">Connect each application with its API URL and key. Saved keys are never shown here.</p>
+{% if new_token %}<div class="alert alert-info">Copy this webhook token now; it will not be shown again: <code>{{ new_token }}</code></div>{% endif %}
+<div class="row g-3">
+{% for kind in ['jellyfin', 'sonarr', 'radarr'] %}
+  {% set integration = integrations.get(kind) %}
+  <div class="col-lg-4"><div class="card p-3 h-100"><h2 class="h5">{{ kind|title }}</h2>
+    <p>Status: {{ integration.health_state if integration else 'unconfigured' }}{% if integration and integration.secret_ref %} · Key saved{% endif %}</p>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="{{ kind }}">
+      <label class="form-label">URL<input class="form-control" type="url" name="base_url" required value="{{ integration.base_url if integration else '' }}"></label>
+      <label class="form-label">API key<input class="form-control" type="password" name="api_key" autocomplete="new-password" placeholder="{{ 'Leave blank to keep saved key' if integration else 'API key' }}"></label>
+      <button class="btn btn-primary">Test and save</button>
+    </form>
+  </div></div>
+{% endfor %}
+</div>
+<div class="card p-3 mt-4"><h2 class="h5">Jellyfin webhook</h2><p>Send JSON notifications to <code>/api/v1/webhook/jellyfin</code>. Set the shared token in the <code>X-Curatarr-Token</code> header.</p><p>Token status: {{ 'configured' if webhook_present else 'not configured' }}.</p><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="webhook"><label class="form-label">New shared token<input class="form-control" type="password" name="webhook_token"></label><button class="btn btn-outline-light">Save or generate token</button></form></div>
+<div class="card p-3 mt-4"><h2 class="h5">Reconciliation schedule</h2><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="scheduler"><label class="form-label">Interval (minutes)<input class="form-control" type="number" min="5" max="1440" name="interval_minutes" value="{{ interval_minutes }}"></label><button class="btn btn-outline-light">Save interval</button></form></div>
+<p class="mt-4 text-secondary">Dry run is enabled by default. To enable deletion for one library, set Dry run to Disabled in that library's policy.</p>
+{% endblock %}
