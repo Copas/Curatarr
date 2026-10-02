@@ -6,7 +6,7 @@ Phase 6 — Controlled deletion validation
 ## Completed
 - Flask app, database schema and migrations, health/status API, Bootstrap shell, branding, and container skeleton.
 - Jellyfin/Sonarr/Radarr clients and read-only discovery with stable provider-ID matching.
-- Durable webhook ingestion, duplicate-event suppression, playback rescue, and episode completion state.
+- Durable webhook ingestion, duplicate-event suppression, playback rescue, and episode completion state; missed-webhook reconciliation handles changed episode IDs, pagination without a reported total, and separate users.
 - TV current/next-season plan generation and durable Sonarr actions.
 - Policy inheritance, inactivity/grace rules, deterministic purge ranking, quota high/low selection, mapped disk-pressure selection, review actions, and dry-run deletion guard.
 - Reversible Leaving Soon poster snapshots, snooze/notice expiration, worker commands, and synthetic demo adapters.
@@ -15,7 +15,7 @@ Phase 6 — Controlled deletion validation
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
 ## In Progress
-- Expanding missed-webhook reconciliation coverage and live API compatibility checks.
+- Checking live API compatibility when test services become available; current local fixtures cover missed-webhook playback and favorite recovery.
 - Validating live test integrations and remaining concurrent playback/delete races, especially playback during an in-flight external request.
 
 ## Next
