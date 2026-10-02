@@ -1,6 +1,13 @@
 {% extends 'base.html' %}
 {% block content %}
 <h1>{{ media.title }}</h1><p>{{ media.media_type|title }} · {{ media.library.name }}</p>
+<div class="card p-3 mb-4"><h2 class="h5">Lifecycle decisions</h2>
+{% for candidate in candidates %}<div class="border-top border-secondary-subtle pt-2 mt-2"><strong>{{ candidate.state.replace('_',' ')|title }}</strong> · {{ candidate.reason_text }}<br>
+<span class="text-secondary">{{ '{:.1f}'.format(candidate.reclaimable_bytes / 1073741824) }} GiB reclaimable · {{ candidate.reason_code.replace('_',' ')|title }}{% if candidate.scheduled_delete_at %} · Scheduled {{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') }}{% endif %}</span>
+{% if candidate.score_detail_json %}<details><summary>Decision score and observations</summary><pre class="overflow-auto">{{ candidate.score_detail_json|tojson(indent=2) }}</pre></details>{% endif %}</div>
+{% else %}<p class="mb-0">No cleanup decision has been recorded for this title.</p>{% endfor %}
+</div>
+{% if actions %}<h2 class="h5">Recent history</h2><ul>{% for action in actions %}<li><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type.replace('_',' ')|title }}</a> · {{ action.state }} · {{ action.reason_text }}</li>{% endfor %}</ul>{% endif %}
 <form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="row g-3">
   {% set fields = [('never_purge','Never Purge','choice'),('tv_inactivity_days','TV inactivity days','number'),('movie_inactivity_days','Movie inactivity days','number'),('minimum_mode','Minimum footprint','choice'),('minimum_episodes','First N episodes','number'),('acquisition_threshold','Completed episode trigger','number'),('meaningful_threshold','Meaningful watch threshold','number'),('grace_days','Grace days','number'),('review_mode','Review mode','choice'),('purge_strategy','Purge strategy','choice')] %}
   {% set choices = {'never_purge':['true','false'],'minimum_mode':['first_n_episodes','season_1','entire_series'],'review_mode':['recommend','require_review','automatic'],'purge_strategy':['oldest_unwatched_first','oldest_watched_nonfavorite_first','weighted']} %}

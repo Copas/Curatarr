@@ -15,13 +15,26 @@
 <div class="row g-3 mb-4"><div class="col-md-6"><div class="card p-3"><h2 class="h6">Estimated reclaimed</h2><p class="display-6 mb-0">{{ '{:.1f}'.format(status.reclaimed_bytes / 1073741824) }} GiB</p></div></div><div class="col-md-6"><div class="card p-3"><h2 class="h6">Pending actions</h2><p class="display-6 mb-0">{{ status.pending_actions }}</p></div></div></div>
 <h2 class="h4">Libraries</h2>
 <div class="row g-3 mb-4">
-{% for library in libraries %}
-  <div class="col-md-6"><div class="card p-3"><h3 class="h5">{{ library.name }}</h3><p>{{ library.media_type|title }} · {{ '{:.1f}'.format((library.last_size_bytes or 0) / 1073741824) }} GiB</p><a href="{{ url_for('main.library_policy', library_id=library.id) }}">Edit policy</a></div></div>
+{% for report in library_reports %}
+  <div class="col-md-6"><div class="card p-3 h-100"><h3 class="h5">{{ report.library.name }}</h3>
+    <p class="mb-1">{{ report.library.media_type|title }} · {{ '{:.1f}'.format(report.size / 1073741824) }} GiB stored</p>
+    {% if report.high is not none %}<p class="mb-1">Quota: <span class="{{ 'text-warning' if report.pressure != 'normal' else 'text-success' }}">{{ report.pressure|title }}</span> · High {{ '{:.1f}'.format(report.high / 1073741824) }} GiB / Low {{ '{:.1f}'.format(report.low / 1073741824) }} GiB</p>
+    {% else %}<p class="mb-1 text-secondary">No library-size quota configured</p>{% endif %}
+    {% if report.free_space_enabled %}<p class="mb-1 text-secondary">Disk-space pressure is checked during reconciliation.</p>{% endif %}
+    <a href="{{ url_for('main.library_policy', library_id=report.library.id) }}">Policy and effective values</a></div></div>
 {% else %}<p>No libraries discovered yet. Add integrations in Settings, then discover.</p>{% endfor %}
 </div>
+<h2 class="h4">Recent acquisitions</h2>
+<div class="table-responsive mb-4"><table class="table"><thead><tr><th>Title</th><th>State</th><th>Current season</th><th>Next season</th></tr></thead><tbody>
+{% for acquisition in acquisitions %}<tr><td><a href="{{ url_for('main.title', media_id=acquisition.media_identity_id) }}">{{ media_titles.get(acquisition.media_identity_id, 'Unknown title') }}</a></td><td>{{ acquisition.state.replace('_',' ')|title }}</td><td>{{ acquisition.highest_demonstrated_season or '—' }}</td><td>{{ acquisition.target_next_season or '—' }}</td></tr>{% else %}<tr><td colspan="4">No recent acquisition plans.</td></tr>{% endfor %}
+</tbody></table></div>
 <h2 class="h4">Recent decisions</h2>
-<div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Action</th><th>Result</th><th>Reason</th></tr></thead><tbody>
-{% for action in actions %}<tr><td>{{ action.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ action.action_type }}</td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="4">No decisions yet.</td></tr>{% endfor %}
+<div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Title</th><th>Action</th><th>Result</th><th>Reason</th></tr></thead><tbody>
+{% for action in actions %}<tr><td>{{ action.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ media_titles.get(action.media_identity_id, '—') }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type.replace('_',' ')|title }}</a></td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No decisions yet.</td></tr>{% endfor %}
+</tbody></table></div>
+<h2 class="h4 mt-4">Recent errors</h2>
+<div class="table-responsive"><table class="table"><thead><tr><th>Action</th><th>State</th><th>Detail</th></tr></thead><tbody>
+{% for action in errors %}<tr><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type.replace('_',' ')|title }}</a></td><td>{{ action.state }}</td><td>{{ action.last_error or action.reason_text }}</td></tr>{% else %}<tr><td colspan="3">No recent errors.</td></tr>{% endfor %}
 </tbody></table></div>
 {% if demo_mode %}<div class="card p-3 mt-4"><h2 class="h5">Demo controls</h2><form class="d-flex flex-wrap gap-2" method="post" action="{{ url_for('main.demo_simulate') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select class="form-select w-auto" name="choice">{% for value in ['complete_episode','start_playback','favorite','unfavorite','advance_30_days','add_movie','increase_movie_size','outage_sonarr','outage_radarr','outage_jellyfin','restore_integrations'] %}<option value="{{ value }}">{{ value.replace('_',' ')|title }}</option>{% endfor %}</select><button class="btn btn-outline-light">Simulate</button></form></div>{% endif %}
 {% endblock %}

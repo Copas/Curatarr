@@ -23,13 +23,16 @@ from . import db
 from .integrations import CLIENTS, IntegrationError, normalized_url
 from .lifecycle import evaluate_retention, execute_approved, review_candidate
 from .models import (
+    AcquisitionState,
     Integration,
     Library,
     LifecycleAction,
     LifecycleEvent,
     MediaIdentity,
+    MediaPart,
     PurgeCandidate,
     TitleOverride,
+    UserMediaState,
     utcnow,
 )
 from .policy import effective_policy, validate_policy
@@ -93,6 +96,10 @@ def _status():
     integrations = {kind: "unconfigured" for kind in CLIENTS}
     for row in db.session.query(Integration).all():
         integrations[row.kind] = row.health_state
+    if current_app.config["DEMO_MODE"]:
+        outage = setting("demo_outage")
+        if outage in integrations:
+            integrations[outage] = "unhealthy (simulated)"
     reclaimed = (
         db.session.query(func.sum(PurgeCandidate.reclaimable_bytes))
         .join(LifecycleAction, LifecycleAction.candidate_id == PurgeCandidate.id)
@@ -212,17 +219,78 @@ def api_history():
 @bp.get("/")
 def overview():
     libraries = db.session.query(Library).all()
+    library_reports = []
+    for library in libraries:
+        media_type = "series" if library.media_type == "tv" else "movie"
+        policy, _ = effective_policy(
+            media_type,
+            setting("global_policy", {}),
+            library.policy.policy_json if library.policy else {},
+        )
+        size = (
+            db.session.query(func.sum(MediaPart.size_bytes))
+            .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+            .filter(
+                MediaIdentity.library_id == library.id, MediaPart.has_file.is_(True)
+            )
+            .scalar()
+            or 0
+        )
+        high = policy["high_water_bytes"] if policy["quota_enabled"] else None
+        low = policy["low_water_bytes"] if policy["quota_enabled"] else None
+        library_reports.append(
+            {
+                "library": library,
+                "size": size,
+                "high": high,
+                "low": low,
+                "pressure": "above high water"
+                if high is not None and size > high
+                else "normal",
+                "free_space_enabled": policy["free_space_enabled"],
+            }
+        )
     actions = (
         db.session.query(LifecycleAction)
         .order_by(LifecycleAction.created_at.desc())
         .limit(10)
         .all()
     )
+    errors = (
+        db.session.query(LifecycleAction)
+        .filter(
+            LifecycleAction.state.in_(
+                ["FAILED_RETRYABLE", "FAILED_FINAL", "UNKNOWN_RECONCILE"]
+            )
+        )
+        .order_by(LifecycleAction.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    acquisitions = (
+        db.session.query(AcquisitionState)
+        .filter(AcquisitionState.state != "DORMANT")
+        .order_by(AcquisitionState.updated_at.desc())
+        .limit(5)
+        .all()
+    )
+    media_ids = {
+        row.media_identity_id for row in actions + acquisitions if row.media_identity_id
+    }
+    media_titles = {
+        row.id: row.title
+        for row in db.session.query(MediaIdentity).filter(
+            MediaIdentity.id.in_(media_ids)
+        )
+    }
     return render_template(
         "overview.html",
         status=_status(),
-        libraries=libraries,
+        library_reports=library_reports,
         actions=actions,
+        errors=errors,
+        acquisitions=acquisitions,
+        media_titles=media_titles,
         demo_mode=current_app.config["DEMO_MODE"],
     )
 
@@ -465,7 +533,21 @@ def review():
         .order_by(PurgeCandidate.eligible_at)
         .all()
     )
-    return render_template("review.html", candidates=rows)
+    activity = {}
+    for candidate in rows:
+        states = (
+            db.session.query(UserMediaState)
+            .filter_by(media_identity_id=candidate.media_identity_id)
+            .all()
+        )
+        activity[candidate.id] = {
+            "last_played": max(
+                (state.last_played_at for state in states if state.last_played_at),
+                default=None,
+            ),
+            "favorite": any(state.favorite for state in states),
+        }
+    return render_template("review.html", candidates=rows, activity=activity)
 
 
 @bp.get("/posters/<media_id>")
@@ -650,7 +732,28 @@ def title(media_id):
             flash(str(exc), "danger")
         return redirect(url_for("main.title", media_id=media.id))
     values, sources = resolved_policy(media)
-    return render_template("title.html", media=media, values=values, sources=sources)
+    candidates = (
+        db.session.query(PurgeCandidate)
+        .filter_by(media_identity_id=media.id)
+        .order_by(PurgeCandidate.eligible_at.desc())
+        .limit(5)
+        .all()
+    )
+    actions = (
+        db.session.query(LifecycleAction)
+        .filter_by(media_identity_id=media.id)
+        .order_by(LifecycleAction.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    return render_template(
+        "title.html",
+        media=media,
+        values=values,
+        sources=sources,
+        candidates=candidates,
+        actions=actions,
+    )
 
 
 @bp.get("/titles")

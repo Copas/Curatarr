@@ -1,13 +1,16 @@
 {% extends 'base.html' %}
 {% block content %}
 <h1>Review queue</h1>
-<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Title</th><th>State</th><th>Reason</th><th>Reclaimable</th><th>Scheduled</th><th>Decision</th></tr></thead><tbody>
+<p class="text-secondary">Every candidate shows the observed reason and current review state. Open Details for its effective policy and decision history.</p>
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Title</th><th>State</th><th>Why</th><th>Last watched</th><th>Favorite</th><th>Reclaimable</th><th>Delete date</th><th>Decision</th></tr></thead><tbody>
 {% for candidate in candidates %}<tr>
   <td class="d-flex align-items-center gap-2"><img src="{{ url_for('main.poster', media_id=candidate.media.id) }}" width="44" height="66" loading="lazy" alt=""><a href="{{ url_for('main.title', media_id=candidate.media.id) }}">{{ candidate.media.title }}</a></td>
   <td>{{ candidate.state }}</td><td>{{ candidate.reason_text }}</td>
+  <td>{{ activity[candidate.id].last_played.strftime('%Y-%m-%d') if activity[candidate.id].last_played else 'Never observed' }}</td>
+  <td>{{ 'Yes' if activity[candidate.id].favorite else 'No' }}</td>
   <td>{{ '{:.1f}'.format(candidate.reclaimable_bytes / 1073741824) }} GiB</td>
   <td>{{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') if candidate.scheduled_delete_at else '—' }}</td>
-  <td><div class="d-flex flex-wrap gap-1">{% set choices = ['keep', 'snooze_30', 'snooze_90', 'never_purge'] if candidate.state == 'ELIGIBLE' else ['delete', 'keep', 'snooze_30', 'snooze_90', 'never_purge'] %}{% for choice in choices %}<form method="post" action="{{ url_for('main.review_action', candidate_id=candidate.id, choice=choice) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ 'btn-danger' if choice == 'delete' else 'btn-outline-light' }}">{{ choice.replace('_', ' ')|title }}</button></form>{% endfor %}</div></td>
-</tr>{% else %}<tr><td colspan="6">No pending candidates.</td></tr>{% endfor %}
+  <td><div class="d-flex flex-wrap gap-1"><a class="btn btn-sm btn-outline-info" href="{{ url_for('main.title', media_id=candidate.media.id) }}">Details</a>{% set choices = ['keep', 'snooze_30', 'snooze_90', 'never_purge'] if candidate.state == 'ELIGIBLE' else ['delete', 'keep', 'snooze_30', 'snooze_90', 'never_purge'] %}{% for choice in choices %}<form method="post" action="{{ url_for('main.review_action', candidate_id=candidate.id, choice=choice) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ 'btn-danger' if choice == 'delete' else 'btn-outline-light' }}">{{ choice.replace('_', ' ')|title }}</button></form>{% endfor %}</div></td>
+</tr>{% else %}<tr><td colspan="8">No pending candidates.</td></tr>{% endfor %}
 </tbody></table></div>
 {% endblock %}
