@@ -18,12 +18,12 @@ def configure_app(app, overrides: dict) -> None:
         SESSION_COOKIE_SECURE=_bool("CURATARR_SESSION_COOKIE_SECURE", False),
         CSRF_ENABLED=_bool("CURATARR_CSRF_ENABLED", True),
         DEMO_MODE=_bool("CURATARR_DEMO_MODE", False),
-        ALLOW_UNAUTHENTICATED=_bool("CURATARR_ALLOW_UNAUTHENTICATED", True),
+        ALLOW_UNAUTHENTICATED=_bool("CURATARR_ALLOW_UNAUTHENTICATED", False),
     )
     app.config.update(overrides)
     if (
         not app.debug
         and not app.testing
-        and app.config["SECRET_KEY"] == "development-only-change-me"
+        and app.config["SECRET_KEY"] in {"development-only-change-me", "change-me"}
     ):
-        app.logger.warning("Set CURATARR_SECRET_KEY before exposing this service")
+        raise RuntimeError("Set a stable, random CURATARR_SECRET_KEY before starting")
