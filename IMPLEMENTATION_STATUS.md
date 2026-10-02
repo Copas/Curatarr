@@ -12,6 +12,7 @@ Phase 6 — Controlled deletion validation
 - Reversible Leaving Soon poster snapshots, original-before-upload persistence, image-tag-aware restoration, snooze/notice expiration, worker commands, and synthetic demo adapters.
 - Pre-delete identity/queue/activity checks, fresh Sonarr episode-file mapping checks, a final playback check before each destructive request, uncertain-response reconciliation, and preserved TV played-state restoration.
 - Synthetic disk-pressure acceptance checks cover normal/low/critical free-space, insufficient reclaimable bytes, a changed queue, cleared pressure, and quota falling below its trigger. Malformed disk/queue/provider responses fail closed.
+- Overview reports current stored size, high/low-water state, recent acquisition decisions, errors, and integration health; Review shows playback/favorite and Leaving Soon state; title details show decision score and effective/inherited policy. Demo fixtures include review, recommend-only, and Leaving Soon candidates plus visible simulated outages.
 - Renewable database leases for event processing and library policy evaluation, plus atomic action claims; PostgreSQL checks pass for fresh/expired leases, work lasting past the original lease, four-process contention, and single-winner action execution.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
@@ -21,7 +22,7 @@ Phase 6 — Controlled deletion validation
 
 ## Next
 - Expand acceptance scenario coverage for remaining concurrent playback/delete races and live API failures.
-- Finish full UI reporting and confirm pressure-level behavior against real disk-space responses.
+- Finish advanced history filtering/reporting and confirm pressure-level behavior against real disk-space responses.
 - Validate image-tag behavior with a live Jellyfin version and test lease behavior across multiple hosts against a shared production-like database.
 - Validate controlled and automatic cleanup against real test integrations before production use.
 

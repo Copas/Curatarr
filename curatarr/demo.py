@@ -116,7 +116,7 @@ def seed_demo():
             jellyfin_id=f"demo-movie-{index}",
             radarr_id=index,
             tmdb_id=20000 + index,
-            added_at=now - timedelta(days=40 + index * 4),
+            added_at=now - timedelta(days=200 if index in (7, 8) else 40 + index * 4),
         )
         db.session.add(media)
         db.session.flush()
@@ -137,6 +137,17 @@ def seed_demo():
                     last_played_at=now - timedelta(days=90),
                 )
             )
+        if index in (7, 8):
+            state = "REVIEW" if index == 7 else "ELIGIBLE"
+            candidate = PurgeCandidate(
+                media_identity_id=media.id,
+                state=state,
+                reason_code="inactivity",
+                reason_text="No playback observed for more than 90 days.",
+                reclaimable_bytes=2_000_000_000,
+                score_detail_json={"acquired_days": 40, "unwatched_bonus": 30},
+            )
+            db.session.add(candidate)
     for library in libraries:
         library.last_size_bytes = sum(
             part.size_bytes
