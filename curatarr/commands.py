@@ -29,6 +29,14 @@ from .services import (
 
 
 def register_commands(app):
+    @app.cli.command("encrypt-secrets")
+    def encrypt_secrets_command():
+        """Encrypt credentials saved by older Curatarr versions."""
+        from .secrets import encrypt_legacy_secrets
+
+        count = encrypt_legacy_secrets()
+        click.echo(f"Encrypted {count} legacy database secrets")
+
     @app.cli.command("demo-seed")
     def demo_seed_command():
         """Populate deterministic synthetic libraries when demo mode is enabled."""

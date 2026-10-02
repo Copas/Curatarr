@@ -16,7 +16,9 @@ Python 3.12 or newer is required.
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 export CURATARR_SECRET_KEY='replace-with-a-random-secret'
+export CURATARR_ALLOW_UNAUTHENTICATED=true  # trusted loopback/LAN only
 .venv/bin/flask --app curatarr db upgrade
+.venv/bin/flask --app curatarr encrypt-secrets
 .venv/bin/python -m curatarr
 ```
 
@@ -28,7 +30,7 @@ In a second shell, run the persistent worker:
 
 The web app listens on port 8787 by default. Open Settings to enter Jellyfin, Sonarr, and Radarr URLs and keys, then run Discover from Overview. Saved keys are masked in the UI. The first Settings visit generates a webhook token and shows it once. Configure Jellyfin's webhook plugin to send JSON to `/api/v1/webhook/jellyfin` with that token in the `X-Curatarr-Token` request header. The webhook stays closed until the token exists.
 
-Use a unique `CURATARR_SECRET_KEY` before exposing the UI. Local unauthenticated operation is currently the only implemented access mode, so protect the port at the network layer. Browser mutations use CSRF tokens. Secrets are stored in the application database and must be protected with normal database access controls and backups.
+Use a unique, stable random `CURATARR_SECRET_KEY` before starting. Curatarr currently has no login system: unauthenticated operation must be explicitly enabled and the UI must be restricted to a trusted loopback/LAN or an authenticated reverse proxy. Browser mutations use CSRF tokens, which do not replace authentication. Integration keys and the webhook token are encrypted in the database using a key derived from `CURATARR_SECRET_KEY`; losing or changing that key makes them unreadable. Back up the key separately from the database. Existing installations should back up the database, run `db upgrade`, then run `encrypt-secrets` once; the command is safe to repeat.
 
 ## Retention behavior
 
@@ -40,7 +42,7 @@ Dry run is enabled by default. A library must explicitly set dry run to false be
 
 ## Containers
 
-Set `CURATARR_DB_PASSWORD` and `CURATARR_SECRET_KEY` in your deployment environment, then run `docker compose up --build`. The compose example uses PostgreSQL and persistent database/config volumes. It explicitly enables migration on web startup. If running outside compose, run `flask --app curatarr db upgrade` before each upgraded application version unless you intentionally set `CURATARR_AUTO_MIGRATE=true`.
+Set `CURATARR_DB_PASSWORD`, `CURATARR_SECRET_KEY`, and `CURATARR_ALLOW_UNAUTHENTICATED=true` in your deployment environment only after protecting access to the UI, then run `docker compose up --build`. The compose example binds the UI to `127.0.0.1:8787` and uses PostgreSQL and persistent database/config volumes. It runs migrations and legacy-secret encryption on web startup. If running outside compose, run `flask --app curatarr db upgrade` and `flask --app curatarr encrypt-secrets` before starting each upgraded application version unless you intentionally set `CURATARR_AUTO_MIGRATE=true`.
 
 The application requires no media volume. Poster snapshots are stored under application data and are never part of the source repository.
 

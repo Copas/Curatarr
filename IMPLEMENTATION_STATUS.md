@@ -13,6 +13,7 @@ Phase 6 — Controlled deletion validation
 - Pre-delete identity/queue/activity checks, fresh Sonarr episode-file mapping checks, a final playback check before each destructive request, uncertain-response reconciliation, and preserved TV played-state restoration.
 - Synthetic disk-pressure acceptance checks cover normal/low/critical free-space, insufficient reclaimable bytes, a changed queue, cleared pressure, and quota falling below its trigger. Malformed disk/queue/provider responses fail closed.
 - Overview reports current stored size, high/low-water state, recent acquisition decisions, errors, and integration health; Review shows playback/favorite and Leaving Soon state; title details show decision score and effective/inherited policy. Demo fixtures include review, recommend-only, and Leaving Soon candidates plus visible simulated outages.
+- Integration API keys and the webhook token are now encrypted at rest with an authenticated cipher derived from a stable application key. Existing plaintext rows have an idempotent `encrypt-secrets` upgrade command, run automatically after container migrations. Unauthenticated operation requires an explicit opt-in and compose binds the UI to loopback.
 - Renewable database leases for event processing and library policy evaluation, plus atomic action claims; PostgreSQL checks pass for fresh/expired leases, work lasting past the original lease, four-process contention, and single-winner action execution.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
@@ -28,7 +29,7 @@ Phase 6 — Controlled deletion validation
 
 ## Known Issues
 - No real-service credentials are available for live validation.
-- Authentication and encrypted-at-rest integration keys are not implemented.
+- Local account authentication is not implemented. The specification permits explicitly opted-in unauthenticated operation for a protected trusted network; do not expose the UI directly to an untrusted network.
 - Poster restoration uses Jellyfin's primary image tag or exact badge bytes. An ambiguous upload followed by image re-encoding before the new tag is recorded still needs manual recovery.
 - PostgreSQL lease renewal and same-host multi-process contention were validated locally; cross-host contention has not been validated.
 - An external delete already in flight cannot be cancelled by a later playback event; the next TV file request is stopped and partial cleanup requires manual review.

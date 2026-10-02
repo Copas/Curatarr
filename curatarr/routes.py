@@ -419,7 +419,15 @@ def settings():
             key = request.form.get("api_key", "")
             row = db.session.query(Integration).filter_by(kind=kind).first()
             if not key and row:
-                key = row.secret_ref
+                from .secrets import decrypt_secret
+
+                try:
+                    key = decrypt_secret(row.secret_ref)
+                except ValueError:
+                    flash(
+                        "Saved key cannot be decrypted; provide a new API key", "danger"
+                    )
+                    return redirect(url_for("main.settings"))
             if not key:
                 flash("API key is required", "danger")
                 return redirect(url_for("main.settings"))
@@ -435,7 +443,9 @@ def settings():
                 row = Integration(kind=kind, base_url=url)
                 db.session.add(row)
             row.base_url = url
-            row.secret_ref = key
+            from .secrets import encrypt_secret
+
+            row.secret_ref = encrypt_secret(key)
             row.detected_version = version
             row.health_state = "healthy"
             row.last_health_at = utcnow()

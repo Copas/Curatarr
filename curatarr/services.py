@@ -34,16 +34,28 @@ from .policy import (
 
 def setting(key, default=None):
     row = db.session.query(AppSetting).filter_by(key=key).first()
-    return row.value_json if row else default
+    if not row:
+        return default
+    if row.is_secret:
+        from .secrets import decrypt_secret
+
+        return decrypt_secret(row.value_json)
+    return row.value_json
 
 
 def set_setting(key, value):
+    is_secret = key == "webhook_token"
+    if is_secret and value is not None:
+        from .secrets import encrypt_secret
+
+        value = encrypt_secret(value)
     row = db.session.query(AppSetting).filter_by(key=key).first()
     if not row:
-        row = AppSetting(key=key, value_json=value)
+        row = AppSetting(key=key, value_json=value, is_secret=is_secret)
         db.session.add(row)
     else:
         row.value_json = value
+        row.is_secret = is_secret
     db.session.commit()
 
 
@@ -55,7 +67,13 @@ def client(kind):
     row = db.session.query(Integration).filter_by(kind=kind, enabled=True).first()
     if not row or not row.secret_ref:
         raise IntegrationError(f"{kind} is not configured")
-    return CLIENTS[kind](row.base_url, row.secret_ref)
+    from .secrets import decrypt_secret
+
+    try:
+        key = decrypt_secret(row.secret_ref)
+    except ValueError as exc:
+        raise IntegrationError(f"{kind} credential is unavailable") from exc
+    return CLIENTS[kind](row.base_url, key)
 
 
 def check_integration(kind):
