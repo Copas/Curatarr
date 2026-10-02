@@ -528,6 +528,15 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
         actual = external.get("tvdbId") if kind == "sonarr" else external.get("tmdbId")
         if expected is None or str(actual) != str(expected):
             return "External provider identity does not match"
+        if kind == "radarr":
+            remote_size = external.get("sizeOnDisk")
+            if remote_size is None and isinstance(external.get("movieFile"), dict):
+                remote_size = external["movieFile"].get("size")
+            local_size = sum(part.size_bytes for part in media.parts if part.has_file)
+            if remote_size is not None and (
+                type(remote_size) is not int or remote_size != local_size
+            ):
+                return "Radarr file size changed since discovery"
         jellyfin = client("jellyfin")
         jellyfin_item = jellyfin.item(media.jellyfin_id)
         if not isinstance(jellyfin_item, dict):
@@ -570,6 +579,23 @@ def _tv_file_targets(media, policy, arr):
     file_ids = {row.get("id") for row in remote_files}
     if not targets <= file_ids:
         raise ValueError("Sonarr episode-file inventory changed")
+    local_file_sizes = {}
+    for part in media.parts:
+        if part.kind == "episode" and part.has_file and part.arr_file_id is not None:
+            local_file_sizes[part.arr_file_id] = max(
+                local_file_sizes.get(part.arr_file_id, 0), part.size_bytes
+            )
+    for row in remote_files:
+        remote_size = row.get("size")
+        if (
+            row.get("id") in local_file_sizes
+            and remote_size is not None
+            and (
+                type(remote_size) is not int
+                or remote_size != local_file_sizes[row["id"]]
+            )
+        ):
+            raise ValueError("Sonarr file size changed since discovery")
     seen = set()
     for episode in remote_episodes:
         episode_id = episode.get("id")

@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from curatarr import db
 from curatarr.integrations import IntegrationError
 from curatarr.lifecycle import execute_action
@@ -229,3 +231,60 @@ def test_sonarr_timeout_after_accepted_command_does_not_search_twice(app, monkey
         assert action.state == "FAILED_RETRYABLE"
         assert execute_action(action.id) == "succeeded"
         assert searches == [(21, 2)]
+
+
+def test_specials_and_unaired_future_episodes_do_not_trigger_search(app):
+    with app.app_context():
+        library = Library(jellyfin_library_id="future-tv", name="TV", media_type="tv")
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="series",
+            title="Future series",
+            jellyfin_id="future-series",
+            sonarr_id=31,
+            tvdb_id=456,
+        )
+        db.session.add(media)
+        db.session.flush()
+        for season, episode, stored in [
+            (0, 1, False),
+            (1, 1, True),
+            (1, 2, False),
+            (2, 1, False),
+            (3, 1, False),
+        ]:
+            db.session.add(
+                MediaPart(
+                    media_identity_id=media.id,
+                    kind="episode",
+                    season_number=season,
+                    episode_number=episode,
+                    jellyfin_id="future-episode-1" if stored else None,
+                    sonarr_episode_id=100 + season * 10 + episode,
+                    has_file=stored,
+                    air_date=utcnow() + timedelta(days=30) if not stored else None,
+                )
+            )
+        db.session.commit()
+        ingest_event(
+            {
+                "event_id": "future-completion",
+                "event_type": "item_played",
+                "item_external_id": "future-episode-1",
+                "series_external_id": "future-series",
+                "season_number": 1,
+                "episode_number": 1,
+                "user_external_id": "viewer",
+                "played": True,
+            }
+        )
+        process_pending_events()
+        actions = (
+            db.session.query(LifecycleAction)
+            .filter_by(action_type="sonarr_season_search")
+            .all()
+        )
+        assert {action.payload_json["season"] for action in actions} == {1, 2}
+        assert all(not action.payload_json["search_now"] for action in actions)

@@ -183,6 +183,21 @@ def test_tv_delete_blocks_stale_shared_file_mapping(app, monkeypatch):
         assert all(part.has_file for part in parts)
 
 
+def test_tv_delete_blocks_changed_sonarr_file_size(app, monkeypatch):
+    with app.app_context():
+        candidate, parts = _series_candidate()
+        sonarr, calls = _sonarr(monkeypatch)
+        sonarr.episode_files = lambda _series_id: [
+            {"id": 100, "size": 100},
+            {"id": 200, "size": 999},
+            {"id": 300, "size": 100},
+        ]
+        assert execute_approved(candidate.id) == "blocked"
+        assert candidate.state == "BLOCKED"
+        assert calls == []
+        assert all(part.has_file for part in parts)
+
+
 def test_tv_delete_shared_unretained_file_once(app, monkeypatch):
     with app.app_context():
         candidate, parts = _series_candidate()
