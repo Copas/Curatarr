@@ -10,13 +10,13 @@ Phase 6 — Controlled deletion validation
 - TV current/next-season plan generation and durable Sonarr actions.
 - Policy inheritance, inactivity/grace rules, deterministic purge ranking, quota high/low selection, mapped disk-pressure selection, review actions, and dry-run deletion guard.
 - Reversible Leaving Soon poster snapshots, snooze/notice expiration, worker commands, and synthetic demo adapters.
-- Pre-delete identity/queue/activity checks, fresh Sonarr episode-file mapping checks, uncertain-response reconciliation, and preserved TV played-state restoration.
+- Pre-delete identity/queue/activity checks, fresh Sonarr episode-file mapping checks, a final playback check before each destructive request, uncertain-response reconciliation, and preserved TV played-state restoration.
 - Database leases for event processing and library policy evaluation, plus atomic action claims; PostgreSQL contention checks pass for fresh/expired leases and single-winner action execution.
-- Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, and queued-delete playback rescue.
+- Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
 ## In Progress
 - Expanding missed-webhook reconciliation coverage and live API compatibility checks.
-- Validating live test integrations and remaining concurrent playback/delete races.
+- Validating live test integrations and remaining concurrent playback/delete races, especially playback during an in-flight external request.
 
 ## Next
 - Expand acceptance scenario coverage for remaining concurrent playback/delete races and live API failures.
@@ -29,6 +29,7 @@ Phase 6 — Controlled deletion validation
 - Authentication and encrypted-at-rest integration keys are not implemented.
 - Poster restoration currently depends on exact image bytes returned by Jellyfin.
 - PostgreSQL lease/action contention was validated locally; longer-running and multi-node behavior has not been validated.
+- An external delete already in flight cannot be cancelled by a later playback event; the next TV file request is stopped and partial cleanup requires manual review.
 
 ## Decisions Made
 - SQLite for local tests; PostgreSQL in container deployment.
