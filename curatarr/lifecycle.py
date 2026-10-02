@@ -1,6 +1,7 @@
 """Reconciliation, review actions, and guarded external execution."""
 
 from datetime import timedelta
+from math import isfinite
 
 from sqlalchemy import func, update
 
@@ -86,13 +87,19 @@ def _queue_ids():
     result = {}
     for kind in ("sonarr", "radarr"):
         try:
-            payload = client(kind).queue()
-            rows = payload.get("records", []) if isinstance(payload, dict) else payload
+            rows = _queue_records(client(kind).queue())
             key = "seriesId" if kind == "sonarr" else "movieId"
             result[kind] = {row.get(key) for row in rows if row.get(key) is not None}
         except IntegrationError:
             result[kind] = None
     return result
+
+
+def _queue_records(payload):
+    rows = payload.get("records") if isinstance(payload, dict) else payload
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise IntegrationError("Integration queue response is invalid")
+    return rows
 
 
 def _disk_pressure(media, policy):
@@ -102,6 +109,8 @@ def _disk_pressure(media, policy):
     try:
         disks = client(kind).diskspace()
     except IntegrationError:
+        return None
+    if not isinstance(disks, list) or any(not isinstance(disk, dict) for disk in disks):
         return None
     configured = policy["disk_path"].rstrip("/") or "/"
     matching = []
@@ -114,7 +123,15 @@ def _disk_pressure(media, policy):
     disk = max(matching, key=lambda pair: pair[0])[1]
     total = disk.get("totalSpace") or 0
     free = disk.get("freeSpace") or 0
-    if total <= 0 or free < 0 or free > total:
+    if (
+        type(total) not in (int, float)
+        or type(free) not in (int, float)
+        or not isfinite(total)
+        or not isfinite(free)
+        or total <= 0
+        or free < 0
+        or free > total
+    ):
         return None
     percent = free / total * 100
     if percent >= policy["low_free_percent"]:
@@ -490,8 +507,7 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
     kind = "sonarr" if media.media_type == "series" else "radarr"
     try:
         arr = client(kind)
-        rows = arr.queue()
-        records = rows.get("records", []) if isinstance(rows, dict) else rows
+        records = _queue_records(arr.queue())
         arr_id = media.sonarr_id if kind == "sonarr" else media.radarr_id
         field = "seriesId" if kind == "sonarr" else "movieId"
         if any(row.get(field) == arr_id for row in records):
@@ -506,12 +522,16 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
         external = arr.request(
             "GET", f"/api/v3/{'series' if kind == 'sonarr' else 'movie'}/{arr_id}"
         )
+        if not isinstance(external, dict):
+            return "External integration cannot be verified"
         expected = media.tvdb_id if kind == "sonarr" else media.tmdb_id
         actual = external.get("tvdbId") if kind == "sonarr" else external.get("tmdbId")
         if expected is None or str(actual) != str(expected):
             return "External provider identity does not match"
         jellyfin = client("jellyfin")
         jellyfin_item = jellyfin.item(media.jellyfin_id)
+        if not isinstance(jellyfin_item, dict):
+            return "External integration cannot be verified"
         provider_key = "Tvdb" if kind == "sonarr" else "Tmdb"
         providers = jellyfin_item.get("ProviderIds") or {}
         if str(providers.get(provider_key)) != str(expected):
