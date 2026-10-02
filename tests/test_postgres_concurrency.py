@@ -4,13 +4,14 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from multiprocessing import get_context
 from threading import Barrier, Lock
 from uuid import uuid4
 
 import pytest
 
 from curatarr import create_app, db
-from curatarr.leases import acquire, release
+from curatarr.leases import acquire, keep_alive, release
 from curatarr.lifecycle import execute_action
 from curatarr.models import (
     JobLease,
@@ -20,6 +21,19 @@ from curatarr.models import (
     WatchStateSnapshot,
     utcnow,
 )
+
+
+def _process_lease_contender(database_url, scope, barrier, outcomes):
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": database_url,
+            "SECRET_KEY": "postgres-test-only",
+        }
+    )
+    with app.app_context():
+        barrier.wait(timeout=10)
+        outcomes.put(acquire(scope, seconds=10))
 
 
 @pytest.mark.skipif(
@@ -152,4 +166,73 @@ def test_postgres_action_claim_calls_external_api_once(monkeypatch):
                 strict=True,
             ):
                 db.session.delete(db.session.get(model, item_id))
+            db.session.commit()
+
+
+@pytest.mark.skipif(
+    not os.getenv("CURATARR_TEST_POSTGRES_URL"),
+    reason="Set CURATARR_TEST_POSTGRES_URL to a migrated test database",
+)
+def test_postgres_lease_renewal_outlives_original_expiry():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": os.environ["CURATARR_TEST_POSTGRES_URL"],
+            "SECRET_KEY": "postgres-test-only",
+        }
+    )
+    scope = f"test-long-lease:{uuid4()}"
+    with app.app_context():
+        owner = acquire(scope, seconds=1)
+        try:
+            with keep_alive(scope, owner, seconds=1) as lost:
+                time.sleep(2.2)
+                assert acquire(scope, seconds=1) is None
+            assert not lost.is_set()
+        finally:
+            release(scope, owner)
+        next_owner = acquire(scope, seconds=1)
+        assert next_owner and next_owner != owner
+        release(scope, next_owner)
+
+
+@pytest.mark.skipif(
+    not os.getenv("CURATARR_TEST_POSTGRES_URL"),
+    reason="Set CURATARR_TEST_POSTGRES_URL to a migrated test database",
+)
+def test_postgres_lease_has_one_owner_across_processes():
+    database_url = os.environ["CURATARR_TEST_POSTGRES_URL"]
+    scope = f"test-process-lease:{uuid4()}"
+    context = get_context("spawn")
+    barrier = context.Barrier(4)
+    outcomes = context.Queue()
+    processes = [
+        context.Process(
+            target=_process_lease_contender,
+            args=(database_url, scope, barrier, outcomes),
+        )
+        for _ in range(4)
+    ]
+    try:
+        for process in processes:
+            process.start()
+        for process in processes:
+            process.join(timeout=15)
+            assert process.exitcode == 0
+        owners = [outcomes.get(timeout=2) for _ in processes]
+        assert len([owner for owner in owners if owner]) == 1
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+        app = create_app(
+            {
+                "TESTING": True,
+                "SQLALCHEMY_DATABASE_URI": database_url,
+                "SECRET_KEY": "postgres-test-only",
+            }
+        )
+        with app.app_context():
+            db.session.query(JobLease).filter_by(scope=scope).delete()
             db.session.commit()

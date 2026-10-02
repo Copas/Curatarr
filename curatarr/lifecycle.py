@@ -244,14 +244,18 @@ def reconcile_candidates():
 
 def evaluate_retention():
     """Create safe review/automatic candidates from observed media state."""
-    from .leases import acquire, release
+    from .leases import acquire, keep_alive, release
 
     scope = "library_policy_eval:all"
     owner = acquire(scope, seconds=3600)
     if not owner:
         return 0
     try:
-        return _evaluate_retention_locked()
+        with keep_alive(scope, owner, seconds=3600) as lost:
+            result = _evaluate_retention_locked()
+        if lost.is_set():
+            raise RuntimeError("Policy evaluation lost its database lease")
+        return result
     except Exception:
         db.session.rollback()
         raise
