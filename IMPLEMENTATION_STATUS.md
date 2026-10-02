@@ -11,6 +11,7 @@ Phase 6 — Controlled deletion validation
 - Policy inheritance, inactivity/grace rules, deterministic purge ranking, quota high/low selection, mapped disk-pressure selection, review actions, and dry-run deletion guard.
 - Reversible Leaving Soon poster snapshots, original-before-upload persistence, image-tag-aware restoration, snooze/notice expiration, worker commands, and synthetic demo adapters.
 - Pre-delete identity/queue/activity checks, fresh Sonarr episode-file mapping checks, a final playback check before each destructive request, uncertain-response reconciliation, and preserved TV played-state restoration.
+- Synthetic disk-pressure acceptance checks cover normal/low/critical free-space, insufficient reclaimable bytes, a changed queue, cleared pressure, and quota falling below its trigger. Malformed disk/queue/provider responses fail closed.
 - Renewable database leases for event processing and library policy evaluation, plus atomic action claims; PostgreSQL checks pass for fresh/expired leases, work lasting past the original lease, four-process contention, and single-winner action execution.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 

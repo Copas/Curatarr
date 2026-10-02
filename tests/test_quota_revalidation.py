@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from curatarr import db
-from curatarr.lifecycle import _validate_deletion
+from curatarr.lifecycle import _validate_deletion, evaluate_retention
 from curatarr.models import (
     Library,
     LibraryPolicy,
@@ -93,4 +93,68 @@ def test_favorite_change_reorders_quota_before_deletion(app, monkeypatch):
         assert (
             _validate_deletion(candidate)
             == "Capacity ranking no longer selects this title"
+        )
+
+
+def test_quota_candidate_blocks_after_library_drops_below_trigger(app, monkeypatch):
+    class FakeRadarr:
+        def queue(self):
+            return {"records": []}
+
+        def request(self, _method, _path):
+            return {"tmdbId": 101}
+
+    class FakeJellyfin:
+        def item(self, _item_id):
+            return {"ProviderIds": {"Tmdb": "101"}}
+
+    monkeypatch.setattr(
+        "curatarr.lifecycle.client",
+        lambda kind: FakeJellyfin() if kind == "jellyfin" else FakeRadarr(),
+    )
+    with app.app_context():
+        library = Library(
+            jellyfin_library_id="quota-drop", name="Movies", media_type="movies"
+        )
+        db.session.add(library)
+        db.session.flush()
+        db.session.add(
+            LibraryPolicy(
+                library_id=library.id,
+                policy_json={
+                    "quota_enabled": True,
+                    "high_water_bytes": 150,
+                    "low_water_bytes": 100,
+                },
+            )
+        )
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="movie",
+            title="Candidate",
+            jellyfin_id="movie-1",
+            radarr_id=1,
+            tmdb_id=101,
+            added_at=utcnow() - timedelta(days=40),
+        )
+        db.session.add(media)
+        db.session.flush()
+        part = MediaPart(
+            media_identity_id=media.id,
+            kind="movie_file",
+            has_file=True,
+            size_bytes=200,
+        )
+        db.session.add(part)
+        db.session.commit()
+        assert evaluate_retention() == 1
+        candidate = db.session.query(PurgeCandidate).one()
+        candidate.state = "APPROVED"
+        db.session.commit()
+        assert _validate_deletion(candidate) is None
+        part.size_bytes = 100
+        db.session.commit()
+        assert (
+            _validate_deletion(candidate)
+            == "Library is no longer above high-water mark"
         )
