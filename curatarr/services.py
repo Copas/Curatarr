@@ -216,7 +216,9 @@ def _upsert_part(media, kind, season, episode, item):
     if has_file and not part.has_file:
         part.acquired_at = utcnow()
     part.has_file = has_file
-    part.size_bytes = item.get("Size") or part.size_bytes
+    size = item.get("Size")
+    if size is not None:
+        part.size_bytes = size if type(size) is int and size >= 0 else 0
     db.session.flush()
     return part
 
@@ -287,7 +289,10 @@ def discover():
                             )
                             part.sonarr_episode_id = episode.get("id")
                             part.arr_file_id = episode.get("episodeFileId") or None
-                            part.size_bytes = file_sizes.get(part.arr_file_id, 0)
+                            size = file_sizes.get(part.arr_file_id, 0)
+                            part.size_bytes = (
+                                size if type(size) is int and size >= 0 else 0
+                            )
                             part.air_date = _as_datetime(episode.get("airDateUtc"))
                 if media_type == "movie" and media.tmdb_id:
                     match = movies_by_tmdb.get(str(media.tmdb_id))

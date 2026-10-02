@@ -58,6 +58,7 @@ class PressureServices:
     def __init__(self, free):
         self.free = free
         self.queue_rows = []
+        self.remote_size = None
 
     def queue(self):
         return {"records": self.queue_rows}
@@ -69,7 +70,10 @@ class PressureServices:
         ]
 
     def request(self, _method, path):
-        return {"tmdbId": 100 + int(path.split("/")[-1])}
+        result = {"tmdbId": 100 + int(path.split("/")[-1])}
+        if self.remote_size is not None:
+            result["sizeOnDisk"] = self.remote_size
+        return result
 
     def item(self, item_id):
         return {"ProviderIds": {"Tmdb": str(100 + int(item_id.split("-")[-1]))}}
@@ -184,6 +188,21 @@ def test_pressure_candidate_blocks_after_pressure_clears(app, monkeypatch):
         db.session.commit()
         services.free = 250
         assert _validate_deletion(candidate) == "Disk pressure is no longer confirmed"
+
+
+def test_movie_delete_blocks_changed_radarr_size(app, monkeypatch):
+    services = PressureServices(150)
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: services)
+    with app.app_context():
+        _pressure_library(count=1)
+        assert evaluate_retention() == 1
+        candidate = db.session.query(PurgeCandidate).one()
+        candidate.state = "APPROVED"
+        db.session.commit()
+        services.remote_size = 999
+        assert (
+            _validate_deletion(candidate) == "Radarr file size changed since discovery"
+        )
 
 
 @pytest.mark.parametrize(
