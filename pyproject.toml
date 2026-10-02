@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "curatarr"
+version = "0.1.0"
+description = "A deterministic media lifecycle manager for Jellyfin, Sonarr, and Radarr"
+requires-python = ">=3.12"
+dependencies = [
+  "Flask>=3.1,<4",
+  "Flask-SQLAlchemy>=3.1,<4",
+  "Flask-Migrate>=4,<5",
+  "requests>=2.32,<3",
+  "Pillow>=11,<13",
+  "gunicorn>=23,<24",
+  "psycopg[binary]>=3.2,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[tool.setuptools.packages.find]
+include = ["curatarr*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"

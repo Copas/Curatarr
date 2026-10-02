@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div><h1>Overview</h1><p class="text-secondary">Media lifecycle decisions at a glance.</p></div>
+  <div class="d-flex gap-2">
+    <form method="post" action="{{ url_for('main.discover_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-outline-light">Discover</button></form>
+    <form method="post" action="{{ url_for('main.reconcile_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-primary">Reconcile</button></form>
+  </div>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="card p-3"><h2 class="h6">Review queue</h2><p class="display-6 mb-0">{{ status.review_count }}</p></div></div>
+  <div class="col-md-4"><div class="card p-3"><h2 class="h6">Leaving soon</h2><p class="display-6 mb-0">{{ status.leaving_soon_count }}</p></div></div>
+  <div class="col-md-4"><div class="card p-3"><h2 class="h6">Integrations</h2><p class="mb-0">{% for kind, state in status.integrations.items() %}{{ kind|title }}: {{ state }}<br>{% endfor %}</p></div></div>
+</div>
+<div class="row g-3 mb-4"><div class="col-md-6"><div class="card p-3"><h2 class="h6">Estimated reclaimed</h2><p class="display-6 mb-0">{{ '{:.1f}'.format(status.reclaimed_bytes / 1073741824) }} GiB</p></div></div><div class="col-md-6"><div class="card p-3"><h2 class="h6">Pending actions</h2><p class="display-6 mb-0">{{ status.pending_actions }}</p></div></div></div>
+<h2 class="h4">Libraries</h2>
+<div class="row g-3 mb-4">
+{% for library in libraries %}
+  <div class="col-md-6"><div class="card p-3"><h3 class="h5">{{ library.name }}</h3><p>{{ library.media_type|title }} · {{ '{:.1f}'.format((library.last_size_bytes or 0) / 1073741824) }} GiB</p><a href="{{ url_for('main.library_policy', library_id=library.id) }}">Edit policy</a></div></div>
+{% else %}<p>No libraries discovered yet. Add integrations in Settings, then discover.</p>{% endfor %}
+</div>
+<h2 class="h4">Recent decisions</h2>
+<div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Action</th><th>Result</th><th>Reason</th></tr></thead><tbody>
+{% for action in actions %}<tr><td>{{ action.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ action.action_type }}</td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="4">No decisions yet.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if demo_mode %}<div class="card p-3 mt-4"><h2 class="h5">Demo controls</h2><form class="d-flex flex-wrap gap-2" method="post" action="{{ url_for('main.demo_simulate') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select class="form-select w-auto" name="choice">{% for value in ['complete_episode','start_playback','favorite','unfavorite','advance_30_days','add_movie','increase_movie_size','outage_sonarr','outage_radarr','outage_jellyfin','restore_integrations'] %}<option value="{{ value }}">{{ value.replace('_',' ')|title }}</option>{% endfor %}</select><button class="btn btn-outline-light">Simulate</button></form></div>{% endif %}
+{% endblock %}
