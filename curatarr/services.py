@@ -729,9 +729,20 @@ def reconcile_user_state():
                     if kind == "Episode" and user_data.get("Played"):
                         part = (
                             db.session.query(MediaPart)
-                            .filter_by(jellyfin_id=item_id)
+                            .filter_by(media_identity_id=media.id, jellyfin_id=item_id)
                             .first()
                         )
+                        if not part:
+                            part = (
+                                db.session.query(MediaPart)
+                                .filter_by(
+                                    media_identity_id=media.id,
+                                    kind="episode",
+                                    season_number=item.get("ParentIndexNumber"),
+                                    episode_number=item.get("IndexNumber"),
+                                )
+                                .first()
+                            )
                         episode_state = (
                             db.session.query(EpisodeUserState)
                             .filter_by(media_part_id=part.id, jellyfin_user_id=user_id)
@@ -763,7 +774,12 @@ def reconcile_user_state():
                         )
                         generated += 1
                 offset += len(rows)
-                if not rows or offset >= page.get("TotalRecordCount", offset):
+                total = page.get("TotalRecordCount")
+                if (
+                    not rows
+                    or (total is not None and offset >= total)
+                    or (total is None and len(rows) < 100)
+                ):
                     break
     process_pending_events(limit=max(100, generated))
     return generated
