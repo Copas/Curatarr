@@ -12,6 +12,7 @@ from curatarr.models import (
     PurgeCandidate,
     utcnow,
 )
+from curatarr.services import ingest_event
 
 
 def test_validated_movie_delete_calls_radarr_once(app, monkeypatch):
@@ -216,3 +217,119 @@ def test_partial_tv_delete_is_reconciled_without_retry(app, monkeypatch):
         assert not parts[1].has_file
         assert parts[2].has_file
         assert set(calls) == {200, 300}
+
+
+def test_playback_after_validation_stops_movie_delete(app, monkeypatch):
+    with app.app_context():
+        library = Library(
+            jellyfin_library_id="late-playback", name="Movies", media_type="movies"
+        )
+        db.session.add(library)
+        db.session.flush()
+        db.session.add(
+            LibraryPolicy(library_id=library.id, policy_json={"dry_run": False})
+        )
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="movie",
+            title="Rescued Film",
+            jellyfin_id="late-film",
+            radarr_id=42,
+            tmdb_id=321,
+            added_at=utcnow() - timedelta(days=200),
+        )
+        db.session.add(media)
+        db.session.flush()
+        db.session.add(
+            MediaPart(
+                media_identity_id=media.id,
+                kind="movie_file",
+                has_file=True,
+                size_bytes=100,
+            )
+        )
+        candidate = PurgeCandidate(
+            media_identity_id=media.id,
+            state="APPROVED",
+            reason_code="inactivity",
+            reason_text="Old",
+            reclaimable_bytes=100,
+        )
+        db.session.add(candidate)
+        db.session.commit()
+        radarr_calls = []
+
+        class FakeRadarr:
+            def queue(self):
+                return {"records": []}
+
+            def request(self, _method, _path):
+                return {"tmdbId": 321}
+
+            def delete_movie(self, movie_id):
+                radarr_calls.append(movie_id)
+
+        class FakeJellyfin:
+            def item(self, _item_id):
+                return {"ProviderIds": {"Tmdb": "321"}}
+
+        arr_count = 0
+
+        def fake_client(kind):
+            nonlocal arr_count
+            if kind == "jellyfin":
+                return FakeJellyfin()
+            arr_count += 1
+            if arr_count == 3:
+                ingest_event(
+                    {
+                        "event_id": "late-playback",
+                        "event_type": "playback_started",
+                        "item_external_id": "late-film",
+                        "user_external_id": "viewer",
+                    }
+                )
+            return FakeRadarr()
+
+        monkeypatch.setattr("curatarr.lifecycle.client", fake_client)
+        assert execute_approved(candidate.id) == "blocked"
+        assert candidate.state == "RESCUED"
+        assert radarr_calls == []
+        action = (
+            db.session.query(LifecycleAction)
+            .filter_by(action_type="delete_media")
+            .one()
+        )
+        assert action.state == "CANCELLED"
+
+
+def test_playback_between_tv_files_stops_remaining_deletes(app, monkeypatch):
+    with app.app_context():
+        candidate, parts = _series_candidate()
+        sonarr, calls = _sonarr(monkeypatch)
+
+        def delete_file(file_id):
+            calls.append(file_id)
+            if file_id == 200:
+                ingest_event(
+                    {
+                        "event_id": "tv-partial-playback",
+                        "event_type": "playback_started",
+                        "item_external_id": "series-1",
+                        "user_external_id": "viewer",
+                    }
+                )
+
+        sonarr.delete_episode_file = delete_file
+        assert execute_approved(candidate.id) == "blocked"
+        assert calls == [200]
+        assert candidate.state == "RESCUED"
+        assert parts[0].has_file
+        assert not parts[1].has_file
+        assert parts[2].has_file
+        action = (
+            db.session.query(LifecycleAction)
+            .filter_by(action_type="delete_media")
+            .one()
+        )
+        assert action.state == "FAILED_FINAL"

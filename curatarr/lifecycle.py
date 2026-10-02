@@ -444,10 +444,10 @@ def review_candidate(candidate_id, choice):
     return candidate
 
 
-def _validate_deletion(candidate, *, queue=None):
+def _validate_deletion(candidate, *, states=("APPROVED",)):
     """Check every destructive precondition with fresh external observations."""
     media = db.session.get(MediaIdentity, candidate.media_identity_id)
-    if not media or media.missing_since or candidate.state != "APPROVED":
+    if not media or media.missing_since or candidate.state not in states:
         return "Item or approval is no longer valid"
     if db.session.query(LifecycleEvent).filter_by(processed_at=None).first():
         return "Unprocessed playback events must be reconciled first"
@@ -635,6 +635,39 @@ def _snapshot_watch_state(media):
     db.session.commit()
 
 
+def _playback_preempts_delete(candidate, action, *, deleted_any=False):
+    """Drain newly received events before the next destructive request."""
+    from .services import process_pending_events
+
+    process_pending_events()
+    db.session.refresh(candidate)
+    pending = db.session.query(LifecycleEvent.id).filter_by(processed_at=None).first()
+    if candidate.state == "EXECUTING" and not pending:
+        return False
+    if pending:
+        candidate.state = "BLOCKED"
+    action.state = "FAILED_FINAL" if deleted_any else "CANCELLED"
+    action.last_error = (
+        "Unprocessed playback events require reconciliation before deletion"
+        if pending
+        else (
+            "Playback or review changed the candidate during partial TV cleanup; "
+            "manual review is required"
+            if deleted_any
+            else "Playback or review cancelled deletion before the external call"
+        )
+    )
+    audit(
+        "delete_interrupted",
+        candidate.media_identity_id,
+        action.last_error,
+        f"delete-interrupted:{action.id}",
+        candidate_id=candidate.id,
+    )
+    db.session.commit()
+    return True
+
+
 def execute_action(action_id):
     action = db.session.get(LifecycleAction, action_id)
     if not action or action.state not in {"PENDING", "FAILED_RETRYABLE"}:
@@ -778,9 +811,7 @@ def execute_action(action_id):
             action.last_error = "Candidate was rescued or changed before execution"
             db.session.commit()
             return "blocked"
-        candidate.state = "APPROVED"
-        reason = _validate_deletion(candidate)
-        candidate.state = "EXECUTING"
+        reason = _validate_deletion(candidate, states=("EXECUTING",))
         if reason:
             candidate.state = "BLOCKED"
             action.state = "CANCELLED"
@@ -789,23 +820,27 @@ def execute_action(action_id):
             return "blocked"
         try:
             if media.media_type == "movie":
-                client("radarr").delete_movie(media.radarr_id)
+                arr = client("radarr")
+                if _playback_preempts_delete(candidate, action):
+                    return "blocked"
+                arr.delete_movie(media.radarr_id)
             else:
                 arr = client("sonarr")
                 policy, _ = resolved_policy(media)
                 target_files = _tv_file_targets(media, policy, arr)
                 _snapshot_watch_state(media)
-                from .policy import retained
-
+                deleted_any = False
                 for file_id in sorted(target_files):
-                    arr.delete_episode_file(file_id)
-                for part in media.parts:
-                    if (
-                        part.kind == "episode"
-                        and part.has_file
-                        and not retained(part, policy)
+                    if _playback_preempts_delete(
+                        candidate, action, deleted_any=deleted_any
                     ):
-                        part.has_file = False
+                        return "blocked"
+                    arr.delete_episode_file(file_id)
+                    deleted_any = True
+                    for part in media.parts:
+                        if part.kind == "episode" and part.arr_file_id == file_id:
+                            part.has_file = False
+                    db.session.commit()
         except (TypeError, ValueError) as exc:
             candidate.state = "BLOCKED"
             action.state = "CANCELLED"
