@@ -11,7 +11,7 @@ Phase 6 — Controlled deletion validation
 - Policy inheritance, inactivity/grace rules, deterministic purge ranking, quota high/low selection, mapped disk-pressure selection, review actions, and dry-run deletion guard.
 - Reversible Leaving Soon poster snapshots, original-before-upload persistence, image-tag-aware restoration, snooze/notice expiration, worker commands, and synthetic demo adapters.
 - Pre-delete identity/queue/activity checks, fresh Sonarr episode-file mapping checks, a final playback check before each destructive request, uncertain-response reconciliation, and preserved TV played-state restoration.
-- Database leases for event processing and library policy evaluation, plus atomic action claims; PostgreSQL contention checks pass for fresh/expired leases and single-winner action execution.
+- Renewable database leases for event processing and library policy evaluation, plus atomic action claims; PostgreSQL checks pass for fresh/expired leases, work lasting past the original lease, four-process contention, and single-winner action execution.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
 ## In Progress
@@ -21,14 +21,14 @@ Phase 6 — Controlled deletion validation
 ## Next
 - Expand acceptance scenario coverage for remaining concurrent playback/delete races and live API failures.
 - Finish full UI reporting and confirm pressure-level behavior against real disk-space responses.
-- Validate image-tag behavior with a live Jellyfin version and validate longer-running or multi-node lease behavior.
+- Validate image-tag behavior with a live Jellyfin version and test lease behavior across multiple hosts against a shared production-like database.
 - Validate controlled and automatic cleanup against real test integrations before production use.
 
 ## Known Issues
 - No real-service credentials are available for live validation.
 - Authentication and encrypted-at-rest integration keys are not implemented.
 - Poster restoration uses Jellyfin's primary image tag or exact badge bytes. An ambiguous upload followed by image re-encoding before the new tag is recorded still needs manual recovery.
-- PostgreSQL lease/action contention was validated locally; longer-running and multi-node behavior has not been validated.
+- PostgreSQL lease renewal and same-host multi-process contention were validated locally; cross-host contention has not been validated.
 - An external delete already in flight cannot be cancelled by a later playback event; the next TV file request is stopped and partial cleanup requires manual review.
 
 ## Decisions Made

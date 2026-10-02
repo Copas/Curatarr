@@ -645,7 +645,7 @@ def _plan_acquisition(media, current_season, event):
 
 
 def process_pending_events(limit=100):
-    from .leases import acquire, release
+    from .leases import acquire, keep_alive, release
 
     events = (
         db.session.query(LifecycleEvent)
@@ -663,7 +663,10 @@ def process_pending_events(limit=100):
         try:
             db.session.refresh(event)
             if event.processed_at is None:
-                process_event(event)
+                with keep_alive(scope, owner, seconds=120) as lost:
+                    process_event(event)
+                if lost.is_set():
+                    raise RuntimeError("Event processing lost its database lease")
                 processed += 1
         except Exception:
             db.session.rollback()
