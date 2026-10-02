@@ -13,7 +13,7 @@ Phase 6 — Controlled deletion validation
 - Pre-delete identity/queue/activity checks, fresh Sonarr episode-file mapping checks, a final playback check before each destructive request, uncertain-response reconciliation, and preserved TV played-state restoration.
 - Sonarr search timeout-after-acceptance and Radarr delete timeout-after-completion are exercised with stateful fixtures; retries/reconciliation do not repeat the external write.
 - Synthetic disk-pressure acceptance checks cover normal/low/critical free-space, insufficient reclaimable bytes, a changed queue, cleared pressure, and quota falling below its trigger. Malformed disk/queue/provider responses fail closed.
-- Overview reports current stored size, high/low-water state, recent acquisition decisions, errors, and integration health; Review shows playback/favorite and Leaving Soon state; title details show decision score and effective/inherited policy. Demo fixtures include review, recommend-only, and Leaving Soon candidates plus visible simulated outages.
+- Overview reports current stored size, high/low-water state, recent acquisition decisions, errors, and integration health; Review shows playback/favorite and Leaving Soon state; title details show decision score and effective/inherited policy. History filters by date, library, title, action/state, and user, with linked decision context and candidate timeline. Demo fixtures include review, recommend-only, and Leaving Soon candidates plus visible simulated outages.
 - Integration API keys and the webhook token are now encrypted at rest with an authenticated cipher derived from a stable application key. Existing plaintext rows have an idempotent `encrypt-secrets` upgrade command, run automatically after container migrations. Unauthenticated operation requires an explicit opt-in and compose binds the UI to loopback.
 - Renewable database leases for event processing and library policy evaluation, plus atomic action claims; PostgreSQL checks pass for fresh/expired leases, work lasting past the original lease, four-process contention, and single-winner action execution.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
@@ -24,7 +24,7 @@ Phase 6 — Controlled deletion validation
 
 ## Next
 - Expand acceptance scenario coverage for remaining concurrent playback/delete races and live API failures.
-- Finish advanced history filtering/reporting and confirm pressure-level behavior against real disk-space responses.
+- Confirm pressure-level behavior against real disk-space responses and expand synthetic UI state coverage.
 - Validate image-tag behavior with a live Jellyfin version and test lease behavior across multiple hosts against a shared production-like database.
 - Validate controlled and automatic cleanup against real test integrations before production use.
 

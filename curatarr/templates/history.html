@@ -1,6 +1,17 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>History</h1><form method="get" class="row g-2 mb-4"><div class="col-md-4"><input class="form-control" name="q" value="{{ title_query }}" placeholder="Title"></div><div class="col-md-3"><input class="form-control" name="type" value="{{ action_type }}" placeholder="Action type"></div><div class="col-md-3"><input class="form-control" name="state" value="{{ state }}" placeholder="State"></div><div class="col-md-2"><button class="btn btn-outline-light w-100">Filter</button></div></form><div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Action</th><th>State</th><th>Reason</th></tr></thead><tbody>
-{% for action in actions %}<tr><td>{{ action.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type }}</a></td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="4">No history yet.</td></tr>{% endfor %}
+<h1>History</h1><p class="text-secondary">Observed events, decisions, external requests, and outcomes.</p>
+<form method="get" class="row g-2 mb-4">
+  <div class="col-md-3"><label class="form-label">Title<input class="form-control" name="q" value="{{ title_query }}"></label></div>
+  <div class="col-md-3"><label class="form-label">Library<select class="form-select" name="library"><option value="">All libraries</option>{% for library in libraries %}<option value="{{ library.id }}" {% if library.id == library_id %}selected{% endif %}>{{ library.name }}</option>{% endfor %}</select></label></div>
+  <div class="col-md-3"><label class="form-label">Action type<input class="form-control" name="type" value="{{ action_type }}"></label></div>
+  <div class="col-md-3"><label class="form-label">State<input class="form-control" name="state" value="{{ state }}"></label></div>
+  <div class="col-md-3"><label class="form-label">From<input class="form-control" type="date" name="from" value="{{ date_from }}"></label></div>
+  <div class="col-md-3"><label class="form-label">To<input class="form-control" type="date" name="to" value="{{ date_to }}"></label></div>
+  <div class="col-md-3"><label class="form-label">Jellyfin user ID<input class="form-control" name="user" value="{{ user_id }}"></label></div>
+  <div class="col-md-3 align-self-end"><button class="btn btn-outline-light w-100">Filter</button></div>
+</form>
+<div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Title</th><th>Action</th><th>State</th><th>Reason</th></tr></thead><tbody>
+{% for action in actions %}<tr><td>{{ action.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ media_titles.get(action.media_identity_id, '—') }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type.replace('_',' ')|title }}</a></td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No matching history.</td></tr>{% endfor %}
 </tbody></table></div>
 {% endblock %}
