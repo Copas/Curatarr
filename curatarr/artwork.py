@@ -49,6 +49,37 @@ def _store_dir() -> Path:
     return path
 
 
+def _primary_tag(item):
+    return (item.get("ImageTags") or {}).get("Primary")
+
+
+def _record_applied(snapshot, jellyfin):
+    current_tag = _primary_tag(jellyfin.item(snapshot.jellyfin_item_id))
+    if current_tag and current_tag != snapshot.original_image_tag:
+        snapshot.badged_image_tag = current_tag
+    audit(
+        "leaving_soon_applied",
+        snapshot.media_identity_id,
+        "Leaving Soon poster applied.",
+        f"artwork-apply:{snapshot.candidate_id}",
+        candidate_id=snapshot.candidate_id,
+    )
+    db.session.commit()
+
+
+def _record_restored(snapshot, reason):
+    snapshot.active = False
+    snapshot.restored_at = utcnow()
+    audit(
+        "leaving_soon_removed",
+        snapshot.media_identity_id,
+        reason,
+        f"artwork-restore:{snapshot.id}",
+        candidate_id=snapshot.candidate_id,
+    )
+    db.session.commit()
+
+
 def apply_badge(candidate):
     media = db.session.get(MediaIdentity, candidate.media_identity_id)
     if not media or not media.jellyfin_id:
@@ -59,9 +90,27 @@ def apply_badge(candidate):
         .first()
     )
     if existing:
-        return True
+        if existing.badged_image_tag:
+            return True
+        try:
+            jellyfin = client("jellyfin")
+            current = jellyfin.image(existing.jellyfin_item_id)
+            badged = Path(existing.badged_image_bytes_path).read_bytes()
+            if current == badged:
+                _record_applied(existing, jellyfin)
+                return True
+            original = Path(existing.original_image_bytes_path).read_bytes()
+            if _jpeg(current) != original:
+                return False
+            jellyfin.put_image(existing.jellyfin_item_id, badged)
+            _record_applied(existing, jellyfin)
+            return True
+        except (IntegrationError, OSError, ValueError):
+            db.session.rollback()
+            return False
     try:
         jellyfin = client("jellyfin")
+        original_tag = _primary_tag(jellyfin.item(media.jellyfin_id))
         original = _jpeg(jellyfin.image(media.jellyfin_id))
         badged = badge_poster(original)
         directory = _store_dir()
@@ -69,6 +118,7 @@ def apply_badge(candidate):
             media_identity_id=media.id,
             jellyfin_item_id=media.jellyfin_id,
             candidate_id=candidate.id,
+            original_image_tag=original_tag,
         )
         db.session.add(snapshot)
         db.session.flush()
@@ -78,16 +128,11 @@ def apply_badge(candidate):
         badge_path.write_bytes(badged)
         snapshot.original_image_bytes_path = str(source_path)
         snapshot.badged_image_bytes_path = str(badge_path)
-        jellyfin.put_image(media.jellyfin_id, badged)
         snapshot.active = True
-        audit(
-            "leaving_soon_applied",
-            media.id,
-            "Leaving Soon poster applied.",
-            f"artwork-apply:{candidate.id}",
-            candidate_id=candidate.id,
-        )
+        # The original must be durable before an external image update can happen.
         db.session.commit()
+        jellyfin.put_image(media.jellyfin_id, badged)
+        _record_applied(snapshot, jellyfin)
         return True
     except (IntegrationError, OSError, ValueError) as exc:
         current_app.logger.warning(
@@ -104,23 +149,28 @@ def restore_badge(snapshot):
         jellyfin = client("jellyfin")
         expected = Path(snapshot.badged_image_bytes_path).read_bytes()
         current = jellyfin.image(snapshot.jellyfin_item_id)
-        if hashlib.sha256(current).digest() != hashlib.sha256(expected).digest():
-            # External artwork changed; avoid overwriting someone else's edit.
-            return False
         original = Path(snapshot.original_image_bytes_path).read_bytes()
-        jellyfin.put_image(snapshot.jellyfin_item_id, original)
-        snapshot.active = False
-        snapshot.restored_at = utcnow()
-        audit(
-            "leaving_soon_removed",
-            snapshot.media_identity_id,
-            "Original poster restored after cleanup was cancelled.",
-            f"artwork-restore:{snapshot.id}",
-            candidate_id=snapshot.candidate_id,
+        if _jpeg(current) == original:
+            _record_restored(snapshot, "Original poster is already present.")
+            return True
+        same_bytes = (
+            hashlib.sha256(current).digest() == hashlib.sha256(expected).digest()
         )
-        db.session.commit()
+        if not same_bytes:
+            current_tag = _primary_tag(jellyfin.item(snapshot.jellyfin_item_id))
+            if (
+                not snapshot.badged_image_tag
+                or current_tag != snapshot.badged_image_tag
+            ):
+                # External artwork changed; avoid overwriting someone else's edit.
+                return False
+        jellyfin.put_image(snapshot.jellyfin_item_id, original)
+        _record_restored(
+            snapshot,
+            "Original poster restored after cleanup was cancelled.",
+        )
         return True
-    except (IntegrationError, OSError) as exc:
+    except (IntegrationError, OSError, ValueError) as exc:
         current_app.logger.warning(
             "Poster restoration failed for snapshot %s: %s",
             snapshot.id,

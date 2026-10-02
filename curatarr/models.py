@@ -215,6 +215,7 @@ class PosterSnapshot(db.Model, Timed):
     )
     jellyfin_item_id = db.Column(db.String(100), nullable=False)
     original_image_tag = db.Column(db.String(100))
+    badged_image_tag = db.Column(db.String(100))
     original_image_bytes_path = db.Column(db.String(512))
     badged_image_bytes_path = db.Column(db.String(512))
     candidate_id = db.Column(db.String(36), db.ForeignKey("purge_candidates.id"))

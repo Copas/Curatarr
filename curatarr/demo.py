@@ -1,6 +1,7 @@
 """Deterministic synthetic data and adapters for local exploration."""
 
 import base64
+import hashlib
 from datetime import timedelta
 from io import BytesIO
 
@@ -179,6 +180,7 @@ class DemoClient:
             raise IntegrationError("Demo item missing")
         return {
             "Id": item_id,
+            "ImageTags": {"Primary": hashlib.sha256(self.image(item_id)).hexdigest()},
             "ProviderIds": {
                 "Tvdb": str(media.tvdb_id) if media.tvdb_id else None,
                 "Tmdb": str(media.tmdb_id) if media.tmdb_id else None,
