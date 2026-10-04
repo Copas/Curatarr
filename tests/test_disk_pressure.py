@@ -236,3 +236,55 @@ def test_invalid_queue_response_blocks_candidate(app, monkeypatch):
         assert (
             _validate_deletion(candidate) == "External integration cannot be verified"
         )
+
+
+class RootOnlyArr:
+    """Like the owner's Sonarr/Radarr: a CIFS NAS mount is not reported."""
+
+    def diskspace(self):
+        return [
+            {"path": "/", "totalSpace": 1000, "freeSpace": 750},
+            {"path": "/mnt/replaceable", "totalSpace": 500, "freeSpace": 390},
+        ]
+
+
+def _pressure_policy(path):
+    policy, _ = effective_policy(
+        "movie",
+        library_values={
+            "free_space_enabled": True,
+            "disk_path": path,
+            "low_free_percent": 15,
+            "critical_free_percent": 8,
+        },
+    )
+    return policy
+
+
+def test_root_disk_is_never_used_for_another_path(app, monkeypatch):
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: RootOnlyArr())
+    media = MediaIdentity(media_type="movie", title="Film")
+    # Not reported by the arr app and not visible here: no selection at all.
+    assert (
+        _disk_pressure(media, _pressure_policy("/mnt/nas-not-mounted/Movies")) is None
+    )
+    # The root filesystem itself still matches its own record.
+    assert _disk_pressure(media, _pressure_policy("/")) == (0, "normal")
+
+
+def test_unreported_mount_is_measured_directly(app, monkeypatch, tmp_path):
+    import os
+
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: RootOnlyArr())
+
+    class Stats:
+        f_blocks, f_frsize, f_bavail = 1000, 1, 50  # 5% free: critical
+
+    real_statvfs = os.statvfs
+    monkeypatch.setattr(
+        "os.statvfs",
+        lambda path: Stats() if path == str(tmp_path) else real_statvfs(path),
+    )
+    media = MediaIdentity(media_type="movie", title="Film")
+    # 100 more bytes are needed to get back to 15% of 1000 (50 free now).
+    assert _disk_pressure(media, _pressure_policy(str(tmp_path))) == (100, "critical")
