@@ -157,6 +157,12 @@ def seed_demo():
             for part in media.parts
             if part.has_file
         )
+    db.session.add(
+        AppSetting(
+            key="jellyfin_user_names",
+            value_json={"demo-viewer-a": "Avery", "demo-viewer-b": "Blake"},
+        )
+    )
     for kind in ("jellyfin", "sonarr", "radarr"):
         db.session.add(
             Integration(

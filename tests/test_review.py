@@ -117,3 +117,27 @@ def test_title_never_purge_cancels_pending_review(app, client):
     )
     with app.app_context():
         assert db.session.get(PurgeCandidate, candidate_id).state == "RESCUED"
+
+
+def test_review_queue_shows_section_29_context(app, client):
+    from curatarr.demo import seed_demo
+    from curatarr.models import MediaIdentity, UserMediaState, utcnow
+
+    app.config["DEMO_MODE"] = True
+    seed_demo()
+    movie = db.session.query(MediaIdentity).filter_by(title="Demo Movie 07").one()
+    db.session.add(
+        UserMediaState(
+            media_identity_id=movie.id,
+            jellyfin_user_id="demo-viewer-b",
+            last_played_at=utcnow() - timedelta(days=120),
+        )
+    )
+    db.session.commit()
+    page = client.get("/review").data.decode()
+    assert "Demo Movies · Movie" in page and "Demo TV A · TV" in page
+    assert "by Blake" in page
+    assert "Delete the movie and its files via Radarr" in page
+    # Demo Series 05 stores four Season 1 episodes; the first three are retained.
+    assert "Delete 1 episode file outside the retained footprint via Sonarr" in page
+    assert "Meaningful watch: No" in page
