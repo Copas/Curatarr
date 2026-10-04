@@ -17,6 +17,15 @@ from curatarr.models import (
 from curatarr.policy import validate_policy
 
 
+@pytest.fixture(autouse=True)
+def _inactivity_cleanup_enabled(app):
+    """These tests exercise inactivity cleanup, which libraries must opt into."""
+    from curatarr.services import set_setting
+
+    with app.app_context():
+        set_setting("global_policy", {"inactivity_cleanup": True})
+
+
 def _movie_library(policy, *, played_days_ago=None):
     library = Library(
         jellyfin_library_id="rule-modes", name="Rule Movies", media_type="movies"

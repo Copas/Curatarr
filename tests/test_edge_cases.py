@@ -1,3 +1,5 @@
+import pytest
+
 """Section 98 acceptance edge cases not covered by feature-specific tests."""
 
 from datetime import timedelta
@@ -22,6 +24,15 @@ from curatarr.models import (
 )
 from curatarr.policy import rank
 from curatarr.services import ingest_event, process_pending_events
+
+
+@pytest.fixture(autouse=True)
+def _inactivity_cleanup_enabled(app):
+    """These tests exercise inactivity cleanup, which libraries must opt into."""
+    from curatarr.services import set_setting
+
+    with app.app_context():
+        set_setting("global_policy", {"inactivity_cleanup": True})
 
 
 def _library(media_type="tv"):

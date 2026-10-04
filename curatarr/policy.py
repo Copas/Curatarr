@@ -17,6 +17,7 @@ DEFAULTS: dict[str, Any] = {
     "review_mode": "require_review",
     "review_expiry": "manual_forever",
     "notice_days": 14,
+    "inactivity_cleanup": False,
     "inactivity_review_mode": None,
     "quota_review_mode": None,
     "quota_enabled": False,
@@ -26,8 +27,8 @@ DEFAULTS: dict[str, Any] = {
     "disk_path": None,
     "low_free_percent": 15,
     "critical_free_percent": 8,
-    "low_pressure_review_mode": None,
-    "critical_pressure_review_mode": None,
+    "low_pressure_review_mode": "automatic",
+    "critical_pressure_review_mode": "automatic",
     "never_purge": False,
     "dry_run": True,
 }
@@ -59,6 +60,7 @@ ENUMS = {
     },
 }
 BOOL_FIELDS = {
+    "inactivity_cleanup",
     "keep_one_season_ahead",
     "manage_specials",
     "quota_enabled",

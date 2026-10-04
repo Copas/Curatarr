@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import pytest
+
 from curatarr import db
 from curatarr.integrations import IntegrationError
 from curatarr.lifecycle import execute_approved, reconcile_unknown_actions
@@ -13,6 +15,15 @@ from curatarr.models import (
     utcnow,
 )
 from curatarr.services import ingest_event
+
+
+@pytest.fixture(autouse=True)
+def _inactivity_cleanup_enabled(app):
+    """These tests exercise inactivity cleanup, which libraries must opt into."""
+    from curatarr.services import set_setting
+
+    with app.app_context():
+        set_setting("global_policy", {"inactivity_cleanup": True})
 
 
 def test_validated_movie_delete_calls_radarr_once(app, monkeypatch):
