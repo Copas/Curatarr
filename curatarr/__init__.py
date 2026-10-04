@@ -45,8 +45,16 @@ def create_app(test_config=None):
     def verify_schema():
         if app.testing:
             return
-        from .schema import current_schema
+        from .schema import POLICY_SCHEMA_VERSION, current_schema, stored_policy_version
 
+        if not current_schema(app) and stored_policy_version() > POLICY_SCHEMA_VERSION:
+            return jsonify(
+                {
+                    "error": "Settings were saved by a newer Curatarr version",
+                    "action": "Install that version or newer; this one will not "
+                    "reinterpret settings it does not understand.",
+                }
+            ), 503
         if not current_schema(app):
             return jsonify(
                 {
