@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Cleanup preview (Retention → "Preview what free-space cleanup would pick"): pretend free space is at a given level and see, per disk, the titles that would be picked in order with sizes and a running total, using the same rules and live queue as the worker. Nothing is changed.
+
 - Settings shows the last webhook delivery (what it was, who, and whether it matched a title), the total received, and the last rejected or ignored delivery with the reason. Notification types Curatarr does not use are acknowledged and recorded as ignored instead of rejected.
 
 - Title pages have "Request now", which applies the always-keep and season-ahead rules to one show immediately and sends the result to Sonarr, plus the Review queue's Delete/Keep/Snooze/Never Purge buttons for a title in Review or Leaving Soon.

@@ -12,6 +12,7 @@ from .integrations import IntegrationError
 from .models import (
     AcquisitionState,
     EpisodeUserState,
+    Library,
     LifecycleAction,
     LifecycleEvent,
     MediaIdentity,
@@ -184,38 +185,68 @@ def _disk_pressure(media, policy):
     return required, level
 
 
-def _pressure_selection(now, queue):
-    """Disk-pressure picks shared by every library on the same disk.
+def _pressure_groups(now, queue, *, free_percent=None, disk_path=None):
+    """Libraries grouped by the disk they live on, with each disk's shortfall.
 
-    Libraries are grouped by the disk they actually live on, the shortfall is
-    computed once per disk, and titles are chosen from the combined pool until
-    it is covered, so several libraries on one disk never each select enough
-    for the whole shortfall. Returns ({media_id: level}, [(disk, deficit)]).
+    free_percent and disk_path are only for the cleanup preview: they pretend
+    free space is at that level and enforcement is on with that path. Returns
+    (groups by disk key, names of libraries whose disk could not be measured).
     """
-    groups = {}
-    for (library_id,) in db.session.query(MediaIdentity.library_id).distinct():
+    preview = free_percent is not None
+    groups, unmeasured = {}, []
+    libraries = (
+        db.session.query(Library)
+        .filter(Library.media_type.in_(["tv", "movies"]))
+        .order_by(Library.name)
+        .all()
+    )
+    for library in libraries:
         rows = (
             db.session.query(MediaIdentity)
-            .filter_by(library_id=library_id, missing_since=None)
+            .filter_by(library_id=library.id, missing_since=None)
             .all()
         )
         if not rows:
             continue
         policy, _ = resolved_policy(rows[0])
-        pressure = _disk_pressure(rows[0], policy)
-        if not pressure or pressure[0] <= 0:
-            continue
+        if preview:
+            policy = policy | {
+                "free_space_enabled": True,
+                "disk_path": disk_path or policy["disk_path"],
+            }
+            if not policy["disk_path"]:
+                unmeasured.append(library.name)
+                continue
         measured = _disk_measure(rows[0], policy)
         if measured is None:
+            if preview:
+                unmeasured.append(library.name)
             continue
+        total, actual_free, key = measured
+        free = total * free_percent / 100 if preview else actual_free
+        percent = free / total * 100
+        if percent >= policy["low_free_percent"]:
+            continue
+        needed = max(0, int(total * policy["low_free_percent"] / 100 - free))
+        level = "critical" if percent < policy["critical_free_percent"] else "low"
         group = groups.setdefault(
-            measured[2],
-            {"needed": 0, "level": "low", "items": [], "policies": []},
+            key,
+            {
+                "needed": 0,
+                "level": "low",
+                "items": [],
+                "policies": [],
+                "libraries": [],
+                "total": total,
+                "actual_free": actual_free,
+                "free": free,
+            },
         )
-        group["needed"] = max(group["needed"], pressure[0])
-        if pressure[1] == "critical":
+        group["needed"] = max(group["needed"], needed)
+        if level == "critical":
             group["level"] = "critical"
         group["policies"].append(policy)
+        group["libraries"].append(library.name)
         for media in rows:
             kind = "sonarr" if media.media_type == "series" else "radarr"
             active_ids = queue.get(kind)
@@ -226,27 +257,95 @@ def _pressure_selection(now, queue):
             media_policy, _ = resolved_policy(media)
             if eligible(item, media_policy, now, healthy=active_ids is not None):
                 group["items"].append(item)
+    return groups, unmeasured
+
+
+def _select_from_group(group, now):
+    """Titles picked from one disk's pool, in order, until its shortfall is met."""
+    if len(group["policies"]) == 1:
+        policy = group["policies"][0]
+        strategy, meaningful = policy["purge_strategy"], policy["meaningful_threshold"]
+    else:
+        # Mixed TV and movie libraries: longest since last activity first,
+        # favorites last, which every per-type strategy agrees with.
+        strategy, meaningful = "oldest_watched_nonfavorite_first", 2
+    picks, reclaimed = [], 0
+    for item in rank(group["items"], strategy, now, meaningful):
+        if reclaimed >= group["needed"]:
+            break
+        picks.append(item)
+        reclaimed += item.size_bytes
+    return picks, max(0, group["needed"] - reclaimed)
+
+
+def _pressure_selection(now, queue):
+    """Disk-pressure picks shared by every library on the same disk.
+
+    Libraries are grouped by the disk they actually live on, the shortfall is
+    computed once per disk, and titles are chosen from the combined pool until
+    it is covered, so several libraries on one disk never each select enough
+    for the whole shortfall. Returns ({media_id: level}, [(disk, deficit)]).
+    """
+    groups, _unmeasured = _pressure_groups(now, queue)
     selected, deficits = {}, []
     for key, group in groups.items():
-        if len(group["policies"]) == 1:
-            policy = group["policies"][0]
-            strategy, meaningful = (
-                policy["purge_strategy"],
-                policy["meaningful_threshold"],
-            )
-        else:
-            # Mixed TV and movie libraries: longest since last activity first,
-            # favorites last, which every per-type strategy agrees with.
-            strategy, meaningful = "oldest_watched_nonfavorite_first", 2
-        reclaimed = 0
-        for item in rank(group["items"], strategy, now, meaningful):
-            if reclaimed >= group["needed"]:
-                break
+        picks, deficit = _select_from_group(group, now)
+        for item in picks:
             selected[item.media_id] = group["level"]
-            reclaimed += item.size_bytes
-        if reclaimed < group["needed"]:
-            deficits.append((key, group["needed"] - reclaimed))
+        if deficit:
+            deficits.append((key, deficit))
     return selected, deficits
+
+
+def preview_cleanup(free_percent, disk_path=None):
+    """What free-space cleanup would pick if free space were at free_percent.
+
+    Uses the same grouping, eligibility, ranking, and stopping rule as the
+    worker against live queue state, but marks and changes nothing.
+    """
+    now = utcnow()
+    groups, unmeasured = _pressure_groups(
+        now, _queue_ids(), free_percent=free_percent, disk_path=disk_path
+    )
+    disks = []
+    for group in groups.values():
+        picks, deficit = _select_from_group(group, now)
+        titles = {
+            media.id: media
+            for media in db.session.query(MediaIdentity).filter(
+                MediaIdentity.id.in_([item.media_id for item in picks])
+            )
+        }
+        running = 0
+        rows = []
+        for item in picks:
+            running += item.size_bytes
+            media = titles[item.media_id]
+            rows.append(
+                {
+                    "media": media,
+                    "library": media.library.name,
+                    "size": item.size_bytes,
+                    "running": running,
+                    "last_activity": item.last_played_at,
+                    "added": item.added_at,
+                    "favorite": item.favorite,
+                }
+            )
+        disks.append(
+            {
+                "libraries": group["libraries"],
+                "total": group["total"],
+                "actual_free": group["actual_free"],
+                "free": group["free"],
+                "needed": group["needed"],
+                "level": group["level"],
+                "picks": rows,
+                "deficit": deficit,
+                "eligible": len(group["items"]),
+            }
+        )
+    return {"disks": disks, "unmeasured": unmeasured}
 
 
 def _library_stored_bytes(library_id):
