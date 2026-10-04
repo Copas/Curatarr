@@ -22,6 +22,7 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - End-to-end demo lifecycle: the reconcile CLI creates, expires, validates, and deletes quota candidates to the low-water target with reclaimed-space reporting; a simulated Radarr outage blocks every automatic delete.
 - All Section 98 acceptance edge cases have explicit tests.
 - Acquisition and Retention rule pages edit global defaults or one library. Saves merge only the shown fields, library-only fields (size limits, disk pressure, dry run) are excluded globally, and global changes are validated against every library. Navigation follows section 39 (Overrides is the title search).
+- First-run `/setup` checklist derived from stored state, with an Overview prompt until required steps are done. Overview also lists scheduled deletions and recent cleanup (deleted vs dry run).
 - Section 94 observability: JSON operational logs limited to the specified fields, durable metric counters, `/api/v1/metrics`, and an Operations table on Overview. Tests use temporary data directories, so they no longer write posters into `instance/`.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
