@@ -94,7 +94,14 @@ The image contains the installed package, not the source tree. Data lives in the
    - **Jellyfin:** Dashboard → API Keys → add a key (default port 8096).
    - **Sonarr:** Settings → General → Security → API Key (default port 8989).
    - **Radarr:** Settings → General → Security → API Key (default port 7878).
-3. In Jellyfin's webhook plugin, send JSON to `http://<host>:8787/api/v1/webhook/jellyfin` with the token in the `X-Curatarr-Token` header.
-4. Review the Acquisition and Retention rules. Every library starts in dry run; Curatarr only records what it would delete until you set Dry run to false for a library.
+3. Set up Jellyfin's Webhook plugin. Curatarr's Settings page shows these steps with your exact address and a template to copy:
+   - Dashboard → Plugins → Webhook → **Add Generic Destination**, with URL `http://<host>:8787/api/v1/webhook/jellyfin`.
+   - Notification types **Playback Start**, **Playback Stop**, and **User Data Saved**; item types **Movies**, **Episodes**, and **Series**.
+   - Leave *Send All Properties* off and paste the template from Settings.
+   - Add the header `X-Curatarr-Token` with the webhook token. Generate a new token in Settings if you did not copy the first one.
+
+   Finished episodes arrive as Playback Stop with *played to completion*, and marking an item watched or favorite arrives as User Data Saved. Without the webhook, the hourly reconciliation still picks up playback, just later.
+4. Click Discover on Overview. Discovery runs in the background worker, because a large library takes longer than a web request is allowed (about 45 seconds for roughly 400 titles and 50,000 Jellyfin items). Overview → Operations shows when it finishes.
+5. Review the Acquisition and Retention rules. Every library starts in dry run; Curatarr only records what it would delete until you set Dry run to false for a library.
 
 For HTTPS, put Curatarr behind a TLS-terminating reverse proxy and set `CURATARR_SESSION_COOKIE_SECURE=true`.

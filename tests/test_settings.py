@@ -73,3 +73,24 @@ def test_settings_explain_where_each_api_key_is(app, client):
     assert 'placeholder="http://media.example.local:7878"' in page
     assert 'href="http://media.example.local:8989/settings/general"' in page
     assert 'href="http://media.example.local:8096/web/#/dashboard/keys"' in page
+
+
+def test_settings_show_webhook_setup_with_template(app, client):
+    import json
+
+    from curatarr.services import JELLYFIN_WEBHOOK_TEMPLATE, normalize_event
+
+    page = client.get("/settings").text
+    assert "Add Generic Destination" in page
+    assert "http://localhost/api/v1/webhook/jellyfin" in page
+    assert "{{NotificationType}}" in page
+    # The template renders valid JSON that Curatarr accepts, even for a movie.
+    rendered = JELLYFIN_WEBHOOK_TEMPLATE
+    for name, value in {
+        "NotificationType": "PlaybackStop",
+        "ItemId": "0" * 32,
+        "PlayedToCompletion": "True",
+    }.items():
+        rendered = rendered.replace("{{" + name + "}}", value)
+    rendered = __import__("re").sub(r"\{\{\w+\}\}", "", rendered)
+    assert normalize_event(json.loads(rendered))["event_type"] == "item_played"

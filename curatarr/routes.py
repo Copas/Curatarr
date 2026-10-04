@@ -37,15 +37,17 @@ from .models import (
 from .policy import effective_policy, validate_policy
 from .services import (
     action_context,
-    discover,
     history_actions,
     history_filter_options,
     ingest_event,
+    integrations_ready,
     lifecycle_outlook,
     media_titles_for,
     metrics_summary,
     process_pending_events,
     reclaimed_bytes_total,
+    reconciliation_state,
+    request_reconciliation,
     resolved_policy,
     review_rows,
     rotate_webhook_token,
@@ -368,6 +370,7 @@ def overview():
         "overview.html",
         status=_status(),
         metrics=metrics_summary(),
+        reconciliation=reconciliation_state(),
         scheduled=scheduled,
         cleanup=cleanup,
         setup_incomplete=setup_incomplete,
@@ -438,45 +441,58 @@ def settings():
     return render_template("settings.html", new_token=new_token, **settings_view())
 
 
+def _queue_reconciliation():
+    if not integrations_ready():
+        flash(
+            "Add the Jellyfin, Sonarr, and Radarr API keys in Settings first.",
+            "warning",
+        )
+    else:
+        request_reconciliation()
+        flash(
+            "Discovery and reconciliation queued. The background worker starts within "
+            "15 seconds; a large library can take several minutes. Progress shows "
+            "under Operations.",
+            "success",
+        )
+    return redirect(url_for("main.overview"))
+
+
 @bp.post("/discover")
 def discover_route():
-    try:
-        if current_app.config["DEMO_MODE"]:
-            from .demo import seed_demo
+    if not current_app.config["DEMO_MODE"]:
+        return _queue_reconciliation()
+    from .demo import seed_demo
 
-            count = 3 if seed_demo() else 0
-        else:
-            count = discover()
-        flash(f"Discovered {count} Jellyfin libraries", "success")
-    except IntegrationError:
-        current_app.logger.warning("Discovery failed: integration unavailable")
-        flash("Discovery failed; check integration status", "danger")
+    count = 3 if seed_demo() else 0
+    flash(f"Discovered {count} Jellyfin libraries", "success")
     return redirect(url_for("main.overview"))
 
 
 @bp.post("/reconcile")
 def reconcile_route():
-    try:
-        process_pending_events()
-        from .lifecycle import expire_snoozes
+    if not current_app.config["DEMO_MODE"]:
+        return _queue_reconciliation()
+    process_pending_events()
+    from .artwork import reconcile_artwork
+    from .lifecycle import expire_snoozes
 
-        expire_snoozes()
-        count = evaluate_retention()
-        from .artwork import reconcile_artwork
-
-        reconcile_artwork()
-        flash(f"Reconciliation created {count} candidates", "success")
-    except IntegrationError:
-        flash("Reconciliation paused because an integration is unavailable", "danger")
+    expire_snoozes()
+    count = evaluate_retention()
+    reconcile_artwork()
+    flash(f"Reconciliation created {count} candidates", "success")
     return redirect(url_for("main.overview"))
 
 
 @bp.route("/api/v1/webhook/jellyfin", methods=["POST"])
 def webhook():
-    if not request.is_json:
-        abort(415)
+    # The Jellyfin Webhook plugin does not always label its body as JSON, so parse
+    # it regardless; the shared token was already checked in guard_request.
+    payload = request.get_json(force=True, silent=True)
+    if not isinstance(payload, dict):
+        abort(400)
     try:
-        event, created = ingest_event(request.get_json())
+        event, created = ingest_event(payload)
     except (ValueError, TypeError):
         abort(400)
     return jsonify({"event_id": event.id, "accepted": created}), 202

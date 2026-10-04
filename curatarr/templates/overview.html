@@ -47,6 +47,7 @@
 <tr><th scope="row">Acquisition actions</th><td>{{ metrics.acquisition_actions }}</td><th scope="row">Purge candidates created</th><td>{{ metrics.purge_candidates_created }}</td></tr>
 <tr><th scope="row">Rescues</th><td>{{ metrics.rescues }}</td><th scope="row">Proposed for reclaim</th><td>{{ '{:.1f}'.format(metrics.bytes_proposed / 1073741824) }} GiB</td></tr>
 <tr><th scope="row">External API failures</th><td>{% for kind, total in metrics.external_api_failures.items() %}{{ kind|title }} {{ total }}{% if not loop.last %} · {% endif %}{% endfor %}</td><th scope="row">Last reconciliation</th><td>{{ metrics.last_reconcile_duration_ms ~ ' ms' if metrics.last_reconcile_duration_ms is not none else '—' }}</td></tr>
+<tr><th scope="row">Reconciliation</th><td>{{ reconciliation.state|capitalize }}</td><th scope="row">Last finished</th><td>{{ reconciliation.last_finished.strftime('%Y-%m-%d %H:%M') ~ ' UTC' if reconciliation.last_finished else 'Never' }}</td></tr>
 <tr><th scope="row">Pending actions</th><td>{{ metrics.pending_actions }}</td><th scope="row">Oldest pending action</th><td>{{ metrics.oldest_pending_action_age_seconds ~ ' s' if metrics.oldest_pending_action_age_seconds is not none else '—' }}</td></tr>
 </tbody></table></div>
 <h2 class="h4 mt-4">Recent errors</h2>

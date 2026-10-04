@@ -1290,6 +1290,7 @@ def settings_view():
     return {
         "integrations": integrations,
         "guides": integration_guides(integrations),
+        "webhook_template": JELLYFIN_WEBHOOK_TEMPLATE,
         "webhook_present": setting("webhook_token") is not None,
         "interval_minutes": setting("reconciliation_interval_seconds", 3600) // 60,
     }
@@ -1391,3 +1392,52 @@ def action_context(action_id):
         "decision": decision,
         "related": related,
     }
+
+
+def integrations_ready():
+    rows = {row.kind: row for row in db.session.query(Integration)}
+    return all(
+        rows.get(kind) is not None and rows[kind].secret_ref
+        for kind in ("jellyfin", "sonarr", "radarr")
+    )
+
+
+def request_reconciliation():
+    """Ask the worker to discover and reconcile on its next cycle.
+
+    Discovery of a large library takes minutes, far longer than a web request
+    may run, so the UI only records the request.
+    """
+    set_setting("reconcile_requested_at", utcnow().isoformat())
+
+
+def reconciliation_state():
+    requested = _as_datetime(setting("reconcile_requested_at"))
+    attempt = _as_datetime(setting("last_reconcile_attempt_at"))
+    finished = _as_datetime(setting("last_reconcile_at"))
+    if requested and (not attempt or requested > attempt):
+        state = "queued"
+    elif attempt and (not finished or attempt > finished):
+        state = "running or failed"
+    else:
+        state = "idle"
+    return {"state": state, "last_finished": finished}
+
+
+# Template for the Jellyfin Webhook plugin's Generic destination. Values are
+# quoted so movies (no season/episode) still render valid JSON.
+JELLYFIN_WEBHOOK_TEMPLATE = """{
+  "event_type": "{{NotificationType}}",
+  "occurred_at": "{{UtcTimestamp}}",
+  "item_external_id": "{{ItemId}}",
+  "item_type": "{{ItemType}}",
+  "series_external_id": "{{SeriesId}}",
+  "season_number": "{{SeasonNumber}}",
+  "episode_number": "{{EpisodeNumber}}",
+  "user_external_id": "{{UserId}}",
+  "position_ticks": "{{PlaybackPositionTicks}}",
+  "played_to_completion": "{{PlayedToCompletion}}",
+  "played": "{{Played}}",
+  "favorite": "{{Favorite}}",
+  "save_reason": "{{SaveReason}}"
+}"""
