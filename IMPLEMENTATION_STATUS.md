@@ -57,6 +57,7 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Rule-specific review modes and the inactivity > quota > disk-pressure reason order (docs/decisions/006-automatic-lifecycle.md).
 - Quota high/low-water hysteresis applies only to Curatarr's own deletions (docs/decisions/005-capacity-policy.md).
 - Favorites rank last but do not protect a title; only Never Purge does.
+- First sync acts on existing watch history: past completions trigger acquisition like new ones (owner's choice, 2026-10-04; docs/decisions/006). Acquisition is not dry-run gated, and prior Sonarr monitored state is not recorded before Curatarr changes it.
 - Authentication uses Jellyfin administrator accounts (owner's choice, like Seerr) behind an isolated adapter, rather than local accounts. Non-administrators cannot sign in.
 - External side effects are represented by persisted actions.
 - Dry run is the default; each library can explicitly override it.
