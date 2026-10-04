@@ -257,6 +257,15 @@ class SonarrClient(Client):
             },
         )
 
+    def unmonitor_episode(self, episode_id):
+        """Unmonitor one episode; returns True only if it was monitored before."""
+        episode = self.request("GET", f"/api/v3/episode/{episode_id}")
+        if not episode["monitored"]:
+            return False
+        episode["monitored"] = False
+        self.request("PUT", f"/api/v3/episode/{episode_id}", json=episode)
+        return True
+
     def delete_episode_file(self, file_id):
         return self.request(
             "DELETE", f"/api/v3/episodefile/{file_id}", destructive=True
