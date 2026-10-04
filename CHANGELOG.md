@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Title pages have "Request now", which applies the always-keep and season-ahead rules to one show immediately and sends the result to Sonarr, plus the Review queue's Delete/Keep/Snooze/Never Purge buttons for a title in Review or Leaving Soon.
+
 - Jellyfin libraries that are not TV or movies (e.g. collections, mixed libraries) are listed on Overview as not managed instead of showing as empty 0 TB libraries, and are left out of rule scopes, the dry-run banner, and library counts.
 
 - Download requests explain themselves, e.g. "Kelden finished S01E01 of XYZ, so Curatarr is searching for Season 2." Overview lists recent requests under "Downloads requested", with their status.

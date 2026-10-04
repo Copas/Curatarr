@@ -1,9 +1,11 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>{{ media.title }}</h1><p>{{ media.media_type|title }} · {{ media.library.name }}</p>
+<h1>{{ media.title }}</h1><p>{{ 'TV' if media.media_type == 'series' else 'Movie' }} · {{ media.library.name }}</p>
+{% if media.media_type == 'series' %}<form method="post" action="{{ url_for('main.title_request_now', media_id=media.id) }}" class="mb-3"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-outline-light">Request now</button> <span class="text-secondary small">Applies the always-keep and season-ahead rules to this show immediately and sends anything due to Sonarr.</span></form>{% endif %}
 <div class="card p-3 mb-4"><h2 class="h5">Lifecycle decisions</h2>
 {% for candidate in candidates %}<div class="border-top border-secondary-subtle pt-2 mt-2"><strong>{{ candidate.state.replace('_',' ')|title }}</strong> · {{ candidate.reason_text }}<br>
 <span class="text-secondary">{{ candidate.reclaimable_bytes|size }} reclaimable · {{ candidate.reason_code.replace('_',' ')|title }}{% if candidate.scheduled_delete_at %} · Scheduled {{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') }}{% endif %}</span>
+{% if candidate.state in ('REVIEW', 'LEAVING_SOON', 'ELIGIBLE', 'SNOOZED') %}<div class="d-flex flex-wrap gap-1 my-2">{% for choice in (['keep', 'snooze_30', 'snooze_90', 'never_purge'] if candidate.state in ('ELIGIBLE', 'SNOOZED') else ['delete', 'keep', 'snooze_30', 'snooze_90', 'never_purge']) %}<form method="post" action="{{ url_for('main.review_action', candidate_id=candidate.id, choice=choice) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="title"><button class="btn btn-sm {{ 'btn-danger' if choice == 'delete' else 'btn-outline-light' }}">{{ choice.replace('_', ' ')|title }}</button></form>{% endfor %}</div>{% endif %}
 {% if candidate.score_detail_json %}<details><summary>Decision score and observations</summary><pre class="overflow-auto">{{ candidate.score_detail_json|tojson(indent=2) }}</pre></details>{% endif %}</div>
 {% else %}<p class="mb-0">No cleanup decision has been recorded for this title.</p>{% endfor %}
 </div>

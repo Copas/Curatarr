@@ -1593,6 +1593,83 @@ def dry_run_by_library():
 ACQUISITION_SEARCHES_PER_RUN = 5
 
 
+def _plan_show(media, request, now, *, require_recent=True):
+    """Apply the always-keep fill and season-ahead catch-up to one show."""
+    from datetime import timedelta
+
+    from .policy import retained
+
+    policy, _ = resolved_policy(media)
+    if policy["fill_minimum_footprint"]:
+        # "Entire series" means never trim, not download everything, so the
+        # fill covers at most Season 1.
+        request(
+            media,
+            1,
+            f"{media.title} is missing episodes it always keeps",
+            episode_filter=lambda part, policy=policy: retained(part, policy),
+        )
+    completed = (
+        db.session.query(
+            MediaPart.season_number,
+            func.count(func.distinct(EpisodeUserState.media_part_id)),
+            func.max(EpisodeUserState.last_played_at),
+        )
+        .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
+        .filter(
+            MediaPart.media_identity_id == media.id,
+            MediaPart.season_number > 0,
+            EpisodeUserState.played.is_(True),
+        )
+        .group_by(MediaPart.season_number)
+        .all()
+    )
+    if not completed:
+        return
+    season, count, _last = max(completed, key=lambda row: row[0])
+    last_played = max(
+        (_as_datetime(row[2]) for row in completed if row[2]), default=None
+    )
+    recent = last_played and now - last_played <= timedelta(
+        days=policy["tv_inactivity_days"]
+    )
+    if count < policy["acquisition_threshold"] or (require_recent and not recent):
+        return
+    latest = (
+        db.session.query(EpisodeUserState.jellyfin_user_id, MediaPart.episode_number)
+        .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
+        .filter(
+            MediaPart.media_identity_id == media.id,
+            MediaPart.season_number == season,
+            EpisodeUserState.played.is_(True),
+        )
+        .order_by(EpisodeUserState.last_played_at.desc())
+        .first()
+    )
+    # Past tense reads correctly for shared accounts like "Jon and Amber".
+    cause = (
+        f"{user_display_name(latest[0])} finished "
+        f"{episode_label(season, latest[1])} of {media.title}, the latest "
+        f"watched in Season {season}"
+        if latest
+        else f"Viewers are watching Season {season} of {media.title}"
+    )
+    for target in acquisition_seasons(media.parts, season, policy):
+        request(media, target, cause, current_season=season)
+
+
+def _skip_reason(media):
+    if media.media_type != "series" or media.sonarr_id is None:
+        return "Only TV shows matched to Sonarr can be requested."
+    if media.missing_since is not None:
+        return "This show is no longer in Jellyfin."
+    if media.arr_monitored is False:
+        return "Sonarr has this show unmonitored, so Curatarr leaves it alone."
+    if media.series_type == "daily":
+        return "Daily shows are numbered by date, so Curatarr does not request them."
+    return None
+
+
 def reconcile_acquisition():
     """Request what viewing and the always-keep rule call for, every reconciliation.
 
@@ -1600,10 +1677,6 @@ def reconcile_acquisition():
     never downloaded, and a next season that appeared after viewers caught up.
     Shows Sonarr has unmonitored, and daily shows, are left alone.
     """
-    from datetime import timedelta
-
-    from .policy import retained
-
     now = utcnow()
     budget = ACQUISITION_SEARCHES_PER_RUN
     requested = 0
@@ -1623,75 +1696,35 @@ def reconcile_acquisition():
 
     shows = (
         db.session.query(MediaIdentity)
-        .filter(
-            MediaIdentity.media_type == "series",
-            MediaIdentity.sonarr_id.isnot(None),
-            MediaIdentity.missing_since.is_(None),
-        )
+        .filter(MediaIdentity.media_type == "series")
         .order_by(MediaIdentity.title)
         .all()
     )
     for media in shows:
-        if media.arr_monitored is False or media.series_type == "daily":
-            continue
-        policy, _ = resolved_policy(media)
-        if policy["fill_minimum_footprint"]:
-            # "Entire series" means never trim, not download everything, so
-            # the fill covers at most Season 1.
-            request(
-                media,
-                1,
-                f"{media.title} is missing episodes it always keeps",
-                episode_filter=lambda part, policy=policy: retained(part, policy),
-            )
-        completed = (
-            db.session.query(
-                MediaPart.season_number,
-                func.count(func.distinct(EpisodeUserState.media_part_id)),
-                func.max(EpisodeUserState.last_played_at),
-            )
-            .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
-            .filter(
-                MediaPart.media_identity_id == media.id,
-                MediaPart.season_number > 0,
-                EpisodeUserState.played.is_(True),
-            )
-            .group_by(MediaPart.season_number)
-            .all()
-        )
-        if not completed:
-            continue
-        season, count, _last = max(completed, key=lambda row: row[0])
-        last_played = max(
-            (_as_datetime(row[2]) for row in completed if row[2]), default=None
-        )
-        recent = last_played and now - last_played <= timedelta(
-            days=policy["tv_inactivity_days"]
-        )
-        if count < policy["acquisition_threshold"] or not recent:
-            continue
-        latest = (
-            db.session.query(
-                EpisodeUserState.jellyfin_user_id, MediaPart.episode_number
-            )
-            .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
-            .filter(
-                MediaPart.media_identity_id == media.id,
-                MediaPart.season_number == season,
-                EpisodeUserState.played.is_(True),
-            )
-            .order_by(EpisodeUserState.last_played_at.desc())
-            .first()
-        )
-        # Past tense reads correctly for shared accounts like "Jon and Amber".
-        cause = (
-            f"{user_display_name(latest[0])} finished "
-            f"{episode_label(season, latest[1])} of {media.title}, the latest "
-            f"watched in Season {season}"
-            if latest
-            else f"Viewers are watching Season {season} of {media.title}"
-        )
-        for target in acquisition_seasons(media.parts, season, policy):
-            request(media, target, cause, current_season=season)
+        if _skip_reason(media) is None:
+            _plan_show(media, request, now)
     db.session.commit()
     return requested
+
+
+def request_title_now(media):
+    """Run the acquisition rules for one show immediately, for the title page.
+
+    Ignores the per-run search limit and the recent-viewing window. Returns
+    (new actions, skip reason); the caller sends the actions to Sonarr.
+    """
+    reason = _skip_reason(media)
+    if reason:
+        return [], reason
+    now = utcnow()
+    created = []
+
+    def request(media, season, cause, **kwargs):
+        action = _request_season(media, season, cause, **kwargs)
+        if action is not None and _as_datetime(action.created_at) >= now:
+            created.append(action)
+        return action
+
+    _plan_show(media, request, now, require_recent=False)
+    db.session.commit()
+    return created, None

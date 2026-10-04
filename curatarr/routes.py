@@ -48,6 +48,7 @@ from .services import (
     reclaimed_bytes_total,
     reconciliation_state,
     request_reconciliation,
+    request_title_now,
     resolved_policy,
     review_rows,
     rotate_webhook_token,
@@ -610,7 +611,37 @@ def review_action(candidate_id, choice):
         reconcile_artwork()
     except ValueError as exc:
         flash(str(exc), "danger")
+    if request.form.get("back") == "title":
+        candidate = db.session.get(PurgeCandidate, candidate_id)
+        if candidate:
+            return redirect(url_for("main.title", media_id=candidate.media_identity_id))
     return redirect(url_for("main.review"))
+
+
+@bp.post("/titles/<media_id>/request")
+def title_request_now(media_id):
+    media = db.session.get(MediaIdentity, media_id)
+    if not media:
+        abort(404)
+    from .lifecycle import execute_action
+
+    actions, skipped = request_title_now(media)
+    if skipped:
+        flash(skipped, "warning")
+    elif not actions:
+        flash(
+            "Nothing to request: the always-keep episodes and the seasons "
+            "viewing calls for are already present or already requested.",
+            "info",
+        )
+    for action in actions:
+        result = execute_action(action.id)
+        status = "Sent to Sonarr" if result == "succeeded" else f"Not sent ({result})"
+        flash(
+            f"{action.reason_text} {status}.",
+            "success" if result == "succeeded" else "danger",
+        )
+    return redirect(url_for("main.title", media_id=media.id))
 
 
 HISTORY_FILTERS = ("type", "state", "q", "library", "user", "from", "to")

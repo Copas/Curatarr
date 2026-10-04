@@ -199,3 +199,69 @@ def test_catch_up_and_always_keep_messages(app):
         "Gaps is missing episodes it always keeps, so Curatarr is searching "
         "for S01E01–S01E02."
     )
+
+
+class _SonarrRecorder:
+    def __init__(self):
+        self.searches = []
+
+    def monitor_episode(self, _episode_id):
+        return True
+
+    def queue(self):
+        return {"records": []}
+
+    def commands(self):
+        return []
+
+    def season_search(self, series_id, season):
+        self.searches.append((series_id, season))
+
+
+def test_request_now_sends_immediately_even_for_older_viewing(app, client, monkeypatch):
+    from curatarr.services import set_setting
+
+    sonarr = _SonarrRecorder()
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: sonarr)
+    set_setting("jellyfin_user_names", {"viewer": "Kelden"})
+    media, parts = _show(
+        "Old Favourite", [(1, 1, True), (1, 2, True), (1, 3, True), (2, 1, False)]
+    )
+    _watched(parts[(1, 3)], days_ago=300)  # outside the hourly 90-day window
+    assert reconcile_acquisition() == 0
+    page = client.post(f"/titles/{media.id}/request", follow_redirects=True).text
+    assert (
+        "Kelden finished S01E03 of Old Favourite, the latest watched in Season 1, "
+        "so Curatarr is searching for Season 2. Sent to Sonarr."
+    ) in page
+    assert sonarr.searches == [(media.sonarr_id, 2)]
+    again = client.post(f"/titles/{media.id}/request", follow_redirects=True).text
+    assert "Nothing to request" in again
+
+
+def test_request_now_explains_shows_it_will_not_touch(app, client):
+    media, _ = _show("Switched Off", [(1, 1, False)], monitored=False)
+    page = client.post(f"/titles/{media.id}/request", follow_redirects=True).text
+    assert "Sonarr has this show unmonitored" in page
+    assert _requests() == []
+
+
+def test_title_page_keep_rescues_and_returns_to_the_title(app, client):
+    from curatarr.models import PurgeCandidate
+
+    media, _ = _show("Leaving", [(1, 1, True), (1, 4, True)])
+    candidate = PurgeCandidate(
+        media_identity_id=media.id,
+        state="LEAVING_SOON",
+        reason_code="disk_pressure",
+        reason_text="Low space",
+        reclaimable_bytes=100,
+    )
+    db.session.add(candidate)
+    db.session.commit()
+    page = client.get(f"/titles/{media.id}").text
+    assert 'name="back" value="title"' in page and ">Keep</button>" in page
+    response = client.post(f"/review/{candidate.id}/keep", data={"back": "title"})
+    assert response.headers["Location"].endswith(f"/titles/{media.id}")
+    db.session.refresh(candidate)
+    assert candidate.state == "RESCUED"
