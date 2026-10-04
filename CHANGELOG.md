@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Settings shows the last webhook delivery (what it was, who, and whether it matched a title), the total received, and the last rejected or ignored delivery with the reason. Notification types Curatarr does not use are acknowledged and recorded as ignored instead of rejected.
+
 - Title pages have "Request now", which applies the always-keep and season-ahead rules to one show immediately and sends the result to Sonarr, plus the Review queue's Delete/Keep/Snooze/Never Purge buttons for a title in Review or Leaving Soon.
 
 - Jellyfin libraries that are not TV or movies (e.g. collections, mixed libraries) are listed on Overview as not managed instead of showing as empty 0 TB libraries, and are left out of rule scopes, the dry-run banner, and library counts.

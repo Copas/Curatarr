@@ -174,3 +174,58 @@ def test_webhook_accepts_plugin_body_without_json_content_type(series, client):
         == 400
     )
     assert client.post("/api/v1/webhook/jellyfin", data=body).status_code == 403
+
+
+def test_settings_show_webhook_deliveries_and_problems(series, client):
+    from curatarr.services import process_pending_events, set_setting
+
+    set_setting("webhook_token", "plugin-token")
+    set_setting("jellyfin_user_names", {USER.hex: "Kelden"})
+    headers = {"X-Curatarr-Token": "plugin-token"}
+    page = client.get("/settings").text
+    assert "No webhook received yet." in page
+
+    client.post(
+        "/api/v1/webhook/jellyfin",
+        data=json.dumps(_template("PlaybackStop", PlayedToCompletion="True")),
+        headers=headers,
+    )
+    page = client.get("/settings").text
+    assert (
+        "Finished: S01E01 of Plugin Series by Kelden — waiting to be processed." in page
+    )
+    process_pending_events()
+    page = client.get("/settings").text
+    assert "— matched to Plugin Series." in page
+    assert "1 received in total." in page
+
+    client.post(
+        "/api/v1/webhook/jellyfin", data="{}", headers={"X-Curatarr-Token": "no"}
+    )
+    page = client.get("/settings").text
+    assert "Last rejected delivery:" in page
+    assert "The X-Curatarr-Token header was missing or wrong." in page
+
+    ignored = client.post(
+        "/api/v1/webhook/jellyfin",
+        data=json.dumps({"NotificationType": "ItemAdded", "ItemId": "x"}),
+        headers=headers,
+    )
+    assert ignored.status_code == 202
+    page = client.get("/settings").text
+    assert "Last ignored notification:" in page
+    assert "ItemAdded notifications are not used." in page
+
+
+def test_unmatched_delivery_says_why(app, client):
+    from curatarr.services import process_pending_events, set_setting
+
+    set_setting("webhook_token", "plugin-token")
+    client.post(
+        "/api/v1/webhook/jellyfin",
+        data=json.dumps(_template("PlaybackStart", ItemId=uuid.uuid4().hex)),
+        headers={"X-Curatarr-Token": "plugin-token"},
+    )
+    process_pending_events()
+    page = client.get("/settings").text
+    assert "not matched: the item is not in a TV or movie library" in page

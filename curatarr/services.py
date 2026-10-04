@@ -417,6 +417,10 @@ def _first(payload, *keys):
 PLAYED_SAVE_REASONS = {"playbackfinished", "toggleplayed"}
 
 
+class UnsupportedWebhookEvent(ValueError):
+    """A well-formed notification of a type Curatarr does not act on."""
+
+
 def normalize_event(payload):
     """Accept the Jellyfin Webhook plugin's fields and Curatarr's canonical form.
 
@@ -444,7 +448,7 @@ def normalize_event(payload):
         "favorite_changed",
         "user_data_saved",
     }:
-        raise ValueError("Unsupported webhook event")
+        raise UnsupportedWebhookEvent(f"{kind or 'Unknown'} notifications are not used")
     item_id = _jellyfin_id(_first(payload, "item_external_id", "ItemId"))
     if not item_id:
         raise ValueError("Item ID is required")
@@ -1393,6 +1397,7 @@ def settings_view():
         "webhook_template": JELLYFIN_WEBHOOK_TEMPLATE,
         "webhook_present": setting("webhook_token") is not None,
         "interval_minutes": setting("reconciliation_interval_seconds", 3600) // 60,
+        "webhook": webhook_status(),
     }
 
 
@@ -1728,3 +1733,99 @@ def request_title_now(media):
     _plan_show(media, request, now, require_recent=False)
     db.session.commit()
     return created, None
+
+
+EVENT_LABELS = {
+    "playback_started": "Playback Start",
+    "playback_progress": "Playback Progress",
+    "playback_stopped": "Playback Stop",
+    "item_played": "Finished",
+    "favorite_changed": "User Data Saved",
+}
+
+
+def record_webhook(outcome, *, reason=None, event=None):
+    """Remember the latest webhook delivery or rejection for the Settings page."""
+    entry = {"at": utcnow().isoformat(), "outcome": outcome}
+    if reason:
+        entry["reason"] = reason
+    if event is not None:
+        entry["event_id"] = event.id
+    key = "webhook_last_delivery" if outcome == "accepted" else "webhook_last_problem"
+    set_setting(key, entry)
+    if outcome == "accepted":
+        increment("webhook_deliveries")
+
+
+def _media_for_delivery(data):
+    """Best-effort title for a delivery that has not been processed yet."""
+    ids = [
+        i for i in (data.get("series_external_id"), data.get("item_external_id")) if i
+    ]
+    if not ids:
+        return None
+    media = (
+        db.session.query(MediaIdentity)
+        .filter(MediaIdentity.jellyfin_id.in_(ids))
+        .first()
+    )
+    if media:
+        return media
+    part = (
+        db.session.query(MediaPart)
+        .filter(MediaPart.jellyfin_id == data.get("item_external_id"))
+        .first()
+    )
+    return part.media if part else None
+
+
+def webhook_status():
+    """What the last webhook delivery was and whether it matched a title."""
+    from .observability import counter_values
+
+    delivery = setting("webhook_last_delivery")
+    problem = setting("webhook_last_problem")
+    summary = None
+    if delivery:
+        event = db.session.get(LifecycleEvent, delivery.get("event_id"))
+        if event:
+            data = event.normalized_json or {}
+            media = (
+                db.session.get(MediaIdentity, event.media_identity_id)
+                if event.media_identity_id
+                else _media_for_delivery(data)
+            )
+            what = (
+                f"{episode_label(data['season_number'], data['episode_number'])} of "
+                if data.get("season_number") is not None
+                and data.get("episode_number") is not None
+                else ""
+            )
+            summary = {
+                "at": _as_datetime(delivery["at"]),
+                "event": EVENT_LABELS.get(event.event_type, event.event_type),
+                "description": f"{what}{media.title if media else 'an item'} by "
+                f"{user_display_name(data.get('user_external_id'))}",
+                "match": (
+                    "waiting to be processed"
+                    if event.processed_at is None
+                    else f"matched to {media.title}"
+                    if media
+                    else "not matched: the item is not in a TV or movie library "
+                    "Curatarr manages"
+                ),
+            }
+    latest_problem = None
+    if problem and (
+        not delivery or _as_datetime(problem["at"]) > _as_datetime(delivery["at"])
+    ):
+        latest_problem = {
+            "at": _as_datetime(problem["at"]),
+            "outcome": problem["outcome"],
+            "reason": problem.get("reason"),
+        }
+    return {
+        "last": summary,
+        "problem": latest_problem,
+        "count": counter_values()["webhook_deliveries"],
+    }
