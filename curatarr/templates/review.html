@@ -10,7 +10,7 @@
   <td>{% if row.last_played %}{{ row.last_played.strftime('%Y-%m-%d') }}{% if row.last_watcher %}<div class="small text-secondary">by {{ row.last_watcher }}</div>{% endif %}{% else %}Never observed{% endif %}</td>
   <td>{{ row.added_at.strftime('%Y-%m-%d') if row.added_at else '—' }}</td>
   <td class="small">Favorite: {{ 'Yes' if row.favorite else 'No' }}<br>Meaningful watch: {{ 'Yes' if row.meaningful else 'No' }}</td>
-  <td>{{ '{:.1f}'.format(candidate.reclaimable_bytes / 1073741824) }} GiB</td>
+  <td>{{ candidate.reclaimable_bytes|size }}</td>
   <td>{{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') if candidate.scheduled_delete_at else '—' }}</td>
   <td><div class="d-flex flex-wrap gap-1"><a class="btn btn-sm btn-outline-info" href="{{ url_for('main.title', media_id=row.media.id) }}">Details</a>{% set choices = ['keep', 'snooze_30', 'snooze_90', 'never_purge'] if candidate.state == 'ELIGIBLE' else ['delete', 'keep', 'snooze_30', 'snooze_90', 'never_purge'] %}{% for choice in choices %}<form method="post" action="{{ url_for('main.review_action', candidate_id=candidate.id, choice=choice) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ 'btn-danger' if choice == 'delete' else 'btn-outline-light' }}">{{ choice.replace('_', ' ')|title }}</button></form>{% endfor %}</div></td>
 </tr>{% else %}<tr><td colspan="10">No pending candidates.</td></tr>{% endfor %}

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% macro shown(value) %}{{ value|choice_label }}{% endmacro %}
+{% macro shown(value, kind=none) %}{% if kind == 'size' and value is not none %}{{ value|size }}{% else %}{{ value|choice_label }}{% endif %}{% endmacro %}
 {% macro source_name(source) %}{{ {'default': 'built-in default', 'global': 'global default', 'library': 'this library', 'title': 'title override'}.get(source, source) }}{% endmacro %}
 {% block content %}
 <h1>{{ heading }}{% if library %} · {{ library.name }}{% endif %}</h1>
@@ -22,17 +22,18 @@
 {% for key, label, kind in fields %}
   {#- Blank only means something when a library inherits, when a review mode
       follows the main review mode, or for the media-type-specific strategy. -#}
-  {% if library %}{% set blank_label = 'Inherit (' ~ (shown(fallback[key])|trim if fallback[key] is not none else 'same as review mode') ~ ')' %}
+  {% if library %}{% set blank_label = 'Inherit (' ~ (shown(fallback[key], kind)|trim if fallback[key] is not none else ('not set' if kind == 'size' else 'same as review mode')) ~ ')' %}
   {% elif key == 'purge_strategy' %}{% set blank_label = 'Depends on library type (TV: oldest unwatched first; movies: oldest watched non-favorites first)' %}
   {% elif fallback[key] is none %}{% set blank_label = 'Same as review mode' %}
   {% else %}{% set blank_label = none %}{% endif %}
   {% set current = stored[key] if key in stored else (none if library else fallback[key]) %}
   <div class="col-md-6"><label class="form-label w-100">{{ label }}
-  {% if kind == 'number' %}<input class="form-control" type="number" min="0" name="{{ key }}" value="{{ current if current is not none else '' }}"{% if blank_label %} placeholder="{{ blank_label }}"{% endif %}>
+  {% if kind == 'size' %}<div class="input-group"><input class="form-control" type="number" min="0" step="any" name="{{ key }}" value="{{ current|size_amount }}"{% if blank_label %} placeholder="{{ blank_label }}"{% endif %}><select class="form-select flex-grow-0 w-auto" name="{{ key }}_unit" aria-label="{{ label }} unit">{% set unit = current|size_unit if current else 'TB' %}{% for option in ['MB', 'GB', 'TB'] %}<option {% if option == unit %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></div>
+  {% elif kind == 'number' %}<input class="form-control" type="number" min="0" name="{{ key }}" value="{{ current if current is not none else '' }}"{% if blank_label %} placeholder="{{ blank_label }}"{% endif %}>
   {% elif kind == 'text' %}<input class="form-control" type="text" name="{{ key }}" value="{{ current or '' }}" placeholder="{{ blank_label or '' }} (e.g. /media/movies)">
   {% else %}<select class="form-select" name="{{ key }}">{% if blank_label %}<option value="">{{ blank_label }}</option>{% endif %}
   {% for value in kind %}<option value="{{ value }}" {% if current is not none and current|string|lower == value %}selected{% endif %}>{{ value|choice_label }}</option>{% endfor %}</select>{% endif %}
-  </label>{% if library %}<div class="form-text">Currently in effect: {{ shown(effective.get(key)) }} ({{ source_name(sources.get(key, 'default')) }})</div>{% endif %}</div>
+  </label>{% if library %}<div class="form-text">Currently in effect: {{ shown(effective.get(key), kind) }} ({{ source_name(sources.get(key, 'default')) }})</div>{% endif %}</div>
 {% endfor %}
 </div><button class="btn btn-primary mt-3">Save</button></form>
 {% if library and not section %}<p class="mt-3"><a href="{{ url_for('main.rules', section='acquisition', scope=library.id) }}">Acquisition rules</a> · <a href="{{ url_for('main.rules', section='retention', scope=library.id) }}">Retention rules</a></p>{% endif %}

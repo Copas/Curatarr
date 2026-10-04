@@ -171,6 +171,35 @@ CHOICE_LABELS = {
 }
 
 
+@bp.app_template_filter("size")
+def size_label(value):
+    """Bytes as MB, GB, or TB (binary, matching Sonarr/Radarr/Jellyfin)."""
+    from .policy import SIZE_UNITS, best_size_unit
+
+    if value is None:
+        return "not set"
+    unit = best_size_unit(value)
+    amount = value / SIZE_UNITS[unit]
+    return f"{amount:.{2 if unit == 'TB' else 1 if unit == 'GB' else 0}f} {unit}"
+
+
+@bp.app_template_filter("size_amount")
+def size_amount(value):
+    """A byte count in its best unit, trimmed for an input box (e.g. 2.5)."""
+    from .policy import SIZE_UNITS, best_size_unit
+
+    if value is None:
+        return ""
+    return f"{value / SIZE_UNITS[best_size_unit(value)]:.3f}".rstrip("0").rstrip(".")
+
+
+@bp.app_template_filter("size_unit")
+def size_unit(value):
+    from .policy import best_size_unit
+
+    return best_size_unit(value)
+
+
 @bp.app_template_filter("choice_label")
 def choice_label(value):
     """Readable text for stored policy values (enums and booleans)."""
@@ -640,8 +669,8 @@ POLICY_FIELDS = {
     ),
     "notice_days": ("Leaving Soon notice before removal (days)", "number"),
     "quota_enabled": ("Library-size limit", ["true", "false"]),
-    "high_water_bytes": ("High-water bytes", "number"),
-    "low_water_bytes": ("Low-water bytes", "number"),
+    "high_water_bytes": ("Size limit: start cleanup above", "size"),
+    "low_water_bytes": ("Size limit: clean down to", "size"),
     "free_space_enabled": ("Free-space enforcement", ["true", "false"]),
     "disk_path": ("Arr-side disk path", "text"),
     "low_free_percent": (

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Size limits are entered in MB, GB, or TB (TB by default) instead of bytes, and every size in the interface uses the same units (binary, matching Sonarr, Radarr, Jellyfin, and df).
+
 - TV cleanup unmonitors each trimmed episode in Sonarr just before deleting its file. Previously the episodes stayed monitored, so Sonarr's missing-episode search would have downloaded them straight back (Sonarr's own "unmonitor deleted episodes" does not apply to API deletions and is off here).
 
 - Library-size limits, free-space enforcement, and dry run can be set as global defaults. The dry-run banner states exactly which libraries are in dry run and which can delete, and explains that dry run rehearses everything but never asks Sonarr/Radarr to delete.

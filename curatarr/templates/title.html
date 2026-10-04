@@ -3,7 +3,7 @@
 <h1>{{ media.title }}</h1><p>{{ media.media_type|title }} · {{ media.library.name }}</p>
 <div class="card p-3 mb-4"><h2 class="h5">Lifecycle decisions</h2>
 {% for candidate in candidates %}<div class="border-top border-secondary-subtle pt-2 mt-2"><strong>{{ candidate.state.replace('_',' ')|title }}</strong> · {{ candidate.reason_text }}<br>
-<span class="text-secondary">{{ '{:.1f}'.format(candidate.reclaimable_bytes / 1073741824) }} GiB reclaimable · {{ candidate.reason_code.replace('_',' ')|title }}{% if candidate.scheduled_delete_at %} · Scheduled {{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') }}{% endif %}</span>
+<span class="text-secondary">{{ candidate.reclaimable_bytes|size }} reclaimable · {{ candidate.reason_code.replace('_',' ')|title }}{% if candidate.scheduled_delete_at %} · Scheduled {{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') }}{% endif %}</span>
 {% if candidate.score_detail_json %}<details><summary>Decision score and observations</summary><pre class="overflow-auto">{{ candidate.score_detail_json|tojson(indent=2) }}</pre></details>{% endif %}</div>
 {% else %}<p class="mb-0">No cleanup decision has been recorded for this title.</p>{% endfor %}
 </div>

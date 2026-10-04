@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from math import isfinite
 from typing import Any
 
 DEFAULTS: dict[str, Any] = {
@@ -303,7 +304,20 @@ def select_to_low_water(items: list[CandidateInput], current: int, high: int, lo
     return selected, max(0, required - reclaimed)
 
 
-INTEGER_FIELDS = set(BOUNDS) | {"high_water_bytes", "low_water_bytes"}
+SIZE_FIELDS = {"high_water_bytes", "low_water_bytes"}
+INTEGER_FIELDS = set(BOUNDS)
+# Binary units, as Sonarr, Radarr, Jellyfin, and df label them (1 TB = 1024 GB).
+SIZE_UNITS = {"MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
+
+
+def best_size_unit(value):
+    """The largest unit in which a byte count is at least 1, defaulting to TB."""
+    if not value:
+        return "TB"
+    for unit in ("TB", "GB", "MB"):
+        if value >= SIZE_UNITS[unit]:
+            return unit
+    return "MB"
 
 
 def merge_policy_form(existing: dict, form, keys) -> dict:
@@ -322,6 +336,15 @@ def merge_policy_form(existing: dict, form, keys) -> dict:
             if raw not in {"true", "false"}:
                 raise ValueError(f"Invalid {key}")
             merged[key] = raw == "true"
+        elif key in SIZE_FIELDS:
+            unit = (form.get(f"{key}_unit") or "TB").strip().upper()
+            try:
+                amount = float(raw)
+            except ValueError as exc:
+                raise ValueError(f"Invalid {key}") from exc
+            if unit not in SIZE_UNITS or not isfinite(amount) or amount < 0:
+                raise ValueError(f"Invalid {key}")
+            merged[key] = round(amount * SIZE_UNITS[unit])
         elif key in INTEGER_FIELDS:
             try:
                 merged[key] = int(raw)
