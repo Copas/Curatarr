@@ -24,7 +24,6 @@ from .auth import SignInError, current_user, needs_server_url, sign_in, sign_out
 from .integrations import CLIENTS, IntegrationError
 from .lifecycle import evaluate_retention, execute_approved, review_candidate
 from .models import (
-    AcquisitionState,
     Integration,
     Library,
     LifecycleAction,
@@ -423,10 +422,10 @@ def overview():
         .all()
     )
     acquisitions = (
-        db.session.query(AcquisitionState)
-        .filter(AcquisitionState.state != "DORMANT")
-        .order_by(AcquisitionState.updated_at.desc())
-        .limit(5)
+        db.session.query(LifecycleAction)
+        .filter_by(action_type="sonarr_season_search")
+        .order_by(LifecycleAction.created_at.desc())
+        .limit(10)
         .all()
     )
     media_ids = {

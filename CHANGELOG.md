@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Download requests explain themselves, e.g. "Kelden finished S01E01 of XYZ, so Curatarr is searching for Season 2." Overview lists recent requests under "Downloads requested", with their status.
+
 - Every reconciliation now requests missing always-keep episodes (new setting "Download always-keep episodes that are missing", on by default) and catches up the next season for shows watched in the last 90 days, skipping shows Sonarr has unmonitored and daily shows, with at most 5 new searches per run. Requires `db upgrade` (adds `arr_monitored` and `series_type`).
 
 - Size limits are entered in MB, GB, or TB (TB by default) instead of bytes, and every size in the interface uses the same units (binary, matching Sonarr, Radarr, Jellyfin, and df).

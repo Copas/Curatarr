@@ -143,3 +143,59 @@ def test_undated_episodes_are_monitored_but_not_searched(app):
     (action,) = _requests(media)
     assert action.payload_json["episode_ids"] == [1001, 1002]
     assert action.payload_json["search_now"] is False
+
+
+def test_requests_explain_who_watched_what_and_what_happens(app, client):
+    from curatarr.services import ingest_event, process_pending_events, set_setting
+
+    set_setting("jellyfin_user_names", {"viewer": "Kelden"})
+    media, parts = _show(
+        "XYZ",
+        [(1, 1, True), (1, 2, True), (1, 3, True), (2, 1, False), (2, 2, False, None)],
+    )
+    parts[(1, 1)].jellyfin_id = "xyz-1-1"
+    db.session.commit()
+    ingest_event(
+        {
+            "event_id": "kelden-1",
+            "event_type": "item_played",
+            "item_external_id": "xyz-1-1",
+            "series_external_id": media.jellyfin_id,
+            "season_number": 1,
+            "episode_number": 1,
+            "user_external_id": "viewer",
+            "played": True,
+        }
+    )
+    process_pending_events()
+    (action,) = _requests(media)
+    assert action.reason_text == (
+        "Kelden finished S01E01 of XYZ, so Curatarr is searching for Season 2."
+    )
+    page = client.get("/").text
+    assert "Downloads requested" in page
+    assert (
+        "Kelden finished S01E01 of XYZ, so Curatarr is searching for Season 2." in page
+    )
+
+
+def test_catch_up_and_always_keep_messages(app):
+    from curatarr.services import set_setting
+
+    set_setting("jellyfin_user_names", {"viewer": "Kelden"})
+    watching, parts = _show(
+        "Catch Up", [(1, 1, True), (1, 2, True), (1, 3, True), (2, 1, False, None)]
+    )
+    _watched(parts[(1, 2)])
+    missing, _ = _show("Gaps", [(1, 1, False), (1, 2, False), (1, 3, True)])
+    reconcile_acquisition()
+    (catch_up,) = _requests(watching)
+    assert catch_up.reason_text == (
+        "Kelden is watching Season 1 of Catch Up (last finished S01E02), so "
+        "Curatarr is monitoring Season 2 so Sonarr downloads it when it airs."
+    )
+    (fill,) = _requests(missing)
+    assert fill.reason_text == (
+        "Gaps is missing episodes it always keeps, so Curatarr is searching "
+        "for S01E01–S01E02."
+    )

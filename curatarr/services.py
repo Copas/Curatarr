@@ -667,6 +667,24 @@ def process_event(event):
     db.session.commit()
 
 
+def user_display_name(user_id):
+    """A Jellyfin user's name from the reconciliation cache, never a raw ID."""
+    names = setting("jellyfin_user_names", {})
+    return names.get(user_id) or "A viewer"
+
+
+def episode_label(season, episode):
+    return f"S{season:02d}E{episode:02d}"
+
+
+def _episode_span(parts):
+    labels = [
+        episode_label(p.season_number, p.episode_number)
+        for p in sorted(parts, key=lambda p: (p.season_number, p.episode_number))
+    ]
+    return labels[0] if len(labels) == 1 else f"{labels[0]}–{labels[-1]}"
+
+
 def _request_season(
     media,
     season,
@@ -677,6 +695,8 @@ def _request_season(
     episode_filter=None,
     allow_search=True,
 ):
+    """reason is the cause, e.g. "Kelden finished S01E01 of XYZ"; the helper
+    adds what Curatarr is doing about it, which depends on air dates."""
     """Queue a Sonarr monitor/search action for a season's missing episodes.
 
     Returns the action, or None when nothing in the season is missing. The
@@ -705,6 +725,19 @@ def _request_season(
     ]
     search_now = bool(available) and allow_search
     episode_ids = sorted(p.sonarr_episode_id for p in missing)
+    if episode_filter is not None:
+        what, it = _episode_span(missing), "them"
+    elif season == current_season:
+        what, it = f"the rest of Season {season}", "them"
+    else:
+        what, it = f"Season {season}", "it"
+    if search_now:
+        outcome = f"searching for {what}"
+    elif available:
+        outcome = f"monitoring {what}; the search follows in a later run"
+    else:
+        outcome = f"monitoring {what} so Sonarr downloads {it} when it airs"
+    reason = f"{reason}, so Curatarr is {outcome}."
     signature = hashlib.sha256(
         json.dumps(
             {"episode_ids": episode_ids, "search_now": search_now}, sort_keys=True
@@ -768,10 +801,18 @@ def _plan_acquisition(media, current_season, event):
     pending = False
     failed = False
     for season in seasons:
+        data = event.normalized_json or {}
+        episode = data.get("episode_number")
+        finished = (
+            episode_label(current_season, episode)
+            if episode is not None
+            else f"an episode of Season {current_season}"
+        )
         action = _request_season(
             media,
             season,
-            f"Season {season} requested because a Season {current_season} episode was completed.",
+            f"{user_display_name(data.get('user_external_id'))} finished {finished} "
+            f"of {media.title}",
             event=event,
             current_season=current_season,
         )
@@ -1596,7 +1637,7 @@ def reconcile_acquisition():
             request(
                 media,
                 1,
-                "Season 1 episodes requested to complete the always-keep set.",
+                f"{media.title} is missing episodes it always keeps",
                 episode_filter=lambda part, policy=policy: retained(part, policy),
             )
         completed = (
@@ -1625,11 +1666,26 @@ def reconcile_acquisition():
         )
         if count < policy["acquisition_threshold"] or not recent:
             continue
+        latest = (
+            db.session.query(
+                EpisodeUserState.jellyfin_user_id, MediaPart.episode_number
+            )
+            .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
+            .filter(
+                MediaPart.media_identity_id == media.id,
+                MediaPart.season_number == season,
+                EpisodeUserState.played.is_(True),
+            )
+            .order_by(EpisodeUserState.last_played_at.desc())
+            .first()
+        )
+        viewer = user_display_name(latest[0]) if latest else "A viewer"
+        last = f" (last finished {episode_label(season, latest[1])})" if latest else ""
         for target in acquisition_seasons(media.parts, season, policy):
             request(
                 media,
                 target,
-                f"Season {target} requested because viewers are watching Season {season}.",
+                f"{viewer} is watching Season {season} of {media.title}{last}",
                 current_season=season,
             )
     db.session.commit()
