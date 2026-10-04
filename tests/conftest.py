@@ -1,6 +1,7 @@
 import pytest
 
 from curatarr import create_app, db
+from curatarr.observability import reset
 
 
 @pytest.fixture
@@ -17,7 +18,9 @@ def app(tmp_path, monkeypatch):
     )
     with application.app_context():
         db.create_all()
+        reset()
         yield application
+        reset()
         db.session.remove()
         db.drop_all()
 

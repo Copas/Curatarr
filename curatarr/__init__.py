@@ -24,6 +24,16 @@ def create_app(test_config=None):
         raise RuntimeError(
             "Authentication is not implemented; explicitly set CURATARR_ALLOW_UNAUTHENTICATED=true only behind trusted network controls"
         )
+    app.logger.setLevel(os.getenv("CURATARR_LOG_LEVEL", "INFO").upper())
+
+    from .observability import flush_counters
+
+    # Registered before db.init_app so it runs after the request session is
+    # removed (teardown functions run in reverse registration order).
+    @app.teardown_appcontext
+    def write_counters(_exc):
+        flush_counters()
+
     db.init_app(app)
     migrate.init_app(app, db)
 

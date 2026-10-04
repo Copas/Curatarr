@@ -38,6 +38,12 @@ class JobLease(db.Model):
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
 
 
+class MetricCounter(db.Model):
+    __tablename__ = "metric_counters"
+    name = db.Column(db.String(100), primary_key=True)
+    value = db.Column(db.BigInteger, default=0, nullable=False)
+
+
 class Integration(db.Model, Timed):
     __tablename__ = "integrations"
     id = db.Column(db.String(36), primary_key=True, default=uuid)

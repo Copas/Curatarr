@@ -1,5 +1,7 @@
 """Reconciliation, review actions, and guarded external execution."""
 
+import logging
+import time
 from datetime import timedelta
 from math import isfinite
 
@@ -19,6 +21,7 @@ from .models import (
     WatchStateSnapshot,
     utcnow,
 )
+from .observability import log_operation
 from .policy import (
     CandidateInput,
     _aware,
@@ -759,6 +762,23 @@ def _playback_preempts_delete(candidate, action, *, deleted_any=False):
 
 
 def execute_action(action_id):
+    started = time.monotonic()
+    result = _execute_action(action_id)
+    if result != "skipped":
+        action = db.session.get(LifecycleAction, action_id)
+        log_operation(
+            action.action_type,
+            result,
+            level=logging.WARNING if result in {"failed", "unknown"} else logging.INFO,
+            action_id=action.id,
+            media_identity_id=action.media_identity_id,
+            candidate_id=action.candidate_id,
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
+    return result
+
+
+def _execute_action(action_id):
     action = db.session.get(LifecycleAction, action_id)
     if not action or action.state not in {"PENDING", "FAILED_RETRYABLE"}:
         return "skipped"

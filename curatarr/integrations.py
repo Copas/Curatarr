@@ -2,10 +2,13 @@
 
 import base64
 import ipaddress
+import logging
 import time
 from urllib.parse import urlparse
 
 import requests
+
+from .observability import increment, log_operation
 
 
 class IntegrationError(RuntimeError):
@@ -58,6 +61,8 @@ class Client:
             raise ValueError("Integration path must be relative to configured host")
         timeout = (5, 60 if destructive else 30)
         attempts = 3 if method.upper() == "GET" else 1
+        integration = type(self).__name__.removesuffix("Client").lower()
+        started = time.monotonic()
         for attempt in range(attempts):
             try:
                 response = self.session.request(
@@ -79,10 +84,27 @@ class Client:
                 if attempt + 1 == attempts or (
                     status_code and 400 <= status_code < 500
                 ):
+                    increment(f"external_api_failures.{integration}")
+                    log_operation(
+                        f"{method.upper()} {path}",
+                        "error",
+                        level=logging.WARNING,
+                        integration=integration,
+                        status_code=status_code,
+                        duration_ms=round((time.monotonic() - started) * 1000),
+                    )
                     raise IntegrationError(
                         f"{type(self).__name__} {method} {path} failed", status_code
                     ) from exc
                 time.sleep(0.25 * 2**attempt)
+        log_operation(
+            f"{method.upper()} {path}",
+            "ok",
+            level=logging.DEBUG if method.upper() == "GET" else logging.INFO,
+            integration=integration,
+            status_code=getattr(response, "status_code", None),
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
         if not response.content:
             return None
         if response.headers.get("Content-Type", "").startswith("image/"):

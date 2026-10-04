@@ -48,7 +48,13 @@ The application requires no media volume. Poster snapshots are stored under appl
 
 ## API and health
 
-Read-only endpoints: `/health`, `/api/v1/status`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. The webhook endpoint is `/api/v1/webhook/jellyfin`.
+Read-only endpoints: `/health`, `/api/v1/status`, `/api/v1/metrics`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. The webhook endpoint is `/api/v1/webhook/jellyfin`.
+
+## Logs and metrics
+
+Operational log lines from the `curatarr.ops` logger are single JSON objects. They are limited to `event_id`, `action_id`, `media_identity_id`, `candidate_id`, `integration`, `operation`, `duration_ms`, `result`, and `status_code`, and never include API keys or payloads. Each external call, processed event, executed action, and reconciliation is logged. Successful GET requests log at DEBUG, failures at WARNING, and everything else at INFO. Set the level with `CURATARR_LOG_LEVEL`.
+
+`/api/v1/metrics` and the Operations table on Overview report: events processed, duplicate events ignored, acquisition actions, purge candidates created, rescues, bytes proposed and actually reclaimed, external API failures per integration, last reconciliation duration, pending actions, and oldest pending action age. Most values are computed from stored history. Duplicate-event and API-failure counts are held in memory and written to the `metric_counters` table when each request or worker cycle ends.
 
 ## Tests
 

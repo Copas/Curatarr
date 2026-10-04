@@ -21,6 +21,7 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Automatic lifecycle: per-rule review modes (inactivity, quota, low/critical disk pressure) inherit the library mode and stay opt-in alongside dry run. Notice expiry and approved deletes process pending playback first; deletes deferred by unprocessed events are retried by the worker. Quota runs continue to the low-water target after Curatarr's own deletes, while external drops below high water still invalidate queued candidates. Confirmed movie deletes mark files absent immediately.
 - End-to-end demo lifecycle: the reconcile CLI creates, expires, validates, and deletes quota candidates to the low-water target with reclaimed-space reporting; a simulated Radarr outage blocks every automatic delete.
 - All Section 98 acceptance edge cases have explicit tests.
+- Section 94 observability: JSON operational logs limited to the specified fields, durable metric counters, `/api/v1/metrics`, and an Operations table on Overview. Tests use temporary data directories, so they no longer write posters into `instance/`.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
 ## In Progress
