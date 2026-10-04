@@ -180,6 +180,9 @@ class JellyfinClient(Client):
     def items(self, parent_id=None, start=0, limit=100):
         params = {
             "Recursive": "true",
+            # Jellyfin otherwise lists a collection (e.g. a SmartLists box set)
+            # in place of its member movies, hiding most of a movie library.
+            "CollapseBoxSetItems": "false",
             "StartIndex": start,
             "Limit": limit,
             "Fields": "ProviderIds,DateCreated,MediaSources",
@@ -191,6 +194,7 @@ class JellyfinClient(Client):
     def user_items(self, user_id, parent_id=None, start=0, limit=100):
         params = {
             "Recursive": "true",
+            "CollapseBoxSetItems": "false",
             "StartIndex": start,
             "Limit": limit,
             "Fields": "ProviderIds,DateCreated",

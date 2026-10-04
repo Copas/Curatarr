@@ -70,3 +70,15 @@ def test_jellyfin_api_key_uses_mediabrowser_authorization():
         "GET", "/System/Info/Public"
     )
     assert "Authorization" not in session.calls[0][1]["headers"]
+
+
+def test_jellyfin_listings_never_collapse_collections():
+    """Live: collapsing hid 849 of 979 movies that sat in SmartLists box sets."""
+    from curatarr.integrations import JellyfinClient
+
+    session = FakeSession()
+    client = JellyfinClient("http://jellyfin.example.local:8096", "dummy", session)
+    client.items("library", 0, 100)
+    client.user_items("user", "library", 0, 100)
+    for _args, kwargs in session.calls:
+        assert kwargs["params"]["CollapseBoxSetItems"] == "false"

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Discovery and watch-history reconciliation no longer miss movies that belong to a Jellyfin collection. Jellyfin collapsed collection members into the collection in library listings, which hid 849 of 979 movies in the owner's Movies library (and 92 of 199 Classic Movies) from tracking, sizes, and cleanup.
+- Reloading Settings after generating a webhook token no longer replaces the token.
+
 - The stored policy format is versioned (migration `c4e8a1f07d36`); a database with settings from a newer version is refused with a clear message instead of being reinterpreted.
 
 - Cleanup preview (Retention → "Preview what free-space cleanup would pick"): pretend free space is at a given level and see, per disk, the titles that would be picked in order with sizes and a running total, using the same rules and live queue as the worker. Nothing is changed.
