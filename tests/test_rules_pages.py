@@ -174,3 +174,58 @@ def test_global_page_keeps_blank_choices_that_mean_something(app, client):
     page = client.get("/rules/retention").text
     assert '<option value="">Depends on library type' in page
     assert '<option value="">Same as review mode</option>' in page
+
+
+def test_size_limits_use_mb_gb_tb_with_tb_default(app, client):
+    from curatarr.policy import SIZE_UNITS
+
+    library = _library()
+    page = client.get(f"/rules/retention?scope={library.id}").text
+    assert "Size limit: start cleanup above" in page
+    assert "<option selected>TB</option>" in page  # default unit
+    client.post(
+        f"/rules/retention?scope={library.id}",
+        data={
+            "quota_enabled": "true",
+            "high_water_bytes": "2.5",
+            "high_water_bytes_unit": "TB",
+            "low_water_bytes": "1800",
+            "low_water_bytes_unit": "GB",
+        },
+    )
+    db.session.refresh(library.policy)
+    stored = library.policy.policy_json
+    assert stored["high_water_bytes"] == round(2.5 * SIZE_UNITS["TB"])
+    assert stored["low_water_bytes"] == 1800 * SIZE_UNITS["GB"]
+    page = client.get(f"/rules/retention?scope={library.id}").text
+    assert 'name="high_water_bytes" value="2.5"' in page
+    # 1800 GB displays as 1.76 TB, the largest unit that is at least 1.
+    assert 'name="low_water_bytes" value="1.758"' in page
+    assert "Currently in effect: 2.50 TB (this library)" in page
+
+
+def test_bad_sizes_are_rejected(app, client):
+    library = _library()
+    for value, unit in (("-1", "TB"), ("lots", "TB"), ("1", "PB"), ("nan", "GB")):
+        response = client.post(
+            f"/rules/retention?scope={library.id}",
+            data={"high_water_bytes": value, "high_water_bytes_unit": unit},
+            follow_redirects=True,
+        )
+        assert b"Invalid high_water_bytes" in response.data, (value, unit)
+
+
+def test_library_inherits_a_global_size_limit(app, client):
+    library = _library()
+    client.post(
+        "/rules/retention",
+        data={
+            "quota_enabled": "true",
+            "high_water_bytes": "3",
+            "high_water_bytes_unit": "TB",
+            "low_water_bytes": "2",
+            "low_water_bytes_unit": "TB",
+        },
+    )
+    page = client.get(f"/rules/retention?scope={library.id}").text
+    assert 'placeholder="Inherit (3.00 TB)"' in page
