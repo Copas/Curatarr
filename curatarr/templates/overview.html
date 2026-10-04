@@ -43,9 +43,9 @@
 <div class="table-responsive mb-4"><table class="table"><thead><tr><th>When</th><th>Title</th><th>Outcome</th><th>Size</th></tr></thead><tbody>
 {% for action, candidate in cleanup %}<tr><td>{{ action.completed_at.strftime('%Y-%m-%d %H:%M') if action.completed_at else '—' }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ media_titles.get(candidate.media_identity_id, 'Unknown title') }}</a></td><td>{{ 'Dry run (not deleted)' if action.action_type == 'would_delete' else 'Deleted' }}</td><td>{{ candidate.reclaimable_bytes|size }}</td></tr>{% else %}<tr><td colspan="4">No cleanup has run yet.</td></tr>{% endfor %}
 </tbody></table></div>
-<h2 class="h4">Recent acquisitions</h2>
-<div class="table-responsive mb-4"><table class="table"><thead><tr><th>Title</th><th>State</th><th>Current season</th><th>Next season</th></tr></thead><tbody>
-{% for acquisition in acquisitions %}<tr><td><a href="{{ url_for('main.title', media_id=acquisition.media_identity_id) }}">{{ media_titles.get(acquisition.media_identity_id, 'Unknown title') }}</a></td><td>{{ acquisition.state.replace('_',' ')|title }}</td><td>{{ acquisition.highest_demonstrated_season or '—' }}</td><td>{{ acquisition.target_next_season or '—' }}</td></tr>{% else %}<tr><td colspan="4">No recent acquisition plans.</td></tr>{% endfor %}
+<h2 class="h4">Downloads requested</h2>
+<div class="table-responsive mb-4"><table class="table"><thead><tr><th>When</th><th>What happened</th><th>Status</th></tr></thead><tbody>
+{% for action in acquisitions %}<tr><td class="text-nowrap">{{ action.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.reason_text }}</a></td><td class="text-nowrap">{{ {'PENDING': 'Queued', 'RUNNING': 'Sending', 'SUCCEEDED': 'Sent to Sonarr', 'FAILED_RETRYABLE': 'Retrying', 'FAILED_FINAL': 'Failed', 'UNKNOWN_RECONCILE': 'Checking', 'CANCELLED': 'Cancelled'}.get(action.state, action.state) }}</td></tr>{% else %}<tr><td colspan="3">Nothing requested yet.</td></tr>{% endfor %}
 </tbody></table></div>
 <h2 class="h4">Recent decisions</h2>
 <div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Title</th><th>Action</th><th>Result</th><th>Reason</th></tr></thead><tbody>
