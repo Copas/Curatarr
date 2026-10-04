@@ -395,7 +395,6 @@ def demo_simulate():
 
 @bp.route("/settings", methods=["GET", "POST"])
 def settings():
-    new_token = None
     if request.method == "POST":
         kind = request.form.get("kind")
         try:
@@ -405,7 +404,14 @@ def settings():
                 )
                 flash(f"{kind.title()} connected", "success")
             elif kind == "webhook":
-                new_token = rotate_webhook_token(request.form.get("webhook_token"))
+                own = (request.form.get("webhook_token") or "").strip()
+                token = rotate_webhook_token(own or None)
+                if own:
+                    flash("Webhook token saved.", "success")
+                else:
+                    # Shown once on the next page; redirecting means a reload
+                    # can never resubmit the form and create another token.
+                    session["new_webhook_token"] = token
             elif kind == "scheduler":
                 try:
                     minutes = int(request.form.get("interval_minutes", ""))
@@ -416,9 +422,9 @@ def settings():
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "danger")
-        if new_token is None:
-            return redirect(url_for("main.settings"))
-    elif setting("webhook_token") is None:
+        return redirect(url_for("main.settings"))
+    new_token = session.pop("new_webhook_token", None)
+    if new_token is None and setting("webhook_token") is None:
         new_token = rotate_webhook_token()
     return render_template("settings.html", new_token=new_token, **settings_view())
 
