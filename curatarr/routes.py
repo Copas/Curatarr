@@ -35,6 +35,7 @@ from .models import (
 )
 from .policy import effective_policy, validate_policy
 from .services import (
+    UnsupportedWebhookEvent,
     action_context,
     dry_run_by_library,
     history_actions,
@@ -47,6 +48,7 @@ from .services import (
     process_pending_events,
     reclaimed_bytes_total,
     reconciliation_state,
+    record_webhook,
     request_reconciliation,
     request_title_now,
     resolved_policy,
@@ -82,6 +84,12 @@ def guard_request():
         if not token or not hmac.compare_digest(
             request.headers.get("X-Curatarr-Token", ""), token
         ):
+            record_webhook(
+                "rejected",
+                reason="No webhook token has been created yet"
+                if not token
+                else "The X-Curatarr-Token header was missing or wrong",
+            )
             abort(403)
         return
     if request.content_type and request.content_type.startswith("application/json"):
@@ -569,11 +577,18 @@ def webhook():
     # it regardless; the shared token was already checked in guard_request.
     payload = request.get_json(force=True, silent=True)
     if not isinstance(payload, dict):
+        record_webhook("rejected", reason="The body was not a JSON object")
         abort(400)
     try:
         event, created = ingest_event(payload)
-    except (ValueError, TypeError):
+    except UnsupportedWebhookEvent as exc:
+        # Acknowledge so the plugin does not report errors for extra types.
+        record_webhook("ignored", reason=str(exc))
+        return jsonify({"accepted": False, "ignored": str(exc)}), 202
+    except (ValueError, TypeError) as exc:
+        record_webhook("rejected", reason=str(exc))
         abort(400)
+    record_webhook("accepted", event=event)
     return jsonify({"event_id": event.id, "accepted": created}), 202
 
 

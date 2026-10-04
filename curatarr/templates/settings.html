@@ -20,6 +20,11 @@
 </div>
 <div class="card p-3 mt-4"><h2 class="h5">Jellyfin webhook</h2>
 <p>The webhook tells Curatarr about playback, finished episodes, and favorites as they happen. Without it, Curatarr still catches up at each hourly reconciliation. Token status: {{ 'configured' if webhook_present else 'not configured' }}. The token is shown only once; if you did not copy it, leave the box below empty and click <em>Save or generate token</em> to make a new one.</p>
+<div class="border rounded p-2 mb-3" id="webhook-status">
+{% if webhook.last %}<strong>Last delivery:</strong> {{ webhook.last.at.strftime('%Y-%m-%d %H:%M') }} UTC — {{ webhook.last.event }}: {{ webhook.last.description }} — {{ webhook.last.match }}. {{ webhook.count }} received in total.
+{% else %}<strong>No webhook received yet.</strong> After saving the destination in Jellyfin, play anything for a few seconds and reload this page.{% endif %}
+{% if webhook.problem %}<div class="text-warning mt-1"><strong>Last {{ 'ignored notification' if webhook.problem.outcome == 'ignored' else 'rejected delivery' }}:</strong> {{ webhook.problem.at.strftime('%Y-%m-%d %H:%M') }} UTC — {{ webhook.problem.reason }}.</div>{% endif %}
+</div>
 <details class="mb-3"><summary>Set up the Jellyfin Webhook plugin</summary>
 <ol class="mt-2">
 <li>In Jellyfin: Dashboard → Plugins → Catalog, install <strong>Webhook</strong> if needed, then restart Jellyfin.</li>
