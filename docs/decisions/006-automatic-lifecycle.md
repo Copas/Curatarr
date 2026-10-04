@@ -23,3 +23,12 @@ The owner's rule, which replaces inactivity as a cleanup trigger by default:
 - Below the critical threshold, the default `critical_pressure_review_mode` is `automatic` with no notice: removal is attempted on the next worker cycle, with the same pre-delete validation.
 - Dry run remains the final gate: nothing is removed until it is turned off globally or for a library.
 - Free-space enforcement requires `free_space_enabled` and a `disk_path`, set globally or per library. Size limits, free-space settings, and dry run became available as global defaults on 2026-10-04 at the owner's request.
+
+## Acquisition on every reconciliation (2026-10-04)
+
+Event-driven planning only reacts to a completion as it happens. The owner wants Curatarr to keep libraries complete, so every reconciliation also:
+
+- requests always-keep episodes that are missing and have aired (`fill_minimum_footprint`, on by default, settable globally, per library, or per title). "Entire series" fills at most Season 1, because it means never trim, not download everything;
+- for shows watched within `tv_inactivity_days`, requests missing episodes of the highest season with completions and the next one (the same season-ahead rule), which catches seasons announced after viewers caught up.
+
+Shows Sonarr has unmonitored (`arr_monitored` false, e.g. set by the owner's script for finished shows) and daily shows are skipped. At most `ACQUISITION_SEARCHES_PER_RUN` (5) new searches start per run, and the rest are monitored and searched in later runs. Requests are idempotent by episode set. Episodes without an air date are monitored but not searched.

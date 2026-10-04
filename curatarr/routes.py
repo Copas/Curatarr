@@ -647,6 +647,10 @@ POLICY_FIELDS = {
     "minimum_episodes": ('N for "First N episodes"', "number"),
     "acquisition_threshold": ("Completed episodes before acquiring", "number"),
     "keep_one_season_ahead": ("Keep one season ahead", ["true", "false"]),
+    "fill_minimum_footprint": (
+        "Download always-keep episodes that are missing",
+        ["true", "false"],
+    ),
     "manage_specials": ("Manage Specials / Season 0", ["true", "false"]),
     "grace_days": ("New-media grace days", "number"),
     "inactivity_cleanup": (
@@ -690,6 +694,7 @@ RULE_SECTIONS = {
             "minimum_episodes",
             "acquisition_threshold",
             "keep_one_season_ahead",
+            "fill_minimum_footprint",
             "manage_specials",
             "grace_days",
         ],
@@ -705,6 +710,7 @@ RULE_SECTIONS = {
                 "minimum_episodes",
                 "acquisition_threshold",
                 "keep_one_season_ahead",
+                "fill_minimum_footprint",
                 "manage_specials",
                 "grace_days",
             }
@@ -783,6 +789,7 @@ def title(media_id):
         values = {}
         for key in (
             "never_purge",
+            "fill_minimum_footprint",
             "tv_inactivity_days",
             "movie_inactivity_days",
             "minimum_mode",
@@ -796,7 +803,7 @@ def title(media_id):
             selected = request.form.get(key, "")
             if selected in {"", "inherit"}:
                 continue
-            if key == "never_purge":
+            if key in {"never_purge", "fill_minimum_footprint"}:
                 values[key] = selected == "true"
             elif key.endswith(("_days", "_episodes", "_threshold")):
                 try:

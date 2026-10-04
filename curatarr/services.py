@@ -290,6 +290,8 @@ def discover():
                     match = series_by_tvdb.get(str(media.tvdb_id))
                     if match:
                         media.sonarr_id = match["id"]
+                        media.arr_monitored = match.get("monitored")
+                        media.series_type = match.get("seriesType")
                         episode_files = {
                             entry["id"]: entry
                             for entry in sonarr.episode_files(media.sonarr_id)
@@ -321,6 +323,7 @@ def discover():
                     match = movies_by_tmdb.get(str(media.tmdb_id))
                     if match:
                         media.radarr_id = match["id"]
+                        media.arr_monitored = match.get("monitored")
                         file_data = match.get("movieFile") or {}
                         _upsert_part(
                             media,
@@ -1538,3 +1541,96 @@ def dry_run_by_library():
         )
         split["dry_run" if policy["dry_run"] else "deleting"].append(library.name)
     return split
+
+
+# New searches started per reconciliation; the rest follow in later runs, so a
+# first sync of a large library cannot flood the indexers or the downloader.
+ACQUISITION_SEARCHES_PER_RUN = 5
+
+
+def reconcile_acquisition():
+    """Request what viewing and the always-keep rule call for, every reconciliation.
+
+    Covers what event-driven planning misses: always-keep episodes that were
+    never downloaded, and a next season that appeared after viewers caught up.
+    Shows Sonarr has unmonitored, and daily shows, are left alone.
+    """
+    from datetime import timedelta
+
+    from .policy import retained
+
+    now = utcnow()
+    budget = ACQUISITION_SEARCHES_PER_RUN
+    requested = 0
+
+    def request(media, season, reason, **kwargs):
+        nonlocal budget, requested
+        action = _request_season(
+            media, season, reason, allow_search=budget > 0, **kwargs
+        )
+        # Requests queued by an earlier run come back unchanged; only new ones
+        # count, and only new searches use up this run's budget.
+        if action is not None and _as_datetime(action.created_at) >= now:
+            requested += 1
+            if action.payload_json.get("search_now"):
+                budget -= 1
+        return action
+
+    shows = (
+        db.session.query(MediaIdentity)
+        .filter(
+            MediaIdentity.media_type == "series",
+            MediaIdentity.sonarr_id.isnot(None),
+            MediaIdentity.missing_since.is_(None),
+        )
+        .order_by(MediaIdentity.title)
+        .all()
+    )
+    for media in shows:
+        if media.arr_monitored is False or media.series_type == "daily":
+            continue
+        policy, _ = resolved_policy(media)
+        if policy["fill_minimum_footprint"]:
+            # "Entire series" means never trim, not download everything, so
+            # the fill covers at most Season 1.
+            request(
+                media,
+                1,
+                "Season 1 episodes requested to complete the always-keep set.",
+                episode_filter=lambda part, policy=policy: retained(part, policy),
+            )
+        completed = (
+            db.session.query(
+                MediaPart.season_number,
+                func.count(func.distinct(EpisodeUserState.media_part_id)),
+                func.max(EpisodeUserState.last_played_at),
+            )
+            .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
+            .filter(
+                MediaPart.media_identity_id == media.id,
+                MediaPart.season_number > 0,
+                EpisodeUserState.played.is_(True),
+            )
+            .group_by(MediaPart.season_number)
+            .all()
+        )
+        if not completed:
+            continue
+        season, count, _last = max(completed, key=lambda row: row[0])
+        last_played = max(
+            (_as_datetime(row[2]) for row in completed if row[2]), default=None
+        )
+        recent = last_played and now - last_played <= timedelta(
+            days=policy["tv_inactivity_days"]
+        )
+        if count < policy["acquisition_threshold"] or not recent:
+            continue
+        for target in acquisition_seasons(media.parts, season, policy):
+            request(
+                media,
+                target,
+                f"Season {target} requested because viewers are watching Season {season}.",
+                current_season=season,
+            )
+    db.session.commit()
+    return requested

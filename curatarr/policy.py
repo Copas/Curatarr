@@ -14,6 +14,7 @@ DEFAULTS: dict[str, Any] = {
     "minimum_mode": "first_n_episodes",
     "minimum_episodes": 3,
     "keep_one_season_ahead": True,
+    "fill_minimum_footprint": True,
     "manage_specials": False,
     "review_mode": "require_review",
     "review_expiry": "manual_forever",
@@ -61,6 +62,7 @@ ENUMS = {
     },
 }
 BOOL_FIELDS = {
+    "fill_minimum_footprint",
     "inactivity_cleanup",
     "keep_one_season_ahead",
     "manage_specials",
