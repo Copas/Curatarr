@@ -67,3 +67,14 @@ def test_history_filters_by_title_library_user_and_date(app, client):
     assert b"Playback Received" in response.data
     assert b"Demo Series 01" in response.data
     assert client.get("/history", query_string={"from": "bad-date"}).status_code == 400
+
+
+def test_history_filter_choices_come_from_recorded_values(app, client):
+    app.config["DEMO_MODE"] = True
+    seed_demo()
+    client.post("/demo/simulate", data={"choice": "complete_episode"})
+    page = client.get("/history").text
+    assert '<option value="demo-viewer-a" >Avery</option>' in page
+    assert '<option value="sonarr_season_search" >Sonarr Season Search</option>' in page
+    assert client.get("/history?from=not-a-date").status_code == 400
+    assert client.get("/history/unknown").status_code == 404

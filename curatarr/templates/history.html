@@ -2,13 +2,13 @@
 {% block content %}
 <h1>History</h1><p class="text-secondary">Observed events, decisions, external requests, and outcomes.</p>
 <form method="get" class="row g-2 mb-4">
-  <div class="col-md-3"><label class="form-label">Title<input class="form-control" name="q" value="{{ title_query }}"></label></div>
-  <div class="col-md-3"><label class="form-label">Library<select class="form-select" name="library"><option value="">All libraries</option>{% for library in libraries %}<option value="{{ library.id }}" {% if library.id == library_id %}selected{% endif %}>{{ library.name }}</option>{% endfor %}</select></label></div>
-  <div class="col-md-3"><label class="form-label">Action type<input class="form-control" name="type" value="{{ action_type }}"></label></div>
-  <div class="col-md-3"><label class="form-label">State<input class="form-control" name="state" value="{{ state }}"></label></div>
-  <div class="col-md-3"><label class="form-label">From<input class="form-control" type="date" name="from" value="{{ date_from }}"></label></div>
-  <div class="col-md-3"><label class="form-label">To<input class="form-control" type="date" name="to" value="{{ date_to }}"></label></div>
-  <div class="col-md-3"><label class="form-label">Jellyfin user ID<input class="form-control" name="user" value="{{ user_id }}"></label></div>
+  <div class="col-md-3"><label class="form-label w-100">Title<input class="form-control" name="q" value="{{ filters.q }}"></label></div>
+  <div class="col-md-3"><label class="form-label w-100">Library<select class="form-select" name="library"><option value="">All libraries</option>{% for library in libraries %}<option value="{{ library.id }}" {% if library.id == filters.library %}selected{% endif %}>{{ library.name }}</option>{% endfor %}</select></label></div>
+  <div class="col-md-3"><label class="form-label w-100">Action type<select class="form-select" name="type"><option value="">All actions</option>{% for value in types %}<option value="{{ value }}" {% if value == filters.type %}selected{% endif %}>{{ value.replace('_',' ')|title }}</option>{% endfor %}</select></label></div>
+  <div class="col-md-3"><label class="form-label w-100">State<select class="form-select" name="state"><option value="">All states</option>{% for value in states %}<option value="{{ value }}" {% if value == filters.state %}selected{% endif %}>{{ value.replace('_',' ')|title }}</option>{% endfor %}</select></label></div>
+  <div class="col-md-3"><label class="form-label w-100">From<input class="form-control" type="date" name="from" value="{{ filters['from'] }}"></label></div>
+  <div class="col-md-3"><label class="form-label w-100">To<input class="form-control" type="date" name="to" value="{{ filters.to }}"></label></div>
+  <div class="col-md-3"><label class="form-label w-100">Jellyfin user<select class="form-select" name="user"><option value="">All users</option>{% for user_id, name in users %}<option value="{{ user_id }}" {% if user_id == filters.user %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label></div>
   <div class="col-md-3 align-self-end"><button class="btn btn-outline-light w-100">Filter</button></div>
 </form>
 <div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Title</th><th>Action</th><th>State</th><th>Reason</th></tr></thead><tbody>

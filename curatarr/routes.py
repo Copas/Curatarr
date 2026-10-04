@@ -2,7 +2,6 @@
 
 import hmac
 import secrets
-from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
 
 from flask import (
@@ -29,7 +28,6 @@ from .models import (
     Integration,
     Library,
     LifecycleAction,
-    LifecycleEvent,
     MediaIdentity,
     MediaPart,
     PurgeCandidate,
@@ -38,9 +36,13 @@ from .models import (
 )
 from .policy import effective_policy, validate_policy
 from .services import (
+    action_context,
     discover,
+    history_actions,
+    history_filter_options,
     ingest_event,
     lifecycle_outlook,
+    media_titles_for,
     metrics_summary,
     process_pending_events,
     reclaimed_bytes_total,
@@ -517,114 +519,31 @@ def review_action(candidate_id, choice):
     return redirect(url_for("main.review"))
 
 
+HISTORY_FILTERS = ("type", "state", "q", "library", "user", "from", "to")
+
+
 @bp.get("/history")
 def history():
-    query = db.session.query(LifecycleAction)
-    action_type = request.args.get("type", "").strip()
-    state = request.args.get("state", "").strip()
-    title_query = request.args.get("q", "").strip()
-    library_id = request.args.get("library", "").strip()
-    user_id = request.args.get("user", "").strip()
-    date_from = request.args.get("from", "").strip()
-    date_to = request.args.get("to", "").strip()
-    if action_type:
-        query = query.filter(LifecycleAction.action_type == action_type)
-    if state:
-        query = query.filter(LifecycleAction.state == state)
-    if title_query or library_id:
-        query = query.join(
-            MediaIdentity, LifecycleAction.media_identity_id == MediaIdentity.id
-        )
-    if title_query:
-        query = query.filter(MediaIdentity.title.ilike(f"%{title_query}%"))
-    if library_id:
-        query = query.filter(MediaIdentity.library_id == library_id)
-    if user_id:
-        query = query.join(
-            LifecycleEvent, LifecycleAction.event_id == LifecycleEvent.id
-        )
-        query = query.filter(LifecycleEvent.jellyfin_user_id == user_id)
+    filters = {key: request.args.get(key, "").strip() for key in HISTORY_FILTERS}
     try:
-        if date_from:
-            query = query.filter(
-                LifecycleAction.created_at
-                >= datetime.combine(
-                    date.fromisoformat(date_from), datetime.min.time(), UTC
-                )
-            )
-        if date_to:
-            query = query.filter(
-                LifecycleAction.created_at
-                < datetime.combine(
-                    date.fromisoformat(date_to) + timedelta(days=1),
-                    datetime.min.time(),
-                    UTC,
-                )
-            )
+        rows = history_actions(filters)
     except ValueError:
         abort(400)
-    rows = query.order_by(LifecycleAction.created_at.desc()).limit(200).all()
-    media_titles = {
-        row.id: row.title
-        for row in db.session.query(MediaIdentity).filter(
-            MediaIdentity.id.in_(
-                {
-                    action.media_identity_id
-                    for action in rows
-                    if action.media_identity_id
-                }
-            )
-        )
-    }
     return render_template(
         "history.html",
         actions=rows,
-        action_type=action_type,
-        state=state,
-        title_query=title_query,
-        library_id=library_id,
-        user_id=user_id,
-        date_from=date_from,
-        date_to=date_to,
-        libraries=db.session.query(Library).order_by(Library.name).all(),
-        media_titles=media_titles,
+        filters=filters,
+        media_titles=media_titles_for(rows),
+        **history_filter_options(),
     )
 
 
 @bp.get("/history/<action_id>")
 def history_detail(action_id):
-    action = db.session.get(LifecycleAction, action_id)
-    if not action:
+    context = action_context(action_id)
+    if not context:
         abort(404)
-    event = db.session.get(LifecycleEvent, action.event_id) if action.event_id else None
-    media = (
-        db.session.get(MediaIdentity, action.media_identity_id)
-        if action.media_identity_id
-        else None
-    )
-    decision = (
-        db.session.query(LifecycleAction)
-        .filter_by(candidate_id=action.candidate_id, action_type="candidate_created")
-        .first()
-        if action.candidate_id
-        else None
-    )
-    related = (
-        db.session.query(LifecycleAction)
-        .filter_by(candidate_id=action.candidate_id)
-        .order_by(LifecycleAction.created_at)
-        .all()
-        if action.candidate_id
-        else []
-    )
-    return render_template(
-        "history_detail.html",
-        action=action,
-        event=event,
-        media=media,
-        decision=decision,
-        related=related,
-    )
+    return render_template("history_detail.html", **context)
 
 
 MODES = ["recommend", "require_review", "automatic"]

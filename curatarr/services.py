@@ -1179,3 +1179,101 @@ def settings_view():
         "webhook_present": setting("webhook_token") is not None,
         "interval_minutes": setting("reconciliation_interval_seconds", 3600) // 60,
     }
+
+
+def history_actions(filters, limit=200):
+    """Filtered audit history; raises ValueError for malformed dates."""
+    from datetime import date, timedelta
+
+    query = db.session.query(LifecycleAction)
+    if filters.get("type"):
+        query = query.filter(LifecycleAction.action_type == filters["type"])
+    if filters.get("state"):
+        query = query.filter(LifecycleAction.state == filters["state"])
+    if filters.get("q") or filters.get("library"):
+        query = query.join(
+            MediaIdentity, LifecycleAction.media_identity_id == MediaIdentity.id
+        )
+    if filters.get("q"):
+        query = query.filter(MediaIdentity.title.ilike(f"%{filters['q']}%"))
+    if filters.get("library"):
+        query = query.filter(MediaIdentity.library_id == filters["library"])
+    if filters.get("user"):
+        query = query.join(
+            LifecycleEvent, LifecycleAction.event_id == LifecycleEvent.id
+        ).filter(LifecycleEvent.jellyfin_user_id == filters["user"])
+    if filters.get("from"):
+        start = datetime.combine(
+            date.fromisoformat(filters["from"]), datetime.min.time(), UTC
+        )
+        query = query.filter(LifecycleAction.created_at >= start)
+    if filters.get("to"):
+        end = datetime.combine(
+            date.fromisoformat(filters["to"]) + timedelta(days=1),
+            datetime.min.time(),
+            UTC,
+        )
+        query = query.filter(LifecycleAction.created_at < end)
+    return query.order_by(LifecycleAction.created_at.desc()).limit(limit).all()
+
+
+def media_titles_for(rows):
+    ids = {row.media_identity_id for row in rows if row.media_identity_id}
+    if not ids:
+        return {}
+    return {
+        media.id: media.title
+        for media in db.session.query(MediaIdentity).filter(MediaIdentity.id.in_(ids))
+    }
+
+
+def history_filter_options():
+    names = setting("jellyfin_user_names", {})
+    user_ids = {
+        row[0]
+        for row in db.session.query(LifecycleEvent.jellyfin_user_id).distinct()
+        if row[0]
+    } | set(names)
+    return {
+        "types": sorted(
+            row[0] for row in db.session.query(LifecycleAction.action_type).distinct()
+        ),
+        "states": sorted(
+            row[0] for row in db.session.query(LifecycleAction.state).distinct()
+        ),
+        "libraries": db.session.query(Library).order_by(Library.name).all(),
+        "users": sorted(
+            ((user_id, names.get(user_id, user_id)) for user_id in user_ids),
+            key=lambda pair: pair[1].lower(),
+        ),
+    }
+
+
+def action_context(action_id):
+    """One audit row with its input event, media, and candidate timeline."""
+    action = db.session.get(LifecycleAction, action_id)
+    if not action:
+        return None
+    related = []
+    decision = None
+    if action.candidate_id:
+        related = (
+            db.session.query(LifecycleAction)
+            .filter_by(candidate_id=action.candidate_id)
+            .order_by(LifecycleAction.created_at)
+            .all()
+        )
+        decision = next(
+            (row for row in related if row.action_type == "candidate_created"), None
+        )
+    return {
+        "action": action,
+        "event": db.session.get(LifecycleEvent, action.event_id)
+        if action.event_id
+        else None,
+        "media": db.session.get(MediaIdentity, action.media_identity_id)
+        if action.media_identity_id
+        else None,
+        "decision": decision,
+        "related": related,
+    }
