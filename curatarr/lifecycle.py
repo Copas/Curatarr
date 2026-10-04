@@ -465,13 +465,16 @@ def review_candidate(candidate_id, choice):
     return candidate
 
 
+PENDING_EVENTS_REASON = "Unprocessed playback events must be reconciled first"
+
+
 def _validate_deletion(candidate, *, states=("APPROVED",)):
     """Check every destructive precondition with fresh external observations."""
     media = db.session.get(MediaIdentity, candidate.media_identity_id)
     if not media or media.missing_since or candidate.state not in states:
         return "Item or approval is no longer valid"
     if db.session.query(LifecycleEvent).filter_by(processed_at=None).first():
-        return "Unprocessed playback events must be reconciled first"
+        return PENDING_EVENTS_REASON
     policy, _ = resolved_policy(media)
     if policy["never_purge"]:
         return "Never Purge is enabled"
@@ -619,10 +622,27 @@ def _tv_file_targets(media, policy, arr):
 
 
 def execute_approved(candidate_id):
+    from .services import process_pending_events
+
+    process_pending_events()
     candidate = db.session.get(PurgeCandidate, candidate_id)
     if not candidate:
         raise ValueError("Unknown candidate")
+    db.session.refresh(candidate)
+    if candidate.state != "APPROVED":
+        return "blocked"
     reason = _validate_deletion(candidate)
+    if reason == PENDING_EVENTS_REASON:
+        # Stay approved; resume_approved() retries once events are processed.
+        audit(
+            "delete_deferred",
+            candidate.media_identity_id,
+            reason,
+            f"deferred:{candidate.id}:{candidate.candidate_revision}",
+            candidate_id=candidate.id,
+        )
+        db.session.commit()
+        return "deferred"
     if reason:
         candidate.state = "BLOCKED"
         audit(
@@ -1032,6 +1052,9 @@ def recover_stale_actions(minutes=10):
 
 
 def expire_notices():
+    from .services import process_pending_events
+
+    process_pending_events()
     now = utcnow()
     rows = (
         db.session.query(PurgeCandidate)
@@ -1041,12 +1064,36 @@ def expire_notices():
         )
         .all()
     )
+    expired = 0
     for candidate in rows:
+        db.session.refresh(candidate)
+        if candidate.state not in {"LEAVING_SOON", "REVIEW"}:
+            continue
         candidate.state = "APPROVED"
         candidate.approved_at = now
         db.session.commit()
         execute_approved(candidate.id)
-    return len(rows)
+        expired += 1
+    return expired
+
+
+def resume_approved():
+    """Retry approvals whose execution was deferred or interrupted before starting."""
+    started = (
+        db.session.query(LifecycleAction.candidate_id)
+        .filter(
+            LifecycleAction.candidate_id.isnot(None),
+            LifecycleAction.action_type.in_(["delete_media", "would_delete"]),
+        )
+        .scalar_subquery()
+    )
+    rows = (
+        db.session.query(PurgeCandidate.id)
+        .filter(PurgeCandidate.state == "APPROVED", PurgeCandidate.id.notin_(started))
+        .all()
+    )
+    results = [execute_approved(row.id) for row in rows]
+    return sum(result != "deferred" for result in results)
 
 
 def expire_snoozes():
