@@ -49,7 +49,7 @@ class FakeSonarr:
         ]
 
     def episode_files(self, _series_id):
-        return [{"id": 51, "size": 500}]
+        return [{"id": 51, "size": 500, "dateAdded": "2024-03-02T10:00:00Z"}]
 
 
 class FakeRadarr:
@@ -76,6 +76,8 @@ def test_discovery_keeps_missing_sonarr_episodes(app, monkeypatch):
         assert len(parts) == 3
         assert parts[0].jellyfin_id == "episode-1"
         assert parts[0].size_bytes == 500
+        # The acquisition time is Sonarr's file date, not when Curatarr looked.
+        assert str(parts[0].acquired_at).startswith("2024-03-02")
         assert not parts[1].has_file
 
 
