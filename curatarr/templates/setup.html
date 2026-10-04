@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Setup</h1>
+<p class="text-secondary">Curatarr is configured from the web interface. Work through these steps in order; each one updates as soon as it is complete.</p>
+<ol class="list-group list-group-numbered mb-4">
+{% for step in steps %}
+  <li class="list-group-item d-flex justify-content-between align-items-start">
+    <div class="ms-2 me-auto">{{ step.label }}{% if step.optional %} <span class="text-secondary">(optional)</span>{% endif %}</div>
+    {% if step.done %}<span class="badge text-bg-success">Done</span>
+    {% else %}<a class="btn btn-sm btn-outline-light" href="{{ url_for(step.endpoint, **step.get('args', {})) }}">Open</a>{% endif %}
+  </li>
+{% endfor %}
+</ol>
+<div class="card p-3">
+  <h2 class="h5">Dry run</h2>
+  {% if destructive %}<p class="mb-0 text-warning">Deletion is enabled for: {{ destructive|join(', ') }}. Every other library stays in dry run.</p>
+  {% else %}<p class="mb-0">Every library is in dry run: Curatarr records what it would delete but makes no destructive requests. When you are ready, set Dry run to false on one library's Retention page.</p>{% endif %}
+</div>
+{% endblock %}

@@ -28,7 +28,7 @@ In a second shell, run the persistent worker:
 .venv/bin/flask --app curatarr worker
 ```
 
-The web app listens on port 8787 by default. Open Settings to enter Jellyfin, Sonarr, and Radarr URLs and keys, then run Discover from Overview. Saved keys are masked in the UI. The first Settings visit generates a webhook token and shows it once. Configure Jellyfin's webhook plugin to send JSON to `/api/v1/webhook/jellyfin` with that token in the `X-Curatarr-Token` request header. The webhook stays closed until the token exists.
+The web app listens on port 8787 by default. Until setup is complete, Overview links to the `/setup` checklist: connect Jellyfin, Sonarr, and Radarr in Settings, create the webhook token, run Discover from Overview, then optionally review the Acquisition and Retention rules. Saved keys are masked in the UI. The first Settings visit generates a webhook token and shows it once. Configure Jellyfin's webhook plugin to send JSON to `/api/v1/webhook/jellyfin` with that token in the `X-Curatarr-Token` request header. The webhook stays closed until the token exists.
 
 Use a unique, stable random `CURATARR_SECRET_KEY` before starting. Curatarr currently has no login system: unauthenticated operation must be explicitly enabled and the UI must be restricted to a trusted loopback/LAN or an authenticated reverse proxy. Browser mutations use CSRF tokens, which do not replace authentication. Integration keys and the webhook token are encrypted in the database using a key derived from `CURATARR_SECRET_KEY`; losing or changing that key makes them unreadable. Back up the key separately from the database. Existing installations should back up the database, run `db upgrade`, then run `encrypt-secrets` once; the command is safe to repeat.
 

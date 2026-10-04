@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>Settings</h1><p class="text-secondary">Connect each application with its API URL and key. Saved keys are never shown here.</p>
+<h1>Settings</h1><p class="text-secondary">Connect each application with its API URL and key. Saved keys are never shown here. The <a href="{{ url_for('main.setup') }}">setup checklist</a> shows what remains.</p>
 {% if new_token %}<div class="alert alert-info">Copy this webhook token now; it will not be shown again: <code>{{ new_token }}</code></div>{% endif %}
 <div class="row g-3">
 {% for kind in ['jellyfin', 'sonarr', 'radarr'] %}

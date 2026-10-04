@@ -18,6 +18,7 @@ from .models import (
     EpisodeUserState,
     Integration,
     Library,
+    LibraryPolicy,
     LifecycleAction,
     LifecycleEvent,
     MediaIdentity,
@@ -973,3 +974,78 @@ def save_policy_layer(library, form, keys):
         row.policy_json = layers[library.id]
         db.session.add(row)
     db.session.commit()
+
+
+def lifecycle_outlook(limit=5):
+    """Upcoming scheduled deletions and the most recent cleanup outcomes."""
+    scheduled = (
+        db.session.query(PurgeCandidate)
+        .filter(
+            PurgeCandidate.state.in_(["LEAVING_SOON", "REVIEW"]),
+            PurgeCandidate.scheduled_delete_at.isnot(None),
+        )
+        .order_by(PurgeCandidate.scheduled_delete_at)
+        .limit(limit)
+        .all()
+    )
+    cleanup = (
+        db.session.query(LifecycleAction, PurgeCandidate)
+        .join(PurgeCandidate, LifecycleAction.candidate_id == PurgeCandidate.id)
+        .filter(
+            (LifecycleAction.action_type == "would_delete")
+            | (
+                (LifecycleAction.action_type == "delete_media")
+                & (LifecycleAction.state == "SUCCEEDED")
+            )
+        )
+        .order_by(LifecycleAction.completed_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return scheduled, cleanup
+
+
+def setup_progress():
+    """First-run checklist derived from stored state (spec section 40)."""
+    integrations = {row.kind: row for row in db.session.query(Integration).all()}
+    steps = []
+    for kind in ("jellyfin", "sonarr", "radarr"):
+        row = integrations.get(kind)
+        steps.append(
+            {
+                "key": kind,
+                "label": f"Connect {kind.title()} (URL, API key, connectivity test)",
+                "done": bool(row and row.secret_ref and row.health_state == "healthy"),
+                "endpoint": "main.settings",
+            }
+        )
+    steps.append(
+        {
+            "key": "webhook",
+            "label": "Create the Jellyfin webhook token",
+            "done": setting("webhook_token") is not None,
+            "endpoint": "main.settings",
+        }
+    )
+    steps.append(
+        {
+            "key": "discover",
+            "label": "Discover Jellyfin libraries",
+            "done": db.session.query(Library.id).first() is not None,
+            "endpoint": "main.overview",
+        }
+    )
+    policies = db.session.query(LibraryPolicy.id).first() is not None or bool(
+        setting("global_policy")
+    )
+    steps.append(
+        {
+            "key": "policy",
+            "label": "Review acquisition and retention rules",
+            "done": policies,
+            "optional": True,
+            "endpoint": "main.rules",
+            "args": {"section": "acquisition"},
+        }
+    )
+    return steps

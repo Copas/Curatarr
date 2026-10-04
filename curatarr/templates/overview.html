@@ -7,6 +7,7 @@
     <form method="post" action="{{ url_for('main.reconcile_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-primary">Reconcile</button></form>
   </div>
 </div>
+{% if setup_incomplete %}<div class="alert alert-info">Setup is not finished. <a href="{{ url_for('main.setup') }}">Continue setup</a> to connect integrations and discover libraries.</div>{% endif %}
 <div class="row g-3 mb-4">
   <div class="col-md-4"><div class="card p-3"><h2 class="h6">Review queue</h2><p class="display-6 mb-0">{{ status.review_count }}</p></div></div>
   <div class="col-md-4"><div class="card p-3"><h2 class="h6">Leaving soon</h2><p class="display-6 mb-0">{{ status.leaving_soon_count }}</p></div></div>
@@ -24,6 +25,14 @@
     <a href="{{ url_for('main.library_policy', library_id=report.library.id) }}">Policy and effective values</a></div></div>
 {% else %}<p>No libraries discovered yet. Add integrations in Settings, then discover.</p>{% endfor %}
 </div>
+<h2 class="h4">Scheduled deletions</h2>
+<div class="table-responsive mb-4"><table class="table"><thead><tr><th>Date</th><th>Title</th><th>State</th><th>Size</th><th>Reason</th></tr></thead><tbody>
+{% for candidate in scheduled %}<tr><td>{{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') }}</td><td><a href="{{ url_for('main.title', media_id=candidate.media_identity_id) }}">{{ media_titles.get(candidate.media_identity_id, 'Unknown title') }}</a></td><td>{{ candidate.state.replace('_',' ')|title }}</td><td>{{ '{:.1f}'.format(candidate.reclaimable_bytes / 1073741824) }} GiB</td><td>{{ candidate.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No deletions are scheduled.</td></tr>{% endfor %}
+</tbody></table></div>
+<h2 class="h4">Recent cleanup</h2>
+<div class="table-responsive mb-4"><table class="table"><thead><tr><th>When</th><th>Title</th><th>Outcome</th><th>Size</th></tr></thead><tbody>
+{% for action, candidate in cleanup %}<tr><td>{{ action.completed_at.strftime('%Y-%m-%d %H:%M') if action.completed_at else '—' }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ media_titles.get(candidate.media_identity_id, 'Unknown title') }}</a></td><td>{{ 'Dry run (not deleted)' if action.action_type == 'would_delete' else 'Deleted' }}</td><td>{{ '{:.1f}'.format(candidate.reclaimable_bytes / 1073741824) }} GiB</td></tr>{% else %}<tr><td colspan="4">No cleanup has run yet.</td></tr>{% endfor %}
+</tbody></table></div>
 <h2 class="h4">Recent acquisitions</h2>
 <div class="table-responsive mb-4"><table class="table"><thead><tr><th>Title</th><th>State</th><th>Current season</th><th>Next season</th></tr></thead><tbody>
 {% for acquisition in acquisitions %}<tr><td><a href="{{ url_for('main.title', media_id=acquisition.media_identity_id) }}">{{ media_titles.get(acquisition.media_identity_id, 'Unknown title') }}</a></td><td>{{ acquisition.state.replace('_',' ')|title }}</td><td>{{ acquisition.highest_demonstrated_season or '—' }}</td><td>{{ acquisition.target_next_season or '—' }}</td></tr>{% else %}<tr><td colspan="4">No recent acquisition plans.</td></tr>{% endfor %}

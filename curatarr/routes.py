@@ -40,6 +40,7 @@ from .policy import effective_policy, validate_policy
 from .services import (
     discover,
     ingest_event,
+    lifecycle_outlook,
     metrics_summary,
     process_pending_events,
     reclaimed_bytes_total,
@@ -47,6 +48,7 @@ from .services import (
     save_policy_layer,
     set_setting,
     setting,
+    setup_progress,
 )
 
 bp = Blueprint("main", __name__)
@@ -283,16 +285,40 @@ def overview():
             MediaIdentity.id.in_(media_ids)
         )
     }
+    scheduled, cleanup = lifecycle_outlook()
+    media_titles |= {
+        row.media_identity_id: row.media.title
+        for row in scheduled + [candidate for _action, candidate in cleanup]
+    }
+    setup_incomplete = not current_app.config["DEMO_MODE"] and any(
+        not step["done"] and not step.get("optional") for step in setup_progress()
+    )
     return render_template(
         "overview.html",
         status=_status(),
         metrics=metrics_summary(),
+        scheduled=scheduled,
+        cleanup=cleanup,
+        setup_incomplete=setup_incomplete,
         library_reports=library_reports,
         actions=actions,
         errors=errors,
         acquisitions=acquisitions,
         media_titles=media_titles,
         demo_mode=current_app.config["DEMO_MODE"],
+    )
+
+
+@bp.get("/setup")
+def setup():
+    return render_template(
+        "setup.html",
+        steps=setup_progress(),
+        destructive=[
+            row.name
+            for row in db.session.query(Library).order_by(Library.name)
+            if row.policy and row.policy.policy_json.get("dry_run") is False
+        ],
     )
 
 
