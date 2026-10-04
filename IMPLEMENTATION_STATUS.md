@@ -1,7 +1,7 @@
 # Curatarr Implementation Status
 
 ## Current Phase
-Phase 6 — Controlled deletion validation
+Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; live validation pending)
 
 ## Completed
 - Flask app, database schema and migrations, health/status API, Bootstrap shell, branding, and container skeleton.
@@ -17,6 +17,9 @@ Phase 6 — Controlled deletion validation
 - Overview reports current stored size, high/low-water state, recent acquisition decisions, errors, and integration health; Review shows playback/favorite and Leaving Soon state; title details show decision score and effective/inherited policy. History filters by date, library, title, action/state, and user, with linked decision context and candidate timeline. Demo fixtures include review, recommend-only, and Leaving Soon candidates plus visible simulated outages.
 - Integration API keys and the webhook token are now encrypted at rest with an authenticated cipher derived from a stable application key. Existing plaintext rows have an idempotent `encrypt-secrets` upgrade command, run automatically after container migrations. Unauthenticated operation requires an explicit opt-in and compose binds the UI to loopback.
 - Renewable database leases for event processing and library policy evaluation, plus atomic action claims; PostgreSQL checks pass for fresh/expired leases, work lasting past the original lease, four-process contention, and single-winner action execution.
+- Automatic lifecycle: per-rule review modes (inactivity, quota, low/critical disk pressure) inherit the library mode and stay opt-in alongside dry run. Notice expiry and approved deletes process pending playback first; deletes deferred by unprocessed events are retried by the worker. Quota runs continue to the low-water target after Curatarr's own deletes, while external drops below high water still invalidate queued candidates. Confirmed movie deletes mark files absent immediately.
+- End-to-end demo lifecycle: the reconcile CLI creates, expires, validates, and deletes quota candidates to the low-water target with reclaimed-space reporting; a simulated Radarr outage blocks every automatic delete.
+- All Section 98 acceptance edge cases have explicit tests.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
 ## In Progress
@@ -24,7 +27,7 @@ Phase 6 — Controlled deletion validation
 - Validating live test integrations and remaining concurrent playback/delete races, especially playback during an in-flight external request.
 
 ## Next
-- Expand acceptance scenario coverage for remaining concurrent playback/delete races and live API failures.
+- Expand live API failure coverage once test services are available.
 - Confirm pressure-level behavior against real disk-space responses and expand synthetic UI state coverage.
 - Validate image-tag behavior with a live Jellyfin version and test lease behavior across multiple hosts against a shared production-like database.
 - Validate controlled and automatic cleanup against real test integrations before production use.
@@ -38,6 +41,9 @@ Phase 6 — Controlled deletion validation
 
 ## Decisions Made
 - SQLite for local tests; PostgreSQL in container deployment.
+- Rule-specific review modes and the inactivity > quota > disk-pressure reason order (docs/decisions/006-automatic-lifecycle.md).
+- Quota high/low-water hysteresis applies only to Curatarr's own deletions (docs/decisions/005-capacity-policy.md).
+- Favorites rank last but do not protect a title; only Never Purge does.
 - External side effects are represented by persisted actions.
 - Dry run is the default; each library can explicitly override it.
 
