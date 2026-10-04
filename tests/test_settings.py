@@ -94,3 +94,14 @@ def test_settings_show_webhook_setup_with_template(app, client):
         rendered = rendered.replace("{{" + name + "}}", value)
     rendered = __import__("re").sub(r"\{\{\w+\}\}", "", rendered)
     assert normalize_event(json.loads(rendered))["event_type"] == "item_played"
+
+
+def test_webhook_setup_step_offers_and_shows_the_token(app, client):
+    client.get("/settings")  # first visit creates and shows a token once
+    page = client.get("/settings").text
+    assert "Generate a new token</button>" in page
+    response = client.post("/settings", data={"kind": "webhook"})
+    page = response.text
+    token = setting("webhook_token")
+    assert f'id="new-webhook-token">{token}</code>' in page
+    assert '<details class="mb-3" open>' in page
