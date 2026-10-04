@@ -1029,8 +1029,17 @@ def save_policy_layer(library, form, keys):
 
     global_values = setting("global_policy", {})
     if library is None:
+        from .policy import DEFAULTS
+
         keys = [key for key in keys if key not in LIBRARY_ONLY_FIELDS]
         global_values = merge_policy_form(global_values, form, keys)
+        # The global page shows every value; store only real changes so a
+        # built-in default that changes later still applies.
+        global_values = {
+            key: value
+            for key, value in global_values.items()
+            if key not in DEFAULTS or value != DEFAULTS[key]
+        }
         layers = {}
     else:
         row = library.policy or LibraryPolicy(library_id=library.id)

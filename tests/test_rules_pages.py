@@ -31,14 +31,15 @@ def test_global_rules_are_inherited_by_libraries(app, client):
     )
     assert setting("global_policy") == {"grace_days": 7, "manage_specials": True}
     page = client.get(f"/rules/acquisition?scope={library.id}").text
-    assert "Inherit global default (7)" in page
-    assert "Inherit built-in default (3)" in page
+    assert 'placeholder="Inherit (7)"' in page
+    assert 'placeholder="Inherit (3)"' in page
     assert "Currently in effect: 7 (global default)" in page
     page = client.get("/rules/acquisition").text
-    # Global defaults have nothing to inherit from; blank means built-in default.
-    assert ">Inherit" not in page and 'placeholder="Inherit' not in page
-    assert 'placeholder="Built-in default (30)"' in page
-    assert "Built-in default (Yes)" in page
+    # Global values have nothing to inherit from, so the page shows real values.
+    assert "Inherit" not in page and "Built-in default" not in page
+    assert 'name="grace_days" value="7"' in page
+    assert 'name="minimum_episodes" value="3"' in page
+    assert '<option value="true" selected>Yes</option>' in page
 
 
 def test_partial_page_keeps_other_library_fields(app, client):
@@ -106,8 +107,7 @@ def test_minimum_footprint_options_explain_themselves(app, client):
         "Entire series (never trimmed)",
     ):
         assert f">{label}</option>" in page
-    assert "Built-in default (First N episodes of Season 1)" in page
-    assert "Built-in default (Yes)" in page
+    assert '<option value="first_n_episodes" selected>' in page
 
 
 def test_yes_no_dropdowns_match_the_default_wording(app, client):
@@ -125,3 +125,25 @@ def test_yes_no_dropdowns_match_the_default_wording(app, client):
         options = re.findall(r">([^<]+)</option>", select)
         # Same words as the "(Yes)"/"(No)" default label, always Yes first.
         assert options[1:] == ["Yes", "No"], (name, options)
+
+
+def test_saving_the_global_page_stores_only_changes(app, client):
+    from curatarr.policy import DEFAULTS
+
+    # A browser submits every shown value; only differences are kept.
+    form = {
+        "minimum_mode": DEFAULTS["minimum_mode"],
+        "minimum_episodes": str(DEFAULTS["minimum_episodes"]),
+        "acquisition_threshold": "2",
+        "keep_one_season_ahead": "true",
+        "manage_specials": "false",
+        "grace_days": str(DEFAULTS["grace_days"]),
+    }
+    client.post("/rules/acquisition", data=form)
+    assert setting("global_policy") == {"acquisition_threshold": 2}
+
+
+def test_global_page_keeps_blank_choices_that_mean_something(app, client):
+    page = client.get("/rules/retention").text
+    assert '<option value="">Depends on library type' in page
+    assert '<option value="">Same as review mode</option>' in page
