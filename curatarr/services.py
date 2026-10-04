@@ -1411,17 +1411,45 @@ def request_reconciliation():
     set_setting("reconcile_requested_at", utcnow().isoformat())
 
 
+RECONCILE_STALE_MINUTES = 30
+
+
 def reconciliation_state():
+    """Queued, running, failed, interrupted, or idle, with times for display."""
+    from datetime import timedelta
+
+    now = utcnow()
     requested = _as_datetime(setting("reconcile_requested_at"))
     attempt = _as_datetime(setting("last_reconcile_attempt_at"))
     finished = _as_datetime(setting("last_reconcile_at"))
+    error = setting("last_reconcile_error") or {}
+    error_at = _as_datetime(error.get("at"))
     if requested and (not attempt or requested > attempt):
         state = "queued"
     elif attempt and (not finished or attempt > finished):
-        state = "running or failed"
+        if error_at and error_at >= attempt:
+            state = "failed"
+        elif now - attempt > timedelta(minutes=RECONCILE_STALE_MINUTES):
+            state = "interrupted"
+        else:
+            state = "running"
     else:
         state = "idle"
-    return {"state": state, "last_finished": finished}
+    return {
+        "state": state,
+        "requested_at": requested,
+        "started_at": attempt,
+        "elapsed_seconds": round((now - attempt).total_seconds())
+        if state == "running"
+        else None,
+        "last_finished": finished,
+        "last_duration_ms": setting("last_reconcile_duration_ms"),
+        "error": error.get("message") if state == "failed" else None,
+        "titles": db.session.query(func.count(MediaIdentity.id))
+        .filter(MediaIdentity.missing_since.is_(None))
+        .scalar(),
+        "libraries": db.session.query(func.count(Library.id)).scalar(),
+    }
 
 
 # Template for the Jellyfin Webhook plugin's Generic destination. Values are
