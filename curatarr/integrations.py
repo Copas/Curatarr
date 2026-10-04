@@ -238,10 +238,13 @@ class SonarrClient(Client):
         return self.request("GET", "/api/v3/diskspace")
 
     def monitor_episode(self, episode_id):
+        """Monitor one episode; returns True only if it was unmonitored before."""
         episode = self.request("GET", f"/api/v3/episode/{episode_id}")
-        if not episode["monitored"]:
-            episode["monitored"] = True
-            self.request("PUT", f"/api/v3/episode/{episode_id}", json=episode)
+        if episode["monitored"]:
+            return False
+        episode["monitored"] = True
+        self.request("PUT", f"/api/v3/episode/{episode_id}", json=episode)
+        return True
 
     def season_search(self, series_id, season_number):
         return self.request(

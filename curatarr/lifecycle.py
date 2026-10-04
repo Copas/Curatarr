@@ -798,8 +798,16 @@ def _execute_action(action_id):
     if action.action_type == "sonarr_season_search":
         try:
             arr = client("sonarr")
-            for episode_id in action.payload_json.get("episode_ids", []):
-                arr.monitor_episode(episode_id)
+            # Record what actually changed; most listed episodes are often
+            # monitored already, and History should not overstate the change.
+            newly_monitored = [
+                episode_id
+                for episode_id in action.payload_json.get("episode_ids", [])
+                if arr.monitor_episode(episode_id)
+            ]
+            action.payload_json = action.payload_json | {
+                "newly_monitored": newly_monitored
+            }
             if action.payload_json.get("search_now"):
                 queue = arr.queue()
                 records = queue.get("records", []) if isinstance(queue, dict) else queue

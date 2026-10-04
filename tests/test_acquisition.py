@@ -288,3 +288,44 @@ def test_specials_and_unaired_future_episodes_do_not_trigger_search(app):
         )
         assert {action.payload_json["season"] for action in actions} == {1, 2}
         assert all(not action.payload_json["search_now"] for action in actions)
+
+
+def test_only_episodes_that_changed_are_recorded_as_newly_monitored(app, monkeypatch):
+    with app.app_context():
+        library = Library(jellyfin_library_id="tv-m", name="TV", media_type="tv")
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="series",
+            title="Monitored Series",
+            jellyfin_id="show-m",
+            tvdb_id=321,
+            sonarr_id=31,
+        )
+        db.session.add(media)
+        db.session.flush()
+        action = LifecycleAction(
+            idempotency_key="monitor-check",
+            action_type="sonarr_season_search",
+            state="PENDING",
+            media_identity_id=media.id,
+            reason_text="Season 2 requested.",
+            payload_json={
+                "sonarr_id": 31,
+                "season": 2,
+                "episode_ids": [21, 22, 23],
+                "search_now": False,
+                "current_season": 1,
+            },
+        )
+        db.session.add(action)
+        db.session.commit()
+
+        class FakeSonarr:
+            def monitor_episode(self, episode_id):
+                return episode_id not in {21, 23}  # 21 and 23 already monitored
+
+        monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: FakeSonarr())
+        assert execute_action(action.id) == "succeeded"
+        assert action.payload_json["newly_monitored"] == [22]
