@@ -41,7 +41,6 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 ## Next
 - Configure the Jellyfin Webhook plugin on the live server and confirm a real delivery is matched. So far every live event came from reconciliation, none from the webhook.
 - Exercise cleanup live under controlled conditions: Leaving Soon poster badge and restore on a real Jellyfin, then a Sonarr episode-file and a Radarr movie deletion, then played-state restoration when a trimmed episode returns. Suggested approach: one library in dry run, with a temporary low free-space threshold above current usage.
-- Decide whether Leaving Soon poster badges should be applied while a library is in dry run (open question to the owner).
 - Tag v0.2.0 once the live checks above pass, and publish the repository to GitHub when a remote exists.
 - Lower priority: version the stored policy schema (spec section 92); move the remaining queries out of the Overview route (spec section 93); validate leases across hosts on a shared PostgreSQL.
 
@@ -57,6 +56,7 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Rule-specific review modes and the inactivity > quota > disk-pressure reason order (docs/decisions/006-automatic-lifecycle.md).
 - Quota high/low-water hysteresis applies only to Curatarr's own deletions (docs/decisions/005-capacity-policy.md).
 - Favorites rank last but do not protect a title; only Never Purge does.
+- Dry run rehearses everything visible, including Leaving Soon poster badges; only the deletion request is withheld (docs/decisions/004).
 - First sync acts on existing watch history: past completions trigger acquisition like new ones (owner's choice, 2026-10-04; docs/decisions/006). Acquisition is not dry-run gated, and prior Sonarr monitored state is not recorded before Curatarr changes it.
 - Authentication uses Jellyfin administrator accounts (owner's choice, like Seerr) behind an isolated adapter, rather than local accounts. Non-administrators cannot sign in.
 - External side effects are represented by persisted actions.

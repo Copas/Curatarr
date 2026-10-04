@@ -223,3 +223,55 @@ def test_ambiguous_badge_upload_keeps_recoverable_snapshot(app, monkeypatch):
         assert snapshot.badged_image_tag
         assert restore_badge(snapshot)
         assert not snapshot.active
+
+
+def test_dry_run_libraries_still_get_leaving_soon_badges(app, monkeypatch):
+    """Owner's decision: dry run rehearses everything visible, badges included."""
+    from curatarr.artwork import reconcile_artwork
+    from curatarr.models import LibraryPolicy
+
+    source = _poster()
+    uploads = []
+
+    class FakeJellyfin:
+        current = source
+
+        def item(self, _item_id):
+            return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
+
+        def image(self, _item_id):
+            return self.current
+
+        def put_image(self, _item_id, data):
+            uploads.append(data)
+            self.current = data
+
+    monkeypatch.setattr("curatarr.artwork.client", lambda _kind: FakeJellyfin())
+    with app.app_context():
+        library = Library(jellyfin_library_id="dry-tv", name="TV", media_type="tv")
+        db.session.add(library)
+        db.session.flush()
+        db.session.add(
+            LibraryPolicy(library_id=library.id, policy_json={"dry_run": True})
+        )
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="series",
+            title="Rehearsed",
+            jellyfin_id="dry-series",
+        )
+        db.session.add(media)
+        db.session.flush()
+        db.session.add(
+            PurgeCandidate(
+                media_identity_id=media.id,
+                state="LEAVING_SOON",
+                reason_code="disk_pressure",
+                reason_text="Low space",
+                reclaimable_bytes=100,
+            )
+        )
+        db.session.commit()
+        reconcile_artwork()
+        assert len(uploads) == 1
+        assert db.session.query(PosterSnapshot).one().active
