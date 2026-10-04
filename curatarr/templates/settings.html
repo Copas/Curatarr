@@ -6,10 +6,13 @@
 {% for kind in ['jellyfin', 'sonarr', 'radarr'] %}
   {% set integration = integrations.get(kind) %}
   <div class="col-lg-4"><div class="card p-3 h-100"><h2 class="h5">{{ kind|title }}</h2>
+    {% set guide = guides[kind] %}
     <p>Status: {{ integration.health_state if integration else 'unconfigured' }}{% if integration and integration.secret_ref %} · Key saved{% endif %}</p>
     <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="{{ kind }}">
-      <label class="form-label">URL<input class="form-control" type="url" name="base_url" required value="{{ integration.base_url if integration else '' }}"></label>
-      <label class="form-label">API key<input class="form-control" type="password" name="api_key" autocomplete="new-password" placeholder="{{ 'Leave blank to keep saved key' if integration else 'API key' }}"></label>
+      <label class="form-label w-100">URL<input class="form-control" type="url" name="base_url" required value="{{ integration.base_url if integration else '' }}" placeholder="{{ guide.suggested_url or 'http://host:' ~ guide.port }}"></label>
+      <div class="form-text mb-2">The address you open {{ kind|title }} at in a browser; default port {{ guide.port }}.</div>
+      <label class="form-label w-100">API key<input class="form-control" type="password" name="api_key" autocomplete="new-password" placeholder="{{ 'Leave blank to keep saved key' if integration else 'API key' }}"></label>
+      <div class="form-text mb-2">Find it in {{ guide.where }}.{% if guide.key_url %} <a href="{{ guide.key_url }}" target="_blank" rel="noopener">Open that page</a>{% endif %}</div>
       <button class="btn btn-primary">Test and save</button>
     </form>
   </div></div>

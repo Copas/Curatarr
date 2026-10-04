@@ -56,3 +56,20 @@ def test_webhook_token_rotation_shows_new_token_once(app, client):
     response = client.post("/settings", data={"kind": "webhook", "webhook_token": ""})
     assert response.status_code == 200
     assert setting("webhook_token").encode() in response.data
+
+
+def test_settings_explain_where_each_api_key_is(app, client):
+    page = client.get("/settings").text
+    assert "Sonarr Settings → General → Security → API Key" in page
+    assert "Radarr Settings → General → Security → API Key" in page
+    assert "Jellyfin Dashboard → API Keys" in page
+    assert 'placeholder="http://host:8989"' in page
+    db.session.add(
+        Integration(kind="jellyfin", base_url="http://media.example.local:8096")
+    )
+    db.session.commit()
+    page = client.get("/settings").text
+    # Sonarr and Radarr suggestions reuse the Jellyfin host with default ports.
+    assert 'placeholder="http://media.example.local:7878"' in page
+    assert 'href="http://media.example.local:8989/settings/general"' in page
+    assert 'href="http://media.example.local:8096/web/#/dashboard/keys"' in page
