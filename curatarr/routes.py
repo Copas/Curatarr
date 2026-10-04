@@ -656,6 +656,11 @@ def _policy_page(section, title, keys, library):
     effective, sources = effective_policy(
         media_type, global_values, stored if library is not None else {}
     )
+    # What a blank field resolves to: built-in defaults for the global layer,
+    # global-or-built-in for a library.
+    fallback, fallback_sources = effective_policy(
+        media_type, global_values if library is not None else {}, {}
+    )
     return render_template(
         "rules.html",
         section=section,
@@ -666,6 +671,8 @@ def _policy_page(section, title, keys, library):
         stored=stored,
         effective=effective,
         sources=sources,
+        fallback=fallback,
+        fallback_sources=fallback_sources,
     )
 
 
