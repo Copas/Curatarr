@@ -623,8 +623,12 @@ POLICY_FIELDS = {
     "keep_one_season_ahead": ("Keep one season ahead", ["true", "false"]),
     "manage_specials": ("Manage Specials / Season 0", ["true", "false"]),
     "grace_days": ("New-media grace days", "number"),
-    "tv_inactivity_days": ("TV inactivity days", "number"),
-    "movie_inactivity_days": ("Movie inactivity days", "number"),
+    "inactivity_cleanup": (
+        "Clean up unwatched titles even when space is fine",
+        ["true", "false"],
+    ),
+    "tv_inactivity_days": ("TV counts as unwatched after (days)", "number"),
+    "movie_inactivity_days": ("Movies count as unwatched after (days)", "number"),
     "meaningful_threshold": ("Meaningful TV watch (episodes)", "number"),
     "purge_strategy": (
         "Purge strategy",
@@ -637,16 +641,19 @@ POLICY_FIELDS = {
         "Review expiration",
         ["manual_forever", "auto_delete_after_notice"],
     ),
-    "notice_days": ("Leaving Soon notice days", "number"),
+    "notice_days": ("Leaving Soon notice before removal (days)", "number"),
     "quota_enabled": ("Library-size limit", ["true", "false"]),
     "high_water_bytes": ("High-water bytes", "number"),
     "low_water_bytes": ("Low-water bytes", "number"),
     "free_space_enabled": ("Free-space enforcement", ["true", "false"]),
     "disk_path": ("Arr-side disk path", "text"),
-    "low_free_percent": ("Low free-space threshold %", "number"),
+    "low_free_percent": (
+        "Low free-space threshold % (clean up back to this)",
+        "number",
+    ),
     "critical_free_percent": ("Critical free-space threshold %", "number"),
-    "low_pressure_review_mode": ("Low-pressure review mode", MODES),
-    "critical_pressure_review_mode": ("Critical-pressure review mode", MODES),
+    "low_pressure_review_mode": ("Below low free space", MODES),
+    "critical_pressure_review_mode": ("Below critical free space (no notice)", MODES),
     "dry_run": ("Dry run", ["true", "false"]),
 }
 RULE_SECTIONS = {

@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import pytest
+
 from curatarr import db
 from curatarr.integrations import IntegrationError
 from curatarr.lifecycle import (
@@ -16,6 +18,15 @@ from curatarr.models import (
     PurgeCandidate,
     utcnow,
 )
+
+
+@pytest.fixture(autouse=True)
+def _inactivity_cleanup_enabled(app):
+    """These tests exercise inactivity cleanup, which libraries must opt into."""
+    from curatarr.services import set_setting
+
+    with app.app_context():
+        set_setting("global_policy", {"inactivity_cleanup": True})
 
 
 def test_ambiguous_movie_result_is_reconciled_without_retry(app, monkeypatch):

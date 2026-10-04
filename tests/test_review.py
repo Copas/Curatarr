@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import pytest
+
 from curatarr import db
 from curatarr.lifecycle import expire_snoozes, review_candidate
 from curatarr.models import (
@@ -9,6 +11,15 @@ from curatarr.models import (
     TitleOverride,
     utcnow,
 )
+
+
+@pytest.fixture(autouse=True)
+def _inactivity_cleanup_enabled(app):
+    """These tests exercise inactivity cleanup, which libraries must opt into."""
+    from curatarr.services import set_setting
+
+    with app.app_context():
+        set_setting("global_policy", {"inactivity_cleanup": True})
 
 
 def test_snooze_and_never_purge(app):

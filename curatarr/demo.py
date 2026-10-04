@@ -39,10 +39,19 @@ def seed_demo():
     ]
     db.session.add_all(libraries)
     db.session.flush()
+    # The demo shows the review flow for unwatched titles, so its libraries
+    # opt into inactivity cleanup (off by default for real libraries).
+    for library in libraries[:2]:
+        db.session.add(
+            LibraryPolicy(
+                library_id=library.id, policy_json={"inactivity_cleanup": True}
+            )
+        )
     db.session.add(
         LibraryPolicy(
             library_id=libraries[2].id,
             policy_json={
+                "inactivity_cleanup": True,
                 "quota_enabled": True,
                 "high_water_bytes": 80_000_000_000,
                 "low_water_bytes": 70_000_000_000,

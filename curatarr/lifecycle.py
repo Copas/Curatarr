@@ -272,6 +272,11 @@ def reconcile_candidates():
                 > _aware(candidate.last_activity_snapshot)
             ):
                 reason = "Playback occurred after candidate creation."
+            elif (
+                candidate.reason_code == "inactivity"
+                and not policy["inactivity_cleanup"]
+            ):
+                reason = "Inactivity cleanup is turned off for this library."
             elif candidate.reason_code == "inactivity" and not inactivity_due(
                 item, policy, now
             ):
@@ -381,7 +386,9 @@ def _evaluate_retention_locked():
         for media, item, policy in candidates:
             if _active_candidate(media.id):
                 continue
-            due = inactivity_due(item, policy, now)
+            # Unwatched time alone triggers cleanup only when a library opts in;
+            # otherwise it only decides who goes first under space pressure.
+            due = policy["inactivity_cleanup"] and inactivity_due(item, policy, now)
             quota = media.id in selected_quota
             under_pressure = media.id in selected_pressure
             if not due and not quota and not under_pressure:
@@ -426,7 +433,12 @@ def _evaluate_retention_locked():
                 score_detail_json=detail,
                 last_activity_snapshot=item.last_played_at,
                 scheduled_delete_at=(
-                    now + timedelta(days=policy["notice_days"])
+                    # Critical free space removes without a notice period.
+                    now
+                    if state == "LEAVING_SOON"
+                    and reason_code == "disk_pressure"
+                    and pressure[1] == "critical"
+                    else now + timedelta(days=policy["notice_days"])
                     if state == "LEAVING_SOON"
                     or (
                         state == "REVIEW"
@@ -522,6 +534,8 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
     snapshot = candidate.last_activity_snapshot
     if last and (snapshot is None or last > snapshot):
         return "Playback occurred after candidate creation"
+    if candidate.reason_code == "inactivity" and not policy["inactivity_cleanup"]:
+        return "Inactivity cleanup is turned off"
     if candidate.reason_code == "inactivity" and not inactivity_due(item, policy, now):
         return "Inactivity rule no longer applies"
     if candidate.reason_code == "quota" and not _quota_cleanup_active(

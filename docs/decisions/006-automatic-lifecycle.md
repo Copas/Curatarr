@@ -13,3 +13,13 @@ A favorite is a strong ranking signal but not protection. A candidate favorited 
 ## Watch history found on first sync
 
 The first reconciliation turns every user's existing Played state into completion events, and those trigger the normal acquisition rule: fill the rest of that season and request the next. The owner chose this on 2026-10-04 after seeing it happen on the first live sync (11 Sonarr requests), over recording history as a baseline only. Acquisition is not covered by dry run, which applies to deletion. Later reconciliations do not repeat this, because a completion already recorded generates no new event.
+
+## Cleanup only when free space runs low (2026-10-04)
+
+The owner's rule, which replaces inactivity as a cleanup trigger by default:
+
+- Not being played (`tv_inactivity_days`/`movie_inactivity_days`) does not by itself make a title a cleanup candidate. A per-library `inactivity_cleanup` switch, off by default, restores the old behavior. Unwatched time still shapes the purge strategy ranking, so long-unwatched titles are chosen first under pressure. Recently played TV stays ineligible.
+- Below the low free-space threshold, Curatarr selects in ranking order only enough to bring free space back to that threshold. The default `low_pressure_review_mode` is `automatic`: titles get a Leaving Soon notice for `notice_days` (14 by default) and are removed when it expires unless rescued by playback. Each hourly re-run counts already-selected titles, so it does not select more, and each removal re-checks pressure and ranking, so the rest are dropped once space recovers.
+- Below the critical threshold, the default `critical_pressure_review_mode` is `automatic` with no notice: removal is attempted on the next worker cycle, with the same pre-delete validation.
+- Dry run remains the final gate. A library must turn it off before anything is actually removed.
+- Free-space enforcement still requires `free_space_enabled` and an arr-side `disk_path` per library.
