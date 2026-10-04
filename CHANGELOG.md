@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Discovery records each file's acquisition time from Sonarr/Radarr `dateAdded` instead of the discovery time, which had made an entire existing library look newly acquired. Existing installs are corrected at the next discovery.
+
 - Cleanup is driven by free space. Unwatched titles are no longer cleanup candidates on their own (new per-library switch `inactivity_cleanup`, off by default). Low free space selects only enough to return to the low threshold, with a Leaving Soon notice (14 days by default) before removal. Critical free space removes without a notice. Dry run still gates all removal.
 
 - The top navigation highlights the section being viewed, including sub-pages (title pages under Overrides, history entries under History, library policy under Retention, setup under Settings).

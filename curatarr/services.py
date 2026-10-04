@@ -222,7 +222,13 @@ def _upsert_part(media, kind, season, episode, item):
         db.session.add(part)
     part.jellyfin_id = str(item.get("Id")) if item.get("Id") else part.jellyfin_id
     has_file = bool(item.get("HasFile", part.has_file))
-    if has_file and not part.has_file:
+    # Sonarr/Radarr report when each file was added; that is the acquisition
+    # time. Using the discovery time instead made a whole existing library look
+    # newly acquired, deferring grace and inactivity for everything at once.
+    added = _as_datetime(item.get("AddedAt")) if has_file else None
+    if added:
+        part.acquired_at = added
+    elif has_file and not part.has_file:
         part.acquired_at = utcnow()
     part.has_file = has_file
     size = item.get("Size")
@@ -284,17 +290,25 @@ def discover():
                     match = series_by_tvdb.get(str(media.tvdb_id))
                     if match:
                         media.sonarr_id = match["id"]
-                        file_sizes = {
-                            entry["id"]: entry.get("size", 0)
+                        episode_files = {
+                            entry["id"]: entry
                             for entry in sonarr.episode_files(media.sonarr_id)
                         }
+                        file_sizes = {
+                            file_id: entry.get("size", 0)
+                            for file_id, entry in episode_files.items()
+                        }
                         for episode in sonarr.episodes(media.sonarr_id):
+                            file_entry = episode_files.get(episode.get("episodeFileId"))
                             part = _upsert_part(
                                 media,
                                 "episode",
                                 episode.get("seasonNumber"),
                                 episode.get("episodeNumber"),
-                                {"HasFile": episode.get("hasFile", False)},
+                                {
+                                    "HasFile": episode.get("hasFile", False),
+                                    "AddedAt": (file_entry or {}).get("dateAdded"),
+                                },
                             )
                             part.sonarr_episode_id = episode.get("id")
                             part.arr_file_id = episode.get("episodeFileId") or None
@@ -315,6 +329,7 @@ def discover():
                             None,
                             {
                                 "HasFile": match.get("hasFile", False),
+                                "AddedAt": file_data.get("dateAdded"),
                                 "Size": file_data.get(
                                     "size", match.get("sizeOnDisk", 0)
                                 ),
