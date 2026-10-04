@@ -1121,3 +1121,61 @@ def review_rows():
             }
         )
     return rows
+
+
+def save_integration(kind, base_url, api_key):
+    """Test and save one integration; raises ValueError with a user message."""
+    from .integrations import normalized_url
+    from .secrets import decrypt_secret, encrypt_secret
+
+    url = normalized_url(base_url or "")
+    row = db.session.query(Integration).filter_by(kind=kind).first()
+    key = api_key
+    if not key and row and row.secret_ref:
+        try:
+            key = decrypt_secret(row.secret_ref)
+        except ValueError as exc:
+            raise ValueError(
+                "Saved key cannot be decrypted; provide a new API key"
+            ) from exc
+    if not key:
+        raise ValueError("API key is required")
+    try:
+        version = CLIENTS[kind](url, key).version()
+    except IntegrationError as exc:
+        raise ValueError(
+            f"{kind.title()} could not be reached; settings were not saved"
+        ) from exc
+    if not row:
+        row = Integration(kind=kind, base_url=url)
+        db.session.add(row)
+    row.base_url = url
+    row.secret_ref = encrypt_secret(key)
+    row.detected_version = version
+    row.health_state = "healthy"
+    row.last_health_at = utcnow()
+    db.session.commit()
+
+
+def rotate_webhook_token(token=None):
+    import secrets
+
+    token = token or secrets.token_urlsafe(32)
+    set_setting("webhook_token", token)
+    db.session.commit()
+    return token
+
+
+def save_reconcile_interval(minutes):
+    if type(minutes) is not int or not 5 <= minutes <= 1440:
+        raise ValueError("Reconciliation interval must be 5–1440 minutes")
+    set_setting("reconciliation_interval_seconds", minutes * 60)
+    db.session.commit()
+
+
+def settings_view():
+    return {
+        "integrations": {row.kind: row for row in db.session.query(Integration)},
+        "webhook_present": setting("webhook_token") is not None,
+        "interval_minutes": setting("reconciliation_interval_seconds", 3600) // 60,
+    }
