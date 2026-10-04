@@ -36,23 +36,21 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
 ## In Progress
-- Checking live API compatibility when test services become available; current local fixtures cover missed-webhook playback and favorite recovery.
-- Validating live test integrations and remaining concurrent playback/delete races, especially playback during an in-flight external request.
+- Live validation on the owner's installed copy (since 2026-10-04). Verified live: Jellyfin administrator sign-in and session checks, the integration keys, discovery (about 440 titles, 6 libraries), reconciliation of watch history, acquisition (34 Sonarr requests, sent and grabbed), free-space measurement of the NAS, and the native installer including systemd.
 
 ## Next
-- Finish first-run setup on the owner's installed copy (2026-10-04: installed with `scripts/install.sh`, services running, Jellyfin administrator sign-in working): add Jellyfin, Sonarr, and Radarr API keys, configure the webhook, run Discover, and begin live validation in dry run.
-- Publish the clean repository to GitHub once a remote exists; tag the next release after the installer has been run for real.
-- Expand live API failure coverage once test services are available.
-- Confirm pressure-level behavior against real disk-space responses and expand synthetic UI state coverage.
-- Validate image-tag behavior with a live Jellyfin version and test lease behavior across multiple hosts against a shared production-like database.
-- Validate controlled and automatic cleanup against real test integrations before production use.
+- Configure the Jellyfin Webhook plugin on the live server and confirm a real delivery is matched. So far every live event came from reconciliation, none from the webhook.
+- Exercise cleanup live under controlled conditions: Leaving Soon poster badge and restore on a real Jellyfin, then a Sonarr episode-file and a Radarr movie deletion, then played-state restoration when a trimmed episode returns. Suggested approach: one library in dry run, with a temporary low free-space threshold above current usage.
+- Decide whether Leaving Soon poster badges should be applied while a library is in dry run (open question to the owner).
+- Tag v0.2.0 once the live checks above pass, and publish the repository to GitHub when a remote exists.
+- Lower priority: version the stored policy schema (spec section 92); move the remaining queries out of the Overview route (spec section 93); validate leases across hosts on a shared PostgreSQL.
 
 ## Known Issues
-- No real-service credentials are available for live validation.
-- Jellyfin sign-in is verified against mocked and demo Jellyfin only; confirm `AuthenticateByName`, `Sessions/Logout`, and `Users/{id}` behavior against a live server. The first-run server URL can be bound by whoever signs in first unless `CURATARR_JELLYFIN_URL` is set. The sign-in rate limit is per process and per client address, so behind a reverse proxy it applies to all users together.
+- The first-run server URL can be bound by whoever signs in first unless `CURATARR_JELLYFIN_URL` is set. The sign-in rate limit is per process and per client address, so behind a reverse proxy it applies to all users together.
 - Poster restoration uses Jellyfin's primary image tag or exact badge bytes. An ambiguous upload followed by image re-encoding before the new tag is recorded still needs manual recovery.
 - PostgreSQL lease renewal and same-host multi-process contention were validated locally; cross-host contention has not been validated.
 - An external delete already in flight cannot be cancelled by a later playback event; the next TV file request is stopped and partial cleanup requires manual review.
+- Sonarr and Radarr record when a file was added to them, not when it first appeared in Jellyfin; titles re-imported into Radarr (for example during a library move) count as newly acquired from that date.
 
 ## Decisions Made
 - SQLite for local tests; PostgreSQL in container deployment.
@@ -65,4 +63,4 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Dry run is the default; each library can explicitly override it.
 
 ## Blockers
-- Live integration validation requires user-provided test services and credentials.
+- None. Live validation runs against the owner's services, so destructive checks need the owner's go-ahead.
