@@ -4,32 +4,20 @@ Curatarr is an independent Jellyfin, Sonarr, and Radarr lifecycle manager. It ob
 
 This is an early implementation. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for completed behavior and current gaps before connecting it to a real library.
 
-## Demo mode
+> **This repository is source code, not an installation.** Run Curatarr from an installed copy made from a tagged release, never from a git checkout. An installed copy keeps its own code, configuration, and data outside the checkout (`/opt/curatarr`, `/etc/curatarr`, `/var/lib/curatarr`, or Docker volumes). Development here cannot change it, and its database, keys, posters, and logs cannot end up in Git. See [docs/INSTALL.md](docs/INSTALL.md).
 
-Demo mode uses synthetic adapters and never contacts private services. After creating the database, set `CURATARR_DEMO_MODE=true` and run `flask --app curatarr demo-seed`. The overview includes controls for playback, favorites, time/size changes, and simulated outages. Run `flask --app curatarr worker --once` or use Reconcile in the UI to evaluate the sample libraries.
+## Installing
 
-## Local development
+- **Native (Linux, systemd):** from a release checkout, run `sudo ./scripts/install.sh`. Re-run it from a newer release to upgrade; it backs up the database first.
+- **Docker:** in a separate deployment directory, copy `.env.example` to `.env`, set the secrets, and run `docker compose up -d --build`.
 
-Python 3.12 or newer is required.
+[docs/INSTALL.md](docs/INSTALL.md) covers both in full, plus configuration, upgrades, rollback, backup, and uninstalling.
 
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
-export CURATARR_SECRET_KEY='replace-with-a-random-secret'
-.venv/bin/flask --app curatarr db upgrade
-.venv/bin/flask --app curatarr encrypt-secrets
-.venv/bin/python -m curatarr
-```
+## First run
 
-In a second shell, run the persistent worker:
+Open `http://<host>:8787` and sign in with a Jellyfin administrator account (see Signing in below). Until setup is complete, Overview links to the `/setup` checklist: connect Jellyfin, Sonarr, and Radarr in Settings, create the webhook token, run Discover from Overview, then optionally review the Acquisition and Retention rules. Saved keys are masked in the UI. The first Settings visit generates a webhook token and shows it once. Configure Jellyfin's webhook plugin to send JSON to `/api/v1/webhook/jellyfin` with that token in the `X-Curatarr-Token` request header. The webhook stays closed until the token exists.
 
-```bash
-.venv/bin/flask --app curatarr worker
-```
-
-The web app listens on port 8787 by default. Until setup is complete, Overview links to the `/setup` checklist: connect Jellyfin, Sonarr, and Radarr in Settings, create the webhook token, run Discover from Overview, then optionally review the Acquisition and Retention rules. Saved keys are masked in the UI. The first Settings visit generates a webhook token and shows it once. Configure Jellyfin's webhook plugin to send JSON to `/api/v1/webhook/jellyfin` with that token in the `X-Curatarr-Token` request header. The webhook stays closed until the token exists.
-
-Use a unique, stable random `CURATARR_SECRET_KEY` before starting. Integration keys and the webhook token are encrypted in the database using a key derived from `CURATARR_SECRET_KEY`; losing or changing that key makes them unreadable. Back up the key separately from the database. Existing installations should back up the database, run `db upgrade`, then run `encrypt-secrets` once; the command is safe to repeat.
+Integration keys and the webhook token are encrypted in the database with a key derived from `CURATARR_SECRET_KEY`. Losing or changing that key makes them unreadable, so back up the key together with the database. The application needs no media volume; deletion always goes through Sonarr or Radarr.
 
 ## Signing in
 
@@ -47,12 +35,6 @@ Policy resolves title override → library → global → built-in default. The 
 
 Dry run is enabled by default. A library must explicitly set dry run to false before destructive arr calls are possible. Before each deletion, Curatarr rechecks mapping, activity, grace, policy, queue state, and integration health. If it cannot verify these, it blocks deletion.
 
-## Containers
-
-Set `CURATARR_DB_PASSWORD` and `CURATARR_SECRET_KEY` (and optionally `CURATARR_JELLYFIN_URL`) in your deployment environment, then run `docker compose up --build`. To use HTTPS, put Curatarr behind a TLS-terminating reverse proxy and set `CURATARR_SESSION_COOKIE_SECURE=true`. The compose example binds the UI to `127.0.0.1:8787` and uses PostgreSQL and persistent database/config volumes. It runs migrations and legacy-secret encryption on web startup. If running outside compose, run `flask --app curatarr db upgrade` and `flask --app curatarr encrypt-secrets` before starting each upgraded application version unless you intentionally set `CURATARR_AUTO_MIGRATE=true`.
-
-The application requires no media volume. Poster snapshots are stored under application data and are never part of the source repository.
-
 ## API and health
 
 Read-only endpoints (all except `/health` and `/api/v1/status` require sign-in): `/health`, `/api/v1/status`, `/api/v1/metrics`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. The webhook endpoint is `/api/v1/webhook/jellyfin`.
@@ -63,7 +45,31 @@ Operational log lines from the `curatarr.ops` logger are single JSON objects. Th
 
 `/api/v1/metrics` and the Operations table on Overview report: events processed, duplicate events ignored, acquisition actions, purge candidates created, rescues, bytes proposed and actually reclaimed, external API failures per integration, last reconciliation duration, pending actions, and oldest pending action age. Most values are computed from stored history. Duplicate-event and API-failure counts are held in memory and written to the `metric_counters` table when each request or worker cycle ends.
 
-## Tests
+## Developing Curatarr
+
+Everything in this section uses the source checkout. The database and posters it creates under `instance/` belong to the checkout only. They are a disposable development database, separate from any installation.
+
+### Local development
+
+Python 3.12 or newer is required.
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+export CURATARR_SECRET_KEY='replace-with-a-random-secret'
+export CURATARR_DEMO_MODE=true          # synthetic data; never contacts real services
+.venv/bin/flask --app curatarr db upgrade
+.venv/bin/flask --app curatarr demo-seed
+.venv/bin/python -m curatarr
+```
+
+In a second shell, run the worker with `.venv/bin/flask --app curatarr worker`. The development server listens on port 8787. In demo mode, sign in as `demo-admin` with password `demo`.
+
+### Demo mode
+
+Demo mode uses synthetic adapters and never contacts private services. After creating the database, set `CURATARR_DEMO_MODE=true` and run `flask --app curatarr demo-seed`. The overview includes controls for playback, favorites, time/size changes, and simulated outages. Run `flask --app curatarr worker --once` or use Reconcile in the UI to evaluate the sample libraries.
+
+### Tests
 
 ```bash
 .venv/bin/pytest
@@ -72,15 +78,20 @@ Operational log lines from the `curatarr.ops` logger are single JSON objects. Th
 ```
 
 Tests use synthetic media names and mocked integration boundaries. No real credentials or private media data belong in this repository.
+
 PostgreSQL contention tests are opt-in: point `CURATARR_TEST_POSTGRES_URL` at an isolated, migrated test database and run `pytest tests/test_postgres_concurrency.py`. They skip during the normal SQLite test run.
 
-## Working on Curatarr
+`tests/test_repository_hygiene.py` keeps the repository publishable (spec section 99). It fails if a tracked file is an `.env`, database, log, key, or `instance/` file, is larger than 1 MB, or contains a private IPv4 address or 32-hex-character key. Run the full test suite before every push.
+
+### Configuration and records
 
 Configuration comes from the environment; `.env.example` lists every variable. The database URL is read from `DATABASE_URL`. If it is unset, Curatarr uses SQLite at `instance/curatarr.db`, and poster snapshots go to `instance/posters/` (or `CURATARR_DATA_DIR`). Both are git-ignored local state. Before running migrations, downgrades, or demo seeding for verification, point `DATABASE_URL` and `CURATARR_DATA_DIR` at a scratch location so your working database is not modified. The test suite already uses temporary databases and data directories.
 
 `IMPLEMENTATION_STATUS.md` tracks the current phase, open work, known issues, and blockers. `docs/decisions/` records design decisions. Update both alongside behavior changes.
 
-Release checklist (spec section 92), run against a scratch database:
+### Release checklist
+
+Run against a scratch database (spec section 92):
 
 ```bash
 export DATABASE_URL=sqlite:////tmp/curatarr-release.db CURATARR_DATA_DIR=/tmp/curatarr-release
@@ -89,6 +100,13 @@ export DATABASE_URL=sqlite:////tmp/curatarr-release.db CURATARR_DATA_DIR=/tmp/cu
 .venv/bin/flask --app curatarr db check            # models match migrations
 .venv/bin/flask --app curatarr db downgrade base
 .venv/bin/flask --app curatarr db upgrade
+```
+
+Also build the release the way users install it, into scratch locations, and confirm the installed copy starts outside the checkout:
+
+```bash
+PREFIX=/tmp/c/opt CONFIG_DIR=/tmp/c/etc DATA_DIR=/tmp/c/data \
+  SERVICE_USER=$(id -un) NO_SYSTEMD=1 ./scripts/install.sh
 ```
 
 Then start the app on a fresh database and in demo mode (`demo-seed`, `worker --once`), confirm `/health` and the main pages load, update `CHANGELOG.md`, and create an annotated `vX.Y.Z` tag.

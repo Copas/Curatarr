@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Native installer (`scripts/install.sh`, `scripts/uninstall.sh`) and `docs/INSTALL.md`. Installed copies keep code, configuration, and data outside the source checkout.
+- Packaging fix: migrations moved into the package (`curatarr/migrations`) and templates, static files, and migrations are declared as package data, so installed copies run without the source tree. The Docker image now runs the installed package as a non-root user.
+- Repository hygiene test for publishable tracked files.
 - Review queue shows library, media type, proposed action, last watcher, acquisition date, and meaningful-watch state.
 - Sign-in with Jellyfin administrator accounts. Sign-in is now required by default; `CURATARR_ALLOW_UNAUTHENTICATED=true` remains for deployments behind an authenticating proxy. New optional `CURATARR_JELLYFIN_URL`.
 - First-run setup checklist; Overview shows scheduled deletions and recent cleanup.
