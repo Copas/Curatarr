@@ -32,5 +32,5 @@
 <li>Under Headers, add Key <code>X-Curatarr-Token</code> with the webhook token as its Value, then Save.</li>
 </ol></details><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="webhook"><label class="form-label">New shared token<input class="form-control" type="password" name="webhook_token"></label><button class="btn btn-outline-light">Save or generate token</button></form></div>
 <div class="card p-3 mt-4"><h2 class="h5">Reconciliation schedule</h2><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="scheduler"><label class="form-label">Interval (minutes)<input class="form-control" type="number" min="5" max="1440" name="interval_minutes" value="{{ interval_minutes }}"></label><button class="btn btn-outline-light">Save interval</button></form></div>
-<p class="mt-4 text-secondary">Dry run is enabled by default. To enable deletion for one library, set Dry run to Disabled in that library's policy.</p>
+<p class="mt-4 text-secondary">Dry run is on by default: Curatarr records what it would remove but never deletes. Turn it off on the <a href="{{ url_for('main.rules', section='retention') }}">Retention page</a>, as the global default or for one library.</p>
 {% endblock %}

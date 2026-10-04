@@ -62,14 +62,41 @@ def test_partial_page_keeps_other_library_fields(app, client):
     assert "minimum_mode" not in library.policy.policy_json
 
 
-def test_global_scope_ignores_library_only_fields(app, client):
-    _library()
+def test_global_defaults_cover_size_space_and_dry_run(app, client, tmp_path):
+    shows = _library()
+    page = client.get("/rules/retention").text
+    for field in ("dry_run", "quota_enabled", "free_space_enabled", "disk_path"):
+        assert f'name="{field}"' in page
+    # Every library is in dry run by default.
+    assert "Dry run is on for every library." in client.get("/").text
     client.post(
         "/rules/retention",
-        data={"dry_run": "false", "quota_enabled": "true", "notice_days": "3"},
+        data={
+            "dry_run": "false",
+            "free_space_enabled": "true",
+            "disk_path": str(tmp_path),
+            "low_free_percent": "15",
+        },
     )
-    assert setting("global_policy") == {"notice_days": 3}
-    assert b'name="dry_run"' not in client.get("/rules/retention").data
+    assert setting("global_policy") == {
+        "dry_run": False,
+        "free_space_enabled": True,
+        "disk_path": str(tmp_path),
+    }
+    library_page = client.get(f"/rules/retention?scope={shows.id}").text
+    assert "Currently in effect: No (global default)" in library_page
+    assert "Deletion is on for every library." in client.get("/").text
+    # A library can still keep itself in dry run.
+    client.post(f"/rules/retention?scope={shows.id}", data={"dry_run": "true"})
+    movies = Library(jellyfin_library_id="m", name="Films", media_type="movies")
+    db.session.add(movies)
+    db.session.commit()
+    banner = client.get("/").text
+    assert "<strong>Deletion is on for:</strong> Films." in banner
+    assert "<strong>Dry run (nothing is removed) for:</strong> Rules TV." in banner
+    status = client.get("/api/v1/status").get_json()
+    assert status["dry_run"] is False
+    assert status["deleting_libraries"] == ["Films"]
 
 
 def test_global_change_that_breaks_a_library_is_rejected(app, client):

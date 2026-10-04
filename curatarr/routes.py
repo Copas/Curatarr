@@ -37,6 +37,7 @@ from .models import (
 from .policy import effective_policy, validate_policy
 from .services import (
     action_context,
+    dry_run_by_library,
     history_actions,
     history_filter_options,
     ingest_event,
@@ -206,16 +207,14 @@ def template_values():
     return {
         "csrf_token": session["csrf_token"],
         "nav_section": _nav_section(),
-        "dry_run": _dry_run_status(),
+        "dry_run_split": dry_run_by_library(),
         "signed_in_user": session.get("user"),
     }
 
 
 def _dry_run_status():
-    return not any(
-        row.policy and row.policy.policy_json.get("dry_run") is False
-        for row in db.session.query(Library).all()
-    )
+    """True only when no library can delete (every library in dry run)."""
+    return not dry_run_by_library()["deleting"]
 
 
 def _status():
@@ -231,6 +230,8 @@ def _status():
         "app": "curatarr",
         "version": "0.1.0",
         "dry_run": _dry_run_status(),
+        "dry_run_libraries": dry_run_by_library()["dry_run"],
+        "deleting_libraries": dry_run_by_library()["deleting"],
         "review_count": db.session.query(PurgeCandidate)
         .filter_by(state="REVIEW")
         .count(),
@@ -438,11 +439,7 @@ def setup():
     return render_template(
         "setup.html",
         steps=setup_progress(),
-        destructive=[
-            row.name
-            for row in db.session.query(Library).order_by(Library.name)
-            if row.policy and row.policy.policy_json.get("dry_run") is False
-        ],
+        destructive=dry_run_by_library()["deleting"],
     )
 
 
@@ -688,10 +685,6 @@ RULE_SECTIONS = {
 
 
 def _policy_page(section, title, keys, library):
-    from .policy import LIBRARY_ONLY_FIELDS
-
-    if library is None:
-        keys = [key for key in keys if key not in LIBRARY_ONLY_FIELDS]
     if request.method == "POST":
         try:
             save_policy_layer(library, request.form, keys)

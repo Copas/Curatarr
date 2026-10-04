@@ -303,17 +303,6 @@ def select_to_low_water(items: list[CandidateInput], current: int, high: int, lo
     return selected, max(0, required - reclaimed)
 
 
-# Library size and disk-pressure limits describe one library or volume, and
-# destructive mode must be enabled per library, so these never come from the
-# global layer.
-LIBRARY_ONLY_FIELDS = {
-    "quota_enabled",
-    "high_water_bytes",
-    "low_water_bytes",
-    "free_space_enabled",
-    "disk_path",
-    "dry_run",
-}
 INTEGER_FIELDS = set(BOUNDS) | {"high_water_bytes", "low_water_bytes"}
 
 
