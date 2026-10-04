@@ -26,6 +26,7 @@ from .services import (
     integrations_ready,
     process_pending_events,
     queue_watch_restoration,
+    reconcile_acquisition,
     reconcile_user_state,
     set_setting,
     setting,
@@ -87,6 +88,7 @@ def worker_cycle():
         discover()
         reconcile_user_state()
         queue_watch_restoration()
+        reconcile_acquisition()
     evaluate_retention()
     set_setting("last_reconcile_at", utcnow().isoformat())
     _record_reconcile_duration(started)
@@ -127,6 +129,7 @@ def register_commands(app):
                     discover()
                     reconcile_user_state()
                     queue_watch_restoration()
+                    reconcile_acquisition()
                 process_pending_events()
                 recover_stale_actions()
                 reconcile_unknown_actions()
