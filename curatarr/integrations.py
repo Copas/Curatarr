@@ -131,8 +131,12 @@ class JellyfinClient(Client):
     status_path = "/System/Info"
 
     def headers(self):
-        # Sign-in can happen before an API key exists (first run).
-        return {"X-Emby-Token": self.api_key} if self.api_key else {}
+        # Jellyfin 12.1 rejects a bare X-Emby-Token header (401 even on
+        # /System/Info); the key must be sent in the MediaBrowser Authorization
+        # scheme. Sign-in can happen before an API key exists (first run).
+        if not self.api_key:
+            return {}
+        return self._client_header("curatarr-server", self.api_key)
 
     @staticmethod
     def _client_header(device_id, token=None):
@@ -158,7 +162,7 @@ class JellyfinClient(Client):
         return self.request(
             "POST",
             "/Sessions/Logout",
-            headers=self._client_header(device_id, token) | {"X-Emby-Token": token},
+            headers=self._client_header(device_id, token),
         )
 
     def user(self, user_id):
