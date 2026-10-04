@@ -43,7 +43,11 @@
   </div>
 </nav>
 <main class="container pb-5">
-  {% if dry_run and show_app %}<div class="alert alert-warning">Dry run is enabled. Approved deletions are recorded without sending destructive requests.</div>{% endif %}
+  {% if show_app and (dry_run_split.dry_run or dry_run_split.deleting) %}
+  {% if not dry_run_split.deleting %}<div class="alert alert-warning" id="dry-run-banner"><strong>Dry run is on for every library.</strong> Curatarr goes through the whole process and records what it would remove in History, but never asks Sonarr or Radarr to delete anything.</div>
+  {% elif dry_run_split.dry_run %}<div class="alert alert-warning" id="dry-run-banner"><strong>Deletion is on for:</strong> {{ dry_run_split.deleting|join(', ') }}. <strong>Dry run (nothing is removed) for:</strong> {{ dry_run_split.dry_run|join(', ') }}.</div>
+  {% else %}<div class="alert alert-secondary" id="dry-run-banner">Deletion is on for every library. Titles are removed through Sonarr and Radarr when their Leaving Soon notice ends.</div>{% endif %}
+  {% endif %}
   {% for category, message in get_flashed_messages(with_categories=true) %}
     <div class="alert alert-{{ category }}">{{ message }}</div>
   {% endfor %}
