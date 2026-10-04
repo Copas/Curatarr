@@ -664,6 +664,66 @@ def process_event(event):
     db.session.commit()
 
 
+def _request_season(
+    media,
+    season,
+    reason,
+    *,
+    event=None,
+    current_season=None,
+    episode_filter=None,
+    allow_search=True,
+):
+    """Queue a Sonarr monitor/search action for a season's missing episodes.
+
+    Returns the action, or None when nothing in the season is missing. The
+    idempotency key covers the exact episode set and whether a search is
+    requested, so the same request is never queued twice.
+    """
+    # Only episodes Sonarr tracks can be acquired. Jellyfin sometimes lists
+    # extra entries (e.g. split double episodes) that Sonarr does not; their
+    # has_file is unknown to Sonarr, and searching for them re-downloaded
+    # whole seasons that were already present.
+    missing = [
+        p
+        for p in media.parts
+        if p.kind == "episode"
+        and p.season_number == season
+        and not p.has_file
+        and p.sonarr_episode_id is not None
+        and (episode_filter is None or episode_filter(p))
+    ]
+    if not missing:
+        return None
+    # An episode without an air date is announced but not released; it is
+    # monitored so Sonarr grabs it later, but searching now cannot find it.
+    available = [
+        p for p in missing if p.air_date and _as_datetime(p.air_date) <= utcnow()
+    ]
+    search_now = bool(available) and allow_search
+    episode_ids = sorted(p.sonarr_episode_id for p in missing)
+    signature = hashlib.sha256(
+        json.dumps(
+            {"episode_ids": episode_ids, "search_now": search_now}, sort_keys=True
+        ).encode()
+    ).hexdigest()[:12]
+    return audit(
+        "sonarr_season_search",
+        media.id,
+        reason,
+        f"sonarr-season-search:{media.id}:{season}:{signature}",
+        payload={
+            "sonarr_id": media.sonarr_id,
+            "season": season,
+            "episode_ids": episode_ids,
+            "search_now": search_now,
+            "current_season": current_season,
+        },
+        state="PENDING",
+        event_id=event.id if event else None,
+    )
+
+
 def _plan_acquisition(media, current_season, event):
     policy, _ = resolved_policy(media)
     if current_season == 0 and not policy["manage_specials"]:
@@ -705,49 +765,16 @@ def _plan_acquisition(media, current_season, event):
     pending = False
     failed = False
     for season in seasons:
-        parts = [
-            p for p in media.parts if p.kind == "episode" and p.season_number == season
-        ]
-        # Only episodes Sonarr tracks can be acquired. Jellyfin sometimes lists
-        # extra entries (e.g. split double episodes) that Sonarr does not; their
-        # has_file is unknown to Sonarr, and searching for them re-downloaded
-        # whole seasons that were already present.
-        missing = [
-            p for p in parts if not p.has_file and p.sonarr_episode_id is not None
-        ]
-        if not missing:
+        action = _request_season(
+            media,
+            season,
+            f"Season {season} requested because a Season {current_season} episode was completed.",
+            event=event,
+            current_season=current_season,
+        )
+        if action is None:
             continue
         planned = True
-        available = [
-            p
-            for p in missing
-            if p.air_date is None or _as_datetime(p.air_date) <= utcnow()
-        ]
-        reason = f"Season {season} requested because a Season {current_season} episode was completed."
-        episode_ids = sorted(
-            p.sonarr_episode_id for p in missing if p.sonarr_episode_id
-        )
-        signature = hashlib.sha256(
-            json.dumps(
-                {"episode_ids": episode_ids, "search_now": bool(available)},
-                sort_keys=True,
-            ).encode()
-        ).hexdigest()[:12]
-        action = audit(
-            "sonarr_season_search",
-            media.id,
-            reason,
-            f"sonarr-season-search:{media.id}:{season}:{signature}",
-            payload={
-                "sonarr_id": media.sonarr_id,
-                "season": season,
-                "episode_ids": episode_ids,
-                "search_now": bool(available),
-                "current_season": current_season,
-            },
-            state="PENDING",
-            event_id=event.id,
-        )
         pending = pending or action.state in {"PENDING", "RUNNING", "FAILED_RETRYABLE"}
         failed = failed or action.state in {"FAILED_FINAL", "UNKNOWN_RECONCILE"}
     if failed:
