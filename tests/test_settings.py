@@ -53,8 +53,11 @@ def test_webhook_token_rotation_shows_new_token_once(app, client):
     first = client.get("/settings")
     assert b"Copy this webhook token now" in first.data
     assert b"Copy this webhook token now" not in client.get("/settings").data
-    response = client.post("/settings", data={"kind": "webhook", "webhook_token": ""})
-    assert response.status_code == 200
+    response = client.post(
+        "/settings",
+        data={"kind": "webhook", "webhook_token": ""},
+        follow_redirects=True,
+    )
     assert setting("webhook_token").encode() in response.data
 
 
@@ -100,8 +103,27 @@ def test_webhook_setup_step_offers_and_shows_the_token(app, client):
     client.get("/settings")  # first visit creates and shows a token once
     page = client.get("/settings").text
     assert "Generate a new token</button>" in page
-    response = client.post("/settings", data={"kind": "webhook"})
+    response = client.post("/settings", data={"kind": "webhook"}, follow_redirects=True)
     page = response.text
     token = setting("webhook_token")
     assert f'id="new-webhook-token">{token}</code>' in page
     assert '<details class="mb-3" open>' in page
+
+
+def test_reloading_after_generating_never_changes_the_token(app, client):
+    client.get("/settings")
+    response = client.post("/settings", data={"kind": "webhook"})
+    assert response.status_code == 302  # no page a reload could resubmit
+    token = setting("webhook_token")
+    first = client.get("/settings").text
+    assert f'id="new-webhook-token">{token}</code>' in first
+    second = client.get("/settings").text  # the reload
+    assert setting("webhook_token") == token
+    assert token not in second  # shown once only
+
+
+def test_own_token_is_adopted_as_given(app, client):
+    client.post(
+        "/settings", data={"kind": "webhook", "webhook_token": " jellyfin-has-this "}
+    )
+    assert setting("webhook_token") == "jellyfin-has-this"
