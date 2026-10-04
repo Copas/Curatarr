@@ -60,3 +60,24 @@ def test_overview_lists_scheduled_and_recent_cleanup(app, client):
     page = client.get("/")
     assert b"Dry run (not deleted)" in page.data
     assert b"No deletions are scheduled." in page.data
+
+
+def test_unmanaged_libraries_are_named_not_shown_as_empty(app, client):
+    for name, media_type in (
+        ("Shows", "tv"),
+        ("Curated Adult", "other"),
+        ("Collections", "other"),
+    ):
+        db.session.add(
+            Library(jellyfin_library_id=name, name=name, media_type=media_type)
+        )
+    db.session.commit()
+    page = client.get("/").text
+    assert "Not managed: Collections, Curated Adult." in page
+    assert '<h3 class="h5">Curated Adult</h3>' not in page
+    assert '<h3 class="h5">Shows</h3>' in page
+    rules = client.get("/rules/retention").text
+    assert ">Shows</a>" in rules and ">Curated Adult</a>" not in rules
+    assert "Dry run is on for every library." in page
+    status = client.get("/api/v1/status").get_json()
+    assert status["dry_run_libraries"] == ["Shows"]
