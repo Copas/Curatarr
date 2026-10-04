@@ -2,11 +2,13 @@
 
 import base64
 import hashlib
+import secrets
 from datetime import timedelta
 from io import BytesIO
 
 from flask import current_app
 from PIL import Image
+from sqlalchemy import func
 
 from . import db
 from .integrations import IntegrationError
@@ -180,6 +182,105 @@ def seed_demo():
 # Demo accounts: "demo-admin" is a Jellyfin administrator and "demo-viewer"
 # is not. Both use the password "demo".
 DEMO_USERS = {"demo-admin": True, "demo-viewer": False}
+
+
+SIMULATIONS = {
+    "complete_episode",
+    "start_playback",
+    "favorite",
+    "unfavorite",
+    "advance_30_days",
+    "add_movie",
+    "increase_movie_size",
+    "outage_sonarr",
+    "outage_radarr",
+    "outage_jellyfin",
+    "restore_integrations",
+}
+
+
+def simulate(choice):
+    """Apply one Overview demo control; raises ValueError for unknown choices."""
+    from .services import ingest_event, process_pending_events, set_setting
+
+    if choice not in SIMULATIONS:
+        raise ValueError("Unknown demo simulation")
+    seed_demo()
+    if choice in {"complete_episode", "start_playback", "favorite", "unfavorite"}:
+        is_episode = choice in {"complete_episode", "start_playback"}
+        ingest_event(
+            {
+                "event_id": secrets.token_hex(16),
+                "event_type": {
+                    "complete_episode": "item_played",
+                    "start_playback": "playback_started",
+                }.get(choice, "favorite_changed"),
+                "item_external_id": "demo-episode-1-1-1"
+                if is_episode
+                else "demo-series-3",
+                "series_external_id": "demo-series-1"
+                if is_episode
+                else "demo-series-3",
+                "season_number": 1,
+                "episode_number": 1,
+                "user_external_id": "demo-viewer-a",
+                "played": choice == "complete_episode",
+                "favorite": choice == "favorite" if not is_episode else None,
+            }
+        )
+        process_pending_events()
+    elif choice == "advance_30_days":
+        for media in db.session.query(MediaIdentity).all():
+            if media.added_at:
+                media.added_at -= timedelta(days=30)
+        for state in db.session.query(UserMediaState).all():
+            if state.last_played_at:
+                state.last_played_at -= timedelta(days=30)
+        db.session.commit()
+    elif choice == "increase_movie_size":
+        media = (
+            db.session.query(MediaIdentity)
+            .filter_by(jellyfin_id="demo-movie-1")
+            .first()
+        )
+        if media:
+            media.parts[0].size_bytes += 1_000_000_000
+            db.session.commit()
+    elif choice == "add_movie":
+        library = (
+            db.session.query(Library).filter_by(jellyfin_library_id="demo-movies").one()
+        )
+        next_id = (
+            db.session.query(func.max(MediaIdentity.radarr_id)).scalar() or 50
+        ) + 1
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="movie",
+            title=f"Demo Movie {next_id:02d}",
+            jellyfin_id=f"demo-movie-{next_id}",
+            radarr_id=next_id,
+            tmdb_id=20000 + next_id,
+            added_at=utcnow(),
+        )
+        db.session.add(media)
+        db.session.flush()
+        db.session.add(
+            MediaPart(
+                media_identity_id=media.id,
+                kind="movie_file",
+                has_file=True,
+                size_bytes=2_000_000_000,
+                acquired_at=utcnow(),
+            )
+        )
+        library.last_size_bytes = (library.last_size_bytes or 0) + 2_000_000_000
+        db.session.commit()
+    else:
+        set_setting(
+            "demo_outage",
+            None if choice == "restore_integrations" else choice.split("_")[1],
+        )
+        db.session.commit()
 
 
 class DemoClient:
