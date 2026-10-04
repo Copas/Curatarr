@@ -329,3 +329,58 @@ def test_only_episodes_that_changed_are_recorded_as_newly_monitored(app, monkeyp
         monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: FakeSonarr())
         assert execute_action(action.id) == "succeeded"
         assert action.payload_json["newly_monitored"] == [22]
+
+
+def test_jellyfin_only_episodes_do_not_trigger_a_search(app):
+    """Live case: Jellyfin listed 13 episodes for a season Sonarr tracks as 12."""
+    with app.app_context():
+        library = Library(jellyfin_library_id="tv-j", name="TV", media_type="tv")
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="series",
+            title="Split Episodes",
+            jellyfin_id="show-j",
+            tvdb_id=654,
+            sonarr_id=65,
+        )
+        db.session.add(media)
+        db.session.flush()
+        for season, episode, sonarr_id, stored in [
+            (1, 1, 11, True),
+            (2, 1, 21, True),
+            (2, 2, 22, True),
+            (2, 3, None, False),  # in Jellyfin only; Sonarr has no such episode
+        ]:
+            db.session.add(
+                MediaPart(
+                    media_identity_id=media.id,
+                    kind="episode",
+                    season_number=season,
+                    episode_number=episode,
+                    jellyfin_id="j-1-1" if (season, episode) == (1, 1) else None,
+                    sonarr_episode_id=sonarr_id,
+                    has_file=stored,
+                )
+            )
+        db.session.commit()
+        ingest_event(
+            {
+                "event_id": "split-1",
+                "event_type": "item_played",
+                "item_external_id": "j-1-1",
+                "series_external_id": "show-j",
+                "season_number": 1,
+                "episode_number": 1,
+                "user_external_id": "viewer",
+                "played": True,
+            }
+        )
+        process_pending_events()
+        assert (
+            db.session.query(LifecycleAction)
+            .filter_by(action_type="sonarr_season_search")
+            .count()
+            == 0
+        )

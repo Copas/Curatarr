@@ -693,7 +693,13 @@ def _plan_acquisition(media, current_season, event):
         parts = [
             p for p in media.parts if p.kind == "episode" and p.season_number == season
         ]
-        missing = [p for p in parts if not p.has_file]
+        # Only episodes Sonarr tracks can be acquired. Jellyfin sometimes lists
+        # extra entries (e.g. split double episodes) that Sonarr does not; their
+        # has_file is unknown to Sonarr, and searching for them re-downloaded
+        # whole seasons that were already present.
+        missing = [
+            p for p in parts if not p.has_file and p.sonarr_episode_id is not None
+        ]
         if not missing:
             continue
         planned = True
