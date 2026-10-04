@@ -102,6 +102,6 @@ The image contains the installed package, not the source tree. Data lives in the
 
    Finished episodes arrive as Playback Stop with *played to completion*, and marking an item watched or favorite arrives as User Data Saved. Without the webhook, the hourly reconciliation still picks up playback, just later.
 4. Click Discover on Overview. Discovery runs in the background worker, because a large library takes longer than a web request is allowed (about 45 seconds for roughly 400 titles and 50,000 Jellyfin items). Overview → Operations shows when it finishes.
-5. Review the Acquisition and Retention rules. Every library starts in dry run; Curatarr only records what it would delete until you set Dry run to false for a library.
+5. Review the Acquisition and Retention rules. Every library starts in dry run: Curatarr goes through the whole process (Leaving Soon notices, countdowns, checks) and records what it would remove in History, but never asks Sonarr or Radarr to delete anything. Turn Dry run off on the Retention page, as the global default or for one library, when you are ready.
 
 For HTTPS, put Curatarr behind a TLS-terminating reverse proxy and set `CURATARR_SESSION_COOKIE_SECURE=true`.

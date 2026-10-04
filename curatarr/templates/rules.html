@@ -16,7 +16,7 @@
 {% endif %}
 <p class="text-secondary">
 {% if library %}Fields left on <em>Inherit</em> use the global value, shown in brackets. Title overrides take precedence over these values.
-{% else %}These values apply to every library that does not set its own. Library-size limits, disk pressure, and dry run are set per library.{% endif %}
+{% else %}These values apply to every library that does not set its own. Library-size limits apply to each library separately; free space is measured per disk, shared by every library on it.{% endif %}
 </p>
 <form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="row g-3">
 {% for key, label, kind in fields %}

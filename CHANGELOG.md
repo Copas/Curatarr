@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Library-size limits, free-space enforcement, and dry run can be set as global defaults. The dry-run banner states exactly which libraries are in dry run and which can delete, and explains that dry run rehearses everything but never asks Sonarr/Radarr to delete.
+
 - Libraries on the same disk share one free-space selection, so four libraries on one NAS no longer each pick enough titles to cover the whole shortfall.
 
 - Disk-pressure checks no longer fall back to the `/` record for other paths. Sonarr/Radarr omit network mounts, so a NAS library was being measured against the local drive. When the arr apps report no matching disk, free space is measured directly if the path is visible to Curatarr.

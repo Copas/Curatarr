@@ -14,6 +14,6 @@
 <div class="card p-3">
   <h2 class="h5">Dry run</h2>
   {% if destructive %}<p class="mb-0 text-warning">Deletion is enabled for: {{ destructive|join(', ') }}. Every other library stays in dry run.</p>
-  {% else %}<p class="mb-0">Every library is in dry run: Curatarr records what it would delete but makes no destructive requests. When you are ready, set Dry run to false on one library's Retention page.</p>{% endif %}
+  {% else %}<p class="mb-0">Every library is in dry run: Curatarr goes through the whole process and records what it would remove in History, but never asks Sonarr or Radarr to delete anything. When you are ready, set Dry run to No on the Retention page, for one library or as the global default.</p>{% endif %}
 </div>
 {% endblock %}

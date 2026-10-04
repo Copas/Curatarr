@@ -1040,13 +1040,12 @@ def save_policy_layer(library, form, keys):
     first, so a global change cannot leave any library unresolvable.
     """
     from .models import LibraryPolicy
-    from .policy import LIBRARY_ONLY_FIELDS, merge_policy_form
+    from .policy import merge_policy_form
 
     global_values = setting("global_policy", {})
     if library is None:
         from .policy import DEFAULTS
 
-        keys = [key for key in keys if key not in LIBRARY_ONLY_FIELDS]
         global_values = merge_policy_form(global_values, form, keys)
         # The global page shows every value; store only real changes so a
         # built-in default that changes later still applies.
@@ -1499,3 +1498,16 @@ JELLYFIN_WEBHOOK_TEMPLATE = """{
   "favorite": "{{Favorite}}",
   "save_reason": "{{SaveReason}}"
 }"""
+
+
+def dry_run_by_library():
+    """Libraries split by their effective dry-run setting (library or global)."""
+    global_values = setting("global_policy", {})
+    split = {"dry_run": [], "deleting": []}
+    for library in db.session.query(Library).order_by(Library.name):
+        values = library.policy.policy_json if library.policy else {}
+        policy, _ = effective_policy(
+            "series" if library.media_type == "tv" else "movie", global_values, values
+        )
+        split["dry_run" if policy["dry_run"] else "deleting"].append(library.name)
+    return split
