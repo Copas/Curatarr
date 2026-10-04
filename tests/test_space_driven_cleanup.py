@@ -136,3 +136,68 @@ def test_retention_page_offers_the_inactivity_switch_off_by_default(app, client)
     page = client.get("/rules/retention").text
     assert "Clean up unwatched titles even when space is fine" in page
     assert '<option value="false" selected>No</option>' in page
+
+
+def test_libraries_on_one_disk_share_a_single_selection(app, monkeypatch, tmp_path):
+    """Four libraries on one NAS must not each select the whole shortfall."""
+    import os
+
+    class NasNotReported:
+        def diskspace(self):
+            return [{"path": "/", "totalSpace": 10_000, "freeSpace": 9_000}]
+
+        def queue(self):
+            return {"records": []}
+
+    class Stats:  # the NAS: 1000 bytes, 100 free = 10%, below 15% low
+        f_blocks, f_frsize, f_bavail = 1000, 1, 100
+
+    real_statvfs = os.statvfs
+    monkeypatch.setattr(
+        "os.statvfs",
+        lambda path: (
+            Stats() if str(path).startswith(str(tmp_path)) else real_statvfs(path)
+        ),
+    )
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _k: NasNotReported())
+    for name in ("Movies", "Classic Movies", "Shows Movies", "More Movies"):
+        folder = tmp_path / name.replace(" ", "_")
+        folder.mkdir()
+        library = Library(jellyfin_library_id=name, name=name, media_type="movies")
+        db.session.add(library)
+        db.session.flush()
+        db.session.add(
+            LibraryPolicy(
+                library_id=library.id,
+                policy_json={
+                    "free_space_enabled": True,
+                    "disk_path": str(folder),
+                    "low_free_percent": 15,
+                    "critical_free_percent": 5,
+                },
+            )
+        )
+        for index in (1, 2):
+            media = MediaIdentity(
+                library_id=library.id,
+                media_type="movie",
+                title=f"{name} {index}",
+                jellyfin_id=f"{name}-{index}",
+                radarr_id=hash((name, index)) % 100000,
+                tmdb_id=index,
+                added_at=utcnow() - timedelta(days=300),
+            )
+            db.session.add(media)
+            db.session.flush()
+            db.session.add(
+                MediaPart(
+                    media_identity_id=media.id,
+                    kind="movie_file",
+                    has_file=True,
+                    size_bytes=30,
+                )
+            )
+    db.session.commit()
+    # 50 bytes are needed for the whole disk: two 30-byte titles, not eight.
+    assert evaluate_retention() == 2
+    assert {c.reason_code for c in _candidates()} == {"disk_pressure"}

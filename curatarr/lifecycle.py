@@ -122,7 +122,10 @@ def _local_disk_space(path):
     return stats.f_blocks * stats.f_frsize, stats.f_bavail * stats.f_frsize
 
 
-def _disk_pressure(media, policy):
+def _disk_measure(media, policy):
+    """(total, free, disk key) for a library's configured path, or None."""
+    import os
+
     if not policy["free_space_enabled"]:
         return None
     kind = "sonarr" if media.media_type == "series" else "radarr"
@@ -142,16 +145,18 @@ def _disk_pressure(media, policy):
         if root == "/" and configured != "/":
             continue
         if configured == root or configured.startswith(root + "/"):
-            matching.append((len(root), disk))
+            matching.append((len(root), root, disk))
     if matching:
-        disk = max(matching, key=lambda pair: pair[0])[1]
+        _length, root, disk = max(matching, key=lambda entry: entry[0])
         total = disk.get("totalSpace") or 0
         free = disk.get("freeSpace") or 0
+        key = ("arr", root, total)
     else:
         measured = _local_disk_space(configured)
         if measured is None:
             return None
         total, free = measured
+        key = ("local", os.stat(configured).st_dev)
     if (
         type(total) not in (int, float)
         or type(free) not in (int, float)
@@ -162,12 +167,86 @@ def _disk_pressure(media, policy):
         or free > total
     ):
         return None
+    return total, free, key
+
+
+def _disk_pressure(media, policy):
+    """(bytes needed to reach the low threshold, level) or None if unknown."""
+    measured = _disk_measure(media, policy)
+    if measured is None:
+        return None
+    total, free, _key = measured
     percent = free / total * 100
     if percent >= policy["low_free_percent"]:
         return (0, "normal")
     level = "critical" if percent < policy["critical_free_percent"] else "low"
     required = max(0, int(total * policy["low_free_percent"] / 100 - free))
     return required, level
+
+
+def _pressure_selection(now, queue):
+    """Disk-pressure picks shared by every library on the same disk.
+
+    Libraries are grouped by the disk they actually live on, the shortfall is
+    computed once per disk, and titles are chosen from the combined pool until
+    it is covered, so several libraries on one disk never each select enough
+    for the whole shortfall. Returns ({media_id: level}, [(disk, deficit)]).
+    """
+    groups = {}
+    for (library_id,) in db.session.query(MediaIdentity.library_id).distinct():
+        rows = (
+            db.session.query(MediaIdentity)
+            .filter_by(library_id=library_id, missing_since=None)
+            .all()
+        )
+        if not rows:
+            continue
+        policy, _ = resolved_policy(rows[0])
+        pressure = _disk_pressure(rows[0], policy)
+        if not pressure or pressure[0] <= 0:
+            continue
+        measured = _disk_measure(rows[0], policy)
+        if measured is None:
+            continue
+        group = groups.setdefault(
+            measured[2],
+            {"needed": 0, "level": "low", "items": [], "policies": []},
+        )
+        group["needed"] = max(group["needed"], pressure[0])
+        if pressure[1] == "critical":
+            group["level"] = "critical"
+        group["policies"].append(policy)
+        for media in rows:
+            kind = "sonarr" if media.media_type == "series" else "radarr"
+            active_ids = queue.get(kind)
+            arr_id = media.sonarr_id if kind == "sonarr" else media.radarr_id
+            item = _candidate_input(
+                media, active_ids is not None and arr_id in active_ids
+            )
+            media_policy, _ = resolved_policy(media)
+            if eligible(item, media_policy, now, healthy=active_ids is not None):
+                group["items"].append(item)
+    selected, deficits = {}, []
+    for key, group in groups.items():
+        if len(group["policies"]) == 1:
+            policy = group["policies"][0]
+            strategy, meaningful = (
+                policy["purge_strategy"],
+                policy["meaningful_threshold"],
+            )
+        else:
+            # Mixed TV and movie libraries: longest since last activity first,
+            # favorites last, which every per-type strategy agrees with.
+            strategy, meaningful = "oldest_watched_nonfavorite_first", 2
+        reclaimed = 0
+        for item in rank(group["items"], strategy, now, meaningful):
+            if reclaimed >= group["needed"]:
+                break
+            selected[item.media_id] = group["level"]
+            reclaimed += item.size_bytes
+        if reclaimed < group["needed"]:
+            deficits.append((key, group["needed"] - reclaimed))
+    return selected, deficits
 
 
 def _library_stored_bytes(library_id):
@@ -234,10 +313,8 @@ def _selected_capacity_ids(media, policy, candidate, active_ids, now):
             return set()
         required = _library_stored_bytes(media.library_id) - policy["low_water_bytes"]
     else:
-        pressure = _disk_pressure(media, policy)
-        if not pressure:
-            return set()
-        required = pressure[0]
+        # Must match how evaluation chose it: shared across libraries on a disk.
+        return set(_pressure_selection(now, _queue_ids())[0])
     selected = set()
     reclaimed = 0
     for item in ranked:
@@ -346,6 +423,14 @@ def _evaluate_retention_locked():
     queue = _queue_ids()
     now = utcnow()
     created = 0
+    pressure_selected, pressure_deficits = _pressure_selection(now, queue)
+    for disk, deficit in pressure_deficits:
+        audit(
+            "capacity_deficit",
+            None,
+            f"Disk pressure remains; {deficit} bytes cannot be reclaimed from eligible media.",
+            f"disk-deficit:{disk}:{deficit}",
+        )
     for library in db.session.query(MediaIdentity.library_id).distinct():
         media_rows = (
             db.session.query(MediaIdentity).filter_by(library_id=library[0]).all()
@@ -392,23 +477,6 @@ def _evaluate_retention_locked():
                     f"Library cannot reach low-water target; {_deficit} bytes remain after all eligible candidates.",
                     f"quota-deficit:{media_rows[0].library_id}:{current_size}:{_deficit}",
                 )
-        selected_pressure = set()
-        pressure = _disk_pressure(media_rows[0], library_policy)
-        if pressure and pressure[0] > 0:
-            reclaimed = 0
-            for ranked in ranked_items:
-                selected_pressure.add(ranked.media_id)
-                reclaimed += ranked.size_bytes
-                if reclaimed >= pressure[0]:
-                    break
-            if reclaimed < pressure[0]:
-                deficit = pressure[0] - reclaimed
-                audit(
-                    "capacity_deficit",
-                    None,
-                    f"Disk pressure remains; {deficit} bytes cannot be reclaimed from eligible media.",
-                    f"disk-deficit:{media_rows[0].library_id}:{pressure[0]}:{deficit}",
-                )
         for media, item, policy in candidates:
             if _active_candidate(media.id):
                 continue
@@ -416,7 +484,8 @@ def _evaluate_retention_locked():
             # otherwise it only decides who goes first under space pressure.
             due = policy["inactivity_cleanup"] and inactivity_due(item, policy, now)
             quota = media.id in selected_quota
-            under_pressure = media.id in selected_pressure
+            pressure_level = pressure_selected.get(media.id)
+            under_pressure = pressure_level is not None
             if not due and not quota and not under_pressure:
                 continue
             reason_code = (
@@ -428,13 +497,13 @@ def _evaluate_retention_locked():
                 else (
                     f"Library exceeds {policy['high_water_bytes']} bytes; selection targets {policy['low_water_bytes']} bytes."
                     if quota
-                    else f"Disk pressure is {pressure[1]}; selection targets {policy['low_free_percent']}% free space."
+                    else f"Disk pressure is {pressure_level}; selection targets {policy['low_free_percent']}% free space."
                 )
             )
             score, detail = weighted_score(item, now, policy["meaningful_threshold"])
             review_mode = policy["review_mode"]
             rule_mode_key = (
-                f"{pressure[1]}_pressure_review_mode"
+                f"{pressure_level}_pressure_review_mode"
                 if reason_code == "disk_pressure"
                 else f"{reason_code}_review_mode"
             )
@@ -443,7 +512,7 @@ def _evaluate_retention_locked():
             if sources["review_mode"] != "title":
                 review_mode = policy[rule_mode_key] or review_mode
             if reason_code == "disk_pressure":
-                detail["pressure_level"] = pressure[1]
+                detail["pressure_level"] = pressure_level
             state = (
                 "ELIGIBLE"
                 if review_mode == "recommend"
@@ -463,7 +532,7 @@ def _evaluate_retention_locked():
                     now
                     if state == "LEAVING_SOON"
                     and reason_code == "disk_pressure"
-                    and pressure[1] == "critical"
+                    and pressure_level == "critical"
                     else now + timedelta(days=policy["notice_days"])
                     if state == "LEAVING_SOON"
                     or (
