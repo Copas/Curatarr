@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% macro shown(value) %}{% if value is sameas true %}Yes{% elif value is sameas false %}No{% elif value is none %}not set{% else %}{{ value|string|replace('_', ' ') }}{% endif %}{% endmacro %}
+{% macro shown(value) %}{{ value|choice_label }}{% endmacro %}
 {% macro source_name(source) %}{{ {'default': 'built-in default', 'global': 'global default', 'library': 'this library', 'title': 'title override'}.get(source, source) }}{% endmacro %}
 {% block content %}
 <h1>{{ heading }}{% if library %} · {{ library.name }}{% endif %}</h1>
@@ -25,7 +25,7 @@
   {% if kind == 'number' %}<input class="form-control" type="number" min="0" name="{{ key }}" value="{{ stored.get(key, '') }}" placeholder="{{ blank_label }}">
   {% elif kind == 'text' %}<input class="form-control" type="text" name="{{ key }}" value="{{ stored.get(key, '') }}" placeholder="{{ blank_label }} (e.g. /media/movies)">
   {% else %}<select class="form-select" name="{{ key }}"><option value="">{{ blank_label }}</option>
-  {% for value in kind %}<option value="{{ value }}" {% if key in stored and stored.get(key)|string|lower == value %}selected{% endif %}>{{ value.replace('_',' ')|title }}</option>{% endfor %}</select>{% endif %}
+  {% for value in kind %}<option value="{{ value }}" {% if key in stored and stored.get(key)|string|lower == value %}selected{% endif %}>{{ value|choice_label }}</option>{% endfor %}</select>{% endif %}
   </label><div class="form-text">Currently in effect: {{ shown(effective.get(key)) }} ({{ source_name(sources.get(key, 'default')) }})</div></div>
 {% endfor %}
 </div><button class="btn btn-primary mt-3">Save</button></form>

@@ -95,3 +95,16 @@ def test_invalid_number_is_reported(app, client):
     )
     assert b"Invalid grace_days" in response.data
     assert setting("global_policy", {}) == {}
+
+
+def test_minimum_footprint_options_explain_themselves(app, client):
+    page = client.get("/rules/acquisition").text
+    assert "Always keep for each show" in page
+    for label in (
+        "First N episodes of Season 1",
+        "All of Season 1",
+        "Entire series (never trimmed)",
+    ):
+        assert f">{label}</option>" in page
+    assert "Built-in default (First N episodes of Season 1)" in page
+    assert "Built-in default (Yes)" in page

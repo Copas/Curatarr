@@ -153,6 +153,32 @@ def sign_out_page():
     return redirect(url_for("main.sign_in_page"), 303)
 
 
+CHOICE_LABELS = {
+    "first_n_episodes": "First N episodes of Season 1",
+    "season_1": "All of Season 1",
+    "entire_series": "Entire series (never trimmed)",
+    "recommend": "Recommend only",
+    "require_review": "Require review",
+    "automatic": "Automatic",
+    "manual_forever": "Wait for a decision",
+    "auto_delete_after_notice": "Delete after the notice period",
+    "oldest_unwatched_first": "Oldest unwatched first",
+    "oldest_watched_nonfavorite_first": "Oldest watched non-favorites first",
+    "weighted": "Weighted score",
+    "true": "Yes",
+    "false": "No",
+}
+
+
+@bp.app_template_filter("choice_label")
+def choice_label(value):
+    """Readable text for stored policy values (enums and booleans)."""
+    if value is None:
+        return "not set"
+    key = str(value).lower()
+    return CHOICE_LABELS.get(key, str(value).replace("_", " "))
+
+
 @bp.app_context_processor
 def template_values():
     if "csrf_token" not in session:
@@ -568,10 +594,10 @@ def history_detail(action_id):
 MODES = ["recommend", "require_review", "automatic"]
 POLICY_FIELDS = {
     "minimum_mode": (
-        "Minimum retained footprint",
+        "Always keep for each show",
         ["first_n_episodes", "season_1", "entire_series"],
     ),
-    "minimum_episodes": ("First N episodes", "number"),
+    "minimum_episodes": ('N for "First N episodes"', "number"),
     "acquisition_threshold": ("Completed episodes before acquiring", "number"),
     "keep_one_season_ahead": ("Keep one season ahead", ["true", "false"]),
     "manage_specials": ("Manage Specials / Season 0", ["false", "true"]),
