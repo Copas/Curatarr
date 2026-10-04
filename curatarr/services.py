@@ -1179,9 +1179,56 @@ def save_reconcile_interval(minutes):
     db.session.commit()
 
 
+INTEGRATION_HELP = {
+    "jellyfin": {
+        "port": 8096,
+        "key_path": "/web/#/dashboard/keys",
+        "where": "Jellyfin Dashboard → API Keys → add a key (name it Curatarr)",
+    },
+    "sonarr": {
+        "port": 8989,
+        "key_path": "/settings/general",
+        "where": "Sonarr Settings → General → Security → API Key",
+    },
+    "radarr": {
+        "port": 7878,
+        "key_path": "/settings/general",
+        "where": "Radarr Settings → General → Security → API Key",
+    },
+}
+
+
+def integration_guides(integrations):
+    """Where to find each API key, with links built from known URLs.
+
+    Sonarr and Radarr usually run on the Jellyfin host, so their suggested URL
+    reuses its host with the app's default port.
+    """
+    from urllib.parse import urlparse
+
+    jellyfin = integrations.get("jellyfin")
+    host = urlparse(jellyfin.base_url).hostname if jellyfin else None
+    guides = {}
+    for kind, info in INTEGRATION_HELP.items():
+        row = integrations.get(kind)
+        suggested = f"http://{host}:{info['port']}" if host else None
+        base = row.base_url if row else None
+        guides[kind] = {
+            "where": info["where"],
+            "port": info["port"],
+            "suggested_url": suggested,
+            "key_url": (base or suggested) + info["key_path"]
+            if (base or suggested)
+            else None,
+        }
+    return guides
+
+
 def settings_view():
+    integrations = {row.kind: row for row in db.session.query(Integration)}
     return {
-        "integrations": {row.kind: row for row in db.session.query(Integration)},
+        "integrations": integrations,
+        "guides": integration_guides(integrations),
         "webhook_present": setting("webhook_token") is not None,
         "interval_minutes": setting("reconciliation_interval_seconds", 3600) // 60,
     }

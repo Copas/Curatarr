@@ -90,7 +90,10 @@ The image contains the installed package, not the source tree. Data lives in the
 ## First run
 
 1. Open `http://<host>:8787`. Sign in with a Jellyfin **administrator** account. On first run, also enter your Jellyfin server URL (unless `CURATARR_JELLYFIN_URL` is set). Do this before exposing Curatarr beyond a trusted network.
-2. Follow the `/setup` checklist: add Jellyfin, Sonarr, and Radarr API keys in Settings, copy the webhook token, then run Discover from Overview.
+2. Follow the `/setup` checklist: add Jellyfin, Sonarr, and Radarr API keys in Settings, copy the webhook token, then run Discover from Overview. The Settings page links to each key's location:
+   - **Jellyfin:** Dashboard → API Keys → add a key (default port 8096).
+   - **Sonarr:** Settings → General → Security → API Key (default port 8989).
+   - **Radarr:** Settings → General → Security → API Key (default port 7878).
 3. In Jellyfin's webhook plugin, send JSON to `http://<host>:8787/api/v1/webhook/jellyfin` with the token in the `X-Curatarr-Token` header.
 4. Review the Acquisition and Retention rules. Every library starts in dry run; Curatarr only records what it would delete until you set Dry run to false for a library.
 
