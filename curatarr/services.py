@@ -1679,14 +1679,15 @@ def reconcile_acquisition():
             .order_by(EpisodeUserState.last_played_at.desc())
             .first()
         )
-        viewer = user_display_name(latest[0]) if latest else "A viewer"
-        last = f" (last finished {episode_label(season, latest[1])})" if latest else ""
+        # Past tense reads correctly for shared accounts like "Jon and Amber".
+        cause = (
+            f"{user_display_name(latest[0])} finished "
+            f"{episode_label(season, latest[1])} of {media.title}, the latest "
+            f"watched in Season {season}"
+            if latest
+            else f"Viewers are watching Season {season} of {media.title}"
+        )
         for target in acquisition_seasons(media.parts, season, policy):
-            request(
-                media,
-                target,
-                f"{viewer} is watching Season {season} of {media.title}{last}",
-                current_season=season,
-            )
+            request(media, target, cause, current_season=season)
     db.session.commit()
     return requested

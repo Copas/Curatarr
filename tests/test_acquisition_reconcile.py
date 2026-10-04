@@ -191,7 +191,7 @@ def test_catch_up_and_always_keep_messages(app):
     reconcile_acquisition()
     (catch_up,) = _requests(watching)
     assert catch_up.reason_text == (
-        "Kelden is watching Season 1 of Catch Up (last finished S01E02), so "
+        "Kelden finished S01E02 of Catch Up, the latest watched in Season 1, so "
         "Curatarr is monitoring Season 2 so Sonarr downloads it when it airs."
     )
     (fill,) = _requests(missing)
