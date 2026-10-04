@@ -392,108 +392,12 @@ def setup():
 def demo_simulate():
     if not current_app.config["DEMO_MODE"]:
         abort(404)
-    from .demo import seed_demo
+    from .demo import simulate
 
-    seed_demo()
-    choice = request.form.get("choice")
-    if choice in {"complete_episode", "start_playback", "favorite", "unfavorite"}:
-        event_type = {
-            "complete_episode": "item_played",
-            "start_playback": "playback_started",
-            "favorite": "favorite_changed",
-            "unfavorite": "favorite_changed",
-        }[choice]
-        is_episode = choice in {"complete_episode", "start_playback"}
-        ingest_event(
-            {
-                "event_id": secrets.token_hex(16),
-                "event_type": event_type,
-                "item_external_id": "demo-episode-1-1-1"
-                if is_episode
-                else "demo-series-3",
-                "series_external_id": "demo-series-1"
-                if is_episode
-                else "demo-series-3",
-                "season_number": 1,
-                "episode_number": 1,
-                "user_external_id": "demo-viewer-a",
-                "played": choice == "complete_episode",
-                "favorite": choice == "favorite" if not is_episode else None,
-            }
-        )
-        process_pending_events()
-    elif choice == "advance_30_days":
-        from datetime import timedelta
-
-        from .models import UserMediaState
-
-        for media in db.session.query(MediaIdentity).all():
-            if media.added_at:
-                media.added_at -= timedelta(days=30)
-        for state in db.session.query(UserMediaState).all():
-            if state.last_played_at:
-                state.last_played_at -= timedelta(days=30)
-        db.session.commit()
-    elif choice == "increase_movie_size":
-        from .models import MediaPart
-
-        media = (
-            db.session.query(MediaIdentity)
-            .filter_by(jellyfin_id="demo-movie-1")
-            .first()
-        )
-        if media:
-            part = (
-                db.session.query(MediaPart)
-                .filter_by(media_identity_id=media.id)
-                .first()
-            )
-            part.size_bytes += 1_000_000_000
-            db.session.commit()
-    elif choice == "add_movie":
-        from .models import MediaPart
-
-        library = (
-            db.session.query(Library)
-            .filter_by(jellyfin_library_id="demo-movies")
-            .first()
-        )
-        next_id = (
-            db.session.query(func.max(MediaIdentity.radarr_id)).scalar() or 50
-        ) + 1
-        media = MediaIdentity(
-            library_id=library.id,
-            media_type="movie",
-            title=f"Demo Movie {next_id:02d}",
-            jellyfin_id=f"demo-movie-{next_id}",
-            radarr_id=next_id,
-            tmdb_id=20000 + next_id,
-            added_at=utcnow(),
-        )
-        db.session.add(media)
-        db.session.flush()
-        db.session.add(
-            MediaPart(
-                media_identity_id=media.id,
-                kind="movie_file",
-                has_file=True,
-                size_bytes=2_000_000_000,
-                acquired_at=utcnow(),
-            )
-        )
-        library.last_size_bytes = (library.last_size_bytes or 0) + 2_000_000_000
-        db.session.commit()
-    elif choice in {
-        "outage_sonarr",
-        "outage_radarr",
-        "outage_jellyfin",
-        "restore_integrations",
-    }:
-        set_setting(
-            "demo_outage",
-            None if choice == "restore_integrations" else choice.split("_")[1],
-        )
-    else:
+    choice = request.form.get("choice", "")
+    try:
+        simulate(choice)
+    except ValueError:
         abort(400)
     flash(f"Simulated: {choice.replace('_', ' ')}", "success")
     return redirect(url_for("main.overview"))
