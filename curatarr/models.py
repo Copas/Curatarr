@@ -94,6 +94,9 @@ class MediaIdentity(db.Model, Timed):
     added_at = db.Column(db.DateTime(timezone=True))
     last_seen_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
     missing_since = db.Column(db.DateTime(timezone=True))
+    # Sonarr/Radarr's own monitored flag; False means "download nothing".
+    arr_monitored = db.Column(db.Boolean)
+    series_type = db.Column(db.String(20))  # Sonarr: standard, daily, anime
     library = db.relationship("Library")
     override = db.relationship("TitleOverride", backref="media", uselist=False)
     parts = db.relationship("MediaPart", backref="media", cascade="all, delete-orphan")
