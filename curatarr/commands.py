@@ -14,6 +14,7 @@ from .lifecycle import (
     expire_snoozes,
     reconcile_unknown_actions,
     recover_stale_actions,
+    resume_approved,
     run_actions,
 )
 from .models import utcnow
@@ -67,6 +68,7 @@ def register_commands(app):
                 expire_snoozes()
                 created = evaluate_retention()
                 run_actions()
+                resume_approved()
                 expire_notices()
                 reconcile_artwork()
                 set_setting("last_reconcile_at", utcnow().isoformat())
@@ -87,6 +89,7 @@ def register_commands(app):
                     reconcile_unknown_actions()
                     expire_snoozes()
                     run_actions()
+                    resume_approved()
                     expire_notices()
                     reconcile_artwork()
                     last = setting("last_reconcile_at")

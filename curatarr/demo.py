@@ -210,13 +210,31 @@ class DemoClient:
     def movie(self, movie_id):
         return self.request("GET", f"/api/v3/movie/{movie_id}")
 
+    def _episode_parts(self, series_id):
+        media = db.session.query(MediaIdentity).filter_by(sonarr_id=series_id).first()
+        if not media:
+            raise IntegrationError("Demo series missing")
+        return [part for part in media.parts if part.kind == "episode"]
+
+    def episodes(self, series_id):
+        self._check()
+        return [
+            {
+                "id": part.sonarr_episode_id,
+                "seasonNumber": part.season_number,
+                "episodeNumber": part.episode_number,
+                "hasFile": part.has_file,
+                "episodeFileId": part.arr_file_id if part.has_file else 0,
+            }
+            for part in self._episode_parts(series_id)
+        ]
+
     def episode_files(self, series_id):
         self._check()
-        media = db.session.query(MediaIdentity).filter_by(sonarr_id=series_id).first()
         return [
-            {"id": part.arr_file_id}
-            for part in media.parts
-            if part.kind == "episode" and part.has_file and part.arr_file_id
+            {"id": part.arr_file_id, "size": part.size_bytes}
+            for part in self._episode_parts(series_id)
+            if part.has_file and part.arr_file_id
         ]
 
     def diskspace(self):
