@@ -936,3 +936,40 @@ def metrics_summary():
             round((utcnow() - _as_datetime(oldest)).total_seconds()) if oldest else None
         ),
     }
+
+
+def save_policy_layer(library, form, keys):
+    """Save submitted policy fields for one library, or globally when None.
+
+    Every library's effective policy is validated against the new values
+    first, so a global change cannot leave any library unresolvable.
+    """
+    from .models import LibraryPolicy
+    from .policy import LIBRARY_ONLY_FIELDS, merge_policy_form
+
+    global_values = setting("global_policy", {})
+    if library is None:
+        keys = [key for key in keys if key not in LIBRARY_ONLY_FIELDS]
+        global_values = merge_policy_form(global_values, form, keys)
+        layers = {}
+    else:
+        row = library.policy or LibraryPolicy(library_id=library.id)
+        layers = {library.id: merge_policy_form(row.policy_json, form, keys)}
+    for media_type in ("series", "movie"):
+        effective_policy(media_type, global_values, {})
+    for other in db.session.query(Library).all():
+        values = layers.get(other.id, other.policy.policy_json if other.policy else {})
+        try:
+            effective_policy(
+                "series" if other.media_type == "tv" else "movie",
+                global_values,
+                values,
+            )
+        except ValueError as exc:
+            raise ValueError(f"{other.name}: {exc}") from exc
+    if library is None:
+        set_setting("global_policy", global_values)
+    else:
+        row.policy_json = layers[library.id]
+        db.session.add(row)
+    db.session.commit()

@@ -26,8 +26,10 @@
     </a>
     <div class="navbar-nav flex-row flex-wrap gap-3">
       <a class="nav-link" href="{{ url_for('main.overview') }}">Overview</a>
+      <a class="nav-link" href="{{ url_for('main.rules', section='acquisition') }}">Acquisition</a>
+      <a class="nav-link" href="{{ url_for('main.rules', section='retention') }}">Retention</a>
       <a class="nav-link" href="{{ url_for('main.review') }}">Review</a>
-      <a class="nav-link" href="{{ url_for('main.titles') }}">Titles</a>
+      <a class="nav-link" href="{{ url_for('main.titles') }}">Overrides</a>
       <a class="nav-link" href="{{ url_for('main.history') }}">History</a>
       <a class="nav-link" href="{{ url_for('main.settings') }}">Settings</a>
     </div>
