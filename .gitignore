@@ -12,4 +12,5 @@ instance/
 logs/
 config/posters/
 *.egg-info/
-
+build/
+dist/

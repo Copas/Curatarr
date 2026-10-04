@@ -30,8 +30,12 @@ def create_app(test_config=None):
     def write_counters(_exc):
         flush_counters()
 
+    from .schema import MIGRATIONS_DIR
+
     db.init_app(app)
-    migrate.init_app(app, db)
+    # Migrations ship inside the package so installed copies can upgrade
+    # without a source checkout.
+    migrate.init_app(app, db, directory=str(MIGRATIONS_DIR))
 
     from . import models  # noqa: F401
     from .commands import register_commands

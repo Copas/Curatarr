@@ -9,15 +9,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from . import db
 
+MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+
 
 def current_schema(app) -> bool:
-    directory = Path(app.root_path).parent / "migrations"
-    if not directory.is_dir():
-        directory = Path.cwd() / "migrations"
-    if not directory.is_dir():
-        return False
     config = Config()
-    config.set_main_option("script_location", str(directory))
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
     head = ScriptDirectory.from_config(config).get_current_head()
     try:
         actual = db.session.execute(

@@ -24,6 +24,17 @@ dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
 [tool.setuptools.packages.find]
 include = ["curatarr*"]
 
+[tool.setuptools.package-data]
+curatarr = [
+  "templates/*.html",
+  "static/*",
+  "migrations/alembic.ini",
+  "migrations/README",
+  "migrations/script.py.mako",
+  "migrations/*.py",
+  "migrations/versions/*.py",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
