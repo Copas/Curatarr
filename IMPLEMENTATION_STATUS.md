@@ -4,6 +4,7 @@
 Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; live validation pending)
 
 ## Completed
+- v0.1.0 tagged 2026-10-04 after the Section 92 release checks: tests and lint, migration upgrade/check/downgrade/re-upgrade on a fresh database, and fresh-install and demo-mode startup with all main pages and API endpoints returning 200.
 - Flask app, database schema and migrations, health/status API, Bootstrap shell, branding, and container skeleton.
 - Jellyfin/Sonarr/Radarr clients and read-only discovery with stable provider-ID matching.
 - Durable webhook ingestion, duplicate-event suppression, playback rescue, and episode completion state; missed-webhook reconciliation handles changed episode IDs, pagination without a reported total, and separate users.

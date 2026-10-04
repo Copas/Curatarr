@@ -60,3 +60,22 @@ Read-only endpoints: `/health`, `/api/v1/status`, `/api/v1/libraries`, `/api/v1/
 
 Tests use synthetic media names and mocked integration boundaries. No real credentials or private media data belong in this repository.
 PostgreSQL contention tests are opt-in: point `CURATARR_TEST_POSTGRES_URL` at an isolated, migrated test database and run `pytest tests/test_postgres_concurrency.py`. They skip during the normal SQLite test run.
+
+## Working on Curatarr
+
+Configuration comes from the environment; `.env.example` lists every variable. The database URL is read from `DATABASE_URL`. If it is unset, Curatarr uses SQLite at `instance/curatarr.db`, and poster snapshots go to `instance/posters/` (or `CURATARR_DATA_DIR`). Both are git-ignored local state. Before running migrations, downgrades, or demo seeding for verification, point `DATABASE_URL` and `CURATARR_DATA_DIR` at a scratch location so your working database is not modified. The test suite already uses temporary databases and data directories.
+
+`IMPLEMENTATION_STATUS.md` tracks the current phase, open work, known issues, and blockers. `docs/decisions/` records design decisions. Update both alongside behavior changes.
+
+Release checklist (spec section 92), run against a scratch database:
+
+```bash
+export DATABASE_URL=sqlite:////tmp/curatarr-release.db CURATARR_DATA_DIR=/tmp/curatarr-release
+.venv/bin/pytest && .venv/bin/ruff check . && .venv/bin/ruff format --check .
+.venv/bin/flask --app curatarr db upgrade
+.venv/bin/flask --app curatarr db check            # models match migrations
+.venv/bin/flask --app curatarr db downgrade base
+.venv/bin/flask --app curatarr db upgrade
+```
+
+Then start the app on a fresh database and in demo mode (`demo-seed`, `worker --once`), confirm `/health` and the main pages load, update `CHANGELOG.md`, and create an annotated `vX.Y.Z` tag.
