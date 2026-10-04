@@ -44,6 +44,7 @@ from .services import (
     process_pending_events,
     reclaimed_bytes_total,
     resolved_policy,
+    save_policy_layer,
     set_setting,
     setting,
 )
@@ -702,59 +703,130 @@ def history_detail(action_id):
     )
 
 
+MODES = ["recommend", "require_review", "automatic"]
+POLICY_FIELDS = {
+    "minimum_mode": (
+        "Minimum retained footprint",
+        ["first_n_episodes", "season_1", "entire_series"],
+    ),
+    "minimum_episodes": ("First N episodes", "number"),
+    "acquisition_threshold": ("Completed episodes before acquiring", "number"),
+    "keep_one_season_ahead": ("Keep one season ahead", ["true", "false"]),
+    "manage_specials": ("Manage Specials / Season 0", ["false", "true"]),
+    "grace_days": ("New-media grace days", "number"),
+    "tv_inactivity_days": ("TV inactivity days", "number"),
+    "movie_inactivity_days": ("Movie inactivity days", "number"),
+    "meaningful_threshold": ("Meaningful TV watch (episodes)", "number"),
+    "purge_strategy": (
+        "Purge strategy",
+        ["oldest_unwatched_first", "oldest_watched_nonfavorite_first", "weighted"],
+    ),
+    "review_mode": ("Review mode", MODES),
+    "inactivity_review_mode": ("Inactivity cleanup review mode", MODES),
+    "quota_review_mode": ("Quota cleanup review mode", MODES),
+    "review_expiry": (
+        "Review expiration",
+        ["manual_forever", "auto_delete_after_notice"],
+    ),
+    "notice_days": ("Leaving Soon notice days", "number"),
+    "quota_enabled": ("Library-size limit", ["false", "true"]),
+    "high_water_bytes": ("High-water bytes", "number"),
+    "low_water_bytes": ("Low-water bytes", "number"),
+    "free_space_enabled": ("Free-space enforcement", ["false", "true"]),
+    "disk_path": ("Arr-side disk path", "text"),
+    "low_free_percent": ("Low free-space threshold %", "number"),
+    "critical_free_percent": ("Critical free-space threshold %", "number"),
+    "low_pressure_review_mode": ("Low-pressure review mode", MODES),
+    "critical_pressure_review_mode": ("Critical-pressure review mode", MODES),
+    "dry_run": ("Dry run", ["true", "false"]),
+}
+RULE_SECTIONS = {
+    "acquisition": (
+        "Acquisition rules",
+        [
+            "minimum_mode",
+            "minimum_episodes",
+            "acquisition_threshold",
+            "keep_one_season_ahead",
+            "manage_specials",
+            "grace_days",
+        ],
+    ),
+    "retention": (
+        "Retention rules",
+        [
+            key
+            for key in POLICY_FIELDS
+            if key
+            not in {
+                "minimum_mode",
+                "minimum_episodes",
+                "acquisition_threshold",
+                "keep_one_season_ahead",
+                "manage_specials",
+                "grace_days",
+            }
+        ],
+    ),
+}
+
+
+def _policy_page(section, title, keys, library):
+    from .policy import LIBRARY_ONLY_FIELDS
+
+    if library is None:
+        keys = [key for key in keys if key not in LIBRARY_ONLY_FIELDS]
+    if request.method == "POST":
+        try:
+            save_policy_layer(library, request.form, keys)
+        except (ValueError, TypeError) as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+        else:
+            flash("Policy saved", "success")
+        return redirect(request.full_path.rstrip("?"))
+    global_values = setting("global_policy", {})
+    stored = global_values
+    media_type = "series"
+    if library is not None:
+        stored = library.policy.policy_json if library.policy else {}
+        media_type = "series" if library.media_type == "tv" else "movie"
+    effective, sources = effective_policy(
+        media_type, global_values, stored if library is not None else {}
+    )
+    return render_template(
+        "rules.html",
+        section=section,
+        heading=title,
+        library=library,
+        libraries=db.session.query(Library).order_by(Library.name).all(),
+        fields=[(key, *POLICY_FIELDS[key]) for key in keys],
+        stored=stored,
+        effective=effective,
+        sources=sources,
+    )
+
+
+@bp.route("/rules/<section>", methods=["GET", "POST"])
+def rules(section):
+    if section not in RULE_SECTIONS:
+        abort(404)
+    library = None
+    scope = request.args.get("scope", "global")
+    if scope != "global":
+        library = db.session.get(Library, scope)
+        if not library:
+            abort(404)
+    title, keys = RULE_SECTIONS[section]
+    return _policy_page(section, title, keys, library)
+
+
 @bp.route("/libraries/<library_id>/policy", methods=["GET", "POST"])
 def library_policy(library_id):
     library = db.session.get(Library, library_id)
     if not library:
         abort(404)
-    from .models import LibraryPolicy
-
-    row = library.policy or LibraryPolicy(library_id=library.id)
-    if request.method == "POST":
-        values = {}
-        try:
-            for key, value in request.form.items():
-                if key == "csrf_token" or value == "":
-                    continue
-                if key in {
-                    "quota_enabled",
-                    "free_space_enabled",
-                    "dry_run",
-                    "never_purge",
-                }:
-                    values[key] = value == "true"
-                elif key.endswith(
-                    ("_days", "_threshold", "_episodes", "_bytes", "_percent")
-                ):
-                    values[key] = int(value)
-                else:
-                    values[key] = value
-            validated = validate_policy(values, complete=False)
-            effective_policy(
-                "series" if library.media_type == "tv" else "movie",
-                setting("global_policy", {}),
-                validated,
-            )
-            row.policy_json = validated
-        except (ValueError, TypeError) as exc:
-            flash(str(exc), "danger")
-        else:
-            db.session.add(row)
-            db.session.commit()
-            flash("Policy saved", "success")
-        return redirect(url_for("main.library_policy", library_id=library.id))
-    effective, sources = effective_policy(
-        "series" if library.media_type == "tv" else "movie",
-        setting("global_policy", {}),
-        row.policy_json or {},
-    )
-    return render_template(
-        "policy.html",
-        library=library,
-        policy=row.policy_json or {},
-        effective=effective,
-        sources=sources,
-    )
+    return _policy_page(None, "All policy settings", list(POLICY_FIELDS), library)
 
 
 @bp.route("/titles/<media_id>", methods=["GET", "POST"])

@@ -299,3 +299,43 @@ def select_to_low_water(items: list[CandidateInput], current: int, high: int, lo
         if reclaimed >= required:
             break
     return selected, max(0, required - reclaimed)
+
+
+# Library size and disk-pressure limits describe one library or volume, and
+# destructive mode must be enabled per library, so these never come from the
+# global layer.
+LIBRARY_ONLY_FIELDS = {
+    "quota_enabled",
+    "high_water_bytes",
+    "low_water_bytes",
+    "free_space_enabled",
+    "disk_path",
+    "dry_run",
+}
+INTEGER_FIELDS = set(BOUNDS) | {"high_water_bytes", "low_water_bytes"}
+
+
+def merge_policy_form(existing: dict, form, keys) -> dict:
+    """Apply submitted form strings for ``keys`` to one stored policy layer.
+
+    Blank or ``inherit`` removes the explicit value. Keys outside ``keys`` keep
+    their stored values, so a page showing some fields cannot erase others.
+    """
+    merged = dict(existing or {})
+    for key in keys:
+        raw = (form.get(key) or "").strip()
+        merged.pop(key, None)
+        if raw in {"", "inherit"}:
+            continue
+        if key in BOOL_FIELDS:
+            if raw not in {"true", "false"}:
+                raise ValueError(f"Invalid {key}")
+            merged[key] = raw == "true"
+        elif key in INTEGER_FIELDS:
+            try:
+                merged[key] = int(raw)
+            except ValueError as exc:
+                raise ValueError(f"Invalid {key}") from exc
+        else:
+            merged[key] = raw
+    return validate_policy(merged, complete=False)
