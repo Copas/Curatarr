@@ -9,3 +9,7 @@ Automatic mode with a zero-day notice still creates a `LEAVING_SOON` candidate t
 Before a notice expires and before any approved deletion runs, pending playback events are processed and the candidate is read again. If events are still unprocessed, the deletion is deferred (the candidate stays `APPROVED`) rather than blocked, and the worker retries it with `resume_approved()`.
 
 A favorite is a strong ranking signal but not protection. A candidate favorited after entering review stays in review; capacity re-ranking moves it behind non-favorites before deletion. Only Never Purge removes a title from cleanup.
+
+## Watch history found on first sync
+
+The first reconciliation turns every user's existing Played state into completion events, and those trigger the normal acquisition rule: fill the rest of that season and request the next. The owner chose this on 2026-10-04 after seeing it happen on the first live sync (11 Sonarr requests), over recording history as a baseline only. Acquisition is not covered by dry run, which applies to deletion. Later reconciliations do not repeat this, because a completion already recorded generates no new event.
