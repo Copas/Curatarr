@@ -108,3 +108,20 @@ def test_minimum_footprint_options_explain_themselves(app, client):
         assert f">{label}</option>" in page
     assert "Built-in default (First N episodes of Season 1)" in page
     assert "Built-in default (Yes)" in page
+
+
+def test_yes_no_dropdowns_match_the_default_wording(app, client):
+    import re
+
+    library = _library()
+    page = client.get(f"/libraries/{library.id}/policy").text
+    for name in (
+        "keep_one_season_ahead",
+        "manage_specials",
+        "quota_enabled",
+        "dry_run",
+    ):
+        select = re.search(rf'name="{name}">(.*?)</select>', page, re.DOTALL).group(1)
+        options = re.findall(r">([^<]+)</option>", select)
+        # Same words as the "(Yes)"/"(No)" default label, always Yes first.
+        assert options[1:] == ["Yes", "No"], (name, options)
