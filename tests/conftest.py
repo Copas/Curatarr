@@ -4,7 +4,9 @@ from curatarr import create_app, db
 
 
 @pytest.fixture
-def app(tmp_path):
+def app(tmp_path, monkeypatch):
+    # Keep poster snapshots and other instance data out of the repository.
+    monkeypatch.setenv("CURATARR_DATA_DIR", str(tmp_path / "data"))
     application = create_app(
         {
             "TESTING": True,
