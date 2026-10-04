@@ -39,6 +39,14 @@ Dry run is enabled by default. A library must explicitly set dry run to false be
 
 Read-only endpoints (all except `/health` and `/api/v1/status` require sign-in): `/health`, `/api/v1/status`, `/api/v1/metrics`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. The webhook endpoint is `/api/v1/webhook/jellyfin`.
 
+## Dashboard integration
+
+Curatarr runs on its own and does not depend on any dashboard. To add it to a home dashboard, link to these pages and endpoints:
+
+- `/` for the overview and `/review` for the review queue (both require sign-in);
+- `/health` for a health check and `/api/v1/status` for review and Leaving Soon counts, dry-run state, and integration health (both public, no secrets);
+- `/static/logo.svg` for the app icon. The file is also in the repository at `curatarr/static/logo.svg` to copy into a dashboard's own assets.
+
 ## Logs and metrics
 
 Operational log lines from the `curatarr.ops` logger are single JSON objects. They are limited to `event_id`, `action_id`, `media_identity_id`, `candidate_id`, `integration`, `operation`, `duration_ms`, `result`, and `status_code`, and never include API keys or payloads. Each external call, processed event, executed action, and reconciliation is logged. Successful GET requests log at DEBUG, failures at WARNING, and everything else at INFO. Set the level with `CURATARR_LOG_LEVEL`.
