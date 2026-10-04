@@ -1,0 +1,55 @@
+from datetime import timedelta
+
+import pytest
+
+from curatarr import db
+from curatarr.commands import RECONCILE_RETRY_SECONDS, worker_cycle
+from curatarr.integrations import IntegrationError
+from curatarr.models import Integration, utcnow
+from curatarr.services import check_integration, set_setting, setting
+
+
+def test_first_run_worker_waits_for_keys_but_reports_healthy(app, client):
+    # State right after the first Jellyfin sign-in: URL saved, no API keys yet.
+    db.session.add(Integration(kind="jellyfin", base_url="http://jellyfin.local"))
+    db.session.commit()
+    assert worker_cycle() == "waiting_for_setup"
+    assert setting("last_reconcile_attempt_at") is None
+    health = client.get("/health").get_json()
+    assert health["scheduler"] == "healthy"
+    assert check_integration("jellyfin") == "unconfigured"
+    assert (
+        client.get("/health").get_json()["integrations"]["jellyfin"] == "unconfigured"
+    )
+
+
+def test_failed_reconciliation_backs_off(app, monkeypatch):
+    for kind in ("jellyfin", "sonarr", "radarr"):
+        db.session.add(
+            Integration(kind=kind, base_url=f"http://{kind}.local", secret_ref="x")
+        )
+    db.session.commit()
+    calls = []
+
+    def failing_discover():
+        calls.append(1)
+        raise IntegrationError("sonarr unavailable")
+
+    monkeypatch.setattr("curatarr.commands.check_integration", lambda _kind: "healthy")
+    monkeypatch.setattr("curatarr.commands.discover", failing_discover)
+    with pytest.raises(IntegrationError):
+        worker_cycle()
+    assert worker_cycle() == "idle"  # no immediate retry
+    assert len(calls) == 1
+    earlier = utcnow() - timedelta(seconds=RECONCILE_RETRY_SECONDS + 1)
+    set_setting("last_reconcile_attempt_at", earlier.isoformat())
+    with pytest.raises(IntegrationError):
+        worker_cycle()
+    assert len(calls) == 2
+
+
+def test_demo_worker_reconciles_then_idles(app):
+    app.config["DEMO_MODE"] = True
+    assert worker_cycle() == "reconciled"
+    assert setting("last_reconcile_at") is not None
+    assert worker_cycle() == "idle"

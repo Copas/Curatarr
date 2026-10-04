@@ -1,11 +1,11 @@
 """Operational commands for a single-node worker."""
 
 import time
-from datetime import timedelta
 
 import click
 from flask import current_app
 
+from . import db
 from .artwork import reconcile_artwork
 from .integrations import IntegrationError
 from .lifecycle import (
@@ -17,9 +17,10 @@ from .lifecycle import (
     resume_approved,
     run_actions,
 )
-from .models import utcnow
+from .models import Integration, utcnow
 from .observability import log_operation
 from .services import (
+    _as_datetime,
     check_integration,
     discover,
     process_pending_events,
@@ -34,6 +35,66 @@ def _record_reconcile_duration(started):
     duration_ms = round((time.monotonic() - started) * 1000)
     set_setting("last_reconcile_duration_ms", duration_ms)
     log_operation("reconcile", "ok", duration_ms=duration_ms)
+
+
+RECONCILE_RETRY_SECONDS = 300
+
+
+def _integrations_ready():
+    rows = {row.kind: row for row in db.session.query(Integration)}
+    return all(
+        rows.get(kind) is not None and rows[kind].secret_ref
+        for kind in ("jellyfin", "sonarr", "radarr")
+    )
+
+
+def _reconcile_due(now):
+    interval = setting("reconciliation_interval_seconds", 3600)
+    last = _as_datetime(setting("last_reconcile_at"))
+    attempt = _as_datetime(setting("last_reconcile_attempt_at"))
+    if attempt and (not last or attempt > last):
+        # The previous attempt failed; back off instead of retrying every cycle.
+        return (now - attempt).total_seconds() >= min(interval, RECONCILE_RETRY_SECONDS)
+    return not last or (now - last).total_seconds() >= interval
+
+
+def worker_cycle():
+    """One worker pass. Returns idle, waiting_for_setup, or reconciled.
+
+    The heartbeat is written first so health reports the worker as running even
+    while reconciliation is waiting for setup or failing on an outage.
+    """
+    set_setting("worker_heartbeat_at", utcnow().isoformat())
+    process_pending_events()
+    recover_stale_actions()
+    reconcile_unknown_actions()
+    expire_snoozes()
+    run_actions()
+    resume_approved()
+    expire_notices()
+    reconcile_artwork()
+    now = utcnow()
+    if not _reconcile_due(now):
+        return "idle"
+    demo = current_app.config["DEMO_MODE"]
+    if not demo and not _integrations_ready():
+        return "waiting_for_setup"
+    set_setting("last_reconcile_attempt_at", now.isoformat())
+    started = time.monotonic()
+    for kind in ("jellyfin", "sonarr", "radarr"):
+        check_integration(kind)
+    if demo:
+        from .demo import seed_demo
+
+        seed_demo()
+    else:
+        discover()
+        reconcile_user_state()
+        queue_watch_restoration()
+    evaluate_retention()
+    set_setting("last_reconcile_at", utcnow().isoformat())
+    _record_reconcile_duration(started)
+    return "reconciled"
 
 
 def register_commands(app):
@@ -90,42 +151,23 @@ def register_commands(app):
     @click.option("--once", is_flag=True, help="Run one worker cycle and exit")
     def worker_command(once):
         """Process durable events/actions; reconcile hourly by default."""
+        announced = None
         while True:
             with current_app.app_context():
                 try:
-                    process_pending_events()
-                    recover_stale_actions()
-                    reconcile_unknown_actions()
-                    expire_snoozes()
-                    run_actions()
-                    resume_approved()
-                    expire_notices()
-                    reconcile_artwork()
-                    last = setting("last_reconcile_at")
-                    from .services import _as_datetime
-
-                    interval = setting("reconciliation_interval_seconds", 3600)
-                    due = not last or utcnow() - _as_datetime(last) >= timedelta(
-                        seconds=interval
-                    )
-                    if due:
-                        started = time.monotonic()
-                        for kind in ("jellyfin", "sonarr", "radarr"):
-                            check_integration(kind)
-                        if current_app.config["DEMO_MODE"]:
-                            from .demo import seed_demo
-
-                            seed_demo()
-                        else:
-                            discover()
-                            reconcile_user_state()
-                            queue_watch_restoration()
-                        evaluate_retention()
-                        set_setting("last_reconcile_at", utcnow().isoformat())
-                        _record_reconcile_duration(started)
-                    set_setting("worker_heartbeat_at", utcnow().isoformat())
+                    result = worker_cycle()
+                    if result == "waiting_for_setup" and announced != result:
+                        current_app.logger.info(
+                            "Reconciliation waits until Jellyfin, Sonarr, and Radarr "
+                            "API keys are saved in Settings"
+                        )
+                    announced = result
                 except IntegrationError as exc:
-                    current_app.logger.warning("Worker cycle incomplete: %s", exc)
+                    current_app.logger.warning(
+                        "Reconciliation incomplete; retrying in %s seconds: %s",
+                        RECONCILE_RETRY_SECONDS,
+                        exc,
+                    )
             if once:
                 break
             time.sleep(15)

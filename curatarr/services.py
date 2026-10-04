@@ -83,6 +83,12 @@ def check_integration(kind):
     row = db.session.query(Integration).filter_by(kind=kind).first()
     if not row:
         return "unconfigured"
+    if not row.secret_ref and not current_app.config["DEMO_MODE"]:
+        # First-run Jellyfin sign-in saves the URL before any API key exists.
+        row.health_state = "unconfigured"
+        row.last_error = None
+        db.session.commit()
+        return row.health_state
     try:
         status = client(kind).health()
         row.health_state = "healthy"
