@@ -24,7 +24,9 @@
         <text x="70" y="86" fill="currentColor" font-family="Arial, Helvetica, sans-serif" font-size="96" font-weight="700">uratarr</text>
       </svg>
     </a>
-    <div class="navbar-nav flex-row flex-wrap gap-3">
+    {% set show_app = signed_in_user or config.ALLOW_UNAUTHENTICATED %}
+    {% if show_app %}
+    <div class="navbar-nav flex-row flex-wrap gap-3 align-items-center">
       <a class="nav-link" href="{{ url_for('main.overview') }}">Overview</a>
       <a class="nav-link" href="{{ url_for('main.rules', section='acquisition') }}">Acquisition</a>
       <a class="nav-link" href="{{ url_for('main.rules', section='retention') }}">Retention</a>
@@ -32,11 +34,13 @@
       <a class="nav-link" href="{{ url_for('main.titles') }}">Overrides</a>
       <a class="nav-link" href="{{ url_for('main.history') }}">History</a>
       <a class="nav-link" href="{{ url_for('main.settings') }}">Settings</a>
+      {% if signed_in_user %}<form method="post" action="{{ url_for('main.sign_out_page') }}" class="d-flex align-items-center gap-2"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><span class="text-secondary small">{{ signed_in_user.name }}</span><button class="btn btn-sm btn-outline-light">Sign out</button></form>{% endif %}
     </div>
+    {% endif %}
   </div>
 </nav>
 <main class="container pb-5">
-  {% if dry_run %}<div class="alert alert-warning">Dry run is enabled. Approved deletions are recorded without sending destructive requests.</div>{% endif %}
+  {% if dry_run and show_app %}<div class="alert alert-warning">Dry run is enabled. Approved deletions are recorded without sending destructive requests.</div>{% endif %}
   {% for category, message in get_flashed_messages(with_categories=true) %}
     <div class="alert alert-{{ category }}">{{ message }}</div>
   {% endfor %}

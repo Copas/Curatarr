@@ -171,6 +171,11 @@ def seed_demo():
     return True
 
 
+# Demo accounts: "demo-admin" is a Jellyfin administrator and "demo-viewer"
+# is not. Both use the password "demo".
+DEMO_USERS = {"demo-admin": True, "demo-viewer": False}
+
+
 class DemoClient:
     def __init__(self, kind):
         self.kind = kind
@@ -289,6 +294,29 @@ class DemoClient:
 
     def mark_played(self, _user_id, _item_id):
         self._check()
+
+    def _demo_user(self, name):
+        return {
+            "Id": f"user-{name}",
+            "Name": name,
+            "Policy": {"IsAdministrator": DEMO_USERS[name], "IsDisabled": False},
+        }
+
+    def authenticate(self, username, password, _device_id):
+        self._check()
+        if username not in DEMO_USERS or password != "demo":
+            raise IntegrationError("Demo sign-in failed", 401)
+        return {"User": self._demo_user(username), "AccessToken": "demo-token"}
+
+    def end_session(self, _token, _device_id):
+        self._check()
+
+    def user(self, user_id):
+        self._check()
+        name = user_id.removeprefix("user-")
+        if name not in DEMO_USERS:
+            raise IntegrationError("Demo user missing", 404)
+        return self._demo_user(name)
 
 
 def demo_client(kind):

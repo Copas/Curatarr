@@ -18,7 +18,8 @@ services:
       DATABASE_URL: postgresql+psycopg://curatarr:${CURATARR_DB_PASSWORD}@db:5432/curatarr
       CURATARR_SECRET_KEY: ${CURATARR_SECRET_KEY:?Set CURATARR_SECRET_KEY}
       CURATARR_AUTO_MIGRATE: "true"
-      CURATARR_ALLOW_UNAUTHENTICATED: ${CURATARR_ALLOW_UNAUTHENTICATED:?Set CURATARR_ALLOW_UNAUTHENTICATED=true only on a trusted network}
+      CURATARR_JELLYFIN_URL: ${CURATARR_JELLYFIN_URL:-}
+      CURATARR_ALLOW_UNAUTHENTICATED: ${CURATARR_ALLOW_UNAUTHENTICATED:-false}
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
@@ -37,7 +38,6 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://curatarr:${CURATARR_DB_PASSWORD}@db:5432/curatarr
       CURATARR_SECRET_KEY: ${CURATARR_SECRET_KEY:?Set CURATARR_SECRET_KEY}
-      CURATARR_ALLOW_UNAUTHENTICATED: ${CURATARR_ALLOW_UNAUTHENTICATED:?Set CURATARR_ALLOW_UNAUTHENTICATED=true only on a trusted network}
     volumes:
       - config:/config
     depends_on:

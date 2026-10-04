@@ -131,7 +131,38 @@ class JellyfinClient(Client):
     status_path = "/System/Info"
 
     def headers(self):
-        return {"X-Emby-Token": self.api_key}
+        # Sign-in can happen before an API key exists (first run).
+        return {"X-Emby-Token": self.api_key} if self.api_key else {}
+
+    @staticmethod
+    def _client_header(device_id, token=None):
+        value = (
+            f'MediaBrowser Client="Curatarr", Device="Curatarr", '
+            f'DeviceId="{device_id}", Version="0.1.0"'
+        )
+        if token:
+            value += f', Token="{token}"'
+        return {"Authorization": value, "X-Emby-Authorization": value}
+
+    def authenticate(self, username, password, device_id):
+        """Verify a user's own credentials; returns Jellyfin's user and token."""
+        return self.request(
+            "POST",
+            "/Users/AuthenticateByName",
+            json={"Username": username, "Pw": password},
+            headers=self._client_header(device_id),
+        )
+
+    def end_session(self, token, device_id):
+        """Revoke the access token created by authenticate()."""
+        return self.request(
+            "POST",
+            "/Sessions/Logout",
+            headers=self._client_header(device_id, token) | {"X-Emby-Token": token},
+        )
+
+    def user(self, user_id):
+        return self.request("GET", f"/Users/{user_id}")
 
     def users(self):
         return self.request("GET", "/Users")
