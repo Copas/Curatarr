@@ -105,6 +105,23 @@ def _queue_records(payload):
     return rows
 
 
+def _local_disk_space(path):
+    """Free space measured directly when Curatarr shares the arr apps' host.
+
+    Used only when the arr apps report no disk for the path; returns None (no
+    selection) when the path is not visible here, as in a separate container.
+    """
+    import os
+
+    if not os.path.isdir(path):
+        return None
+    try:
+        stats = os.statvfs(path)
+    except OSError:
+        return None
+    return stats.f_blocks * stats.f_frsize, stats.f_bavail * stats.f_frsize
+
+
 def _disk_pressure(media, policy):
     if not policy["free_space_enabled"]:
         return None
@@ -119,13 +136,22 @@ def _disk_pressure(media, policy):
     matching = []
     for disk in disks:
         root = (disk.get("path") or "").rstrip("/") or "/"
-        if configured == root or configured.startswith(root.rstrip("/") + "/"):
+        # "/" contains every path, so it only counts when it is the configured
+        # path itself. Sonarr/Radarr omit network mounts (e.g. a CIFS NAS) from
+        # disk space, and falling back to "/" measured the wrong disk.
+        if root == "/" and configured != "/":
+            continue
+        if configured == root or configured.startswith(root + "/"):
             matching.append((len(root), disk))
-    if not matching:
-        return None
-    disk = max(matching, key=lambda pair: pair[0])[1]
-    total = disk.get("totalSpace") or 0
-    free = disk.get("freeSpace") or 0
+    if matching:
+        disk = max(matching, key=lambda pair: pair[0])[1]
+        total = disk.get("totalSpace") or 0
+        free = disk.get("freeSpace") or 0
+    else:
+        measured = _local_disk_space(configured)
+        if measured is None:
+            return None
+        total, free = measured
     if (
         type(total) not in (int, float)
         or type(free) not in (int, float)

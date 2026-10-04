@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Disk-pressure checks no longer fall back to the `/` record for other paths. Sonarr/Radarr omit network mounts, so a NAS library was being measured against the local drive. When the arr apps report no matching disk, free space is measured directly if the path is visible to Curatarr.
+
 - Discovery records each file's acquisition time from Sonarr/Radarr `dateAdded` instead of the discovery time, which had made an entire existing library look newly acquired. Existing installs are corrected at the next discovery.
 
 - Cleanup is driven by free space. Unwatched titles are no longer cleanup candidates on their own (new per-library switch `inactivity_cleanup`, off by default). Low free space selects only enough to return to the low threshold, with a Leaving Soon notice (14 days by default) before removal. Critical free space removes without a notice. Dry run still gates all removal.
