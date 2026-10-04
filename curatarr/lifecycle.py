@@ -141,7 +141,51 @@ def _disk_pressure(media, policy):
     return required, level
 
 
-def _selected_capacity_ids(media, policy, reason_code, active_ids, now):
+def _library_stored_bytes(library_id):
+    return (
+        db.session.query(func.sum(MediaPart.size_bytes))
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaIdentity.library_id == library_id,
+            MediaIdentity.missing_since.is_(None),
+            MediaPart.has_file.is_(True),
+        )
+        .scalar()
+        or 0
+    )
+
+
+def _quota_cleanup_active(media, policy, candidate):
+    """Apply high/low-water hysteresis to a queued quota candidate.
+
+    Above high water the run is active. Between the marks it continues only
+    when Curatarr itself has deleted quota media since this candidate was
+    created; a drop caused elsewhere still invalidates queued candidates.
+    """
+    if not policy["quota_enabled"]:
+        return False
+    size = _library_stored_bytes(media.library_id)
+    if size > policy["high_water_bytes"]:
+        return True
+    if size <= policy["low_water_bytes"]:
+        return False
+    return (
+        db.session.query(LifecycleAction.id)
+        .join(PurgeCandidate, LifecycleAction.candidate_id == PurgeCandidate.id)
+        .join(MediaIdentity, PurgeCandidate.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaIdentity.library_id == media.library_id,
+            PurgeCandidate.reason_code == "quota",
+            LifecycleAction.action_type == "delete_media",
+            LifecycleAction.state == "SUCCEEDED",
+            LifecycleAction.completed_at >= candidate.eligible_at,
+        )
+        .first()
+        is not None
+    )
+
+
+def _selected_capacity_ids(media, policy, candidate, active_ids, now):
     """Re-rank a capacity decision using the latest persisted observations."""
     library_media = (
         db.session.query(MediaIdentity)
@@ -149,19 +193,17 @@ def _selected_capacity_ids(media, policy, reason_code, active_ids, now):
         .all()
     )
     inputs = []
-    current_size = 0
     for other in library_media:
-        current_size += sum(part.size_bytes for part in other.parts if part.has_file)
         arr_id = other.sonarr_id if other.media_type == "series" else other.radarr_id
-        candidate = _candidate_input(other, arr_id in active_ids)
+        item = _candidate_input(other, arr_id in active_ids)
         other_policy, _ = resolved_policy(other)
-        if eligible(candidate, other_policy, now):
-            inputs.append(candidate)
+        if eligible(item, other_policy, now):
+            inputs.append(item)
     ranked = rank(inputs, policy["purge_strategy"], now, policy["meaningful_threshold"])
-    if reason_code == "quota":
-        if not policy["quota_enabled"] or current_size <= policy["high_water_bytes"]:
+    if candidate.reason_code == "quota":
+        if not _quota_cleanup_active(media, policy, candidate):
             return set()
-        required = current_size - policy["low_water_bytes"]
+        required = _library_stored_bytes(media.library_id) - policy["low_water_bytes"]
     else:
         pressure = _disk_pressure(media, policy)
         if not pressure:
@@ -232,23 +274,8 @@ def reconcile_candidates():
             ):
                 reason = "Inactivity rule no longer applies."
             elif candidate.reason_code == "quota":
-                current_size = (
-                    db.session.query(func.sum(MediaPart.size_bytes))
-                    .join(
-                        MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id
-                    )
-                    .filter(
-                        MediaIdentity.library_id == media.library_id,
-                        MediaPart.has_file.is_(True),
-                    )
-                    .scalar()
-                    or 0
-                )
-                if (
-                    not policy["quota_enabled"]
-                    or current_size <= policy["high_water_bytes"]
-                ):
-                    reason = "Library is no longer above high-water mark."
+                if not _quota_cleanup_active(media, policy, candidate):
+                    reason = "Library no longer requires quota cleanup."
             elif candidate.reason_code == "disk_pressure":
                 pressure = _disk_pressure(media, policy)
                 if pressure is not None and pressure[0] <= 0:
@@ -494,19 +521,10 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
         return "Playback occurred after candidate creation"
     if candidate.reason_code == "inactivity" and not inactivity_due(item, policy, now):
         return "Inactivity rule no longer applies"
-    if candidate.reason_code == "quota":
-        size = (
-            db.session.query(func.sum(MediaPart.size_bytes))
-            .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
-            .filter(
-                MediaIdentity.library_id == media.library_id,
-                MediaPart.has_file.is_(True),
-            )
-            .scalar()
-            or 0
-        )
-        if not policy["quota_enabled"] or size <= policy["high_water_bytes"]:
-            return "Library is no longer above high-water mark"
+    if candidate.reason_code == "quota" and not _quota_cleanup_active(
+        media, policy, candidate
+    ):
+        return "Library is no longer above high-water mark"
     if candidate.reason_code == "disk_pressure":
         pressure = _disk_pressure(media, policy)
         if not pressure or pressure[0] <= 0:
@@ -521,9 +539,7 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
             return "Download or import is active"
         if candidate.reason_code in {"quota", "disk_pressure"}:
             active_ids = {row.get(field) for row in records}
-            selected = _selected_capacity_ids(
-                media, policy, candidate.reason_code, active_ids, now
-            )
+            selected = _selected_capacity_ids(media, policy, candidate, active_ids, now)
             if media.id not in selected:
                 return "Capacity ranking no longer selects this title"
         external = arr.request(
@@ -898,6 +914,8 @@ def execute_action(action_id):
                 if _playback_preempts_delete(candidate, action):
                     return "blocked"
                 arr.delete_movie(media.radarr_id)
+                for part in media.parts:
+                    part.has_file = False
             else:
                 arr = client("sonarr")
                 policy, _ = resolved_policy(media)
@@ -983,6 +1001,8 @@ def reconcile_unknown_actions():
                     if exc.status_code != 404:
                         continue
                     complete = True
+                    for part in media.parts:
+                        part.has_file = False
             else:
                 from .policy import retained
 
