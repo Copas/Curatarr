@@ -223,6 +223,9 @@ def health():
         if last_heartbeat and (utcnow() - last_heartbeat).total_seconds() < 60
         else "offline"
     )
+    if worker == "offline" and reconciliation_state()["state"] == "running":
+        # The heartbeat is written between cycles; a long reconciliation is busy.
+        worker = "busy"
     result = {
         "application": "healthy",
         "database": database,
@@ -451,8 +454,8 @@ def _queue_reconciliation():
         request_reconciliation()
         flash(
             "Discovery and reconciliation queued. The background worker starts within "
-            "15 seconds; a large library can take several minutes. Progress shows "
-            "under Operations.",
+            "15 seconds and a large library can take a few minutes; the status above "
+            "updates automatically.",
             "success",
         )
     return redirect(url_for("main.overview"))

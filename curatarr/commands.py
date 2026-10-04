@@ -5,6 +5,7 @@ import time
 import click
 from flask import current_app
 
+from . import db
 from .artwork import reconcile_artwork
 from .integrations import IntegrationError
 from .lifecycle import (
@@ -158,6 +159,11 @@ def register_commands(app):
                         )
                     announced = result
                 except IntegrationError as exc:
+                    db.session.rollback()
+                    set_setting(
+                        "last_reconcile_error",
+                        {"at": utcnow().isoformat(), "message": str(exc)},
+                    )
                     current_app.logger.warning(
                         "Reconciliation incomplete; retrying in %s seconds: %s",
                         RECONCILE_RETRY_SECONDS,

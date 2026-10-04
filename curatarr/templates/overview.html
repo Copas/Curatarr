@@ -7,6 +7,16 @@
     <form method="post" action="{{ url_for('main.reconcile_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-primary">Reconcile</button></form>
   </div>
 </div>
+{% set r = reconciliation %}
+{% if r.state in ('queued', 'running') %}<meta http-equiv="refresh" content="15">{% endif %}
+<div class="alert {{ {'queued': 'alert-info', 'running': 'alert-info', 'failed': 'alert-danger', 'interrupted': 'alert-warning'}.get(r.state, 'alert-secondary') }}" id="reconcile-status">
+{% if r.state == 'queued' %}<strong>Discovery queued</strong> at {{ r.requested_at.strftime('%H:%M:%S') }} UTC; the worker picks it up within 15 seconds. This page refreshes automatically.
+{% elif r.state == 'running' %}<strong>Discovery and reconciliation running</strong> since {{ r.started_at.strftime('%H:%M:%S') }} UTC ({{ r.elapsed_seconds // 60 }} min {{ r.elapsed_seconds % 60 }} s). A large library takes a few minutes. This page refreshes automatically.
+{% elif r.state == 'failed' %}<strong>Last reconciliation failed:</strong> {{ r.error }}. It retries automatically in about 5 minutes; check integration status in Settings.
+{% elif r.state == 'interrupted' %}<strong>Last reconciliation did not finish.</strong> It started at {{ r.started_at.strftime('%H:%M') }} UTC; the worker may have restarted. Click Discover to run it again.
+{% elif r.last_finished %}Last reconciliation finished {{ r.last_finished.strftime('%Y-%m-%d %H:%M') }} UTC{% if r.last_duration_ms %} in {{ (r.last_duration_ms / 1000)|round(0)|int }} s{% endif %}: {{ r.titles }} titles across {{ r.libraries }} libraries.
+{% else %}No reconciliation has run yet. Click Discover after adding API keys.{% endif %}
+</div>
 {% if setup_incomplete %}<div class="alert alert-info">Setup is not finished. <a href="{{ url_for('main.setup') }}">Continue setup</a> to connect integrations and discover libraries.</div>{% endif %}
 <div class="row g-3 mb-4">
   <div class="col-md-4"><div class="card p-3"><h2 class="h6">Review queue</h2><p class="display-6 mb-0">{{ status.review_count }}</p></div></div>
@@ -46,7 +56,7 @@
 <tr><th scope="row">Events processed</th><td>{{ metrics.events_processed }}</td><th scope="row">Duplicate events ignored</th><td>{{ metrics.duplicate_events_ignored }}</td></tr>
 <tr><th scope="row">Acquisition actions</th><td>{{ metrics.acquisition_actions }}</td><th scope="row">Purge candidates created</th><td>{{ metrics.purge_candidates_created }}</td></tr>
 <tr><th scope="row">Rescues</th><td>{{ metrics.rescues }}</td><th scope="row">Proposed for reclaim</th><td>{{ '{:.1f}'.format(metrics.bytes_proposed / 1073741824) }} GiB</td></tr>
-<tr><th scope="row">External API failures</th><td>{% for kind, total in metrics.external_api_failures.items() %}{{ kind|title }} {{ total }}{% if not loop.last %} · {% endif %}{% endfor %}</td><th scope="row">Last reconciliation</th><td>{{ metrics.last_reconcile_duration_ms ~ ' ms' if metrics.last_reconcile_duration_ms is not none else '—' }}</td></tr>
+<tr><th scope="row">External API failures (since install)</th><td>{% for kind, total in metrics.external_api_failures.items() %}{{ kind|title }} {{ total }}{% if not loop.last %} · {% endif %}{% endfor %}</td><th scope="row">Last reconciliation</th><td>{{ metrics.last_reconcile_duration_ms ~ ' ms' if metrics.last_reconcile_duration_ms is not none else '—' }}</td></tr>
 <tr><th scope="row">Reconciliation</th><td>{{ reconciliation.state|capitalize }}</td><th scope="row">Last finished</th><td>{{ reconciliation.last_finished.strftime('%Y-%m-%d %H:%M') ~ ' UTC' if reconciliation.last_finished else 'Never' }}</td></tr>
 <tr><th scope="row">Pending actions</th><td>{{ metrics.pending_actions }}</td><th scope="row">Oldest pending action</th><td>{{ metrics.oldest_pending_action_age_seconds ~ ' s' if metrics.oldest_pending_action_age_seconds is not none else '—' }}</td></tr>
 </tbody></table></div>
