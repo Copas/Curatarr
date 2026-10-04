@@ -16,7 +16,6 @@ Python 3.12 or newer is required.
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 export CURATARR_SECRET_KEY='replace-with-a-random-secret'
-export CURATARR_ALLOW_UNAUTHENTICATED=true  # trusted loopback/LAN only
 .venv/bin/flask --app curatarr db upgrade
 .venv/bin/flask --app curatarr encrypt-secrets
 .venv/bin/python -m curatarr
@@ -30,7 +29,15 @@ In a second shell, run the persistent worker:
 
 The web app listens on port 8787 by default. Until setup is complete, Overview links to the `/setup` checklist: connect Jellyfin, Sonarr, and Radarr in Settings, create the webhook token, run Discover from Overview, then optionally review the Acquisition and Retention rules. Saved keys are masked in the UI. The first Settings visit generates a webhook token and shows it once. Configure Jellyfin's webhook plugin to send JSON to `/api/v1/webhook/jellyfin` with that token in the `X-Curatarr-Token` request header. The webhook stays closed until the token exists.
 
-Use a unique, stable random `CURATARR_SECRET_KEY` before starting. Curatarr currently has no login system: unauthenticated operation must be explicitly enabled and the UI must be restricted to a trusted loopback/LAN or an authenticated reverse proxy. Browser mutations use CSRF tokens, which do not replace authentication. Integration keys and the webhook token are encrypted in the database using a key derived from `CURATARR_SECRET_KEY`; losing or changing that key makes them unreadable. Back up the key separately from the database. Existing installations should back up the database, run `db upgrade`, then run `encrypt-secrets` once; the command is safe to repeat.
+Use a unique, stable random `CURATARR_SECRET_KEY` before starting. Integration keys and the webhook token are encrypted in the database using a key derived from `CURATARR_SECRET_KEY`; losing or changing that key makes them unreadable. Back up the key separately from the database. Existing installations should back up the database, run `db upgrade`, then run `encrypt-secrets` once; the command is safe to repeat.
+
+## Signing in
+
+Sign in with a Jellyfin account that has the Administrator permission, which is the permission Jellyfin uses for server configuration. Other Jellyfin accounts are refused. Curatarr checks the password with Jellyfin, ends the Jellyfin session it created, and keeps only the user's ID and name in a signed session cookie that lasts up to seven days. Passwords and Jellyfin user tokens are never stored. Every five minutes Curatarr re-checks the account using its own Jellyfin API key, so a removed, disabled, or demoted administrator loses access. If Jellyfin is unreachable, an existing session continues for up to one hour after its last successful check. After five failed sign-ins from one address within 15 minutes, further attempts are refused until the window passes.
+
+On first run, the sign-in page also asks for the Jellyfin server URL and binds Curatarr to it. Until that first administrator signs in, anyone who can reach the page could bind a different server, so keep Curatarr on a trusted network until setup is done. Alternatively, set `CURATARR_JELLYFIN_URL` so the server is fixed from the start. After sign-in, add a Jellyfin API key in Settings; it is needed for library discovery and the periodic account re-check.
+
+`/health`, `/api/v1/status`, and the token-protected webhook stay public for dashboards. Every other page and API endpoint requires sign-in. Set `CURATARR_ALLOW_UNAUTHENTICATED=true` only when another layer, such as an authenticating reverse proxy, already restricts access. In demo mode, sign in as `demo-admin` with password `demo`; `demo-viewer` shows the refusal for non-administrators.
 
 ## Retention behavior
 
@@ -42,13 +49,13 @@ Dry run is enabled by default. A library must explicitly set dry run to false be
 
 ## Containers
 
-Set `CURATARR_DB_PASSWORD`, `CURATARR_SECRET_KEY`, and `CURATARR_ALLOW_UNAUTHENTICATED=true` in your deployment environment only after protecting access to the UI, then run `docker compose up --build`. The compose example binds the UI to `127.0.0.1:8787` and uses PostgreSQL and persistent database/config volumes. It runs migrations and legacy-secret encryption on web startup. If running outside compose, run `flask --app curatarr db upgrade` and `flask --app curatarr encrypt-secrets` before starting each upgraded application version unless you intentionally set `CURATARR_AUTO_MIGRATE=true`.
+Set `CURATARR_DB_PASSWORD` and `CURATARR_SECRET_KEY` (and optionally `CURATARR_JELLYFIN_URL`) in your deployment environment, then run `docker compose up --build`. To use HTTPS, put Curatarr behind a TLS-terminating reverse proxy and set `CURATARR_SESSION_COOKIE_SECURE=true`. The compose example binds the UI to `127.0.0.1:8787` and uses PostgreSQL and persistent database/config volumes. It runs migrations and legacy-secret encryption on web startup. If running outside compose, run `flask --app curatarr db upgrade` and `flask --app curatarr encrypt-secrets` before starting each upgraded application version unless you intentionally set `CURATARR_AUTO_MIGRATE=true`.
 
 The application requires no media volume. Poster snapshots are stored under application data and are never part of the source repository.
 
 ## API and health
 
-Read-only endpoints: `/health`, `/api/v1/status`, `/api/v1/metrics`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. The webhook endpoint is `/api/v1/webhook/jellyfin`.
+Read-only endpoints (all except `/health` and `/api/v1/status` require sign-in): `/health`, `/api/v1/status`, `/api/v1/metrics`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. The webhook endpoint is `/api/v1/webhook/jellyfin`.
 
 ## Logs and metrics
 

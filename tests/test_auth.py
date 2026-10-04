@@ -1,0 +1,151 @@
+from datetime import timedelta
+
+import pytest
+
+from curatarr import db
+from curatarr.models import AppSetting, Integration, LifecycleAction, utcnow
+
+
+@pytest.fixture
+def secured(app):
+    app.config["ALLOW_UNAUTHENTICATED"] = False
+    app.config["DEMO_MODE"] = True
+    return app
+
+
+def _sign_in(client, username="demo-admin", password="demo", **extra):
+    return client.post(
+        "/login" + extra.pop("query", ""),
+        data={"username": username, "password": password, **extra},
+    )
+
+
+def test_signed_out_requests_are_redirected_or_rejected(secured, client):
+    response = client.get("/review?x=1")
+    assert response.status_code == 302
+    assert response.headers["Location"].startswith("/login?next=")
+    assert client.get("/api/v1/history").status_code == 401
+    assert client.get("/api/v1/metrics").get_json() == {"error": "Sign-in required"}
+    assert (
+        client.post("/rules/acquisition", data={"grace_days": "1"}).status_code == 302
+    )
+    assert client.get("/health").status_code == 200
+    assert client.get("/api/v1/status").status_code == 200
+    assert client.get("/login").status_code == 200
+    # The webhook keeps its own token check rather than a session.
+    assert client.post("/api/v1/webhook/jellyfin", json={}).status_code == 403
+
+
+def test_administrator_signs_in_and_out(secured, client):
+    response = _sign_in(client, query="?next=/history")
+    assert response.status_code == 303
+    assert response.headers["Location"] == "/history"
+    page = client.get("/")
+    assert page.status_code == 200
+    assert b"demo-admin" in page.data and b"Sign out" in page.data
+    assert (
+        db.session.query(LifecycleAction)
+        .filter_by(action_type="admin_signed_in")
+        .count()
+        == 1
+    )
+    client.post("/logout")
+    assert client.get("/").status_code == 302
+
+
+@pytest.mark.parametrize(
+    ("username", "password", "message"),
+    [
+        ("demo-viewer", "demo", b"requires a Jellyfin administrator account"),
+        ("demo-admin", "wrong", b"did not accept that username and password"),
+    ],
+)
+def test_non_administrators_and_bad_passwords_are_refused(
+    secured, client, username, password, message
+):
+    response = _sign_in(client, username, password)
+    assert response.headers["Location"].startswith("/login")
+    assert message in client.get("/login").data
+    assert client.get("/").status_code == 302
+
+
+def test_repeated_failures_are_rate_limited(secured, client):
+    for _ in range(5):
+        _sign_in(client, password="wrong")
+    _sign_in(client)
+    assert b"Too many failed sign-in attempts" in client.get("/login").data
+    assert client.get("/").status_code == 302
+
+
+def test_next_cannot_redirect_off_site(secured, client):
+    for target in ("//evil.example/", "https://evil.example/", "/\\evil.example"):
+        response = _sign_in(client, query=f"?next={target}")
+        assert response.headers["Location"] == "/"
+
+
+def test_first_run_binds_the_jellyfin_server(secured, client, monkeypatch):
+    secured.config["DEMO_MODE"] = False
+    calls = []
+
+    class FakeJellyfin:
+        def __init__(self, base_url, api_key):
+            calls.append(("init", base_url, api_key))
+
+        def authenticate(self, username, password, device_id):
+            calls.append(("authenticate", username, device_id))
+            return {
+                "User": {
+                    "Id": "u1",
+                    "Name": "Owner",
+                    "Policy": {"IsAdministrator": True},
+                },
+                "AccessToken": "user-token",
+            }
+
+        def end_session(self, token, device_id):
+            calls.append(("end_session", token))
+
+    monkeypatch.setattr("curatarr.auth.JellyfinClient", FakeJellyfin)
+    assert b"Jellyfin server URL" in client.get("/login").data
+    _sign_in(client, "owner", "pw")
+    assert b"Enter your Jellyfin server URL" in client.get("/login").data
+    _sign_in(client, "owner", "secret-pw", server_url="http://jellyfin.local:8096/")
+    assert ("init", "http://jellyfin.local:8096", "") in calls
+    assert ("end_session", "user-token") in calls
+    row = db.session.query(Integration).filter_by(kind="jellyfin").one()
+    assert row.base_url == "http://jellyfin.local:8096" and row.secret_ref is None
+    assert b"Jellyfin server URL" not in client.get("/login").data
+    stored = " ".join(str(r.value_json) for r in db.session.query(AppSetting))
+    assert "secret-pw" not in stored and "user-token" not in stored
+    with client.session_transaction() as session:
+        assert session["user"]["id"] == "u1"
+        assert "secret-pw" not in str(session) and "user-token" not in str(session)
+
+
+def _age_session(client, minutes):
+    with client.session_transaction() as session:
+        session["user"]["verified_at"] = (
+            utcnow() - timedelta(minutes=minutes)
+        ).isoformat()
+
+
+def test_demoted_administrator_loses_access(secured, client, monkeypatch):
+    _sign_in(client)
+    monkeypatch.setitem(
+        __import__("curatarr.demo", fromlist=["DEMO_USERS"]).DEMO_USERS,
+        "demo-admin",
+        False,
+    )
+    assert client.get("/").status_code == 200  # Within the re-check interval.
+    _age_session(client, 6)
+    assert client.get("/").status_code == 302
+
+
+def test_jellyfin_outage_allows_a_grace_period(secured, client):
+    _sign_in(client)
+    db.session.add(AppSetting(key="demo_outage", value_json="jellyfin"))
+    db.session.commit()
+    _age_session(client, 30)
+    assert client.get("/").status_code == 200
+    _age_session(client, 61)
+    assert client.get("/").status_code == 302

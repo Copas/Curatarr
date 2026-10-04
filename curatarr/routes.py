@@ -21,6 +21,7 @@ from flask import (
 from sqlalchemy import func
 
 from . import db
+from .auth import SignInError, current_user, needs_server_url, sign_in, sign_out
 from .integrations import CLIENTS, IntegrationError, normalized_url
 from .lifecycle import evaluate_retention, execute_approved, review_candidate
 from .models import (
@@ -84,11 +85,76 @@ def guard_request():
             abort(403)
 
 
+PUBLIC_ENDPOINTS = {
+    "main.sign_in_page",
+    "main.health",
+    "main.api_status",
+    "main.webhook",
+    "static",
+}
+
+
+@bp.before_app_request
+def require_sign_in():
+    if current_app.config["ALLOW_UNAUTHENTICATED"]:
+        return None
+    if request.endpoint in PUBLIC_ENDPOINTS or current_user():
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Sign-in required"}), 401
+    target = request.full_path.rstrip("?") if request.method == "GET" else None
+    return redirect(url_for("main.sign_in_page", next=target))
+
+
+def _safe_next(value):
+    if (
+        value
+        and value.startswith("/")
+        and not value.startswith("//")
+        and "\\" not in value
+    ):
+        return value
+    return url_for("main.overview")
+
+
+@bp.route("/login", methods=["GET", "POST"])
+def sign_in_page():
+    if request.method == "POST":
+        try:
+            sign_in(
+                request.form.get("username", "").strip(),
+                request.form.get("password", ""),
+                request.remote_addr or "unknown",
+                request.form.get("server_url"),
+            )
+        except SignInError as exc:
+            flash(str(exc), "danger")
+            return redirect(
+                url_for("main.sign_in_page", next=request.args.get("next")), 303
+            )
+        return redirect(_safe_next(request.args.get("next")), 303)
+    return render_template(
+        "login.html",
+        needs_server_url=needs_server_url(),
+        demo_mode=current_app.config["DEMO_MODE"],
+    )
+
+
+@bp.post("/logout")
+def sign_out_page():
+    sign_out()
+    return redirect(url_for("main.sign_in_page"), 303)
+
+
 @bp.app_context_processor
 def template_values():
     if "csrf_token" not in session:
         session["csrf_token"] = secrets.token_urlsafe(32)
-    return {"csrf_token": session["csrf_token"], "dry_run": _dry_run_status()}
+    return {
+        "csrf_token": session["csrf_token"],
+        "dry_run": _dry_run_status(),
+        "signed_in_user": session.get("user"),
+    }
 
 
 def _dry_run_status():

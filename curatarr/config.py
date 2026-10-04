@@ -1,6 +1,7 @@
 """Runtime configuration; persistent policy values live in the database."""
 
 import os
+from datetime import timedelta
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -16,6 +17,7 @@ def configure_app(app, overrides: dict) -> None:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=_bool("CURATARR_SESSION_COOKIE_SECURE", False),
+        PERMANENT_SESSION_LIFETIME=timedelta(days=7),
         CSRF_ENABLED=_bool("CURATARR_CSRF_ENABLED", True),
         DEMO_MODE=_bool("CURATARR_DEMO_MODE", False),
         ALLOW_UNAUTHENTICATED=_bool("CURATARR_ALLOW_UNAUTHENTICATED", False),

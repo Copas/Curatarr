@@ -20,10 +20,6 @@ def create_app(test_config=None):
         instance_path=os.getenv("CURATARR_DATA_DIR"),
     )
     configure_app(app, test_config or {})
-    if not app.testing and not app.config["ALLOW_UNAUTHENTICATED"]:
-        raise RuntimeError(
-            "Authentication is not implemented; explicitly set CURATARR_ALLOW_UNAUTHENTICATED=true only behind trusted network controls"
-        )
     app.logger.setLevel(os.getenv("CURATARR_LOG_LEVEL", "INFO").upper())
 
     from .observability import flush_counters
