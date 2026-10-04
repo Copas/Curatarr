@@ -370,12 +370,16 @@ def _evaluate_retention_locked():
             )
             score, detail = weighted_score(item, now, policy["meaningful_threshold"])
             review_mode = policy["review_mode"]
+            rule_mode_key = (
+                f"{pressure[1]}_pressure_review_mode"
+                if reason_code == "disk_pressure"
+                else f"{reason_code}_review_mode"
+            )
+            # A title-level review mode is the most specific choice and wins.
+            _, sources = resolved_policy(media)
+            if sources["review_mode"] != "title":
+                review_mode = policy[rule_mode_key] or review_mode
             if reason_code == "disk_pressure":
-                _, sources = resolved_policy(media)
-                if sources["review_mode"] != "title":
-                    review_mode = (
-                        policy[f"{pressure[1]}_pressure_review_mode"] or review_mode
-                    )
                 detail["pressure_level"] = pressure[1]
             state = (
                 "ELIGIBLE"

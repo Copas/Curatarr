@@ -17,6 +17,8 @@ DEFAULTS: dict[str, Any] = {
     "review_mode": "require_review",
     "review_expiry": "manual_forever",
     "notice_days": 14,
+    "inactivity_review_mode": None,
+    "quota_review_mode": None,
     "quota_enabled": False,
     "high_water_bytes": None,
     "low_water_bytes": None,
@@ -45,6 +47,8 @@ BOUNDS = {
 ENUMS = {
     "minimum_mode": {"first_n_episodes", "season_1", "entire_series"},
     "review_mode": {"recommend", "require_review", "automatic"},
+    "inactivity_review_mode": {"recommend", "require_review", "automatic"},
+    "quota_review_mode": {"recommend", "require_review", "automatic"},
     "low_pressure_review_mode": {"recommend", "require_review", "automatic"},
     "critical_pressure_review_mode": {"recommend", "require_review", "automatic"},
     "review_expiry": {"manual_forever", "auto_delete_after_notice"},
