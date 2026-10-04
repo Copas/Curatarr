@@ -22,7 +22,7 @@ from sqlalchemy import func
 
 from . import db
 from .auth import SignInError, current_user, needs_server_url, sign_in, sign_out
-from .integrations import CLIENTS, IntegrationError, normalized_url
+from .integrations import CLIENTS, IntegrationError
 from .lifecycle import evaluate_retention, execute_approved, review_candidate
 from .models import (
     AcquisitionState,
@@ -46,9 +46,12 @@ from .services import (
     reclaimed_bytes_total,
     resolved_policy,
     review_rows,
+    rotate_webhook_token,
+    save_integration,
     save_policy_layer,
-    set_setting,
+    save_reconcile_interval,
     setting,
+    settings_view,
     setup_progress,
 )
 
@@ -405,83 +408,32 @@ def demo_simulate():
 
 @bp.route("/settings", methods=["GET", "POST"])
 def settings():
+    new_token = None
     if request.method == "POST":
         kind = request.form.get("kind")
-        if kind in CLIENTS:
-            try:
-                url = normalized_url(request.form.get("base_url", ""))
-            except ValueError as exc:
-                flash(str(exc), "danger")
-                return redirect(url_for("main.settings"))
-            key = request.form.get("api_key", "")
-            row = db.session.query(Integration).filter_by(kind=kind).first()
-            if not key and row:
-                from .secrets import decrypt_secret
-
-                try:
-                    key = decrypt_secret(row.secret_ref)
-                except ValueError:
-                    flash(
-                        "Saved key cannot be decrypted; provide a new API key", "danger"
-                    )
-                    return redirect(url_for("main.settings"))
-            if not key:
-                flash("API key is required", "danger")
-                return redirect(url_for("main.settings"))
-            try:
-                version = CLIENTS[kind](url, key).version()
-            except IntegrationError:
-                flash(
-                    f"{kind.title()} could not be reached; settings were not saved",
-                    "danger",
+        try:
+            if kind in CLIENTS:
+                save_integration(
+                    kind, request.form.get("base_url"), request.form.get("api_key")
                 )
-                return redirect(url_for("main.settings"))
-            if not row:
-                row = Integration(kind=kind, base_url=url)
-                db.session.add(row)
-            row.base_url = url
-            from .secrets import encrypt_secret
-
-            row.secret_ref = encrypt_secret(key)
-            row.detected_version = version
-            row.health_state = "healthy"
-            row.last_health_at = utcnow()
-            db.session.commit()
-            flash(f"{kind.title()} connected", "success")
-        elif kind == "webhook":
-            token = request.form.get("webhook_token") or secrets.token_urlsafe(32)
-            set_setting("webhook_token", token)
-            rows = {row.kind: row for row in db.session.query(Integration).all()}
-            return render_template(
-                "settings.html",
-                integrations=rows,
-                webhook_present=True,
-                new_token=token,
-                interval_minutes=setting("reconciliation_interval_seconds", 3600) // 60,
-            )
-        elif kind == "scheduler":
-            try:
-                minutes = int(request.form.get("interval_minutes", "60"))
-                if not 5 <= minutes <= 1440:
-                    raise ValueError("Reconciliation interval must be 5–1440 minutes")
-            except ValueError as exc:
-                flash(str(exc), "danger")
-            else:
-                set_setting("reconciliation_interval_seconds", minutes * 60)
+                flash(f"{kind.title()} connected", "success")
+            elif kind == "webhook":
+                new_token = rotate_webhook_token(request.form.get("webhook_token"))
+            elif kind == "scheduler":
+                try:
+                    minutes = int(request.form.get("interval_minutes", ""))
+                except ValueError:
+                    minutes = None
+                save_reconcile_interval(minutes)
                 flash("Reconciliation interval saved", "success")
-        return redirect(url_for("main.settings"))
-    new_token = None
-    if not setting("webhook_token"):
-        new_token = secrets.token_urlsafe(32)
-        set_setting("webhook_token", new_token)
-    rows = {row.kind: row for row in db.session.query(Integration).all()}
-    return render_template(
-        "settings.html",
-        integrations=rows,
-        webhook_present=bool(setting("webhook_token")),
-        new_token=new_token,
-        interval_minutes=setting("reconciliation_interval_seconds", 3600) // 60,
-    )
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+        if new_token is None:
+            return redirect(url_for("main.settings"))
+    elif setting("webhook_token") is None:
+        new_token = rotate_webhook_token()
+    return render_template("settings.html", new_token=new_token, **settings_view())
 
 
 @bp.post("/discover")
