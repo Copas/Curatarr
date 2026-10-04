@@ -24,16 +24,13 @@ from .auth import SignInError, current_user, needs_server_url, sign_in, sign_out
 from .integrations import CLIENTS, IntegrationError
 from .lifecycle import evaluate_retention, execute_approved, review_candidate
 from .models import (
-    Integration,
     Library,
     LifecycleAction,
     MediaIdentity,
-    MediaPart,
     PurgeCandidate,
-    TitleOverride,
     utcnow,
 )
-from .policy import effective_policy, validate_policy
+from .policy import effective_policy
 from .services import (
     UnsupportedWebhookEvent,
     action_context,
@@ -42,24 +39,25 @@ from .services import (
     history_filter_options,
     ingest_event,
     integrations_ready,
-    lifecycle_outlook,
     media_titles_for,
     metrics_summary,
+    operational_status,
+    overview_data,
     process_pending_events,
-    reclaimed_bytes_total,
     reconciliation_state,
     record_webhook,
     request_reconciliation,
     request_title_now,
-    resolved_policy,
     review_rows,
     rotate_webhook_token,
     save_integration,
     save_policy_layer,
     save_reconcile_interval,
+    save_title_override,
     setting,
     settings_view,
     setup_progress,
+    title_view,
 )
 
 bp = Blueprint("main", __name__)
@@ -256,32 +254,7 @@ def _dry_run_status():
 
 
 def _status():
-    integrations = {kind: "unconfigured" for kind in CLIENTS}
-    for row in db.session.query(Integration).all():
-        integrations[row.kind] = row.health_state
-    if current_app.config["DEMO_MODE"]:
-        outage = setting("demo_outage")
-        if outage in integrations:
-            integrations[outage] = "unhealthy (simulated)"
-    reclaimed = reclaimed_bytes_total()
-    return {
-        "app": "curatarr",
-        "version": "0.1.0",
-        "dry_run": _dry_run_status(),
-        "dry_run_libraries": dry_run_by_library()["dry_run"],
-        "deleting_libraries": dry_run_by_library()["deleting"],
-        "review_count": db.session.query(PurgeCandidate)
-        .filter_by(state="REVIEW")
-        .count(),
-        "leaving_soon_count": db.session.query(PurgeCandidate)
-        .filter_by(state="LEAVING_SOON")
-        .count(),
-        "reclaimed_bytes": reclaimed,
-        "pending_actions": db.session.query(LifecycleAction)
-        .filter(LifecycleAction.state.in_(["PENDING", "FAILED_RETRYABLE", "RUNNING"]))
-        .count(),
-        "integrations": integrations,
-    }
+    return operational_status(demo_mode=current_app.config["DEMO_MODE"])
 
 
 @bp.get("/health")
@@ -382,78 +355,6 @@ def api_history():
 
 @bp.get("/")
 def overview():
-    every_library = db.session.query(Library).order_by(Library.name).all()
-    libraries = [library for library in every_library if library.managed]
-    unmanaged = [library.name for library in every_library if not library.managed]
-    library_reports = []
-    for library in libraries:
-        media_type = "series" if library.media_type == "tv" else "movie"
-        policy, _ = effective_policy(
-            media_type,
-            setting("global_policy", {}),
-            library.policy.policy_json if library.policy else {},
-        )
-        size = (
-            db.session.query(func.sum(MediaPart.size_bytes))
-            .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
-            .filter(
-                MediaIdentity.library_id == library.id, MediaPart.has_file.is_(True)
-            )
-            .scalar()
-            or 0
-        )
-        high = policy["high_water_bytes"] if policy["quota_enabled"] else None
-        low = policy["low_water_bytes"] if policy["quota_enabled"] else None
-        library_reports.append(
-            {
-                "library": library,
-                "size": size,
-                "high": high,
-                "low": low,
-                "pressure": "above high water"
-                if high is not None and size > high
-                else "normal",
-                "free_space_enabled": policy["free_space_enabled"],
-            }
-        )
-    actions = (
-        db.session.query(LifecycleAction)
-        .order_by(LifecycleAction.created_at.desc())
-        .limit(10)
-        .all()
-    )
-    errors = (
-        db.session.query(LifecycleAction)
-        .filter(
-            LifecycleAction.state.in_(
-                ["FAILED_RETRYABLE", "FAILED_FINAL", "UNKNOWN_RECONCILE"]
-            )
-        )
-        .order_by(LifecycleAction.created_at.desc())
-        .limit(5)
-        .all()
-    )
-    acquisitions = (
-        db.session.query(LifecycleAction)
-        .filter_by(action_type="sonarr_season_search")
-        .order_by(LifecycleAction.created_at.desc())
-        .limit(10)
-        .all()
-    )
-    media_ids = {
-        row.media_identity_id for row in actions + acquisitions if row.media_identity_id
-    }
-    media_titles = {
-        row.id: row.title
-        for row in db.session.query(MediaIdentity).filter(
-            MediaIdentity.id.in_(media_ids)
-        )
-    }
-    scheduled, cleanup = lifecycle_outlook()
-    media_titles |= {
-        row.media_identity_id: row.media.title
-        for row in scheduled + [candidate for _action, candidate in cleanup]
-    }
     setup_incomplete = not current_app.config["DEMO_MODE"] and any(
         not step["done"] and not step.get("optional") for step in setup_progress()
     )
@@ -462,16 +363,9 @@ def overview():
         status=_status(),
         metrics=metrics_summary(),
         reconciliation=reconciliation_state(),
-        scheduled=scheduled,
-        cleanup=cleanup,
         setup_incomplete=setup_incomplete,
-        library_reports=library_reports,
-        unmanaged_libraries=unmanaged,
-        actions=actions,
-        errors=errors,
-        acquisitions=acquisitions,
-        media_titles=media_titles,
         demo_mode=current_app.config["DEMO_MODE"],
+        **overview_data(),
     )
 
 
@@ -868,77 +762,15 @@ def title(media_id):
     if not media:
         abort(404)
     if request.method == "POST":
-        values = {}
-        for key in (
-            "never_purge",
-            "fill_minimum_footprint",
-            "tv_inactivity_days",
-            "movie_inactivity_days",
-            "minimum_mode",
-            "minimum_episodes",
-            "acquisition_threshold",
-            "meaningful_threshold",
-            "grace_days",
-            "review_mode",
-            "purge_strategy",
-        ):
-            selected = request.form.get(key, "")
-            if selected in {"", "inherit"}:
-                continue
-            if key in {"never_purge", "fill_minimum_footprint"}:
-                values[key] = selected == "true"
-            elif key.endswith(("_days", "_episodes", "_threshold")):
-                try:
-                    values[key] = int(selected)
-                except ValueError:
-                    flash(f"Invalid number for {key}", "danger")
-                    return redirect(url_for("main.title", media_id=media.id))
-            else:
-                values[key] = selected
-        override = media.override or TitleOverride(media_identity_id=media.id)
         try:
-            override.override_json = validate_policy(values, complete=False)
-            db.session.add(override)
-            db.session.commit()
-            if values.get("never_purge"):
-                from .lifecycle import rescue_candidate
-                from .services import _active_candidate
-
-                candidate = _active_candidate(media.id)
-                if candidate:
-                    rescue_candidate(
-                        candidate, "Never Purge was enabled for this title."
-                    )
-                    from .artwork import reconcile_artwork
-
-                    reconcile_artwork()
-            flash("Title override saved", "success")
+            save_title_override(media, request.form)
         except ValueError as exc:
+            db.session.rollback()
             flash(str(exc), "danger")
+        else:
+            flash("Title override saved", "success")
         return redirect(url_for("main.title", media_id=media.id))
-    values, sources = resolved_policy(media)
-    candidates = (
-        db.session.query(PurgeCandidate)
-        .filter_by(media_identity_id=media.id)
-        .order_by(PurgeCandidate.eligible_at.desc())
-        .limit(5)
-        .all()
-    )
-    actions = (
-        db.session.query(LifecycleAction)
-        .filter_by(media_identity_id=media.id)
-        .order_by(LifecycleAction.created_at.desc())
-        .limit(10)
-        .all()
-    )
-    return render_template(
-        "title.html",
-        media=media,
-        values=values,
-        sources=sources,
-        candidates=candidates,
-        actions=actions,
-    )
+    return render_template("title.html", media=media, **title_view(media))
 
 
 @bp.get("/titles")

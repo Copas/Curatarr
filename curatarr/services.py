@@ -1829,3 +1829,167 @@ def webhook_status():
         "problem": latest_problem,
         "count": counter_values()["webhook_deliveries"],
     }
+
+
+def app_version():
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("curatarr")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def operational_status(*, demo_mode=False):
+    """Non-secret operational state for /api/v1/status and Overview."""
+    integrations = {kind: "unconfigured" for kind in CLIENTS}
+    for row in db.session.query(Integration).all():
+        integrations[row.kind] = row.health_state
+    if demo_mode:
+        outage = setting("demo_outage")
+        if outage in integrations:
+            integrations[outage] = "unhealthy (simulated)"
+    split = dry_run_by_library()
+    return {
+        "app": "curatarr",
+        "version": app_version(),
+        "dry_run": not split["deleting"],
+        "dry_run_libraries": split["dry_run"],
+        "deleting_libraries": split["deleting"],
+        "review_count": db.session.query(PurgeCandidate)
+        .filter_by(state="REVIEW")
+        .count(),
+        "leaving_soon_count": db.session.query(PurgeCandidate)
+        .filter_by(state="LEAVING_SOON")
+        .count(),
+        "reclaimed_bytes": reclaimed_bytes_total(),
+        "pending_actions": db.session.query(LifecycleAction)
+        .filter(LifecycleAction.state.in_(["PENDING", "FAILED_RETRYABLE", "RUNNING"]))
+        .count(),
+        "integrations": integrations,
+    }
+
+
+def overview_data():
+    """Library sizes, recent decisions, errors, requests, and the cleanup outlook."""
+    every_library = db.session.query(Library).order_by(Library.name).all()
+    library_reports = []
+    for library in every_library:
+        if not library.managed:
+            continue
+        policy, _ = effective_policy(
+            "series" if library.media_type == "tv" else "movie",
+            setting("global_policy", {}),
+            library.policy.policy_json if library.policy else {},
+        )
+        size = (
+            db.session.query(func.sum(MediaPart.size_bytes))
+            .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+            .filter(
+                MediaIdentity.library_id == library.id, MediaPart.has_file.is_(True)
+            )
+            .scalar()
+            or 0
+        )
+        high = policy["high_water_bytes"] if policy["quota_enabled"] else None
+        low = policy["low_water_bytes"] if policy["quota_enabled"] else None
+        library_reports.append(
+            {
+                "library": library,
+                "size": size,
+                "high": high,
+                "low": low,
+                "pressure": "above high water"
+                if high is not None and size > high
+                else "normal",
+                "free_space_enabled": policy["free_space_enabled"],
+            }
+        )
+    recent = db.session.query(LifecycleAction).order_by(
+        LifecycleAction.created_at.desc()
+    )
+    actions = recent.limit(10).all()
+    errors = (
+        recent.filter(
+            LifecycleAction.state.in_(
+                ["FAILED_RETRYABLE", "FAILED_FINAL", "UNKNOWN_RECONCILE"]
+            )
+        )
+        .limit(5)
+        .all()
+    )
+    acquisitions = (
+        recent.filter(LifecycleAction.action_type == "sonarr_season_search")
+        .limit(10)
+        .all()
+    )
+    scheduled, cleanup = lifecycle_outlook()
+    media_titles = media_titles_for(actions + acquisitions) | {
+        row.media_identity_id: row.media.title
+        for row in scheduled + [candidate for _action, candidate in cleanup]
+    }
+    return {
+        "library_reports": library_reports,
+        "unmanaged_libraries": [
+            library.name for library in every_library if not library.managed
+        ],
+        "actions": actions,
+        "errors": errors,
+        "acquisitions": acquisitions,
+        "scheduled": scheduled,
+        "cleanup": cleanup,
+        "media_titles": media_titles,
+    }
+
+
+TITLE_OVERRIDE_FIELDS = (
+    "never_purge",
+    "fill_minimum_footprint",
+    "tv_inactivity_days",
+    "movie_inactivity_days",
+    "minimum_mode",
+    "minimum_episodes",
+    "acquisition_threshold",
+    "meaningful_threshold",
+    "grace_days",
+    "review_mode",
+    "purge_strategy",
+)
+
+
+def save_title_override(media, form):
+    """Save one title's overrides; enabling Never Purge rescues it at once."""
+    from .artwork import reconcile_artwork
+    from .lifecycle import rescue_candidate
+    from .models import TitleOverride
+    from .policy import merge_policy_form
+
+    override = media.override or TitleOverride(media_identity_id=media.id)
+    override.override_json = merge_policy_form(
+        override.override_json or {}, form, TITLE_OVERRIDE_FIELDS
+    )
+    db.session.add(override)
+    db.session.commit()
+    if override.override_json.get("never_purge"):
+        candidate = _active_candidate(media.id)
+        if candidate:
+            rescue_candidate(candidate, "Never Purge was enabled for this title.")
+            reconcile_artwork()
+
+
+def title_view(media):
+    values, sources = resolved_policy(media)
+    return {
+        "values": values,
+        "sources": sources,
+        "candidates": db.session.query(PurgeCandidate)
+        .filter_by(media_identity_id=media.id)
+        .order_by(PurgeCandidate.eligible_at.desc())
+        .limit(5)
+        .all(),
+        "actions": db.session.query(LifecycleAction)
+        .filter_by(media_identity_id=media.id)
+        .order_by(LifecycleAction.created_at.desc())
+        .limit(10)
+        .all(),
+    }
