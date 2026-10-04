@@ -8,3 +8,10 @@ body { background: #101923; color: #e7edf2; }
 @media (prefers-reduced-motion: reduce) { .curatarr-logo .curatarr-arrow { animation: none; } }
 html[data-bs-theme="light"] .curatarr-arrow-top { fill: #087aaa; }
 html[data-bs-theme="light"] .curatarr-arrow-bottom { fill: #b46208; }
+
+/* The navigation entry for the page being viewed. */
+.navbar .nav-link.active {
+  color: var(--bs-emphasis-color);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--bs-primary);
+}

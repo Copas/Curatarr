@@ -179,12 +179,33 @@ def choice_label(value):
     return CHOICE_LABELS.get(key, str(value).replace("_", " "))
 
 
+NAV_SECTIONS = {
+    "main.overview": "overview",
+    "main.review": "review",
+    "main.titles": "overrides",
+    "main.title": "overrides",
+    "main.history": "history",
+    "main.history_detail": "history",
+    "main.settings": "settings",
+    "main.setup": "settings",
+    "main.library_policy": "retention",
+}
+
+
+def _nav_section():
+    """Which top-level navigation entry the current page belongs to."""
+    if request.endpoint == "main.rules":
+        return (request.view_args or {}).get("section")
+    return NAV_SECTIONS.get(request.endpoint)
+
+
 @bp.app_context_processor
 def template_values():
     if "csrf_token" not in session:
         session["csrf_token"] = secrets.token_urlsafe(32)
     return {
         "csrf_token": session["csrf_token"],
+        "nav_section": _nav_section(),
         "dry_run": _dry_run_status(),
         "signed_in_user": session.get("user"),
     }
