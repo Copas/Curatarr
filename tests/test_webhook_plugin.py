@@ -1,5 +1,6 @@
 """Payloads shaped like the Jellyfin Webhook plugin (v22) actually sends them."""
 
+import json
 import uuid
 
 import pytest
@@ -12,7 +13,12 @@ from curatarr.models import (
     MediaPart,
     UserMediaState,
 )
-from curatarr.services import ingest_event, normalize_event, process_pending_events
+from curatarr.services import (
+    ingest_event,
+    normalize_event,
+    process_pending_events,
+    set_setting,
+)
 
 SERIES = uuid.uuid4()
 EPISODE = uuid.uuid4()
@@ -148,3 +154,23 @@ def test_movie_template_with_empty_episode_fields_is_valid(app):
     assert normalized["series_external_id"] is None
     assert normalized["season_number"] is None
     assert normalized["event_type"] == "playback_started"
+
+
+def test_webhook_accepts_plugin_body_without_json_content_type(series, client):
+    set_setting("webhook_token", "plugin-token")
+    body = json.dumps(_template("PlaybackStart"))
+    response = client.post(
+        "/api/v1/webhook/jellyfin",
+        data=body,
+        headers={"X-Curatarr-Token": "plugin-token", "Content-Type": "text/plain"},
+    )
+    assert response.status_code == 202
+    assert (
+        client.post(
+            "/api/v1/webhook/jellyfin",
+            data="not json",
+            headers={"X-Curatarr-Token": "plugin-token"},
+        ).status_code
+        == 400
+    )
+    assert client.post("/api/v1/webhook/jellyfin", data=body).status_code == 403

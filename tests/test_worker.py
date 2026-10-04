@@ -53,3 +53,43 @@ def test_demo_worker_reconciles_then_idles(app):
     assert worker_cycle() == "reconciled"
     assert setting("last_reconcile_at") is not None
     assert worker_cycle() == "idle"
+
+
+def _configured():
+    for kind in ("jellyfin", "sonarr", "radarr"):
+        db.session.add(
+            Integration(kind=kind, base_url=f"http://{kind}.local", secret_ref="x")
+        )
+    db.session.commit()
+
+
+def test_discover_button_queues_instead_of_running(app, client, monkeypatch):
+    monkeypatch.setattr(
+        "curatarr.services.discover",
+        lambda: pytest.fail("discovery must not run inside the web request"),
+    )
+    response = client.post("/discover", follow_redirects=True)
+    assert b"Add the Jellyfin, Sonarr, and Radarr API keys" in response.data
+    assert setting("reconcile_requested_at") is None
+    _configured()
+    response = client.post("/discover", follow_redirects=True)
+    assert b"Discovery and reconciliation queued" in response.data
+    assert setting("reconcile_requested_at") is not None
+    assert b"Queued" in client.get("/").data
+
+
+def test_worker_runs_a_requested_reconciliation_immediately(app, monkeypatch):
+    _configured()
+    ran = []
+    monkeypatch.setattr("curatarr.commands.check_integration", lambda _kind: "healthy")
+    monkeypatch.setattr("curatarr.commands.discover", lambda: ran.append("discover"))
+    monkeypatch.setattr("curatarr.commands.reconcile_user_state", lambda: None)
+    monkeypatch.setattr("curatarr.commands.queue_watch_restoration", lambda: None)
+    # Within the hourly interval and a recent failed attempt: normally idle.
+    set_setting("last_reconcile_at", utcnow().isoformat())
+    set_setting("last_reconcile_attempt_at", utcnow().isoformat())
+    assert worker_cycle() == "idle"
+    set_setting("reconcile_requested_at", utcnow().isoformat())
+    assert worker_cycle() == "reconciled"
+    assert ran == ["discover"]
+    assert worker_cycle() == "idle"  # the request was consumed

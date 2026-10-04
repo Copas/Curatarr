@@ -5,7 +5,6 @@ import time
 import click
 from flask import current_app
 
-from . import db
 from .artwork import reconcile_artwork
 from .integrations import IntegrationError
 from .lifecycle import (
@@ -17,12 +16,13 @@ from .lifecycle import (
     resume_approved,
     run_actions,
 )
-from .models import Integration, utcnow
+from .models import utcnow
 from .observability import log_operation
 from .services import (
     _as_datetime,
     check_integration,
     discover,
+    integrations_ready,
     process_pending_events,
     queue_watch_restoration,
     reconcile_user_state,
@@ -40,18 +40,13 @@ def _record_reconcile_duration(started):
 RECONCILE_RETRY_SECONDS = 300
 
 
-def _integrations_ready():
-    rows = {row.kind: row for row in db.session.query(Integration)}
-    return all(
-        rows.get(kind) is not None and rows[kind].secret_ref
-        for kind in ("jellyfin", "sonarr", "radarr")
-    )
-
-
 def _reconcile_due(now):
     interval = setting("reconciliation_interval_seconds", 3600)
     last = _as_datetime(setting("last_reconcile_at"))
     attempt = _as_datetime(setting("last_reconcile_attempt_at"))
+    requested = _as_datetime(setting("reconcile_requested_at"))
+    if requested and (not attempt or requested > attempt):
+        return True  # Discover/Reconcile was pressed; skip schedule and backoff.
     if attempt and (not last or attempt > last):
         # The previous attempt failed; back off instead of retrying every cycle.
         return (now - attempt).total_seconds() >= min(interval, RECONCILE_RETRY_SECONDS)
@@ -77,7 +72,7 @@ def worker_cycle():
     if not _reconcile_due(now):
         return "idle"
     demo = current_app.config["DEMO_MODE"]
-    if not demo and not _integrations_ready():
+    if not demo and not integrations_ready():
         return "waiting_for_setup"
     set_setting("last_reconcile_attempt_at", now.isoformat())
     started = time.monotonic()

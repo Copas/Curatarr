@@ -18,7 +18,19 @@
   </div></div>
 {% endfor %}
 </div>
-<div class="card p-3 mt-4"><h2 class="h5">Jellyfin webhook</h2><p>Send JSON notifications to <code>/api/v1/webhook/jellyfin</code>. Set the shared token in the <code>X-Curatarr-Token</code> header.</p><p>Token status: {{ 'configured' if webhook_present else 'not configured' }}.</p><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="webhook"><label class="form-label">New shared token<input class="form-control" type="password" name="webhook_token"></label><button class="btn btn-outline-light">Save or generate token</button></form></div>
+<div class="card p-3 mt-4"><h2 class="h5">Jellyfin webhook</h2>
+<p>The webhook tells Curatarr about playback, finished episodes, and favorites as they happen. Without it, Curatarr still catches up at each hourly reconciliation. Token status: {{ 'configured' if webhook_present else 'not configured' }}. The token is shown only once; if you did not copy it, leave the box below empty and click <em>Save or generate token</em> to make a new one.</p>
+<details class="mb-3"><summary>Set up the Jellyfin Webhook plugin</summary>
+<ol class="mt-2">
+<li>In Jellyfin: Dashboard → Plugins → Catalog, install <strong>Webhook</strong> if needed, then restart Jellyfin.</li>
+<li>Dashboard → Plugins → Webhook → <strong>Add Generic Destination</strong>.</li>
+<li>Webhook Name: <code>Curatarr</code>. Webhook Url: <code>{{ request.host_url }}api/v1/webhook/jellyfin</code></li>
+<li>Notification Type: tick <strong>Playback Start</strong>, <strong>Playback Stop</strong>, and <strong>User Data Saved</strong>. Leave Playback Progress off.</li>
+<li>Item Type: tick <strong>Movies</strong>, <strong>Episodes</strong>, and <strong>Series</strong>. Leave the user filter empty so every user counts.</li>
+<li>Leave <em>Send All Properties</em> unticked and paste this into Template:
+<pre class="mt-2"><code>{{ webhook_template }}</code></pre></li>
+<li>Under Headers, add Key <code>X-Curatarr-Token</code> with the webhook token as its Value, then Save.</li>
+</ol></details><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="webhook"><label class="form-label">New shared token<input class="form-control" type="password" name="webhook_token"></label><button class="btn btn-outline-light">Save or generate token</button></form></div>
 <div class="card p-3 mt-4"><h2 class="h5">Reconciliation schedule</h2><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="scheduler"><label class="form-label">Interval (minutes)<input class="form-control" type="number" min="5" max="1440" name="interval_minutes" value="{{ interval_minutes }}"></label><button class="btn btn-outline-light">Save interval</button></form></div>
 <p class="mt-4 text-secondary">Dry run is enabled by default. To enable deletion for one library, set Dry run to Disabled in that library's policy.</p>
 {% endblock %}
