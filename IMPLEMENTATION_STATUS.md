@@ -22,6 +22,7 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - End-to-end demo lifecycle: the reconcile CLI creates, expires, validates, and deletes quota candidates to the low-water target with reclaimed-space reporting; a simulated Radarr outage blocks every automatic delete.
 - All Section 98 acceptance edge cases have explicit tests.
 - Acquisition and Retention rule pages edit global defaults or one library. Saves merge only the shown fields, library-only fields (size limits, disk pressure, dry run) are excluded globally, and global changes are validated against every library. Navigation follows section 39 (Overrides is the title search).
+- Source and installed copies are separate (docs/decisions/008-source-and-installed-copies.md, docs/INSTALL.md). The package now ships templates, static files, and migrations, so it runs without a checkout. `scripts/install.sh` and `scripts/uninstall.sh` manage native systemd installs under `/opt/curatarr`, `/etc/curatarr`, and `/var/lib/curatarr`, with database backup before upgrade and the previous release kept for rollback. The Docker image runs the installed package as a non-root user. A hygiene test keeps tracked files publishable. Verified: wheel installed outside the repo, installer fresh install and upgrade into scratch locations without systemd, Docker image build and start.
 - Sign-in with Jellyfin administrator accounts (docs/decisions/007-jellyfin-sign-in.md): password verified by Jellyfin and never stored, the Jellyfin session ended immediately, administrator status re-checked every five minutes with a one-hour outage grace period, rate-limited failures, safe post-sign-in redirects, and first-run server binding. `/health`, `/api/v1/status`, and the webhook remain public.
 - Review queue shows every section 29 field: library, media type, proposed action (movie delete, or the number of episode files outside the footprint), last watched and by whom (Jellyfin display names cached during reconciliation), acquisition date, favorite and meaningful-watch state.
 - First-run `/setup` checklist derived from stored state, with an Overview prompt until required steps are done. Overview also lists scheduled deletions and recent cleanup (deleted vs dry run).
@@ -33,12 +34,15 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Validating live test integrations and remaining concurrent playback/delete races, especially playback during an in-flight external request.
 
 ## Next
+- Install the owner's local copy from a tagged release with `scripts/install.sh` (needs root; not yet run against real systemd) and move day-to-day use off the development checkout.
+- Publish the clean repository to GitHub once a remote exists; tag the next release after the installer has been run for real.
 - Expand live API failure coverage once test services are available.
 - Confirm pressure-level behavior against real disk-space responses and expand synthetic UI state coverage.
 - Validate image-tag behavior with a live Jellyfin version and test lease behavior across multiple hosts against a shared production-like database.
 - Validate controlled and automatic cleanup against real test integrations before production use.
 
 ## Known Issues
+- The systemd parts of `scripts/install.sh` (user creation, unit files, service start) have not been run on a real host yet; the rest was exercised with `NO_SYSTEMD=1` and a user install.
 - No real-service credentials are available for live validation.
 - Jellyfin sign-in is verified against mocked and demo Jellyfin only; confirm `AuthenticateByName`, `Sessions/Logout`, and `Users/{id}` behavior against a live server. The first-run server URL can be bound by whoever signs in first unless `CURATARR_JELLYFIN_URL` is set. The sign-in rate limit is per process and per client address, so behind a reverse proxy it applies to all users together.
 - Poster restoration uses Jellyfin's primary image tag or exact badge bytes. An ambiguous upload followed by image re-encoding before the new tag is recorded still needs manual recovery.
