@@ -355,21 +355,67 @@ def discover():
     return len(libraries)
 
 
+def _flag(value):
+    """Booleans from JSON or from Jellyfin Webhook plugin templates ("True", "")."""
+    if isinstance(value, bool) or value is None:
+        return value
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes"}:
+        return True
+    if text in {"false", "0", "no"}:
+        return False
+    return None
+
+
+def _number(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return None
+
+
+def _jellyfin_id(value):
+    """Jellyfin GUIDs appear with or without dashes; use the API's dashless form."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    compact = text.replace("-", "").lower()
+    if len(compact) == 32 and all(char in "0123456789abcdef" for char in compact):
+        return compact
+    return text or None
+
+
+def _first(payload, *keys):
+    for key in keys:
+        value = payload.get(key)
+        if value is not None and value != "":
+            return value
+    return None
+
+
+# UserDataSaved reasons that mean the viewer finished or marked the item watched.
+PLAYED_SAVE_REASONS = {"playbackfinished", "toggleplayed"}
+
+
 def normalize_event(payload):
-    """Accept Jellyfin notification plugin's common fields and canonical form."""
+    """Accept the Jellyfin Webhook plugin's fields and Curatarr's canonical form.
+
+    The plugin can send all of its properties (native JSON types) or a template
+    (every value a string), so flags, numbers, and IDs are parsed from either.
+    It has no "item played" notification: completion arrives as PlaybackStop
+    with PlayedToCompletion, or as UserDataSaved with Played and SaveReason.
+    """
     if not isinstance(payload, dict):
         raise TypeError("Webhook payload must be an object")
-    kind = (
-        payload.get("event_type")
-        or payload.get("NotificationType")
-        or payload.get("Event")
-    )
+    kind = _first(payload, "event_type", "NotificationType", "Event")
     mapping = {
         "PlaybackStart": "playback_started",
         "PlaybackProgress": "playback_progress",
         "PlaybackStop": "playback_stopped",
         "ItemPlayed": "item_played",
-        "UserDataSaved": "favorite_changed",
+        "UserDataSaved": "user_data_saved",
     }
     kind = mapping.get(kind, kind)
     if kind not in {
@@ -378,38 +424,53 @@ def normalize_event(payload):
         "playback_stopped",
         "item_played",
         "favorite_changed",
+        "user_data_saved",
     }:
         raise ValueError("Unsupported webhook event")
-    item_id = payload.get("item_external_id") or payload.get("ItemId")
+    item_id = _jellyfin_id(_first(payload, "item_external_id", "ItemId"))
     if not item_id:
         raise ValueError("Item ID is required")
-    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    played = _flag(_first(payload, "played", "Played"))
+    completed = _flag(_first(payload, "played_to_completion", "PlayedToCompletion"))
+    reason = str(_first(payload, "save_reason", "SaveReason") or "").lower()
+    if kind == "playback_stopped" and completed:
+        kind = "item_played"
+    elif kind == "user_data_saved":
+        # Marking watched counts as completion; other saves carry favorite state.
+        kind = (
+            "item_played"
+            if played and reason in PLAYED_SAVE_REASONS
+            else "favorite_changed"
+        )
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     digest = hashlib.sha256(raw.encode()).hexdigest()
-    event_id = payload.get("event_id") or payload.get("EventId") or digest
+    event_id = _first(payload, "event_id", "EventId") or digest
     occurred = (
-        _as_datetime(payload.get("occurred_at") or payload.get("Date")) or utcnow()
+        _as_datetime(_first(payload, "occurred_at", "UtcTimestamp", "Date")) or utcnow()
     )
     return {
         "event_id": str(event_id),
         "source": "jellyfin",
         "event_type": kind,
         "occurred_at": occurred,
-        "user_external_id": payload.get("user_external_id") or payload.get("UserId"),
-        "item_external_id": str(item_id),
-        "item_type": (
-            payload.get("item_type") or payload.get("ItemType") or ""
-        ).lower(),
-        "series_external_id": payload.get("series_external_id")
-        or payload.get("SeriesId"),
-        "season_number": payload.get("season_number", payload.get("ParentIndexNumber")),
-        "episode_number": payload.get("episode_number", payload.get("IndexNumber")),
-        "played": bool(
-            payload.get("played", payload.get("Played", kind == "item_played"))
+        "user_external_id": _jellyfin_id(_first(payload, "user_external_id", "UserId")),
+        "item_external_id": item_id,
+        "item_type": str(_first(payload, "item_type", "ItemType") or "").lower(),
+        "series_external_id": _jellyfin_id(
+            _first(payload, "series_external_id", "SeriesId")
         ),
-        "position_ticks": int(
-            payload.get("position_ticks", payload.get("PlaybackPositionTicks", 0)) or 0
+        "season_number": _number(
+            _first(payload, "season_number", "SeasonNumber", "ParentIndexNumber")
         ),
-        "favorite": payload.get("favorite", payload.get("IsFavorite")),
+        "episode_number": _number(
+            _first(payload, "episode_number", "EpisodeNumber", "IndexNumber")
+        ),
+        "played": bool(played or completed or kind == "item_played"),
+        "position_ticks": _number(
+            _first(payload, "position_ticks", "PlaybackPositionTicks")
+        )
+        or 0,
+        "favorite": _flag(_first(payload, "favorite", "Favorite", "IsFavorite")),
         "payload_hash": digest,
     }
 
