@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review queue shows library, media type, proposed action, last watcher, acquisition date, and meaningful-watch state.
 - Sign-in with Jellyfin administrator accounts. Sign-in is now required by default; `CURATARR_ALLOW_UNAUTHENTICATED=true` remains for deployments behind an authenticating proxy. New optional `CURATARR_JELLYFIN_URL`.
 - First-run setup checklist; Overview shows scheduled deletions and recent cleanup.
 - Acquisition and Retention rule pages with global defaults and per-library scopes. Policy saves now merge with stored values instead of replacing them.

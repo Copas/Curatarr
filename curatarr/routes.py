@@ -34,7 +34,6 @@ from .models import (
     MediaPart,
     PurgeCandidate,
     TitleOverride,
-    UserMediaState,
     utcnow,
 )
 from .policy import effective_policy, validate_policy
@@ -46,6 +45,7 @@ from .services import (
     process_pending_events,
     reclaimed_bytes_total,
     resolved_policy,
+    review_rows,
     save_policy_layer,
     set_setting,
     setting,
@@ -626,31 +626,7 @@ def webhook():
 
 @bp.get("/review")
 def review():
-    rows = (
-        db.session.query(PurgeCandidate)
-        .filter(
-            PurgeCandidate.state.in_(
-                ["ELIGIBLE", "REVIEW", "LEAVING_SOON", "SNOOZED", "APPROVED"]
-            )
-        )
-        .order_by(PurgeCandidate.eligible_at)
-        .all()
-    )
-    activity = {}
-    for candidate in rows:
-        states = (
-            db.session.query(UserMediaState)
-            .filter_by(media_identity_id=candidate.media_identity_id)
-            .all()
-        )
-        activity[candidate.id] = {
-            "last_played": max(
-                (state.last_played_at for state in states if state.last_played_at),
-                default=None,
-            ),
-            "favorite": any(state.favorite for state in states),
-        }
-    return render_template("review.html", candidates=rows, activity=activity)
+    return render_template("review.html", rows=review_rows())
 
 
 @bp.get("/posters/<media_id>")

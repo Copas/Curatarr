@@ -720,7 +720,13 @@ def reconcile_user_state():
     """Repair missed playback and favorite changes from Jellyfin user data."""
     jellyfin = client("jellyfin")
     generated = 0
-    for user in jellyfin.users():
+    users = jellyfin.users()
+    set_setting(
+        "jellyfin_user_names",
+        setting("jellyfin_user_names", {})
+        | {str(user["Id"]): str(user.get("Name") or user["Id"]) for user in users},
+    )
+    for user in users:
         user_id = str(user["Id"])
         for library in db.session.query(Library).filter_by(enabled=True).all():
             offset = 0
@@ -1049,3 +1055,69 @@ def setup_progress():
         }
     )
     return steps
+
+
+def review_rows():
+    """Pending candidates with the section 29 review context."""
+    from .lifecycle import _candidate_input
+    from .policy import retained
+
+    names = setting("jellyfin_user_names", {})
+    rows = []
+    candidates = (
+        db.session.query(PurgeCandidate)
+        .filter(
+            PurgeCandidate.state.in_(
+                ["ELIGIBLE", "REVIEW", "LEAVING_SOON", "SNOOZED", "APPROVED"]
+            )
+        )
+        .order_by(PurgeCandidate.eligible_at)
+        .all()
+    )
+    for candidate in candidates:
+        media = candidate.media
+        policy, _ = resolved_policy(media)
+        item = _candidate_input(media)
+        latest = (
+            db.session.query(UserMediaState)
+            .filter(
+                UserMediaState.media_identity_id == media.id,
+                UserMediaState.last_played_at.isnot(None),
+            )
+            .order_by(UserMediaState.last_played_at.desc())
+            .first()
+        )
+        if media.media_type == "series":
+            files = {
+                part.arr_file_id
+                for part in media.parts
+                if part.kind == "episode"
+                and part.has_file
+                and not retained(part, policy)
+            }
+            action = (
+                f"Delete {len(files)} episode file{'s' if len(files) != 1 else ''} "
+                "outside the retained footprint via Sonarr"
+            )
+            meaningful = item.completed_episodes >= policy["meaningful_threshold"]
+        else:
+            action = "Delete the movie and its files via Radarr"
+            meaningful = item.last_played_at is not None
+        rows.append(
+            {
+                "candidate": candidate,
+                "media": media,
+                "library": media.library.name,
+                "last_played": item.last_played_at,
+                "last_watcher": (
+                    names.get(latest.jellyfin_user_id, latest.jellyfin_user_id)
+                    if latest
+                    else None
+                ),
+                "added_at": media.added_at,
+                "favorite": item.favorite,
+                "meaningful": meaningful,
+                "proposed_action": action,
+            }
+        )
+    return rows
