@@ -54,3 +54,19 @@ def test_client_errors_are_sanitized():
     assert session.calls == 4
     with pytest.raises(ValueError):
         normalized_url("http://user:pass@radarr.example.local")
+
+
+def test_jellyfin_api_key_uses_mediabrowser_authorization():
+    from curatarr.integrations import JellyfinClient
+
+    session = FakeSession()
+    JellyfinClient("http://jellyfin.example.local:8096", "dummy", session).users()
+    headers = session.calls[0][1]["headers"]
+    assert 'Token="dummy"' in headers["Authorization"]
+    assert headers["Authorization"].startswith("MediaBrowser ")
+    assert "X-Emby-Token" not in headers
+    session = FakeSession()
+    JellyfinClient("http://jellyfin.example.local:8096", "", session).request(
+        "GET", "/System/Info/Public"
+    )
+    assert "Authorization" not in session.calls[0][1]["headers"]
