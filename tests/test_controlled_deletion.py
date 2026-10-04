@@ -167,7 +167,15 @@ def _sonarr(
         def episode_files(self, _series_id):
             return [{"id": file_id} for file_id in file_ids]
 
+        def __init__(self):
+            self.order = []  # unmonitor and delete calls, in sequence
+
+        def unmonitor_episode(self, episode_id):
+            self.order.append(("unmonitor", episode_id))
+            return True
+
         def delete_episode_file(self, file_id):
+            self.order.append(("delete", file_id))
             calls.append(file_id)
             if file_id == fail_on:
                 raise IntegrationError("uncertain")
@@ -214,11 +222,26 @@ def test_tv_delete_shared_unretained_file_once(app, monkeypatch):
         candidate, parts = _series_candidate()
         parts[2].arr_file_id = 200
         db.session.commit()
-        _, calls = _sonarr(
+        sonarr, calls = _sonarr(
             monkeypatch, file_ids=(100, 200), episode_files=(100, 200, 200)
         )
         assert execute_approved(candidate.id) == "succeeded"
         assert calls == [200]
+        # Both episodes on the shared file are unmonitored before the delete,
+        # so Sonarr's missing search cannot download them again.
+        assert sonarr.order == [
+            ("unmonitor", parts[1].sonarr_episode_id),
+            ("unmonitor", parts[2].sonarr_episode_id),
+            ("delete", 200),
+        ]
+        action = (
+            db.session.query(LifecycleAction)
+            .filter_by(action_type="delete_media")
+            .one()
+        )
+        assert action.payload_json["unmonitored"] == sorted(
+            [parts[1].sonarr_episode_id, parts[2].sonarr_episode_id]
+        )
         assert parts[0].has_file
         assert not parts[1].has_file
         assert not parts[2].has_file

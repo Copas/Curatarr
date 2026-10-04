@@ -384,6 +384,10 @@ class DemoClient:
     def delete_movie(self, _movie_id):
         self._check()
 
+    def unmonitor_episode(self, _episode_id):
+        self._check()
+        return True
+
     def delete_episode_file(self, _file_id):
         self._check()
 

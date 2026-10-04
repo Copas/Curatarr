@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- TV cleanup unmonitors each trimmed episode in Sonarr just before deleting its file. Previously the episodes stayed monitored, so Sonarr's missing-episode search would have downloaded them straight back (Sonarr's own "unmonitor deleted episodes" does not apply to API deletions and is off here).
+
 - Library-size limits, free-space enforcement, and dry run can be set as global defaults. The dry-run banner states exactly which libraries are in dry run and which can delete, and explains that dry run rehearses everything but never asks Sonarr/Radarr to delete.
 
 - Libraries on the same disk share one free-space selection, so four libraries on one NAS no longer each pick enough titles to cover the whole shortfall.

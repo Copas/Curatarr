@@ -1059,11 +1059,26 @@ def _execute_action(action_id):
                 target_files = _tv_file_targets(media, policy, arr)
                 _snapshot_watch_state(media)
                 deleted_any = False
+                unmonitored = []
                 for file_id in sorted(target_files):
                     if _playback_preempts_delete(
                         candidate, action, deleted_any=deleted_any
                     ):
                         return "blocked"
+                    # Unmonitor first: a monitored episode without a file is
+                    # "missing" to Sonarr, and its next missing-episode search
+                    # would download the trimmed episodes straight back.
+                    for part in media.parts:
+                        if (
+                            part.kind == "episode"
+                            and part.arr_file_id == file_id
+                            and part.sonarr_episode_id is not None
+                            and arr.unmonitor_episode(part.sonarr_episode_id)
+                        ):
+                            unmonitored.append(part.sonarr_episode_id)
+                    action.payload_json = action.payload_json | {
+                        "unmonitored": sorted(unmonitored)
+                    }
                     arr.delete_episode_file(file_id)
                     deleted_any = True
                     for part in media.parts:
