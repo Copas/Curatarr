@@ -1,4 +1,6 @@
 {% extends 'base.html' %}
+{% macro shown(value) %}{% if value is sameas true %}Yes{% elif value is sameas false %}No{% elif value is none %}not set{% else %}{{ value|string|replace('_', ' ') }}{% endif %}{% endmacro %}
+{% macro source_name(source) %}{{ {'default': 'built-in default', 'global': 'global default', 'library': 'this library', 'title': 'title override'}.get(source, source) }}{% endmacro %}
 {% block content %}
 <h1>{{ heading }}{% if library %} · {{ library.name }}{% endif %}</h1>
 {% if section %}
@@ -13,17 +15,18 @@
 </div>
 {% endif %}
 <p class="text-secondary">
-{% if library %}Leave a field on Inherit to use the global default. Title overrides take precedence over these values.
-{% else %}Global defaults apply to every library that does not override them. Library-size limits, disk pressure, and dry run are set per library.{% endif %}
+{% if library %}Fields left on <em>Inherit</em> use the global default, or Curatarr's built-in default where no global default is set; each option shows the value it would inherit. Title overrides take precedence over these values.
+{% else %}Global defaults apply to every library that does not set its own value. A field left on <em>Built-in default</em> uses Curatarr's own default, shown in brackets. Library-size limits, disk pressure, and dry run are set per library.{% endif %}
 </p>
 <form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="row g-3">
 {% for key, label, kind in fields %}
+  {% set blank_label = ('Inherit ' ~ source_name(fallback_sources[key]) if library else 'Built-in default') ~ ' (' ~ shown(fallback[key])|trim ~ ')' %}
   <div class="col-md-6"><label class="form-label w-100">{{ label }}
-  {% if kind == 'number' %}<input class="form-control" type="number" min="0" name="{{ key }}" value="{{ stored.get(key, '') }}" placeholder="Inherit">
-  {% elif kind == 'text' %}<input class="form-control" type="text" name="{{ key }}" value="{{ stored.get(key, '') }}" placeholder="Inherit (e.g. /media/movies)">
-  {% else %}<select class="form-select" name="{{ key }}"><option value="">Inherit</option>
+  {% if kind == 'number' %}<input class="form-control" type="number" min="0" name="{{ key }}" value="{{ stored.get(key, '') }}" placeholder="{{ blank_label }}">
+  {% elif kind == 'text' %}<input class="form-control" type="text" name="{{ key }}" value="{{ stored.get(key, '') }}" placeholder="{{ blank_label }} (e.g. /media/movies)">
+  {% else %}<select class="form-select" name="{{ key }}"><option value="">{{ blank_label }}</option>
   {% for value in kind %}<option value="{{ value }}" {% if key in stored and stored.get(key)|string|lower == value %}selected{% endif %}>{{ value.replace('_',' ')|title }}</option>{% endfor %}</select>{% endif %}
-  </label><div class="form-text">Effective: {{ effective.get(key) if effective.get(key) is not none else '—' }} ({{ sources.get(key, 'default') }})</div></div>
+  </label><div class="form-text">Currently in effect: {{ shown(effective.get(key)) }} ({{ source_name(sources.get(key, 'default')) }})</div></div>
 {% endfor %}
 </div><button class="btn btn-primary mt-3">Save</button></form>
 {% if library and not section %}<p class="mt-3"><a href="{{ url_for('main.rules', section='acquisition', scope=library.id) }}">Acquisition rules</a> · <a href="{{ url_for('main.rules', section='retention', scope=library.id) }}">Retention rules</a></p>{% endif %}

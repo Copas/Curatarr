@@ -30,8 +30,15 @@ def test_global_rules_are_inherited_by_libraries(app, client):
         "/rules/acquisition", data={"grace_days": "7", "manage_specials": "true"}
     )
     assert setting("global_policy") == {"grace_days": 7, "manage_specials": True}
-    page = client.get(f"/rules/acquisition?scope={library.id}")
-    assert b"Effective: 7 (global)" in page.data
+    page = client.get(f"/rules/acquisition?scope={library.id}").text
+    assert "Inherit global default (7)" in page
+    assert "Inherit built-in default (3)" in page
+    assert "Currently in effect: 7 (global default)" in page
+    page = client.get("/rules/acquisition").text
+    # Global defaults have nothing to inherit from; blank means built-in default.
+    assert ">Inherit" not in page and 'placeholder="Inherit' not in page
+    assert 'placeholder="Built-in default (30)"' in page
+    assert "Built-in default (Yes)" in page
 
 
 def test_partial_page_keeps_other_library_fields(app, client):
