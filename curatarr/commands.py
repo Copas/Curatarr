@@ -18,6 +18,7 @@ from .lifecycle import (
     run_actions,
 )
 from .models import utcnow
+from .observability import log_operation
 from .services import (
     check_integration,
     discover,
@@ -27,6 +28,12 @@ from .services import (
     set_setting,
     setting,
 )
+
+
+def _record_reconcile_duration(started):
+    duration_ms = round((time.monotonic() - started) * 1000)
+    set_setting("last_reconcile_duration_ms", duration_ms)
+    log_operation("reconcile", "ok", duration_ms=duration_ms)
 
 
 def register_commands(app):
@@ -51,6 +58,7 @@ def register_commands(app):
     def reconcile_command():
         """Refresh external state and evaluate policies once."""
         with current_app.app_context():
+            started = time.monotonic()
             try:
                 for kind in ("jellyfin", "sonarr", "radarr"):
                     check_integration(kind)
@@ -72,6 +80,7 @@ def register_commands(app):
                 expire_notices()
                 reconcile_artwork()
                 set_setting("last_reconcile_at", utcnow().isoformat())
+                _record_reconcile_duration(started)
                 click.echo(f"Reconciliation complete: {created} new candidates")
             except IntegrationError as exc:
                 current_app.logger.error("Reconciliation stopped: %s", exc)
@@ -100,6 +109,7 @@ def register_commands(app):
                         seconds=interval
                     )
                     if due:
+                        started = time.monotonic()
                         for kind in ("jellyfin", "sonarr", "radarr"):
                             check_integration(kind)
                         if current_app.config["DEMO_MODE"]:
@@ -112,6 +122,7 @@ def register_commands(app):
                             queue_watch_restoration()
                         evaluate_retention()
                         set_setting("last_reconcile_at", utcnow().isoformat())
+                        _record_reconcile_duration(started)
                     set_setting("worker_heartbeat_at", utcnow().isoformat())
                 except IntegrationError as exc:
                     current_app.logger.warning("Worker cycle incomplete: %s", exc)

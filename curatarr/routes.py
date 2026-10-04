@@ -40,7 +40,9 @@ from .policy import effective_policy, validate_policy
 from .services import (
     discover,
     ingest_event,
+    metrics_summary,
     process_pending_events,
+    reclaimed_bytes_total,
     resolved_policy,
     set_setting,
     setting,
@@ -101,16 +103,7 @@ def _status():
         outage = setting("demo_outage")
         if outage in integrations:
             integrations[outage] = "unhealthy (simulated)"
-    reclaimed = (
-        db.session.query(func.sum(PurgeCandidate.reclaimable_bytes))
-        .join(LifecycleAction, LifecycleAction.candidate_id == PurgeCandidate.id)
-        .filter(
-            LifecycleAction.action_type == "delete_media",
-            LifecycleAction.state == "SUCCEEDED",
-        )
-        .scalar()
-        or 0
-    )
+    reclaimed = reclaimed_bytes_total()
     return {
         "app": "curatarr",
         "version": "0.1.0",
@@ -166,6 +159,11 @@ def health():
 @bp.get("/api/v1/status")
 def api_status():
     return jsonify(_status())
+
+
+@bp.get("/api/v1/metrics")
+def api_metrics():
+    return jsonify(metrics_summary())
 
 
 @bp.get("/api/v1/libraries")
@@ -287,6 +285,7 @@ def overview():
     return render_template(
         "overview.html",
         status=_status(),
+        metrics=metrics_summary(),
         library_reports=library_reports,
         actions=actions,
         errors=errors,

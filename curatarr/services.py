@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import time
 from datetime import UTC, datetime
 
 from flask import current_app
@@ -26,6 +27,7 @@ from .models import (
     WatchStateSnapshot,
     utcnow,
 )
+from .observability import increment, log_operation
 from .policy import (
     acquisition_seasons,
     effective_policy,
@@ -405,6 +407,12 @@ def normalize_event(payload):
     }
 
 
+def _duplicate(existing):
+    increment("duplicate_events_ignored")
+    log_operation("event_duplicate", "ignored", event_id=existing.id)
+    return existing, False
+
+
 def ingest_event(payload):
     normalized = normalize_event(payload)
     existing = (
@@ -413,7 +421,7 @@ def ingest_event(payload):
         .first()
     )
     if existing:
-        return existing, False
+        return _duplicate(existing)
     event = LifecycleEvent(
         external_event_id=normalized["event_id"],
         source="jellyfin",
@@ -437,7 +445,7 @@ def ingest_event(payload):
             .first()
         )
         if existing:
-            return existing, False
+            return _duplicate(existing)
         raise
     return event, True
 
@@ -686,8 +694,16 @@ def process_pending_events(limit=100):
         try:
             db.session.refresh(event)
             if event.processed_at is None:
+                started = time.monotonic()
                 with keep_alive(scope, owner, seconds=120) as lost:
                     process_event(event)
+                log_operation(
+                    f"event_{event.event_type}",
+                    "processed",
+                    event_id=event.id,
+                    media_identity_id=event.media_identity_id,
+                    duration_ms=round((time.monotonic() - started) * 1000),
+                )
                 if lost.is_set():
                     raise RuntimeError("Event processing lost its database lease")
                 processed += 1
@@ -864,3 +880,59 @@ def queue_watch_restoration():
             queued += 1
     db.session.commit()
     return queued
+
+
+def reclaimed_bytes_total():
+    return (
+        db.session.query(func.sum(PurgeCandidate.reclaimable_bytes))
+        .join(LifecycleAction, LifecycleAction.candidate_id == PurgeCandidate.id)
+        .filter(
+            LifecycleAction.action_type == "delete_media",
+            LifecycleAction.state == "SUCCEEDED",
+        )
+        .scalar()
+        or 0
+    )
+
+
+def metrics_summary():
+    """Section 94 operational metrics from durable rows and counters."""
+    from .observability import counter_values
+
+    counters = counter_values()
+    pending_states = ["PENDING", "FAILED_RETRYABLE", "RUNNING"]
+    oldest = (
+        db.session.query(func.min(LifecycleAction.created_at))
+        .filter(LifecycleAction.state.in_(pending_states))
+        .scalar()
+    )
+    count = db.session.query(func.count(PurgeCandidate.id))
+    proposed = (
+        db.session.query(func.sum(PurgeCandidate.reclaimable_bytes))
+        .filter(PurgeCandidate.state.in_(ACTIVE_CANDIDATE_STATES))
+        .scalar()
+    )
+    prefix = "external_api_failures."
+    return {
+        "events_processed": db.session.query(func.count(LifecycleEvent.id))
+        .filter(LifecycleEvent.processed_at.isnot(None))
+        .scalar(),
+        "duplicate_events_ignored": counters["duplicate_events_ignored"],
+        "acquisition_actions": db.session.query(func.count(LifecycleAction.id))
+        .filter_by(action_type="sonarr_season_search")
+        .scalar(),
+        "purge_candidates_created": count.scalar(),
+        "rescues": count.filter(PurgeCandidate.state == "RESCUED").scalar(),
+        "bytes_proposed": proposed or 0,
+        "bytes_reclaimed": reclaimed_bytes_total(),
+        "external_api_failures": {
+            kind: counters[prefix + kind] for kind in ("jellyfin", "sonarr", "radarr")
+        },
+        "last_reconcile_duration_ms": setting("last_reconcile_duration_ms"),
+        "pending_actions": db.session.query(func.count(LifecycleAction.id))
+        .filter(LifecycleAction.state.in_(pending_states))
+        .scalar(),
+        "oldest_pending_action_age_seconds": (
+            round((utcnow() - _as_datetime(oldest)).total_seconds()) if oldest else None
+        ),
+    }
