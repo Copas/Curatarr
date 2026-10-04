@@ -68,6 +68,11 @@ class Library(db.Model, Timed):
     last_scanned_at = db.Column(db.DateTime(timezone=True))
     policy = db.relationship("LibraryPolicy", backref="library", uselist=False)
 
+    @property
+    def managed(self):
+        """Only TV and movie libraries map to Sonarr/Radarr; others are not managed."""
+        return self.media_type in {"tv", "movies"}
+
 
 class LibraryPolicy(db.Model, Timed):
     __tablename__ = "library_policies"

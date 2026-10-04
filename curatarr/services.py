@@ -1548,7 +1548,9 @@ def reconciliation_state():
         "titles": db.session.query(func.count(MediaIdentity.id))
         .filter(MediaIdentity.missing_since.is_(None))
         .scalar(),
-        "libraries": db.session.query(func.count(Library.id)).scalar(),
+        "libraries": db.session.query(func.count(Library.id))
+        .filter(Library.media_type.in_(["tv", "movies"]))
+        .scalar(),
     }
 
 
@@ -1576,6 +1578,8 @@ def dry_run_by_library():
     global_values = setting("global_policy", {})
     split = {"dry_run": [], "deleting": []}
     for library in db.session.query(Library).order_by(Library.name):
+        if not library.managed:
+            continue
         values = library.policy.policy_json if library.policy else {}
         policy, _ = effective_policy(
             "series" if library.media_type == "tv" else "movie", global_values, values

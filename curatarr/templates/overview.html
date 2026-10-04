@@ -35,6 +35,7 @@
     <a href="{{ url_for('main.library_policy', library_id=report.library.id) }}">Policy and effective values</a></div></div>
 {% else %}<p>No libraries discovered yet. Add integrations in Settings, then discover.</p>{% endfor %}
 </div>
+{% if unmanaged_libraries %}<p class="text-secondary small" id="unmanaged-libraries">Not managed: {{ unmanaged_libraries|join(', ') }}. Curatarr only tracks Jellyfin TV and movie libraries, which Sonarr and Radarr manage; other library types are left untouched and their size is not counted.</p>{% endif %}
 <h2 class="h4">Scheduled deletions</h2>
 <div class="table-responsive mb-4"><table class="table"><thead><tr><th>Date</th><th>Title</th><th>State</th><th>Size</th><th>Reason</th></tr></thead><tbody>
 {% for candidate in scheduled %}<tr><td>{{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') }}</td><td><a href="{{ url_for('main.title', media_id=candidate.media_identity_id) }}">{{ media_titles.get(candidate.media_identity_id, 'Unknown title') }}</a></td><td>{{ candidate.state.replace('_',' ')|title }}</td><td>{{ candidate.reclaimable_bytes|size }}</td><td>{{ candidate.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No deletions are scheduled.</td></tr>{% endfor %}

@@ -372,7 +372,9 @@ def api_history():
 
 @bp.get("/")
 def overview():
-    libraries = db.session.query(Library).all()
+    every_library = db.session.query(Library).order_by(Library.name).all()
+    libraries = [library for library in every_library if library.managed]
+    unmanaged = [library.name for library in every_library if not library.managed]
     library_reports = []
     for library in libraries:
         media_type = "series" if library.media_type == "tv" else "movie"
@@ -454,6 +456,7 @@ def overview():
         cleanup=cleanup,
         setup_incomplete=setup_incomplete,
         library_reports=library_reports,
+        unmanaged_libraries=unmanaged,
         actions=actions,
         errors=errors,
         acquisitions=acquisitions,
@@ -747,7 +750,11 @@ def _policy_page(section, title, keys, library):
         section=section,
         heading=title,
         library=library,
-        libraries=db.session.query(Library).order_by(Library.name).all(),
+        libraries=[
+            row
+            for row in db.session.query(Library).order_by(Library.name)
+            if row.managed
+        ],
         fields=[(key, *POLICY_FIELDS[key]) for key in keys],
         stored=stored,
         effective=effective,
