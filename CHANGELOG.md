@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Acquisition ignores episodes that exist only in Jellyfin. Split or differently numbered episodes Sonarr does not track looked missing and triggered season searches that re-downloaded seasons already present (seen live with Tires S2).
 - Acquisition actions record which episodes were actually switched to monitored (`newly_monitored`). Episodes Sonarr already monitored are no longer implied as changes.
 - Overview shows a live reconciliation banner (queued, running with elapsed time, failed with the reason, interrupted, or last finished with counts) and refreshes itself while work is queued or running. Health reports the worker as busy during a long reconciliation instead of offline.
 - Discover and Reconcile now queue work for the background worker instead of running inside the web request. A real library's discovery (about 45 seconds) exceeded the web worker's 30-second timeout and returned Internal Server Error. Overview shows reconciliation state and the last finish time.
