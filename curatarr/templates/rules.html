@@ -36,5 +36,6 @@
   </label>{% if library %}<div class="form-text">Currently in effect: {{ shown(effective.get(key), kind) }} ({{ source_name(sources.get(key, 'default')) }})</div>{% endif %}</div>
 {% endfor %}
 </div><button class="btn btn-primary mt-3">Save</button></form>
+{% if section == 'retention' %}<p class="mt-3"><a href="{{ url_for('main.cleanup_preview') }}">Preview what free-space cleanup would pick</a> without changing anything.</p>{% endif %}
 {% if library and not section %}<p class="mt-3"><a href="{{ url_for('main.rules', section='acquisition', scope=library.id) }}">Acquisition rules</a> · <a href="{{ url_for('main.rules', section='retention', scope=library.id) }}">Retention rules</a></p>{% endif %}
 {% endblock %}

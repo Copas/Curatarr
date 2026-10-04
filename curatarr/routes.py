@@ -227,6 +227,7 @@ NAV_SECTIONS = {
     "main.settings": "settings",
     "main.setup": "settings",
     "main.library_policy": "retention",
+    "main.cleanup_preview": "retention",
 }
 
 
@@ -807,6 +808,35 @@ def _policy_page(section, title, keys, library):
         sources=sources,
         fallback=fallback,
         fallback_sources=fallback_sources,
+    )
+
+
+@bp.get("/cleanup-preview")
+def cleanup_preview():
+    from .lifecycle import preview_cleanup
+    from .policy import effective_policy as resolve
+
+    defaults, _ = resolve("series", setting("global_policy", {}), {})
+    disk_path = request.args.get("path", defaults["disk_path"] or "").strip()
+    raw = request.args.get("free", "").strip()
+    result, error, free = None, None, None
+    if raw:
+        try:
+            free = float(raw)
+            if not 0 <= free <= 100:
+                raise ValueError
+        except ValueError:
+            error = "Enter a free-space percentage between 0 and 100."
+        else:
+            result = preview_cleanup(free, disk_path or None)
+    return render_template(
+        "cleanup_preview.html",
+        free=free if free is not None else max(defaults["low_free_percent"] - 1, 0),
+        disk_path=disk_path,
+        low=defaults["low_free_percent"],
+        critical=defaults["critical_free_percent"],
+        result=result,
+        error=error,
     )
 
 

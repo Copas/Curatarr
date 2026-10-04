@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Cleanup preview</h1>
+<p class="text-secondary">See what free-space cleanup would pick if free space dropped to a given level, using the same rules, rankings, and live download queue the worker uses. Nothing is marked, badged, or deleted. Libraries without free-space enforcement are previewed as if it were on, using the disk path below. Thresholds now: clean up below {{ low }}% free, no notice below {{ critical }}%.</p>
+<form method="get" class="card p-3 mb-4"><div class="row g-3 align-items-end">
+  <div class="col-md-3"><label class="form-label w-100">Pretend free space is (%)<input class="form-control" type="number" step="any" min="0" max="100" name="free" value="{{ free }}"></label></div>
+  <div class="col-md-6"><label class="form-label w-100">Disk path (as Sonarr/Radarr see it)<input class="form-control" type="text" name="path" value="{{ disk_path }}" placeholder="/mnt/media"></label></div>
+  <div class="col-md-3"><button class="btn btn-primary w-100">Preview</button></div>
+</div></form>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+{% if result %}
+  {% if result.unmeasured %}<div class="alert alert-warning">Could not measure the disk for: {{ result.unmeasured|join(', ') }}. Enter a disk path that Curatarr can see, or one Sonarr/Radarr report.</div>{% endif %}
+  {% for disk in result.disks %}
+  <div class="card p-3 mb-4">
+    <h2 class="h5">{{ disk.libraries|join(', ') }}</h2>
+    <p class="mb-2">Disk: {{ disk.total|size }} · actually free {{ disk.actual_free|size }} ({{ '%.1f'|format(disk.actual_free / disk.total * 100) }}%) · pretending {{ disk.free|size }} free ({{ '%.1f'|format(disk.free / disk.total * 100) }}%, {{ disk.level }}).<br>
+    Needs {{ disk.needed|size }} freed to get back to the threshold. {{ disk.eligible }} titles are eligible; {{ disk.picks|length }} would be picked{% if disk.level == 'critical' %} and removed without a notice period{% else %} and marked Leaving Soon{% endif %}.</p>
+    {% if disk.deficit %}<div class="alert alert-warning">Even every eligible title is {{ disk.deficit|size }} short of the threshold.</div>{% endif %}
+    <div class="table-responsive"><table class="table"><thead><tr><th>#</th><th>Title</th><th>Library</th><th>Frees</th><th>Running total</th><th>Last watched</th><th>Added</th><th>Favorite</th></tr></thead><tbody>
+    {% for row in disk.picks %}<tr><td>{{ loop.index }}</td><td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a></td><td>{{ row.library }}</td><td>{{ row.size|size }}</td><td>{{ row.running|size }}</td><td>{{ row.last_activity.strftime('%Y-%m-%d') if row.last_activity else 'Never' }}</td><td>{{ row.added.strftime('%Y-%m-%d') if row.added else '—' }}</td><td>{{ 'Yes' if row.favorite else 'No' }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  {% else %}
+  {% if not result.unmeasured %}<div class="alert alert-success">At {{ free }}% free, every disk is at or above its low threshold, so nothing would be picked.</div>{% endif %}
+  {% endfor %}
+{% endif %}
+{% endblock %}
