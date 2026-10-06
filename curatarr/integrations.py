@@ -250,6 +250,24 @@ class SonarrClient(Client):
         self.request("PUT", f"/api/v3/episode/{episode_id}", json=episode)
         return True
 
+    def monitor_season(self, series_id, season_number):
+        """Monitor a whole season; returns True only if it was unmonitored before.
+
+        Sonarr monitors an episode it learns about later (a newly announced one)
+        only when its season is monitored, so monitoring the episodes alone misses
+        them. Sonarr also monitors the season's existing episodes when the season
+        flag changes.
+        """
+        series = self.request("GET", f"/api/v3/series/{series_id}")
+        for season in series.get("seasons", []):
+            if season.get("seasonNumber") == season_number:
+                if season.get("monitored"):
+                    return False
+                season["monitored"] = True
+                self.request("PUT", f"/api/v3/series/{series_id}", json=series)
+                return True
+        return False
+
     def season_search(self, series_id, season_number):
         return self.request(
             "POST",

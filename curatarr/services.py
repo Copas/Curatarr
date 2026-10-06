@@ -758,6 +758,10 @@ def _request_season(
             "episode_ids": episode_ids,
             "search_now": search_now,
             "current_season": current_season,
+            # A whole-season request also monitors the season itself, so episodes
+            # announced later are monitored too. A partial fill (episode_filter,
+            # e.g. the first episodes of Season 1) leaves the season alone.
+            "whole_season": episode_filter is None,
         },
         state="PENDING",
         event_id=event.id if event else None,

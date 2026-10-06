@@ -1,7 +1,12 @@
 import pytest
 import requests
 
-from curatarr.integrations import IntegrationError, RadarrClient, normalized_url
+from curatarr.integrations import (
+    IntegrationError,
+    RadarrClient,
+    SonarrClient,
+    normalized_url,
+)
 
 
 class FakeResponse:
@@ -82,3 +87,29 @@ def test_jellyfin_listings_never_collapse_collections():
     client.user_items("user", "library", 0, 100)
     for _args, kwargs in session.calls:
         assert kwargs["params"]["CollapseBoxSetItems"] == "false"
+
+
+def test_monitor_season_sets_only_that_season_and_reports_changes():
+    series = {
+        "id": 7,
+        "seasons": [
+            {"seasonNumber": 1, "monitored": False},
+            {"seasonNumber": 2, "monitored": False},
+        ],
+    }
+    calls = []
+
+    class SeriesSonarr(SonarrClient):
+        def request(self, method, path, **kwargs):
+            calls.append((method, path, kwargs.get("json")))
+            return series
+
+    sonarr = SeriesSonarr("http://sonarr.example.local:8989/", "dummy")
+    assert sonarr.monitor_season(7, 2) is True
+    method, path, body = calls[-1]
+    assert (method, path) == ("PUT", "/api/v3/series/7")
+    assert [s["monitored"] for s in body["seasons"]] == [False, True]
+    calls.clear()
+    assert sonarr.monitor_season(7, 2) is False  # already monitored: no PUT
+    assert [c[0] for c in calls] == ["GET"]
+    assert sonarr.monitor_season(7, 9) is False  # unknown season

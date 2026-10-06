@@ -1016,6 +1016,12 @@ def _execute_action(action_id):
             action.payload_json = action.payload_json | {
                 "newly_monitored": newly_monitored
             }
+            if action.payload_json.get("whole_season"):
+                action.payload_json = action.payload_json | {
+                    "season_monitored": arr.monitor_season(
+                        action.payload_json["sonarr_id"], action.payload_json["season"]
+                    )
+                }
             if action.payload_json.get("search_now"):
                 queue = arr.queue()
                 records = queue.get("records", []) if isinstance(queue, dict) else queue

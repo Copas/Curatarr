@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- When Curatarr requests a whole season (the rest of the season being watched, or the next season), it now also monitors that season in Sonarr. Sonarr monitors an episode it learns about later only when the season is monitored, so episodes announced after the request (common for a season still airing) were added unmonitored and never downloaded. Partial requests, such as the first episodes of Season 1, still leave the season alone.
+
 - Discovery and watch-history reconciliation no longer miss movies that belong to a Jellyfin collection. Jellyfin collapsed collection members into the collection in library listings, which hid 849 of 979 movies in the owner's Movies library (and 92 of 199 Classic Movies) from tracking, sizes, and cleanup.
 - Reloading Settings after generating a webhook token no longer replaces the token.
 
