@@ -224,6 +224,9 @@ class SonarrClient(Client):
     def series(self):
         return self.request("GET", "/api/v3/series")
 
+    def tags(self):
+        return self.request("GET", "/api/v3/tag")
+
     def episodes(self, series_id):
         return self.request("GET", "/api/v3/episode", params={"seriesId": series_id})
 
