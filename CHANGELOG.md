@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A show whose latest season viewers have watched (by the acquisition threshold) gets its next season whenever Sonarr lists it, no matter how long ago that viewing was; before, the next season was only requested within the recent-viewing window (90 days by default), so a season premiering a year later was missed. A show not continued although the next season was already out is still treated as abandoned.
+- While viewers are on a season that is still airing (its latest episode aired in the last 30 days), Curatarr makes sure Sonarr monitors that season even if every episode so far is downloaded, so new episodes download when they air. Queued once per season.
+
 - Withdrew the `curatarr-pilot` Sonarr tag rule added earlier the same day: shows added by a list get Curatarr's configured always-keep fill like any other show. Migration `a1e5d9c3b7f2` drops the `arr_tags` column again (`db upgrade`).
 
 - When Curatarr requests a whole season (the rest of the season being watched, or the next season), it now also monitors that season in Sonarr. Sonarr monitors an episode it learns about later only when the season is monitored, so episodes announced after the request (common for a season still airing) were added unmonitored and never downloaded. Partial requests, such as the first episodes of Season 1, still leave the season alone.
