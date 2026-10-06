@@ -86,6 +86,8 @@ def test_missing_always_keep_episodes_are_requested(app):
     # First 3 episodes of Season 1 only: not E4/E5 (present) or Season 2.
     assert action.payload_json["episode_ids"] == [1001, 1002, 1003]
     assert action.payload_json["search_now"] is True
+    # A partial fill must not monitor the whole season in Sonarr.
+    assert action.payload_json["whole_season"] is False
     assert reconcile_acquisition() == 0  # never queued twice
 
 
@@ -112,6 +114,8 @@ def test_next_season_is_caught_up_for_shows_being_watched(app):
     reconcile_acquisition()
     seasons = sorted(a.payload_json["season"] for a in _requests(media))
     assert seasons == [2]
+    # A whole next season also monitors the season, so later episodes are caught.
+    assert all(a.payload_json["whole_season"] for a in _requests(media))
 
 
 def test_abandoned_shows_do_not_get_new_seasons(app):
@@ -204,8 +208,13 @@ def test_catch_up_and_always_keep_messages(app):
 class _SonarrRecorder:
     def __init__(self):
         self.searches = []
+        self.seasons = []
 
     def monitor_episode(self, _episode_id):
+        return True
+
+    def monitor_season(self, series_id, season):
+        self.seasons.append((series_id, season))
         return True
 
     def queue(self):

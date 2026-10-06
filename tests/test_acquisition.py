@@ -76,9 +76,15 @@ def test_completion_fills_current_and_next_only(app, monkeypatch):
             == 2
         )
 
+        monitored_seasons = []
+
         class FakeSonarr:
             def monitor_episode(self, _episode_id):
                 return None
+
+            def monitor_season(self, series_id, season):
+                monitored_seasons.append((series_id, season))
+                return True
 
             def season_search(self, _series_id, _season):
                 return None
@@ -94,6 +100,8 @@ def test_completion_fills_current_and_next_only(app, monkeypatch):
 
         assert run_actions() == 2
         assert db.session.query(AcquisitionState).one().state == "ACTIVE"
+        # Both requests cover whole seasons (the rest of Season 1, then Season 2).
+        assert sorted(monitored_seasons) == [(21, 1), (21, 2)]
 
 
 def test_two_users_same_episode_count_once(app):
@@ -384,3 +392,70 @@ def test_jellyfin_only_episodes_do_not_trigger_a_search(app):
             .count()
             == 0
         )
+
+
+def _season_action(payload):
+    library = Library(jellyfin_library_id="tv-season", name="TV", media_type="tv")
+    db.session.add(library)
+    db.session.flush()
+    media = MediaIdentity(
+        library_id=library.id,
+        media_type="series",
+        title="Airing Series",
+        jellyfin_id="show-airing",
+        tvdb_id=654,
+        sonarr_id=41,
+    )
+    db.session.add(media)
+    db.session.flush()
+    action = LifecycleAction(
+        idempotency_key=f"season-monitor-{payload['whole_season']}",
+        action_type="sonarr_season_search",
+        state="PENDING",
+        media_identity_id=media.id,
+        reason_text="Season 3 requested.",
+        payload_json={
+            "sonarr_id": 41,
+            "season": 3,
+            "episode_ids": [31],
+            "search_now": False,
+            "current_season": 2,
+        }
+        | payload,
+    )
+    db.session.add(action)
+    db.session.commit()
+    return action
+
+
+class _SeasonSonarr:
+    def __init__(self):
+        self.seasons = []
+
+    def monitor_episode(self, _episode_id):
+        return True
+
+    def monitor_season(self, series_id, season):
+        self.seasons.append((series_id, season))
+        return True
+
+
+def test_whole_season_request_monitors_the_season(app, monkeypatch):
+    """Sonarr only monitors a later-announced episode when its season is monitored."""
+    with app.app_context():
+        action = _season_action({"whole_season": True})
+        sonarr = _SeasonSonarr()
+        monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: sonarr)
+        assert execute_action(action.id) == "succeeded"
+        assert sonarr.seasons == [(41, 3)]
+        assert action.payload_json["season_monitored"] is True
+
+
+def test_partial_request_leaves_the_season_unmonitored(app, monkeypatch):
+    with app.app_context():
+        action = _season_action({"whole_season": False})
+        sonarr = _SeasonSonarr()
+        monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: sonarr)
+        assert execute_action(action.id) == "succeeded"
+        assert sonarr.seasons == []
+        assert "season_monitored" not in action.payload_json
