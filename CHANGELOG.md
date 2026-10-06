@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Shows tagged `curatarr-pilot` in Sonarr skip the always-keep fill until someone has watched an episode, so an import list that adds new shows to try out (pilot only) does not fill each one to the Season 1 minimum. Curatarr now records each show's Sonarr tag labels during discovery. Requires `db upgrade` (migration `f3b8c2d51a47` adds `arr_tags`).
+- Withdrew the `curatarr-pilot` Sonarr tag rule added earlier the same day: shows added by a list get Curatarr's configured always-keep fill like any other show. Migration `a1e5d9c3b7f2` drops the `arr_tags` column again (`db upgrade`).
 
 - When Curatarr requests a whole season (the rest of the season being watched, or the next season), it now also monitors that season in Sonarr. Sonarr monitors an episode it learns about later only when the season is monitored, so episodes announced after the request (common for a season still airing) were added unmonitored and never downloaded. Partial requests, such as the first episodes of Season 1, still leave the season alone.
 
