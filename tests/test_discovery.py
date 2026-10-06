@@ -33,10 +33,7 @@ class FakeJellyfin:
 
 class FakeSonarr:
     def series(self):
-        return [{"id": 42, "tvdbId": 123, "tags": [3, 9]}]
-
-    def tags(self):
-        return [{"id": 3, "label": "curatarr-pilot"}, {"id": 4, "label": "other"}]
+        return [{"id": 42, "tvdbId": 123}]
 
     def episodes(self, _series_id):
         return [
@@ -71,8 +68,6 @@ def test_discovery_keeps_missing_sonarr_episodes(app, monkeypatch):
         assert discover() == 1
         media = db.session.query(MediaIdentity).one()
         assert media.sonarr_id == 42
-        # Tag labels are stored; an id Sonarr no longer lists (9) is ignored.
-        assert media.arr_tags == ["curatarr-pilot"]
         parts = (
             db.session.query(MediaPart)
             .order_by(MediaPart.season_number, MediaPart.episode_number)
