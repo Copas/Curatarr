@@ -274,3 +274,42 @@ def test_title_page_keep_rescues_and_returns_to_the_title(app, client):
     assert response.headers["Location"].endswith(f"/titles/{media.id}")
     db.session.refresh(candidate)
     assert candidate.state == "RESCUED"
+
+
+def test_watched_latest_season_gets_the_next_one_whenever_it_appears(app):
+    """Watched (one episode, the default threshold) the latest season; the next one
+    premiered later. No 90-day limit."""
+    premiere = utcnow() - timedelta(days=10)
+    media, parts = _show(
+        "Waited For",
+        [(1, 1, True), (1, 2, True), (2, 1, False, premiere), (2, 2, False, None)],
+    )
+    _watched(parts[(1, 1)], days_ago=300)  # one episode, long before Season 2
+    reconcile_acquisition()
+    (action,) = [a for a in _requests(media) if a.payload_json["season"] == 2]
+    assert action.payload_json["whole_season"] is True
+    assert action.payload_json["episode_ids"] == [2001, 2002]
+
+
+def test_airing_season_is_monitored_even_when_nothing_is_missing(app):
+    recent = utcnow() - timedelta(days=5)
+    media, parts = _show(
+        "Weekly Show",
+        [(1, 1, True), (2, 1, True, recent - timedelta(days=7)), (2, 2, True, recent)],
+    )
+    _watched(parts[(2, 2)])
+    assert reconcile_acquisition() == 1
+    (action,) = _requests(media)
+    assert action.payload_json["season"] == 2
+    assert action.payload_json["episode_ids"] == []
+    assert action.payload_json["whole_season"] is True
+    assert action.payload_json["search_now"] is False
+    assert "still airing" in action.reason_text
+    assert reconcile_acquisition() == 0  # queued once per season
+
+
+def test_finished_old_season_is_not_monitored_again(app):
+    media, parts = _show("Ended Show", [(1, 1, True), (1, 2, True)])
+    _watched(parts[(1, 2)])
+    assert reconcile_acquisition() == 0
+    assert _requests(media) == []
