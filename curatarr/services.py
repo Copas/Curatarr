@@ -253,6 +253,7 @@ def discover():
     sonarr_series = sonarr.series()
     radarr_movies = radarr.movies()
     series_by_tvdb = {str(s.get("tvdbId")): s for s in sonarr_series if s.get("tvdbId")}
+    tag_labels = {tag["id"]: tag.get("label") for tag in sonarr.tags()}
     movies_by_tmdb = {str(m.get("tmdbId")): m for m in radarr_movies if m.get("tmdbId")}
     seen = set()
     for source in libraries:
@@ -292,6 +293,11 @@ def discover():
                         media.sonarr_id = match["id"]
                         media.arr_monitored = match.get("monitored")
                         media.series_type = match.get("seriesType")
+                        media.arr_tags = sorted(
+                            tag_labels[tag_id]
+                            for tag_id in match.get("tags") or []
+                            if tag_labels.get(tag_id)
+                        )
                         episode_files = {
                             entry["id"]: entry
                             for entry in sonarr.episode_files(media.sonarr_id)
@@ -1600,6 +1606,8 @@ def dry_run_by_library():
 # New searches started per reconciliation; the rest follow in later runs, so a
 # first sync of a large library cannot flood the indexers or the downloader.
 ACQUISITION_SEARCHES_PER_RUN = 5
+# Sonarr tag for shows added to try out: only the pilot until someone watches.
+PILOT_TAG = "curatarr-pilot"
 
 
 def _plan_show(media, request, now, *, require_recent=True):
@@ -1609,7 +1617,7 @@ def _plan_show(media, request, now, *, require_recent=True):
     from .policy import retained
 
     policy, _ = resolved_policy(media)
-    if policy["fill_minimum_footprint"]:
+    if policy["fill_minimum_footprint"] and not _pilot_only(media):
         # "Entire series" means never trim, not download everything, so the
         # fill covers at most Season 1.
         request(
@@ -1665,6 +1673,25 @@ def _plan_show(media, request, now, *, require_recent=True):
     )
     for target in acquisition_seasons(media.parts, season, policy):
         request(media, target, cause, current_season=season)
+
+
+def _pilot_only(media):
+    """A show Sonarr tagged PILOT_TAG keeps only what Sonarr monitors (usually the
+    pilot) until someone watches an episode; then the usual rules apply. Lists
+    that add shows to try out use the tag, so untried shows don't each fill to
+    the always-keep minimum."""
+    if PILOT_TAG not in (media.arr_tags or []):
+        return False
+    watched = (
+        db.session.query(EpisodeUserState.id)
+        .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
+        .filter(
+            MediaPart.media_identity_id == media.id,
+            EpisodeUserState.played.is_(True),
+        )
+        .first()
+    )
+    return watched is None
 
 
 def _skip_reason(media):
