@@ -91,6 +91,28 @@ def test_missing_always_keep_episodes_are_requested(app):
     assert reconcile_acquisition() == 0  # never queued twice
 
 
+def test_pilot_tagged_shows_wait_for_a_viewer_before_the_fill(app):
+    """Shows added to try out keep only the pilot until someone watches one."""
+    media, parts = _show(
+        "Trial Show", [(1, 1, True)] + [(1, e, False) for e in range(2, 6)]
+    )
+    media.arr_tags = ["curatarr-pilot"]
+    db.session.commit()
+    assert reconcile_acquisition() == 0
+    assert _requests(media) == []
+    _watched(parts[(1, 1)])
+    reconcile_acquisition()
+    (fill,) = [a for a in _requests(media) if not a.payload_json["whole_season"]]
+    assert fill.payload_json["episode_ids"] == [1002, 1003]  # up to the minimum (3)
+
+
+def test_other_tags_do_not_change_the_fill(app):
+    media, _ = _show("Tagged Show", [(1, 1, True), (1, 2, False)])
+    media.arr_tags = ["something-else"]
+    db.session.commit()
+    assert reconcile_acquisition() == 1
+
+
 def test_unmonitored_daily_and_opted_out_shows_are_left_alone(app):
     _show("Switched Off", [(1, 1, False)], monitored=False)
     _show("Talk Nightly", [(1, 1, False)], series_type="daily")
