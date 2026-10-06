@@ -721,6 +721,8 @@ def _request_season(
         and (episode_filter is None or episode_filter(p))
     ]
     if not missing:
+        if episode_filter is None and _season_airing(media, season):
+            return _monitor_airing_season(media, season, reason, event)
         return None
     # An episode without an air date is announced but not released; it is
     # monitored so Sonarr grabs it later, but searching now cannot find it.
@@ -762,6 +764,58 @@ def _request_season(
             # announced later are monitored too. A partial fill (episode_filter,
             # e.g. the first episodes of Season 1) leaves the season alone.
             "whole_season": episode_filter is None,
+        },
+        state="PENDING",
+        event_id=event.id if event else None,
+    )
+
+
+# A season counts as airing while it is the latest one Sonarr lists and one of
+# its episodes aired within this many days. (Unaired episodes Sonarr knows about
+# are requested as missing episodes, which monitors the season anyway.)
+AIRING_RECENT_DAYS = 30
+
+
+def _season_airing(media, season):
+    from datetime import timedelta
+
+    tracked = [
+        p
+        for p in media.parts
+        if p.kind == "episode"
+        and (p.season_number or 0) > 0
+        and p.sonarr_episode_id is not None
+    ]
+    if not tracked or season != max(p.season_number for p in tracked):
+        return False
+    cutoff = utcnow() - timedelta(days=AIRING_RECENT_DAYS)
+    return any(
+        p.air_date and _as_datetime(p.air_date) >= cutoff
+        for p in tracked
+        if p.season_number == season
+    )
+
+
+def _monitor_airing_season(media, season, reason, event=None):
+    """Make sure Sonarr monitors a season that is still airing even when every
+    episode it lists is already downloaded, so new episodes download as they
+    air. Queued once per season (an empty episode request with whole_season)."""
+    reason = (
+        f"{reason}, so Curatarr is making sure Sonarr monitors Season {season}, "
+        "which is still airing, so new episodes download when they come out."
+    )
+    return audit(
+        "sonarr_season_search",
+        media.id,
+        reason,
+        f"sonarr-season-monitor:{media.id}:{season}",
+        payload={
+            "sonarr_id": media.sonarr_id,
+            "season": season,
+            "episode_ids": [],
+            "search_now": False,
+            "current_season": season,
+            "whole_season": True,
         },
         state="PENDING",
         event_id=event.id if event else None,
@@ -1642,7 +1696,9 @@ def _plan_show(media, request, now, *, require_recent=True):
     recent = last_played and now - last_played <= timedelta(
         days=policy["tv_inactivity_days"]
     )
-    if count < policy["acquisition_threshold"] or (require_recent and not recent):
+    if count < policy["acquisition_threshold"] or (
+        require_recent and not recent and not _caught_up(media, season)
+    ):
         return
     latest = (
         db.session.query(EpisodeUserState.jellyfin_user_id, MediaPart.episode_number)
@@ -1665,6 +1721,42 @@ def _plan_show(media, request, now, *, require_recent=True):
     )
     for target in acquisition_seasons(media.parts, season, policy):
         request(media, target, cause, current_season=season)
+
+
+def _caught_up(media, season):
+    """Viewers watched the latest season available to them: `season` counts as
+    watched (the caller checks acquisition_threshold), and the next season came
+    out after the last time anyone played an episode of it. Such a show gets its
+    next season whenever it appears, with no recent-viewing limit. A show not
+    continued although the next season was already out is abandoned and keeps
+    the limit."""
+    watched_at = (
+        db.session.query(func.max(EpisodeUserState.last_played_at))
+        .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
+        .filter(
+            MediaPart.media_identity_id == media.id,
+            MediaPart.season_number == season,
+            EpisodeUserState.played.is_(True),
+        )
+        .scalar()
+    )
+    if watched_at is None:
+        return False
+    following = [
+        p
+        for p in media.parts
+        if p.kind == "episode" and (p.season_number or 0) > season
+    ]
+    if not following:
+        return False
+    next_season = min(p.season_number for p in following)
+    premieres = [
+        _as_datetime(p.air_date)
+        for p in following
+        if p.season_number == next_season and p.air_date
+    ]
+    # An undated next season has not premiered yet, so it comes after.
+    return not premieres or min(premieres) > _as_datetime(watched_at)
 
 
 def _skip_reason(media):
