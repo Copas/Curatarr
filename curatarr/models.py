@@ -102,7 +102,6 @@ class MediaIdentity(db.Model, Timed):
     # Sonarr/Radarr's own monitored flag; False means "download nothing".
     arr_monitored = db.Column(db.Boolean)
     series_type = db.Column(db.String(20))  # Sonarr: standard, daily, anime
-    arr_tags = db.Column(db.JSON)  # Sonarr tag labels, e.g. PILOT_TAG
     library = db.relationship("Library")
     override = db.relationship("TitleOverride", backref="media", uselist=False)
     parts = db.relationship("MediaPart", backref="media", cascade="all, delete-orphan")
