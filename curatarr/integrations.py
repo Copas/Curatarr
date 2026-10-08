@@ -175,7 +175,19 @@ class JellyfinClient(Client):
         return self.request("GET", "/Library/VirtualFolders")
 
     def item(self, item_id):
-        return self.request("GET", f"/Items/{item_id}")
+        """One item with its provider IDs and image tags.
+
+        Uses the item list filtered by id: since Jellyfin 12.2, GET /Items/{id}
+        with an API key and no user fails ("Guid can't be empty"), which blocked
+        every deletion check and artwork update.
+        """
+        data = self.request(
+            "GET", "/Items", params={"Ids": item_id, "Fields": "ProviderIds"}
+        )
+        items = data.get("Items") if isinstance(data, dict) else None
+        if not items:
+            raise IntegrationError("Jellyfin item not found")
+        return items[0]
 
     def items(self, parent_id=None, start=0, limit=100):
         params = {
