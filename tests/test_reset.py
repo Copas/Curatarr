@@ -297,3 +297,29 @@ def test_untouched_unmonitored_shows_are_still_left_alone(app):
         db.session.commit()
         _watched(parts[(1, 4)], days_ago=1)
         assert reconcile_acquisition() == 0
+
+
+def test_reset_button_queues_the_reset_for_the_worker(app, client, monkeypatch):
+    """The page must not run the deletions itself: a long show outlasted the web
+    server's request timeout and was cut off after one file."""
+    from curatarr.lifecycle import resume_approved
+    from curatarr.models import PurgeCandidate
+
+    with app.app_context():
+        media, _parts = _show()
+        sonarr = _clients(monkeypatch)
+        page = client.post(f"/titles/{media.id}/reset", follow_redirects=True).text
+        assert "started" in page
+        assert not [c for c in sonarr.calls if c[0] == "delete"]
+        candidate = (
+            db.session.query(PurgeCandidate).filter_by(media_identity_id=media.id).one()
+        )
+        assert candidate.state == "APPROVED"
+        resume_approved()  # what the worker runs every cycle
+        db.session.refresh(candidate)
+        assert candidate.state == "COMPLETED"
+        assert sorted(c[1] for c in sonarr.calls if c[0] == "delete") == [
+            1004,
+            2001,
+            2002,
+        ]
