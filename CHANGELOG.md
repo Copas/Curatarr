@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Works with Jellyfin 12.2: looking up one Jellyfin item now uses the item list (`/Items?Ids=`) because 12.2 rejects `GET /Items/{id}` from an API key with no user ("Guid can't be empty"). Before this fix every deletion check failed with "External integration cannot be verified", and poster badge updates could not read items.
+
 - Reset to minimum now works on any show, including ones Sonarr has unmonitored (for example by a nightly job that unmonitors ended, complete shows) and ones with an always-keep episode missing. A show Curatarr has reset or cleaned up is refilled when someone watches it even if Sonarr has it unmonitored: the request monitors the series in Sonarr first, since Sonarr ignores unmonitored series. Other unmonitored shows are still left alone. The reset button on the title page is now a clearly separate red button.
 
 - Title pages for TV shows have "Reset to minimum": trims the show to its always-keep episodes as if nobody had watched it. It runs through the normal approved-deletion path with every check except the grace period and recent viewing, then unmonitors all seasons in Sonarr (keeping the always-keep episodes monitored) and records the reset so earlier viewing no longer requests seasons. Watching again after a reset works as usual. Dry run is respected. Requires `db upgrade` (migration `d2f6a8c41e93` adds `viewing_reset_at`).
