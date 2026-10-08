@@ -22,7 +22,7 @@ from sqlalchemy import func
 from . import db
 from .auth import SignInError, current_user, needs_server_url, sign_in, sign_out
 from .integrations import CLIENTS, IntegrationError
-from .lifecycle import evaluate_retention, execute_approved, review_candidate
+from .lifecycle import evaluate_retention, review_candidate
 from .models import (
     Library,
     LifecycleAction,
@@ -518,8 +518,13 @@ def review_action(candidate_id, choice):
     try:
         candidate = review_candidate(candidate_id, choice)
         if choice == "delete":
-            result = execute_approved(candidate.id)
-            flash(f"Deletion result: {result}", "info")
+            # Approved; the worker deletes it within a minute (resume_approved),
+            # so a large show is not cut off by the web request timeout.
+            flash(
+                "Deletion approved. Curatarr's worker carries it out in the "
+                "background, usually within a minute; History shows the outcome.",
+                "info",
+            )
         else:
             flash("Review decision saved", "success")
         from .artwork import reconcile_artwork
@@ -542,11 +547,19 @@ def title_reset(media_id):
     if not media:
         abort(404)
     try:
-        candidate, result = reset_series(media)
+        candidate, result = reset_series(media, run=False)
     except ValueError as exc:
         flash(str(exc), "danger")
         return redirect(url_for("main.title", media_id=media.id))
-    if result == "succeeded":
+    if result == "queued":
+        flash(
+            f"Reset of {media.title} started. Curatarr's worker does it in the "
+            "background, usually within a minute; a long show can take a few "
+            "minutes. The outcome appears under Lifecycle decisions and Recent "
+            "history on this page.",
+            "info",
+        )
+    elif result == "succeeded":
         flash(
             f"{media.title} was reset to its always-keep episodes. Curatarr fetches "
             "more once someone watches it again.",

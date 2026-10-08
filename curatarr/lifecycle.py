@@ -866,7 +866,7 @@ def _tv_file_targets(media, policy, arr):
 MANUAL_RESET = "manual_reset"
 
 
-def reset_series(media):
+def reset_series(media, *, run=True):
     """Title page "Reset to minimum": trim a show back to its always-keep
     episodes as if nobody had watched it.
 
@@ -910,6 +910,10 @@ def reset_series(media):
         candidate_id=candidate.id,
     )
     db.session.commit()
+    if not run:
+        # The worker picks up approved candidates every cycle (resume_approved),
+        # so a long show is not cut off by the web server's request timeout.
+        return candidate, "queued"
     return candidate, execute_approved(candidate.id)
 
 
