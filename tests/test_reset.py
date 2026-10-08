@@ -207,3 +207,93 @@ def test_title_page_offers_the_reset(app, client):
         assert "Reset to minimum" in page
         assert "3 episode files" in page
         assert "dry run" in page
+
+
+def test_reset_works_on_an_unmonitored_show_missing_an_always_keep_episode(
+    app, monkeypatch
+):
+    with app.app_context():
+        media, parts = _show()
+        media.arr_monitored = False  # e.g. the nightly "unmonitor ended shows" job
+        parts[(1, 2)].has_file = False  # an always-keep episode is missing
+        db.session.commit()
+        sonarr = _clients(monkeypatch)
+        sonarr.episode_files = lambda _series_id: [
+            {"id": s * 1000 + e, "size": 100}
+            for s, e in [(1, 1), (1, 3), (1, 4), (2, 1), (2, 2)]
+        ]
+        sonarr.episodes = lambda _series_id: [
+            {
+                "id": s * 100 + e,
+                "hasFile": (s, e) != (1, 2),
+                "episodeFileId": s * 1000 + e if (s, e) != (1, 2) else 0,
+            }
+            for s, e in [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2)]
+        ]
+        _candidate, result = reset_series(media)
+        assert result == "succeeded"
+        assert sorted(c[1] for c in sonarr.calls if c[0] == "delete") == [
+            1004,
+            2001,
+            2002,
+        ]
+
+
+def test_a_reset_unmonitored_show_is_refilled_and_remonitored_when_watched(
+    app, monkeypatch
+):
+    from curatarr.lifecycle import execute_action
+
+    with app.app_context():
+        media, parts = _show()
+        media.arr_monitored = False
+        db.session.commit()
+        _clients(monkeypatch)
+        reset_series(media)
+        for key in [(1, 4), (2, 1), (2, 2)]:
+            assert not parts[key].has_file
+        db.session.query(LifecycleAction).filter_by(
+            action_type="sonarr_season_search"
+        ).delete()
+        db.session.commit()
+        _watched(parts[(1, 3)], days_ago=0)  # watched after the reset
+        assert reconcile_acquisition() >= 1
+        action = (
+            db.session.query(LifecycleAction)
+            .filter_by(action_type="sonarr_season_search")
+            .first()
+        )
+        assert action.payload_json["monitor_series"] is True
+
+        class RefillSonarr(FakeSonarr):
+            def monitor_series(self, series_id):
+                self.calls.append(("monitor_series", series_id))
+                return True
+
+            def monitor_episode(self, _episode_id):
+                return True
+
+            def monitor_season(self, _series_id, _season):
+                return True
+
+            def commands(self):
+                return []
+
+            def season_search(self, series_id, season):
+                self.calls.append(("search", series_id, season))
+
+        refill = RefillSonarr()
+        monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: refill)
+        assert execute_action(action.id) == "succeeded"
+        assert ("monitor_series", 77) in refill.calls
+        assert media.arr_monitored is True
+
+
+def test_untouched_unmonitored_shows_are_still_left_alone(app):
+    with app.app_context():
+        media, parts = _show()
+        media.arr_monitored = False
+        parts[(2, 1)].has_file = False
+        db.session.commit()
+        _watched(parts[(1, 4)], days_ago=1)
+        assert reconcile_acquisition() == 0
