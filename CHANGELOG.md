@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Title page actions are grouped in an Actions panel, one row per action with its description beside the button, instead of help text trailing after the button. Reset to minimum opens a confirmation page that lists what is deleted and kept, with Cancel and a red confirm button.
+
 - Reset to minimum and the Review queue's Delete no longer run the deletions inside the web request: they approve the cleanup and the worker carries it out within a cycle (about 15 seconds). A long show (six seasons of I Love Lucy) outlasted gunicorn's 30-second request timeout, the page showed Internal Server Error, and the reset stopped after one file. An interrupted deletion is still reconciled against Sonarr and marked blocked rather than repeated.
 
 - Works with Jellyfin 12.2: looking up one Jellyfin item now uses the item list (`/Items?Ids=`) because 12.2 rejects `GET /Items/{id}` from an API key with no user ("Guid can't be empty"). Before this fix every deletion check failed with "External integration cannot be verified", and poster badge updates could not read items.
