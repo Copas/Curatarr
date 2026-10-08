@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<p class="mb-2"><a class="link-secondary" href="{{ url_for('main.title', media_id=media.id) }}">&larr; {{ media.title }}</a></p>
+<h1 class="h3">Reset {{ media.title }} to minimum?</h1>
+<p class="text-secondary">Trims the show back to its always-keep episodes, as if nobody had watched it.</p>
+<div class="card p-3 mb-3">
+  <dl class="row mb-0">
+    <dt class="col-sm-4">Deleted through Sonarr</dt><dd class="col-sm-8">{{ reset_files }} episode file{{ '' if reset_files == 1 else 's' }} ({{ reset_bytes|size }})</dd>
+    <dt class="col-sm-4">Kept</dt><dd class="col-sm-8">{{ reset_kept }} episode file{{ '' if reset_kept == 1 else 's' }}: {{ values.minimum_mode|choice_label }}{% if values.minimum_mode == 'first_n_episodes' %} ({{ values.minimum_episodes }}){% endif %}</dd>
+    <dt class="col-sm-4">Afterwards</dt><dd class="col-sm-8">Sonarr stops downloading this show. Curatarr fetches more once someone watches it again.</dd>
+  </dl>
+</div>
+<p class="text-secondary small">The usual safety checks still apply: nothing for the show may be downloading, Never Purge must be off, the show is checked against Sonarr and Jellyfin, and the reset stops if someone starts playing it. Curatarr's worker does the reset in the background, usually within a minute.</p>
+{% if values.dry_run %}<div class="alert alert-info">This library is in <strong>dry run</strong>: Curatarr records what it would delete, but nothing is actually deleted.</div>{% endif %}
+<form method="post" action="{{ url_for('main.title_reset', media_id=media.id) }}" class="d-flex gap-2"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <a class="btn btn-outline-secondary" href="{{ url_for('main.title', media_id=media.id) }}">Cancel</a>
+  <button class="btn btn-danger">Reset to minimum</button>
+</form>
+{% endblock %}

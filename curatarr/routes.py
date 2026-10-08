@@ -539,13 +539,15 @@ def review_action(candidate_id, choice):
     return redirect(url_for("main.review"))
 
 
-@bp.post("/titles/<media_id>/reset")
+@bp.route("/titles/<media_id>/reset", methods=["GET", "POST"])
 def title_reset(media_id):
     from .lifecycle import reset_series
 
     media = db.session.get(MediaIdentity, media_id)
-    if not media:
+    if not media or media.media_type != "series":
         abort(404)
+    if request.method == "GET":
+        return render_template("reset_confirm.html", media=media, **title_view(media))
     try:
         candidate, result = reset_series(media, run=False)
     except ValueError as exc:
