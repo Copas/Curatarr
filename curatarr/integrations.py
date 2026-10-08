@@ -278,6 +278,20 @@ class SonarrClient(Client):
             json={"episodeIds": sorted(episode_ids), "monitored": monitored},
         )
 
+    def monitor_series(self, series_id):
+        """Monitor the series itself (not its seasons); True if it was unmonitored.
+
+        Sonarr does not search for an unmonitored series even when its episodes
+        are monitored, so a request for a show Sonarr has unmonitored (for example
+        by a nightly "unmonitor ended shows" job) needs this first.
+        """
+        series = self.request("GET", f"/api/v3/series/{series_id}")
+        if series.get("monitored"):
+            return False
+        series["monitored"] = True
+        self.request("PUT", f"/api/v3/series/{series_id}", json=series)
+        return True
+
     def unmonitor_seasons(self, series_id):
         """Unmonitor every season of a series; returns the season numbers changed.
 
