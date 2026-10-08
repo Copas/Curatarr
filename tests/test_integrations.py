@@ -113,3 +113,30 @@ def test_monitor_season_sets_only_that_season_and_reports_changes():
     assert sonarr.monitor_season(7, 2) is False  # already monitored: no PUT
     assert [c[0] for c in calls] == ["GET"]
     assert sonarr.monitor_season(7, 9) is False  # unknown season
+
+
+def test_jellyfin_item_uses_the_item_list_not_the_single_item_route():
+    """Jellyfin 12.2 rejects GET /Items/{id} with an API key and no user."""
+    from curatarr.integrations import JellyfinClient
+
+    calls = []
+
+    class ListJellyfin(JellyfinClient):
+        def request(self, method, path, **kwargs):
+            calls.append((method, path, kwargs.get("params")))
+            return {"Items": [{"Id": "abc", "ProviderIds": {"Tvdb": "1"}}]}
+
+    item = ListJellyfin("http://jellyfin.example.local:8096", "dummy").item("abc")
+    assert item["ProviderIds"] == {"Tvdb": "1"}
+    assert calls == [("GET", "/Items", {"Ids": "abc", "Fields": "ProviderIds"})]
+
+
+def test_jellyfin_item_missing_is_an_integration_error():
+    from curatarr.integrations import JellyfinClient
+
+    class EmptyJellyfin(JellyfinClient):
+        def request(self, method, path, **kwargs):
+            return {"Items": []}
+
+    with pytest.raises(IntegrationError):
+        EmptyJellyfin("http://jellyfin.example.local:8096", "dummy").item("gone")
