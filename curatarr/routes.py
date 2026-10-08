@@ -534,6 +534,46 @@ def review_action(candidate_id, choice):
     return redirect(url_for("main.review"))
 
 
+@bp.post("/titles/<media_id>/reset")
+def title_reset(media_id):
+    from .lifecycle import reset_series
+
+    media = db.session.get(MediaIdentity, media_id)
+    if not media:
+        abort(404)
+    try:
+        candidate, result = reset_series(media)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("main.title", media_id=media.id))
+    if result == "succeeded":
+        flash(
+            f"{media.title} was reset to its always-keep episodes. Curatarr fetches "
+            "more once someone watches it again.",
+            "success",
+        )
+    elif result == "dry_run":
+        flash(
+            f"Dry run: {media.title} would be reset to its always-keep episodes "
+            f"(freeing {size_label(candidate.reclaimable_bytes)}). Nothing was deleted.",
+            "info",
+        )
+    elif result == "deferred":
+        flash(
+            "New playback is being processed first; the reset runs right after.", "info"
+        )
+    else:
+        blocked = (
+            db.session.query(LifecycleAction)
+            .filter_by(candidate_id=candidate.id, action_type="delete_blocked")
+            .order_by(LifecycleAction.created_at.desc())
+            .first()
+        )
+        reason = blocked.reason_text if blocked else "see History"
+        flash(f"The reset was not done: {reason}.", "danger")
+    return redirect(url_for("main.title", media_id=media.id))
+
+
 @bp.post("/titles/<media_id>/request")
 def title_request_now(media_id):
     media = db.session.get(MediaIdentity, media_id)

@@ -268,6 +268,35 @@ class SonarrClient(Client):
                 return True
         return False
 
+    def set_episodes_monitored(self, episode_ids, monitored):
+        """Bulk monitor or unmonitor episodes in one request."""
+        if not episode_ids:
+            return None
+        return self.request(
+            "PUT",
+            "/api/v3/episode/monitor",
+            json={"episodeIds": sorted(episode_ids), "monitored": monitored},
+        )
+
+    def unmonitor_seasons(self, series_id):
+        """Unmonitor every season of a series; returns the season numbers changed.
+
+        With a season unmonitored, Sonarr adds episodes it learns about later as
+        unmonitored too, so nothing new downloads until Curatarr requests it.
+        Sonarr also unmonitors each season's episodes when the flag changes.
+        """
+        series = self.request("GET", f"/api/v3/series/{series_id}")
+        changed = [
+            season["seasonNumber"]
+            for season in series.get("seasons", [])
+            if season.get("monitored")
+        ]
+        if changed:
+            for season in series["seasons"]:
+                season["monitored"] = False
+            self.request("PUT", f"/api/v3/series/{series_id}", json=series)
+        return changed
+
     def season_search(self, series_id, season_number):
         return self.request(
             "POST",

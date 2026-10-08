@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Title pages for TV shows have "Reset to minimum": trims the show to its always-keep episodes as if nobody had watched it. It runs through the normal approved-deletion path with every check except the grace period and recent viewing, then unmonitors all seasons in Sonarr (keeping the always-keep episodes monitored) and records the reset so earlier viewing no longer requests seasons. Watching again after a reset works as usual. Dry run is respected. Requires `db upgrade` (migration `d2f6a8c41e93` adds `viewing_reset_at`).
+
 - A show whose latest season viewers have watched (by the acquisition threshold) gets its next season whenever Sonarr lists it, no matter how long ago that viewing was; before, the next season was only requested within the recent-viewing window (90 days by default), so a season premiering a year later was missed. A show not continued although the next season was already out is still treated as abandoned.
 - While viewers are on a season that is still airing (its latest episode aired in the last 30 days), Curatarr makes sure Sonarr monitors that season even if every episode so far is downloaded, so new episodes download when they air. Queued once per season.
 

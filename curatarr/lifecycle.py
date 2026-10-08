@@ -722,7 +722,12 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
         return "Minimum TV footprint is not fully present"
     now = utcnow()
     item = _candidate_input(media)
-    if not eligible(item, policy, now):
+    if candidate.reason_code == MANUAL_RESET:
+        # Asked for on the title page: the grace period and recent viewing do not
+        # apply, every other safety check below does.
+        if not item.mapped:
+            return "Show is not matched to Sonarr with its minimum footprint present"
+    elif not eligible(item, policy, now):
         return "Grace, mapping, snooze, or minimum-footprint guard failed"
     last = item.last_played_at
     snapshot = candidate.last_activity_snapshot
@@ -850,6 +855,89 @@ def _tv_file_targets(media, policy, arr):
     ):
         raise ValueError("Sonarr episode inventory is incomplete")
     return targets
+
+
+MANUAL_RESET = "manual_reset"
+
+
+def reset_series(media):
+    """Title page "Reset to minimum": trim a show back to its always-keep
+    episodes as if nobody had watched it.
+
+    Goes through the same approved-deletion path as the Review queue's Delete,
+    with every safety check except the grace period and recent viewing. After the
+    files are deleted, all seasons and the trimmed episodes are unmonitored in
+    Sonarr and viewing before the reset stops driving acquisition, so Curatarr
+    fetches more only once someone watches again. Dry run is respected.
+    """
+    if media.media_type != "series" or media.sonarr_id is None:
+        raise ValueError("Only TV shows matched to Sonarr can be reset.")
+    existing = _active_candidate(media.id)
+    if existing and existing.state in {"APPROVED", "EXECUTING"}:
+        raise ValueError("A cleanup for this show is already running.")
+    policy, _ = resolved_policy(media)
+    size = reclaimable_bytes(media.parts, policy)
+    item = _candidate_input(media)
+    now = utcnow()
+    if existing:
+        # A pending cleanup proposal is replaced by the reset.
+        existing.state = "SUPERSEDED"
+        existing.scheduled_delete_at = None
+    candidate = PurgeCandidate(
+        media_identity_id=media.id,
+        state="APPROVED",
+        reason_code=MANUAL_RESET,
+        reason_text=(
+            f"Reset {media.title} to its always-keep episodes from the title page."
+        ),
+        reclaimable_bytes=size,
+        last_activity_snapshot=item.last_played_at,
+        approved_at=now,
+    )
+    db.session.add(candidate)
+    db.session.flush()
+    audit(
+        "reset_requested",
+        media.id,
+        f"Reset to minimum requested for {media.title}.",
+        f"reset:{candidate.id}",
+        candidate_id=candidate.id,
+    )
+    db.session.commit()
+    return candidate, execute_approved(candidate.id)
+
+
+def _finish_reset(media, policy, arr, action, unmonitored):
+    """After a reset's files are gone: nothing more downloads until someone
+    watches again. All seasons are unmonitored (Sonarr then unmonitors their
+    episodes too, and adds later episodes unmonitored), the always-keep episodes
+    are monitored again, and viewing before now stops counting for acquisition."""
+    from .policy import retained
+
+    seasons = arr.unmonitor_seasons(media.sonarr_id)
+    trimmed = sorted(
+        part.sonarr_episode_id
+        for part in media.parts
+        if part.kind == "episode"
+        and part.sonarr_episode_id is not None
+        and not retained(part, policy)
+    )
+    kept = sorted(
+        part.sonarr_episode_id
+        for part in media.parts
+        if part.kind == "episode"
+        and part.sonarr_episode_id is not None
+        and retained(part, policy)
+    )
+    arr.set_episodes_monitored(trimmed, False)
+    arr.set_episodes_monitored(kept, True)
+    action.payload_json = action.payload_json | {
+        "unmonitored": sorted(set(unmonitored) | set(trimmed)),
+        "seasons_unmonitored": seasons,
+        "kept_monitored": kept,
+    }
+    media.viewing_reset_at = utcnow()
+    db.session.commit()
 
 
 def execute_approved(candidate_id):
@@ -1190,6 +1278,8 @@ def _execute_action(action_id):
                         if part.kind == "episode" and part.arr_file_id == file_id:
                             part.has_file = False
                     db.session.commit()
+                if candidate.reason_code == MANUAL_RESET:
+                    _finish_reset(media, policy, arr, action, unmonitored)
         except (TypeError, ValueError) as exc:
             candidate.state = "BLOCKED"
             action.state = "CANCELLED"

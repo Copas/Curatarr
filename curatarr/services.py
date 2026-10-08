@@ -822,6 +822,13 @@ def _monitor_airing_season(media, season, reason, event=None):
     )
 
 
+def _since_reset(media):
+    """Filters limiting viewing to after a "Reset to minimum" (none if never reset)."""
+    if media.viewing_reset_at is None:
+        return []
+    return [EpisodeUserState.last_played_at > media.viewing_reset_at]
+
+
 def _plan_acquisition(media, current_season, event):
     policy, _ = resolved_policy(media)
     if current_season == 0 and not policy["manage_specials"]:
@@ -833,6 +840,7 @@ def _plan_acquisition(media, current_season, event):
             MediaPart.media_identity_id == media.id,
             MediaPart.season_number == current_season,
             EpisodeUserState.played.is_(True),
+            *_since_reset(media),
         )
         .scalar()
     )
@@ -1683,6 +1691,7 @@ def _plan_show(media, request, now, *, require_recent=True):
             MediaPart.media_identity_id == media.id,
             MediaPart.season_number > 0,
             EpisodeUserState.played.is_(True),
+            *_since_reset(media),
         )
         .group_by(MediaPart.season_number)
         .all()
@@ -1707,6 +1716,7 @@ def _plan_show(media, request, now, *, require_recent=True):
             MediaPart.media_identity_id == media.id,
             MediaPart.season_number == season,
             EpisodeUserState.played.is_(True),
+            *_since_reset(media),
         )
         .order_by(EpisodeUserState.last_played_at.desc())
         .first()
@@ -1737,6 +1747,7 @@ def _caught_up(media, season):
             MediaPart.media_identity_id == media.id,
             MediaPart.season_number == season,
             EpisodeUserState.played.is_(True),
+            *_since_reset(media),
         )
         .scalar()
     )
@@ -2074,10 +2085,19 @@ def save_title_override(media, form):
 
 
 def title_view(media):
+    from .policy import reclaimable_bytes, retained
+
     values, sources = resolved_policy(media)
+    episodes = [p for p in media.parts if p.kind == "episode"]
     return {
         "values": values,
         "sources": sources,
+        # For "Reset to minimum": what would be removed and what stays.
+        "reset_bytes": reclaimable_bytes(media.parts, values),
+        "reset_files": sum(
+            1 for p in episodes if p.has_file and not retained(p, values)
+        ),
+        "reset_kept": sum(1 for p in episodes if p.has_file and retained(p, values)),
         "candidates": db.session.query(PurgeCandidate)
         .filter_by(media_identity_id=media.id)
         .order_by(PurgeCandidate.eligible_at.desc())
