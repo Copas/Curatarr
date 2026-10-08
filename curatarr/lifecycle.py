@@ -718,15 +718,21 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
     policy, _ = resolved_policy(media)
     if policy["never_purge"]:
         return "Never Purge is enabled"
-    if media.media_type == "series" and not minimum_satisfied(media.parts, policy):
+    if (
+        media.media_type == "series"
+        and candidate.reason_code != MANUAL_RESET
+        and not minimum_satisfied(media.parts, policy)
+    ):
+        # A requested reset may run with always-keep episodes missing: it only
+        # removes episodes outside the minimum, and watching later fills it in.
         return "Minimum TV footprint is not fully present"
     now = utcnow()
     item = _candidate_input(media)
     if candidate.reason_code == MANUAL_RESET:
-        # Asked for on the title page: the grace period and recent viewing do not
-        # apply, every other safety check below does.
-        if not item.mapped:
-            return "Show is not matched to Sonarr with its minimum footprint present"
+        # Asked for on the title page: the grace period, recent viewing, and
+        # Sonarr's series monitored flag do not apply; every other check does.
+        if media.sonarr_id is None:
+            return "Show is not matched to Sonarr"
     elif not eligible(item, policy, now):
         return "Grace, mapping, snooze, or minimum-footprint guard failed"
     last = item.last_played_at
@@ -1094,6 +1100,13 @@ def _execute_action(action_id):
     if action.action_type == "sonarr_season_search":
         try:
             arr = client("sonarr")
+            if action.payload_json.get("monitor_series"):
+                action.payload_json = action.payload_json | {
+                    "series_monitored": arr.monitor_series(
+                        action.payload_json["sonarr_id"]
+                    )
+                }
+                media.arr_monitored = True
             # Record what actually changed; most listed episodes are often
             # monitored already, and History should not overstate the change.
             newly_monitored = [
