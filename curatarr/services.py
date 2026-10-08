@@ -764,6 +764,8 @@ def _request_season(
             # announced later are monitored too. A partial fill (episode_filter,
             # e.g. the first episodes of Season 1) leaves the season alone.
             "whole_season": episode_filter is None,
+            # Sonarr ignores an unmonitored series, so the request monitors it.
+            "monitor_series": media.arr_monitored is False,
         },
         state="PENDING",
         event_id=event.id if event else None,
@@ -1770,12 +1772,27 @@ def _caught_up(media, season):
     return not premieres or min(premieres) > _as_datetime(watched_at)
 
 
+def _trimmed_by_curatarr(media):
+    """A show Curatarr reset or cleaned up stays Curatarr's to refill, even when
+    Sonarr has it unmonitored (a nightly job unmonitors complete, ended shows)."""
+    if media.viewing_reset_at is not None:
+        return True
+    return (
+        db.session.query(LifecycleAction.id)
+        .filter_by(
+            media_identity_id=media.id, action_type="delete_media", state="SUCCEEDED"
+        )
+        .first()
+        is not None
+    )
+
+
 def _skip_reason(media):
     if media.media_type != "series" or media.sonarr_id is None:
         return "Only TV shows matched to Sonarr can be requested."
     if media.missing_since is not None:
         return "This show is no longer in Jellyfin."
-    if media.arr_monitored is False:
+    if media.arr_monitored is False and not _trimmed_by_curatarr(media):
         return "Sonarr has this show unmonitored, so Curatarr leaves it alone."
     if media.series_type == "daily":
         return "Daily shows are numbered by date, so Curatarr does not request them."
