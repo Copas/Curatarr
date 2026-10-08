@@ -205,8 +205,12 @@ def test_title_page_offers_the_reset(app, client):
         media, _parts = _show(dry_run=True)
         page = client.get(f"/titles/{media.id}").text
         assert "Reset to minimum" in page
-        assert "3 episode files" in page
-        assert "dry run" in page
+        assert f"/titles/{media.id}/reset" in page
+        confirm = client.get(f"/titles/{media.id}/reset").text
+        assert "Reset Reset Show to minimum?" in confirm
+        assert "3 episode files" in confirm
+        assert "dry run" in confirm
+        assert "Cancel" in confirm
 
 
 def test_reset_works_on_an_unmonitored_show_missing_an_always_keep_episode(
