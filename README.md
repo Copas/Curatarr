@@ -9,7 +9,7 @@ This is an early implementation. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_S
 ## Installing
 
 - **Native (Linux, systemd):** from a release checkout, run `sudo ./scripts/install.sh`. Re-run it from a newer release to upgrade; it backs up the default SQLite database before migration.
-- **Updating this host:** use the clean local `v0.2.0rc1` checkout and the verified commands in [docs/INSTALL.md](docs/INSTALL.md#upgrade). The installer leaves `/etc/curatarr/curatarr.env` and live data in place.
+- **Updating this host:** use the clean local `v0.2.0rc2` checkout and the verified commands in [docs/INSTALL.md](docs/INSTALL.md#upgrade). The installer leaves `/etc/curatarr/curatarr.env` and live data in place.
 - **Docker:** in a separate deployment directory, copy `.env.example` to `.env`, set the secrets, and run `docker compose up -d --build`.
 
 [docs/INSTALL.md](docs/INSTALL.md) covers both in full, plus configuration, upgrades, rollback, backup, and uninstalling.
