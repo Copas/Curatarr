@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New "Shows by size" page (navigation bar): every TV show on disk, largest first, with what Reset to minimum would free, last watched and by whom, a library filter, totals, and a Reset… button that opens the confirmation page. Daily shows are flagged on this page and on the confirmation page, because a reset keeps none of their episodes and Curatarr never refills daily shows.
+
 - Title page actions are grouped in an Actions panel, one row per action with its description beside the button, instead of help text trailing after the button. Reset to minimum opens a confirmation page that lists what is deleted and kept, with Cancel and a red confirm button.
 
 - Reset to minimum and the Review queue's Delete no longer run the deletions inside the web request: they approve the cleanup and the worker carries it out within a cycle (about 15 seconds). A long show (six seasons of I Love Lucy) outlasted gunicorn's 30-second request timeout, the page showed Internal Server Error, and the reset stopped after one file. An interrupted deletion is still reconciled against Sonarr and marked blocked rather than repeated.
