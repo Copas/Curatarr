@@ -54,6 +54,8 @@ say "Installing code to $PREFIX"
 mkdir -p "$PREFIX/releases" "$CONFIG_DIR" "$DATA_DIR"
 previous=$(readlink -f "$PREFIX/current" 2>/dev/null || true)
 release=$(mktemp -d "$PREFIX/releases/$(date +%Y%m%d-%H%M%S)-XXXXXX")
+# mktemp creates mode 700; migrations and services run as SERVICE_USER.
+chmod 755 "$release"
 staging=""
 backup=""
 next="$PREFIX/.current-$$"
