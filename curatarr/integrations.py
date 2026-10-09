@@ -142,7 +142,7 @@ class JellyfinClient(Client):
     def _client_header(device_id, token=None):
         value = (
             f'MediaBrowser Client="Curatarr", Device="Curatarr", '
-            f'DeviceId="{device_id}", Version="0.2.0rc2"'
+            f'DeviceId="{device_id}", Version="0.2.0rc3"'
         )
         if token:
             value += f', Token="{token}"'

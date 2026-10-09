@@ -123,6 +123,16 @@ def _local_disk_space(path):
     return stats.f_blocks * stats.f_frsize, stats.f_bavail * stats.f_frsize
 
 
+def _arr_disk_path(path):
+    """Normalize Arr disk paths for matching across slash and case variants."""
+    normalized = path.replace("\\", "/").rstrip("/") or "/"
+    if len(normalized) > 1 and normalized[1] == ":":
+        return normalized.casefold()
+    if normalized.startswith("//"):
+        return normalized.casefold()
+    return normalized
+
+
 def _disk_measure(media, policy):
     """(total, free, disk key) for a library's configured path, or None."""
     import os
@@ -136,10 +146,13 @@ def _disk_measure(media, policy):
         return None
     if not isinstance(disks, list) or any(not isinstance(disk, dict) for disk in disks):
         return None
-    configured = policy["disk_path"].rstrip("/") or "/"
+    configured = _arr_disk_path(policy["disk_path"])
     matching = []
     for disk in disks:
-        root = (disk.get("path") or "").rstrip("/") or "/"
+        path = disk.get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        root = _arr_disk_path(path)
         # "/" contains every path, so it only counts when it is the configured
         # path itself. Sonarr/Radarr omit network mounts (e.g. a CIFS NAS) from
         # disk space, and falling back to "/" measured the wrong disk.
