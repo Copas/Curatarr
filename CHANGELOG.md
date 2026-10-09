@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc2 (2026-10-09)
+
+- Fix native upgrades failing at database migration: the installer now makes the staged release directory accessible to the `curatarr` service user. The failed `rc1` upgrade rolled back to the previous running version.
+
 ## 0.2.0rc1 (2026-10-09)
 
 - Refreshed the interface with grouped navigation, light and dark themes, a browsable title library, compact review cards, clearer policy sections, and a dedicated Operations page. Deletion approval now has a confirmation page. Administrators can allowlist non-admin Jellyfin household users for browsing and Keep/Snooze/Never Purge decisions; all admin routes and actions enforce the role server-side.
