@@ -1,5 +1,6 @@
 """Server-rendered UI and narrow operational API."""
 
+import hashlib
 import hmac
 import secrets
 from io import BytesIO
@@ -275,6 +276,7 @@ NAV_SECTIONS = {
     "main.title": "library",
     "main.title_reset": "library",
     "main.shows": "library",
+    "main.reset_unwatched": "library",
     "main.history": "activity",
     "main.history_detail": "activity",
     "main.settings": "manage",
@@ -644,6 +646,67 @@ def shows():
         library_id=library_id,
         total_on_disk=sum(r["on_disk"] for r in rows),
         total_frees=sum(r["frees"] for r in rows),
+    )
+
+
+def _reset_plan_signature(plan, skip_days):
+    """Fingerprint of the exact shows on the confirmation page, so a list that changed
+    between viewing and confirming is refused instead of resetting something unseen."""
+    ids = ",".join(sorted(str(r["media"].id) for r in plan))
+    return hashlib.sha256(f"{skip_days}|{ids}".encode()).hexdigest()[:16]
+
+
+@bp.route("/shows/reset-unwatched", methods=["GET", "POST"])
+def reset_unwatched():
+    from .lifecycle import reset_many
+    from .services import unwatched_reset_plan
+
+    try:
+        skip_days = min(max(int(request.values.get("skip_days", 30)), 0), 3650)
+    except ValueError:
+        skip_days = 30
+    library_id = request.values.get("library") or None
+    plan, skipped = unwatched_reset_plan(skip_days, library_id)
+    signature = _reset_plan_signature(plan, skip_days)
+    phrase = f"reset {len(plan)} show{'' if len(plan) == 1 else 's'}"
+    if request.method == "POST":
+        back = url_for(
+            "main.reset_unwatched", skip_days=skip_days, library=library_id or None
+        )
+        if request.form.get("signature") != signature:
+            flash(
+                "The list of shows changed since you opened this page. Review it again before confirming.",
+                "danger",
+            )
+            return redirect(back)
+        if request.form.get("confirm", "").strip().lower() != phrase:
+            flash(f"Nothing was reset. To confirm, type “{phrase}” exactly.", "danger")
+            return redirect(back)
+        queued, failed = reset_many([r["media"] for r in plan])
+        flash(
+            f"Started {queued} reset{'' if queued == 1 else 's'}. Curatarr's worker does them one "
+            "at a time in the background; History shows each outcome."
+            + (
+                f" {len(failed)} could not start: "
+                + "; ".join(f"{m.title} ({why})" for m, why in failed)
+                if failed
+                else ""
+            ),
+            "info" if not failed else "warning",
+        )
+        return redirect(url_for("main.shows"))
+    live = sorted({r["library"] for r in plan if not r["dry_run"]})
+    return render_template(
+        "reset_unwatched.html",
+        plan=plan,
+        skipped=skipped,
+        skip_days=skip_days,
+        library_id=library_id,
+        signature=signature,
+        phrase=phrase,
+        total_frees=sum(r["frees"] for r in plan),
+        total_files=sum(r["reset_files"] for r in plan),
+        live_libraries=live,
     )
 
 

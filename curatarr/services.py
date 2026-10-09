@@ -1302,7 +1302,7 @@ def shows_by_size(library_id=None):
     For the "Shows by size" page, the place to regain room by hand. Shows no
     longer in Jellyfin or not matched to Sonarr are left out (they cannot be
     reset)."""
-    from .policy import reclaimable_bytes
+    from .policy import reclaimable_bytes, retained
 
     names = setting("jellyfin_user_names", {})
     query = db.session.query(MediaIdentity).filter(
@@ -1352,10 +1352,58 @@ def shows_by_size(library_id=None):
                 # Daily shows are numbered by date, keep nothing under the
                 # always-keep rule, and are never refilled by Curatarr.
                 "daily": media.series_type == "daily",
+                "never_purge": policy["never_purge"],
+                "reset_files": sum(
+                    1
+                    for p in media.parts
+                    if p.kind == "episode" and p.has_file and not retained(p, policy)
+                ),
             }
         )
     rows.sort(key=lambda r: r["on_disk"], reverse=True)
     return rows
+
+
+def unwatched_reset_plan(skip_recent_days=30, library_id=None):
+    """Which shows "Reset all unwatched shows" would reset, and which it skips and why.
+
+    Unwatched means no playback recorded at all for the show (no episode started by
+    anyone). Skipped: daily shows (a reset keeps none of their episodes and they are
+    never refilled), Never Purge, a cleanup already running, already at the minimum,
+    and shows added in the last `skip_recent_days` days. Returns (plan, skipped);
+    skipped rows carry a "reason".
+    """
+    from datetime import timedelta
+
+    cutoff = utcnow() - timedelta(days=skip_recent_days)
+    plan, skipped = [], []
+    for row in shows_by_size(library_id):
+        media = row["media"]
+        if row["last_played"] is not None:
+            continue
+        played = (
+            db.session.query(EpisodeUserState.id)
+            .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
+            .filter(MediaPart.media_identity_id == media.id)
+            .first()
+        )
+        if played is not None:
+            continue
+        added = _as_datetime(media.added_at)
+        if row["daily"]:
+            reason = "Daily show: a reset would delete every episode"
+        elif row["never_purge"]:
+            reason = "Never Purge is on"
+        elif row["resetting"]:
+            reason = "A cleanup is already running"
+        elif not row["frees"]:
+            reason = "Already at its minimum"
+        elif added and added > cutoff:
+            reason = f"Added {added.strftime('%Y-%m-%d')}, within the last {skip_recent_days} days"
+        else:
+            reason = None
+        (skipped if reason else plan).append(row | {"reason": reason})
+    return plan, skipped
 
 
 def review_rows():

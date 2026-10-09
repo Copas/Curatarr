@@ -1,6 +1,7 @@
 """Title page "Reset to minimum": trim a show to its always-keep episodes as if
 nobody had watched it, through the normal approved-deletion path."""
 
+import re
 from datetime import timedelta
 
 from curatarr import db
@@ -373,3 +374,141 @@ def test_daily_shows_are_flagged_before_a_reset(app, client):
         db.session.commit()
         assert "Daily show" in client.get("/shows").text
         assert "is a daily show" in client.get(f"/titles/{media.id}/reset").text
+
+
+def _unwatched_show(title, *, added_days_ago=200, daily=False, library_id):
+    media = MediaIdentity(
+        library_id=library_id,
+        media_type="series",
+        title=title,
+        jellyfin_id=title,
+        sonarr_id=abs(hash(title)) % 9000 + 100,
+        tvdb_id=abs(hash(title)) % 90000 + 1000,
+        series_type="daily" if daily else "standard",
+        added_at=utcnow() - timedelta(days=added_days_ago),
+    )
+    db.session.add(media)
+    db.session.flush()
+    for index, (season, episode) in enumerate(
+        [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1)], start=1
+    ):
+        db.session.add(
+            MediaPart(
+                media_identity_id=media.id,
+                kind="episode",
+                season_number=2026 if daily else season,
+                episode_number=index if daily else episode,
+                sonarr_episode_id=abs(hash((title, season, episode))) % 900000,
+                arr_file_id=abs(hash((title, "f", season, episode))) % 900000,
+                has_file=True,
+                size_bytes=100,
+            )
+        )
+    db.session.commit()
+    return media
+
+
+def test_unwatched_plan_picks_never_started_shows_and_explains_skips(app):
+    from curatarr.services import unwatched_reset_plan
+
+    with app.app_context():
+        watched, parts = _show()  # "Reset Show"
+        _watched(parts[(1, 1)], days_ago=3)
+        lib = watched.library_id
+        old = _unwatched_show("Old Unwatched", library_id=lib)
+        _unwatched_show("Brand New", added_days_ago=5, library_id=lib)
+        _unwatched_show("Nightly", daily=True, library_id=lib)
+        guarded = _unwatched_show("Guarded", library_id=lib)
+        db.session.add(
+            TitleOverride(
+                media_identity_id=guarded.id, override_json={"never_purge": True}
+            )
+        )
+        db.session.commit()
+        plan, skipped = unwatched_reset_plan(30)
+        assert [r["media"].title for r in plan] == ["Old Unwatched"]
+        reasons = {r["media"].title: r["reason"] for r in skipped}
+        assert reasons["Brand New"].startswith("Added ")
+        assert reasons["Nightly"].startswith("Daily show")
+        assert reasons["Guarded"] == "Never Purge is on"
+        assert "Reset Show" not in reasons  # watched shows are not listed at all
+        assert plan[0]["frees"] == 200 and plan[0]["reset_files"] == 2
+        plan, _ = unwatched_reset_plan(0)  # no recent-add exemption
+        assert {r["media"].title for r in plan} == {"Old Unwatched", "Brand New"}
+        assert old.id in {r["media"].id for r in plan}
+
+
+def test_bulk_reset_requires_the_exact_phrase_and_an_unchanged_list(
+    app, client, monkeypatch
+):
+    from curatarr.lifecycle import resume_approved
+    from curatarr.models import PurgeCandidate
+
+    with app.app_context():
+        lib = _show(dry_run=False)[0].library_id
+        db.session.query(MediaIdentity).delete()
+        db.session.commit()
+        a = _unwatched_show("Alpha", library_id=lib)
+        b = _unwatched_show("Beta", library_id=lib)
+        page = client.get("/shows/reset-unwatched").text
+        assert "Reset all unwatched shows?" in page and "reset 2 shows" in page
+        assert "Not a dry run" in page
+        signature = re.search(r'name="signature" value="([^"]+)"', page).group(1)
+        client.post(
+            "/shows/reset-unwatched",
+            data={"confirm": "yes", "signature": signature, "skip_days": 30},
+        )
+        assert (
+            db.session.query(PurgeCandidate).count() == 0
+        )  # wrong phrase: nothing queued
+        client.post(
+            "/shows/reset-unwatched",
+            data={"confirm": "reset 2 shows", "signature": "stale", "skip_days": 30},
+        )
+        assert db.session.query(PurgeCandidate).count() == 0  # list changed: refused
+        response = client.post(
+            "/shows/reset-unwatched",
+            data={"confirm": "Reset 2 Shows", "signature": signature, "skip_days": 30},
+            follow_redirects=True,
+        )
+        assert "Started 2 resets" in response.text
+        states = {
+            c.media_identity_id: c.state for c in db.session.query(PurgeCandidate)
+        }
+        assert states == {a.id: "APPROVED", b.id: "APPROVED"}
+
+        class AnySonarr(FakeSonarr):
+            def request(self, _method, path):
+                media = a if str(a.sonarr_id) in path else b
+                return {"tvdbId": media.tvdb_id}
+
+            def episodes(self, series_id):
+                media = a if series_id == a.sonarr_id else b
+                return [
+                    {
+                        "id": p.sonarr_episode_id,
+                        "hasFile": True,
+                        "episodeFileId": p.arr_file_id,
+                    }
+                    for p in media.parts
+                ]
+
+            def episode_files(self, series_id):
+                media = a if series_id == a.sonarr_id else b
+                return [{"id": p.arr_file_id, "size": 100} for p in media.parts]
+
+        class AnyJellyfin:
+            def item(self, item_id):
+                media = a if item_id == a.jellyfin_id else b
+                return {"ProviderIds": {"Tvdb": str(media.tvdb_id)}}
+
+        sonarr = AnySonarr()
+        monkeypatch.setattr(
+            "curatarr.lifecycle.client",
+            lambda kind: AnyJellyfin() if kind == "jellyfin" else sonarr,
+        )
+        resume_approved()
+        assert {c.state for c in db.session.query(PurgeCandidate)} == {"COMPLETED"}
+        assert (
+            len([c for c in sonarr.calls if c[0] == "delete"]) == 4
+        )  # S1E4 and S2E1 of each

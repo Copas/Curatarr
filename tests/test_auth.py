@@ -178,6 +178,8 @@ def test_allowlisted_household_can_review_but_not_administer(secured, client):
     assert "by Avery" not in review and "by Blake" not in review
     shows = client.get("/shows").text
     assert "Reset…" not in shows and "by Avery" not in shows
+    assert "Reset all unwatched shows" not in shows
+    assert client.get("/shows/reset-unwatched").status_code == 403
     for path in (
         "/settings",
         "/setup",
