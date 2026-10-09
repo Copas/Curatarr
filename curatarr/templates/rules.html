@@ -32,7 +32,7 @@
   <div class="col-md-6"><label class="form-label w-100">{{ label }}
   {% if kind == 'size' %}<div class="input-group"><input class="form-control" type="number" min="0" step="any" name="{{ key }}" value="{{ current|size_amount }}"{% if blank_label %} placeholder="{{ blank_label }}"{% endif %}><select class="form-select flex-grow-0 w-auto" name="{{ key }}_unit" aria-label="{{ label }} unit">{% set unit = current|size_unit if current else 'TB' %}{% for option in ['MB', 'GB', 'TB'] %}<option {% if option == unit %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></div>
   {% elif kind == 'number' %}<input class="form-control" type="number" min="0" name="{{ key }}" value="{{ current if current is not none else '' }}"{% if blank_label %} placeholder="{{ blank_label }}"{% endif %}>
-  {% elif kind == 'text' %}<input class="form-control" type="text" name="{{ key }}" value="{{ current or '' }}" placeholder="{{ blank_label or '' }} (e.g. /media/movies)">
+  {% elif kind == 'text' %}<input class="form-control" type="text" name="{{ key }}" value="{{ current or '' }}" placeholder="{{ blank_label or '' }} (e.g. /media/movies or C:\Media\Movies)">
   {% else %}<select class="form-select" name="{{ key }}">{% if blank_label %}<option value="">{{ blank_label }}</option>{% endif %}
   {% for value in kind %}<option value="{{ value }}" {% if current is not none and current|string|lower == value %}selected{% endif %}>{{ value|choice_label }}</option>{% endfor %}</select>{% endif %}
   </label>{% if library %}<div class="form-text">Currently in effect: {{ shown(effective.get(key), kind) }} ({{ source_name(sources.get(key, 'default')) }})</div>{% endif %}</div>

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0rc3 (2026-10-09)
+
+- Document Docker Desktop installation and upgrades on Windows. Keep shell entrypoints in LF format when cloned on Windows.
+- Accept Windows drive and UNC paths in free-space rules, and match Sonarr/Radarr disk records across slash and letter-case differences. An unreported disk still cannot trigger free-space cleanup.
+
 ## 0.2.0rc2 (2026-10-09)
 
 - Fix native upgrades failing at database migration: the installer now makes the staged release directory accessible to the `curatarr` service user. The failed `rc1` upgrade rolled back to the previous running version.

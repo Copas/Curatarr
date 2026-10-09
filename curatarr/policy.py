@@ -1,5 +1,6 @@
 """Pure, deterministic lifecycle policy calculations."""
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import isfinite
@@ -72,6 +73,8 @@ BOOL_FIELDS = {
     "dry_run",
 }
 
+WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:[/\\]")
+
 
 def validate_policy(values: dict[str, Any], *, complete: bool = True) -> dict[str, Any]:
     clean = {}
@@ -94,7 +97,8 @@ def validate_policy(values: dict[str, Any], *, complete: bool = True) -> dict[st
         ):
             raise ValueError(f"Invalid {key}")
         elif key == "disk_path" and (
-            not isinstance(value, str) or not value.startswith("/")
+            not isinstance(value, str)
+            or not (value.startswith(("/", "\\\\")) or WINDOWS_DRIVE_PATH.match(value))
         ):
             raise ValueError("Disk path must be an absolute arr-side path")
         clean[key] = value
