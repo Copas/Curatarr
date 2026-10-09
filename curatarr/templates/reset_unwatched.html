@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block content %}
+<p class="mb-2"><a class="link-secondary" href="{{ url_for('main.shows', library=library_id) }}">&larr; Shows by size</a></p>
+<div class="eyebrow">Library</div><h1>Reset all unwatched shows?</h1>
+<p class="text-secondary">Trims every show nobody has ever started back to its always-keep episodes, in one go.</p>
+
+{% if plan %}
+<div class="alert alert-danger">
+  <p class="mb-2"><strong>This changes a lot at once.</strong> It resets <strong>{{ plan|length }} show{{ '' if plan|length == 1 else 's' }}</strong> and deletes <strong>{{ total_files }} episode file{{ '' if total_files == 1 else 's' }} ({{ total_frees|size }})</strong> through Sonarr.</p>
+  <ul class="mb-0">
+    <li>Deleted episodes are gone. Getting them back means downloading them again, and some older releases may no longer be available.</li>
+    <li>Sonarr stops downloading these shows. Curatarr fetches more of a show only once someone starts watching it.</li>
+    <li>"Unwatched" means Curatarr has never seen anyone start an episode, including viewing from before Curatarr was installed if Jellyfin did not record it.</li>
+  </ul>
+</div>
+{% if live_libraries %}<div class="alert alert-warning"><strong>Not a dry run:</strong> {{ live_libraries|join(', ') }} {{ 'is' if live_libraries|length == 1 else 'are' }} live, so files in {{ 'it' if live_libraries|length == 1 else 'them' }} will really be deleted.</div>
+{% else %}<div class="alert alert-info">Every affected library is in <strong>dry run</strong>: Curatarr records what it would delete, but nothing is actually deleted.</div>{% endif %}
+{% endif %}
+
+<form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+  <input type="hidden" name="library" value="{{ library_id or '' }}">
+  <label class="form-label mb-0">Skip shows added in the last
+    <div class="input-group"><input class="form-control" type="number" min="0" max="3650" name="skip_days" value="{{ skip_days }}" style="max-width: 7rem"><span class="input-group-text">days</span></div>
+  </label>
+  <button class="btn btn-outline-secondary">Update list</button>
+</form>
+
+<h2 class="h5">Will be reset ({{ plan|length }})</h2>
+<div class="table-responsive"><table class="table align-middle">
+<thead><tr><th>Show</th><th class="text-end">On disk</th><th class="text-end">Frees</th><th>Added</th></tr></thead>
+<tbody>{% for row in plan %}<tr>
+  <td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a><div class="small text-secondary">{{ row.library }}{% if row.dry_run %} · dry run{% endif %}</div></td>
+  <td class="text-end text-nowrap">{{ row.on_disk|size }}</td>
+  <td class="text-end text-nowrap">{{ row.frees|size }}</td>
+  <td class="text-nowrap">{{ row.media.added_at.strftime('%Y-%m-%d') if row.media.added_at else '—' }}</td>
+</tr>{% else %}<tr><td colspan="4" class="text-secondary">No unwatched shows to reset.</td></tr>{% endfor %}</tbody>
+</table></div>
+
+{% if skipped %}<details class="mb-4"><summary>Skipped unwatched shows ({{ skipped|length }})</summary>
+<div class="table-responsive mt-2"><table class="table table-sm align-middle"><tbody>{% for row in skipped %}<tr><td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a></td><td class="text-secondary">{{ row.reason }}</td><td class="text-end text-nowrap">{{ row.on_disk|size }}</td></tr>{% endfor %}</tbody></table></div>
+</details>{% endif %}
+
+{% if plan %}
+<form method="post" class="card p-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="signature" value="{{ signature }}">
+  <input type="hidden" name="skip_days" value="{{ skip_days }}">
+  <input type="hidden" name="library" value="{{ library_id or '' }}">
+  <label class="form-label">To confirm, type <strong>{{ phrase }}</strong>
+    <input class="form-control mt-1" name="confirm" autocomplete="off" required style="max-width: 20rem">
+  </label>
+  <div class="d-flex gap-2 mt-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.shows', library=library_id) }}">Cancel</a>
+    <button class="btn btn-danger">Reset {{ plan|length }} unwatched show{{ '' if plan|length == 1 else 's' }}</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
