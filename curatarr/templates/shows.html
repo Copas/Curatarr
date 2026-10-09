@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Shows by size</h1>
+<p class="text-secondary">Every TV show on disk, largest first. <strong>Reset frees</strong> is the space a Reset to minimum would regain: everything except the always-keep episodes. Reset opens a confirmation page first, and Curatarr fetches more again when someone watches.</p>
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
+  <form method="get" class="d-flex align-items-end gap-2">
+    <label class="form-label mb-0">Library
+      <select class="form-select" name="library">
+        <option value="">All TV libraries</option>
+        {% for library in libraries %}<option value="{{ library.id }}" {% if library.id == library_id %}selected{% endif %}>{{ library.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn btn-outline-light">Show</button>
+  </form>
+  <div class="text-secondary small">{{ rows|length }} show{{ '' if rows|length == 1 else 's' }} · {{ total_on_disk|size }} on disk · resetting all would free {{ total_frees|size }}</div>
+</div>
+<div class="table-responsive"><table class="table align-middle">
+<thead><tr><th>Show</th><th class="text-end">On disk</th><th class="text-end">Reset frees</th><th>Last watched</th><th class="text-end">Action</th></tr></thead>
+<tbody>
+{% for row in rows %}<tr>
+  <td><div class="d-flex align-items-center gap-2"><img src="{{ url_for('main.poster', media_id=row.media.id) }}" width="44" height="66" loading="lazy" alt="">
+    <div><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a><div class="small text-secondary">{{ row.library }} · {{ row.episodes }} episode{{ '' if row.episodes == 1 else 's' }}</div>{% if row.daily %}<div class="small text-warning">Daily show: a reset deletes every episode and Curatarr won't fetch it again</div>{% endif %}</div></div></td>
+  <td class="text-end text-nowrap">{{ row.on_disk|size }}</td>
+  <td class="text-end text-nowrap">{% if row.frees %}{{ row.frees|size }}{% else %}<span class="text-secondary">—</span>{% endif %}</td>
+  <td>{% if row.last_played %}{{ row.last_played.strftime('%Y-%m-%d') }}{% if row.last_watcher %}<div class="small text-secondary">by {{ row.last_watcher }}</div>{% endif %}{% else %}<span class="text-secondary">Never observed</span>{% endif %}</td>
+  <td class="text-end text-nowrap">{% if row.resetting %}<span class="text-secondary">Reset in progress</span>{% elif not row.frees %}<span class="text-secondary">At minimum</span>{% else %}<a class="btn btn-sm btn-outline-danger" href="{{ url_for('main.title_reset', media_id=row.media.id) }}">Reset…</a>{% if row.dry_run %}<div class="small text-secondary">dry run</div>{% endif %}{% endif %}</td>
+</tr>{% else %}<tr><td colspan="5" class="text-secondary">No TV shows on disk{% if library_id %} in this library{% endif %}.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

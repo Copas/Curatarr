@@ -220,6 +220,7 @@ NAV_SECTIONS = {
     "main.review": "review",
     "main.titles": "overrides",
     "main.title": "overrides",
+    "main.shows": "shows",
     "main.history": "history",
     "main.history_detail": "history",
     "main.settings": "settings",
@@ -496,6 +497,28 @@ def webhook():
 @bp.get("/review")
 def review():
     return render_template("review.html", rows=review_rows())
+
+
+@bp.get("/shows")
+def shows():
+    from .services import shows_by_size
+
+    library_id = request.args.get("library") or None
+    rows = shows_by_size(library_id)
+    libraries = (
+        db.session.query(Library)
+        .filter(Library.media_type == "tv")
+        .order_by(Library.name)
+        .all()
+    )
+    return render_template(
+        "shows.html",
+        rows=rows,
+        libraries=libraries,
+        library_id=library_id,
+        total_on_disk=sum(r["on_disk"] for r in rows),
+        total_frees=sum(r["frees"] for r in rows),
+    )
 
 
 @bp.get("/posters/<media_id>")

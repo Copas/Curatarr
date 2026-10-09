@@ -327,3 +327,49 @@ def test_reset_button_queues_the_reset_for_the_worker(app, client, monkeypatch):
             2001,
             2002,
         ]
+
+
+def test_shows_by_size_lists_shows_largest_first_with_reset_links(app, client):
+    with app.app_context():
+        media, _parts = _show(dry_run=True)
+        small = MediaIdentity(
+            library_id=media.library_id,
+            media_type="series",
+            title="Small Show",
+            jellyfin_id="small",
+            sonarr_id=78,
+            tvdb_id=778,
+            added_at=utcnow(),
+        )
+        db.session.add(small)
+        db.session.flush()
+        db.session.add(
+            MediaPart(
+                media_identity_id=small.id,
+                kind="episode",
+                season_number=1,
+                episode_number=1,
+                sonarr_episode_id=9101,
+                has_file=True,
+                size_bytes=50,
+            )
+        )
+        db.session.commit()
+        page = client.get("/shows").text
+        assert "Shows by size" in page
+        assert page.index("Reset Show") < page.index(
+            "Small Show"
+        )  # 600 bytes before 50
+        assert f"/titles/{media.id}/reset" in page  # 300 bytes outside the minimum
+        assert "At minimum" in page  # Small Show has only its always-keep episode
+        filtered = client.get(f"/shows?library={media.library_id}").text
+        assert "Reset Show" in filtered
+
+
+def test_daily_shows_are_flagged_before_a_reset(app, client):
+    with app.app_context():
+        media, _parts = _show(dry_run=True)
+        media.series_type = "daily"
+        db.session.commit()
+        assert "Daily show" in client.get("/shows").text
+        assert "is a daily show" in client.get(f"/titles/{media.id}/reset").text
