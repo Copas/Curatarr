@@ -4,7 +4,7 @@
 <p class="text-secondary">See what free-space cleanup would pick if free space dropped to a given level, using the same rules, rankings, and live download queue the worker uses. Nothing is marked, badged, or deleted. Libraries without free-space enforcement are previewed as if it were on, using the disk path below. Thresholds now: clean up below {{ low }}% free, no notice below {{ critical }}%.</p>
 <form method="get" class="card p-3 mb-4"><div class="row g-3 align-items-end">
   <div class="col-md-3"><label class="form-label w-100">Pretend free space is (%)<input class="form-control" type="number" step="any" min="0" max="100" name="free" value="{{ free }}"></label></div>
-  <div class="col-md-6"><label class="form-label w-100">Disk path (as Sonarr/Radarr see it)<input class="form-control" type="text" name="path" value="{{ disk_path }}" placeholder="/mnt/media"></label></div>
+  <div class="col-md-6"><label class="form-label w-100">Disk path (as Sonarr/Radarr see it)<input class="form-control" type="text" name="path" value="{{ disk_path }}" placeholder="/mnt/media or C:\Media"></label></div>
   <div class="col-md-3"><button class="btn btn-primary w-100">Preview</button></div>
 </div></form>
 {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}

@@ -4,7 +4,7 @@
 Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; live validation pending)
 
 ## Completed
-- v0.2.0rc2 release candidate: full tests and Ruff checks pass; the packaged install serves the main pages from outside the checkout; a scratch native upgrade retains the previous release and creates an integrity-checked SQLite backup. The installer builds before stopping services, migrates before switching `current`, and restores the previous release and default SQLite database on upgrade failure. The rc2 native upgrade is running on the owner's host. Live lifecycle validation remains pending before v0.2.0.
+- v0.2.0rc3 release candidate: Docker Desktop installation steps for Windows, LF shell entrypoints, and Windows Arr disk-path matching are included. The Docker image was built and served HTTP on Linux; a Windows host smoke test is still pending. The rc2 native upgrade is running on the owner's host. Live lifecycle validation remains pending before v0.2.0.
 - UI/UX pass: grouped navigation, responsive review cards, browsable title list, clearer policy sections, a dedicated Operations page, light/dark theme choice, and deletion confirmation. Admins can allowlist non-admin Jellyfin household accounts for focused viewing and Keep/Snooze/Never Purge decisions; route-level checks keep administration and deletion approval with admins.
 - v0.1.0 tagged 2026-10-04 after the Section 92 release checks: tests and lint, migration upgrade/check/downgrade/re-upgrade on a fresh database, and fresh-install and demo-mode startup with all main pages and API endpoints returning 200.
 - Flask app, database schema and migrations, health/status API, Bootstrap shell, branding, and container skeleton.

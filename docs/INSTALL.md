@@ -14,7 +14,7 @@ A running installation is an **installed copy** with its own code, configuration
 | Data | `instance/` (git-ignored, disposable) | `/var/lib/curatarr` | Docker volumes `config` and `database` |
 | Runs as | Your shell | `curatarr-web` and `curatarr-worker` systemd services | `web` and `worker` containers |
 
-Changing, testing, or resetting the checkout never touches an installed copy. Nothing from an installed copy, such as its database, keys, posters, or logs, ends up in Git. Install from a tagged release (for example `v0.2.0rc2`), never from an unreleased branch.
+Changing, testing, or resetting the checkout never touches an installed copy. Nothing from an installed copy, such as its database, keys, posters, or logs, ends up in Git. Install from a tagged release (for example `v0.2.0rc3`), never from an unreleased branch.
 
 ## Native install (Linux with systemd)
 
@@ -23,7 +23,7 @@ Requirements: Python 3.12 or newer with the `venv` module, systemd, and root acc
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc2         # the release you want
+git checkout v0.2.0rc3         # the release you want
 sudo ./scripts/install.sh
 ```
 
@@ -45,18 +45,18 @@ To change locations or the service account, set `PREFIX`, `CONFIG_DIR`, `DATA_DI
 ```bash
 cd curatarr-release
 git fetch --tags
-git checkout v0.2.0rc2
+git checkout v0.2.0rc3
 sudo ./scripts/install.sh
 ```
 
 The installer builds the new release, stops the services, backs up the default SQLite database to `/var/lib/curatarr/backups/`, migrates, selects the new release, and starts the services again. Configuration is kept. Read `CHANGELOG.md` before upgrading.
 
-If the tagged checkout is already on the same host as the installation, use it directly. Confirm that it is clean and at the intended tag before running the installer:
+If a checkout is already on the same host as the installation, use it directly. Confirm that it is clean and at the intended tag before running the installer:
 
 ```bash
-cd /home/jon/Curatarr
+cd /path/to/your/curatarr-release
 git status --short                   # must print nothing
-git describe --tags --exact-match   # must print v0.2.0rc2
+git describe --tags --exact-match   # must print v0.2.0rc3
 sudo ./scripts/install.sh
 sudo systemctl is-active curatarr-web curatarr-worker
 curl -fsS http://127.0.0.1:8787/api/v1/status | python3 -m json.tool
@@ -91,12 +91,46 @@ Use a deployment directory that is separate from any development checkout, for e
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 cd curatarr-deploy
-git checkout v0.2.0rc2
+git checkout v0.2.0rc3
 cp .env.example .env    # set CURATARR_SECRET_KEY and CURATARR_DB_PASSWORD
 docker compose up -d --build
 ```
 
 The image contains the installed package, not the source tree. Data lives in the `config` and `database` volumes, and migrations run when the web container starts. The example compose file binds the UI to `127.0.0.1:8787`; change the `ports` entry to reach it from your network. To upgrade, check out the new tag and run `docker compose up -d --build` again after backing up the volumes.
+
+### Windows with Docker Desktop
+
+Install Git and [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/), using its Linux containers backend (WSL 2 is the usual choice). Run these commands in PowerShell from a directory where you keep deployments:
+
+```powershell
+git clone https://github.com/Copas/Curatarr.git curatarr-deploy
+Set-Location curatarr-deploy
+git checkout v0.2.0rc3
+Copy-Item .env.example .env
+notepad .env
+docker compose up -d --build
+docker compose ps
+(Invoke-RestMethod http://127.0.0.1:8787/api/v1/status).version
+```
+
+Before starting Compose, replace `CURATARR_SECRET_KEY=change-me` in `.env` with a long, random secret and add `CURATARR_DB_PASSWORD=` with a separate random alphanumeric password. Keep `.env`: changing the secret key makes saved integration keys unreadable. Compose uses PostgreSQL, so its database URL overrides the SQLite example in `.env`. The web page is at `http://localhost:8787` once the `web` container is healthy.
+
+If Jellyfin, Sonarr, or Radarr run directly on the same Windows PC, use `host.docker.internal` in the URLs entered into Curatarr (for example `http://host.docker.internal:8096` for Jellyfin). `localhost` inside Curatarr points to its container; the host services must also accept connections from Docker Desktop. A Jellyfin webhook running on that Windows PC can send to `http://127.0.0.1:8787/api/v1/webhook/jellyfin`; another PC needs a reachable host address and a corresponding port binding in `compose.yaml`. The supplied binding accepts connections only from the Docker host.
+
+For free-space rules, enter the disk path **as Sonarr or Radarr reports it**, such as `C:\Media\Movies` or `\\nas\Media\Movies`. Curatarr matches drive and UNC paths regardless of slash style or letter case. If the Arr app does not report that disk and the container cannot see the path, Curatarr skips free-space cleanup for it rather than measuring a different disk. Use Retention → Preview to check the match before enabling cleanup.
+
+Before an upgrade, save `.env` and back up both the `database` and `config` named volumes in Docker Desktop's Volumes view. Then, in PowerShell:
+
+```powershell
+Set-Location curatarr-deploy
+git fetch --tags
+git checkout <new-release-tag>
+docker compose up -d --build
+docker compose ps
+(Invoke-RestMethod http://127.0.0.1:8787/api/v1/status).version
+```
+
+Keep the named volumes when replacing containers: `docker compose down --volumes` deletes the database and saved posters. Use `docker compose logs --tail=100 web worker` if startup fails.
 
 ## First run
 

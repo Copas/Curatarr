@@ -272,6 +272,37 @@ def test_root_disk_is_never_used_for_another_path(app, monkeypatch):
     assert _disk_pressure(media, _pressure_policy("/")) == (0, "normal")
 
 
+@pytest.mark.parametrize(
+    ("configured", "arr_path"),
+    [
+        (r"C:\Media\Movies", "c:/media"),
+        ("C:/Media/Movies", "c:\\MEDIA\\"),
+        (r"\\nas\Media\Movies", "//NAS/media"),
+    ],
+)
+def test_windows_arr_paths_match_slashes_and_case(
+    app, monkeypatch, configured, arr_path
+):
+    class WindowsArr:
+        def diskspace(self):
+            return [{"path": arr_path, "totalSpace": 1000, "freeSpace": 50}]
+
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: WindowsArr())
+    media = MediaIdentity(media_type="movie", title="Film")
+    assert _disk_pressure(media, _pressure_policy(configured)) == (100, "critical")
+
+
+@pytest.mark.parametrize("path", [r"D:\Media\Movies", r"C:\MediaOther\Movies"])
+def test_windows_disk_path_never_uses_another_drive_or_prefix(app, monkeypatch, path):
+    class OtherDriveArr:
+        def diskspace(self):
+            return [{"path": "C:\\Media", "totalSpace": 1000, "freeSpace": 50}]
+
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: OtherDriveArr())
+    media = MediaIdentity(media_type="movie", title="Film")
+    assert _disk_pressure(media, _pressure_policy(path)) is None
+
+
 def test_unreported_mount_is_measured_directly(app, monkeypatch, tmp_path):
     import os
 

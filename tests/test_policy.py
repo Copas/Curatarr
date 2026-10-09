@@ -44,6 +44,17 @@ def test_inheritance_and_invalid_quota():
         )
 
 
+@pytest.mark.parametrize("path", [r"C:\Media\Movies", "D:/TV", r"\\nas\Media\Movies"])
+def test_windows_arr_disk_paths_are_valid(path):
+    assert validate_policy({"disk_path": path})["disk_path"] == path
+
+
+@pytest.mark.parametrize("path", ["C:Media", r"\Media", "Media/Movies"])
+def test_relative_arr_disk_paths_are_invalid(path):
+    with pytest.raises(ValueError, match="Disk path must be an absolute"):
+        validate_policy({"disk_path": path})
+
+
 def test_acquisition_never_skips_two_seasons():
     parts = [SimpleNamespace(kind="episode", season_number=s) for s in (0, 1, 2, 4)]
     policy, _ = effective_policy("series")
