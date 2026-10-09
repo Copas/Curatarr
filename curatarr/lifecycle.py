@@ -930,6 +930,20 @@ def reset_series(media, *, run=True):
     return candidate, execute_approved(candidate.id)
 
 
+def reset_many(shows):
+    """Queue Reset to minimum for each show (the worker runs them one at a time).
+    Returns (queued, [(media, reason)] for shows that could not be queued)."""
+    queued, failed = 0, []
+    for media in shows:
+        try:
+            reset_series(media, run=False)
+            queued += 1
+        except ValueError as exc:
+            db.session.rollback()
+            failed.append((media, str(exc)))
+    return queued, failed
+
+
 def _finish_reset(media, policy, arr, action, unmonitored):
     """After a reset's files are gone: nothing more downloads until someone
     watches again. All seasons are unmonitored (Sonarr then unmonitors their
