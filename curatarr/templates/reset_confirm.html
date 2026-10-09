@@ -11,6 +11,7 @@
   </dl>
 </div>
 <p class="text-secondary small">The usual safety checks still apply: nothing for the show may be downloading, Never Purge must be off, the show is checked against Sonarr and Jellyfin, and the reset stops if someone starts playing it. Curatarr's worker does the reset in the background, usually within a minute.</p>
+{% if media.series_type == 'daily' %}<div class="alert alert-warning"><strong>{{ media.title }} is a daily show.</strong> Its episodes are numbered by air date, so the always-keep rule keeps none of them: a reset deletes every episode, and Curatarr does not fetch daily shows again when someone watches.</div>{% endif %}
 {% if values.dry_run %}<div class="alert alert-info">This library is in <strong>dry run</strong>: Curatarr records what it would delete, but nothing is actually deleted.</div>{% endif %}
 <form method="post" action="{{ url_for('main.title_reset', media_id=media.id) }}" class="d-flex gap-2"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <a class="btn btn-outline-secondary" href="{{ url_for('main.title', media_id=media.id) }}">Cancel</a>

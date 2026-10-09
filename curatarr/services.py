@@ -1296,6 +1296,68 @@ def setup_progress():
     return steps
 
 
+def shows_by_size(library_id=None):
+    """TV shows ordered by space on disk, with what Reset to minimum would free.
+
+    For the "Shows by size" page, the place to regain room by hand. Shows no
+    longer in Jellyfin or not matched to Sonarr are left out (they cannot be
+    reset)."""
+    from .policy import reclaimable_bytes
+
+    names = setting("jellyfin_user_names", {})
+    query = db.session.query(MediaIdentity).filter(
+        MediaIdentity.media_type == "series",
+        MediaIdentity.missing_since.is_(None),
+        MediaIdentity.sonarr_id.isnot(None),
+    )
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    rows = []
+    for media in query.all():
+        on_disk = sum(
+            p.size_bytes for p in media.parts if p.kind == "episode" and p.has_file
+        )
+        if not on_disk:
+            continue
+        policy, _ = resolved_policy(media)
+        frees = reclaimable_bytes(media.parts, policy)
+        latest = (
+            db.session.query(UserMediaState)
+            .filter(
+                UserMediaState.media_identity_id == media.id,
+                UserMediaState.last_played_at.isnot(None),
+            )
+            .order_by(UserMediaState.last_played_at.desc())
+            .first()
+        )
+        active = _active_candidate(media.id)
+        rows.append(
+            {
+                "media": media,
+                "library": media.library.name,
+                "on_disk": on_disk,
+                "frees": frees,
+                "keeps": on_disk - frees,
+                "episodes": sum(
+                    1 for p in media.parts if p.kind == "episode" and p.has_file
+                ),
+                "last_played": latest.last_played_at if latest else None,
+                "last_watcher": (
+                    names.get(latest.jellyfin_user_id, latest.jellyfin_user_id)
+                    if latest
+                    else None
+                ),
+                "resetting": bool(active and active.state in {"APPROVED", "EXECUTING"}),
+                "dry_run": policy["dry_run"],
+                # Daily shows are numbered by date, keep nothing under the
+                # always-keep rule, and are never refilled by Curatarr.
+                "daily": media.series_type == "daily",
+            }
+        )
+    rows.sort(key=lambda r: r["on_disk"], reverse=True)
+    return rows
+
+
 def review_rows():
     """Pending candidates with the section 29 review context."""
     from .lifecycle import _candidate_input
