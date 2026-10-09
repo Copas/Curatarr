@@ -20,7 +20,14 @@ from flask import (
 from sqlalchemy import func
 
 from . import db
-from .auth import SignInError, current_user, needs_server_url, sign_in, sign_out
+from .auth import (
+    SignInError,
+    current_user,
+    household_user_ids,
+    needs_server_url,
+    sign_in,
+    sign_out,
+)
 from .integrations import CLIENTS, IntegrationError
 from .lifecycle import evaluate_retention, review_candidate
 from .models import (
@@ -54,6 +61,7 @@ from .services import (
     save_policy_layer,
     save_reconcile_interval,
     save_title_override,
+    set_setting,
     setting,
     settings_view,
     setup_progress,
@@ -120,6 +128,40 @@ def require_sign_in():
     return redirect(url_for("main.sign_in_page", next=target))
 
 
+HOUSEHOLD_PAGES = {
+    "main.overview",
+    "main.review",
+    "main.shows",
+    "main.titles",
+    "main.title",
+    "main.poster",
+    "main.review_action",
+    "main.theme_preference",
+    "main.sign_out_page",
+    "main.sign_in_page",
+}
+
+
+@bp.before_app_request
+def authorize_household():
+    if current_app.config["ALLOW_UNAUTHENTICATED"]:
+        return
+    user = current_user()
+    if not user or user.get("role") != "household":
+        return
+    if request.endpoint in PUBLIC_ENDPOINTS:
+        return
+    if request.endpoint not in HOUSEHOLD_PAGES:
+        abort(403)
+    if request.endpoint == "main.title" and request.method != "GET":
+        abort(403)
+    if request.endpoint == "main.review_action" and (
+        request.view_args.get("choice")
+        not in {"keep", "snooze_30", "snooze_90", "never_purge"}
+    ):
+        abort(403)
+
+
 def _safe_next(value):
     if (
         value
@@ -158,6 +200,16 @@ def sign_in_page():
 def sign_out_page():
     sign_out()
     return redirect(url_for("main.sign_in_page"), 303)
+
+
+@bp.post("/preferences/theme")
+def theme_preference():
+    theme = request.form.get("theme")
+    if theme not in {"light", "dark"}:
+        abort(400)
+    response = redirect(_safe_next(request.form.get("back")), 303)
+    response.set_cookie("curatarr_theme", theme, max_age=31536000, samesite="Lax")
+    return response
 
 
 CHOICE_LABELS = {
@@ -218,22 +270,25 @@ def choice_label(value):
 NAV_SECTIONS = {
     "main.overview": "overview",
     "main.review": "review",
-    "main.titles": "overrides",
-    "main.title": "overrides",
-    "main.shows": "shows",
-    "main.history": "history",
-    "main.history_detail": "history",
-    "main.settings": "settings",
-    "main.setup": "settings",
-    "main.library_policy": "retention",
-    "main.cleanup_preview": "retention",
+    "main.review_delete_confirm": "review",
+    "main.titles": "library",
+    "main.title": "library",
+    "main.title_reset": "library",
+    "main.shows": "library",
+    "main.history": "activity",
+    "main.history_detail": "activity",
+    "main.settings": "manage",
+    "main.setup": "manage",
+    "main.library_policy": "manage",
+    "main.cleanup_preview": "manage",
+    "main.operations": "manage",
 }
 
 
 def _nav_section():
     """Which top-level navigation entry the current page belongs to."""
     if request.endpoint == "main.rules":
-        return (request.view_args or {}).get("section")
+        return "manage"
     return NAV_SECTIONS.get(request.endpoint)
 
 
@@ -241,11 +296,19 @@ def _nav_section():
 def template_values():
     if "csrf_token" not in session:
         session["csrf_token"] = secrets.token_urlsafe(32)
+    signed_in_user = session.get("user")
+    is_admin = current_app.config["ALLOW_UNAUTHENTICATED"] or bool(
+        signed_in_user and signed_in_user.get("role", "admin") == "admin"
+    )
     return {
         "csrf_token": session["csrf_token"],
         "nav_section": _nav_section(),
         "dry_run_split": dry_run_by_library(),
-        "signed_in_user": session.get("user"),
+        "signed_in_user": signed_in_user,
+        "is_admin": is_admin,
+        "theme": request.cookies.get("curatarr_theme")
+        if request.cookies.get("curatarr_theme") in {"light", "dark"}
+        else "dark",
     }
 
 
@@ -370,6 +433,17 @@ def overview():
     )
 
 
+@bp.get("/operations")
+def operations():
+    return render_template(
+        "operations.html",
+        metrics=metrics_summary(),
+        reconciliation=reconciliation_state(),
+        status=_status(),
+        **overview_data(),
+    )
+
+
 @bp.get("/setup")
 def setup():
     return render_template(
@@ -420,14 +494,58 @@ def settings():
                     minutes = None
                 save_reconcile_interval(minutes)
                 flash("Reconciliation interval saved", "success")
-        except ValueError as exc:
+            elif kind == "household":
+                from .services import client as integration_client
+
+                users = integration_client("jellyfin").users()
+                if not isinstance(users, list):
+                    raise TypeError("Jellyfin did not return a user list.")
+                eligible = {
+                    str(user["Id"])
+                    for user in users
+                    if isinstance(user, dict)
+                    and user.get("Id")
+                    and isinstance(user.get("Policy"), dict)
+                    and not user["Policy"].get("IsAdministrator")
+                    and not user["Policy"].get("IsDisabled")
+                }
+                selected = set(request.form.getlist("user_id"))
+                if not selected <= eligible:
+                    raise ValueError("Select only enabled Jellyfin household users.")
+                set_setting("household_user_ids", sorted(selected))
+                flash("Household access saved", "success")
+        except (ValueError, TypeError, IntegrationError) as exc:
             db.session.rollback()
             flash(str(exc), "danger")
         return redirect(url_for("main.settings"))
     new_token = session.pop("new_webhook_token", None)
     if new_token is None and setting("webhook_token") is None:
         new_token = rotate_webhook_token()
-    return render_template("settings.html", new_token=new_token, **settings_view())
+    from .services import client as integration_client
+
+    try:
+        users = integration_client("jellyfin").users()
+        if not isinstance(users, list):
+            raise TypeError("Jellyfin did not return a user list.")
+        household_users = [
+            user
+            for user in users
+            if isinstance(user, dict)
+            and isinstance(user.get("Policy"), dict)
+            and not user["Policy"].get("IsAdministrator")
+            and not user["Policy"].get("IsDisabled")
+        ]
+        household_error = None
+    except (IntegrationError, TypeError) as exc:
+        household_users, household_error = [], str(exc)
+    return render_template(
+        "settings.html",
+        new_token=new_token,
+        household_users=household_users,
+        household_allowed=household_user_ids(),
+        household_error=household_error,
+        **settings_view(),
+    )
 
 
 def _queue_reconciliation():
@@ -499,6 +617,14 @@ def review():
     return render_template("review.html", rows=review_rows())
 
 
+@bp.get("/review/<candidate_id>/delete")
+def review_delete_confirm(candidate_id):
+    candidate = db.session.get(PurgeCandidate, candidate_id)
+    if not candidate or candidate.state not in {"REVIEW", "LEAVING_SOON", "SNOOZED"}:
+        abort(404)
+    return render_template("review_delete_confirm.html", candidate=candidate)
+
+
 @bp.get("/shows")
 def shows():
     from .services import shows_by_size
@@ -526,6 +652,10 @@ def poster(media_id):
     media = db.session.get(MediaIdentity, media_id)
     if not media or not media.jellyfin_id:
         abort(404)
+    if not current_app.config["ALLOW_UNAUTHENTICATED"] and (
+        (current_user() or {}).get("role") == "household" and not media.library.managed
+    ):
+        abort(404)
     try:
         from .artwork import _jpeg
         from .services import client as integration_client
@@ -538,6 +668,8 @@ def poster(media_id):
 
 @bp.post("/review/<candidate_id>/<choice>")
 def review_action(candidate_id, choice):
+    if choice == "delete" and request.form.get("confirm") != "delete":
+        abort(400)
     try:
         candidate = review_candidate(candidate_id, choice)
         if choice == "delete":
@@ -845,6 +977,10 @@ def title(media_id):
     media = db.session.get(MediaIdentity, media_id)
     if not media:
         abort(404)
+    if not current_app.config["ALLOW_UNAUTHENTICATED"] and (
+        (current_user() or {}).get("role") == "household" and not media.library.managed
+    ):
+        abort(404)
     if request.method == "POST":
         try:
             save_title_override(media, request.form)
@@ -860,12 +996,29 @@ def title(media_id):
 @bp.get("/titles")
 def titles():
     query = request.args.get("q", "").strip()
-    rows = []
+    media_type = request.args.get("type", "")
+    if media_type not in {"", "series", "movie"}:
+        abort(400)
+    page = max(request.args.get("page", 1, type=int), 1)
+    rows_query = (
+        db.session.query(MediaIdentity)
+        .join(Library)
+        .filter(Library.media_type.in_(("tv", "movies")))
+    )
     if query:
-        rows = (
-            db.session.query(MediaIdentity)
-            .filter(MediaIdentity.title.ilike(f"%{query}%"))
-            .limit(50)
-            .all()
-        )
-    return render_template("titles.html", rows=rows, query=query)
+        rows_query = rows_query.filter(MediaIdentity.title.ilike(f"%{query}%"))
+    if media_type:
+        rows_query = rows_query.filter(MediaIdentity.media_type == media_type)
+    total = rows_query.count()
+    rows = (
+        rows_query.order_by(MediaIdentity.title).offset((page - 1) * 48).limit(48).all()
+    )
+    return render_template(
+        "titles.html",
+        rows=rows,
+        query=query,
+        media_type=media_type,
+        page=page,
+        has_next=page * 48 < total,
+        total=total,
+    )

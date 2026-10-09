@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.0rc1 (2026-10-09)
+
+- Refreshed the interface with grouped navigation, light and dark themes, a browsable title library, compact review cards, clearer policy sections, and a dedicated Operations page. Deletion approval now has a confirmation page. Administrators can allowlist non-admin Jellyfin household users for browsing and Keep/Snooze/Never Purge decisions; all admin routes and actions enforce the role server-side.
 
 - New "Shows by size" page (navigation bar): every TV show on disk, largest first, with what Reset to minimum would free, last watched and by whom, a library filter, totals, and a Reset… button that opens the confirmation page. Daily shows are flagged on this page and on the confirmation page, because a reset keeps none of their episodes and Curatarr never refills daily shows.
 
@@ -30,7 +32,7 @@
 
 - Settings shows the last webhook delivery (what it was, who, and whether it matched a title), the total received, and the last rejected or ignored delivery with the reason. Notification types Curatarr does not use are acknowledged and recorded as ignored instead of rejected.
 
-- Title pages have "Request now", which applies the always-keep and season-ahead rules to one show immediately and sends the result to Sonarr, plus the Review queue's Delete/Keep/Snooze/Never Purge buttons for a title in Review or Leaving Soon.
+- Title pages have "Request now", which applies the always-keep and season-ahead rules to one show immediately and sends the result to Sonarr, plus Keep/Snooze/Never Purge actions and an admin deletion confirmation link for a title in Review or Leaving Soon.
 
 - Jellyfin libraries that are not TV or movies (e.g. collections, mixed libraries) are listed on Overview as not managed instead of showing as empty 0 TB libraries, and are left out of rule scopes, the dry-run banner, and library counts.
 
@@ -52,7 +54,7 @@
 
 - Cleanup is driven by free space. Unwatched titles are no longer cleanup candidates on their own (new per-library switch `inactivity_cleanup`, off by default). Low free space selects only enough to return to the low threshold, with a Leaving Soon notice (14 days by default) before removal. Critical free space removes without a notice. Dry run still gates all removal.
 
-- The top navigation highlights the section being viewed, including sub-pages (title pages under Overrides, history entries under History, library policy under Retention, setup under Settings).
+- The grouped top navigation highlights the section being viewed, including sub-pages under Library, Activity, and Manage.
 - The global rules page shows real values instead of "Built-in default" placeholders and saves only values that differ from the built-in defaults. Blank options remain only where they mean something: the media-type-specific purge strategy and rule review modes that follow the main review mode. Library pages read "Inherit (value)".
 - Policy choices use plain labels: "Always keep for each show" offers "First N episodes of Season 1", "All of Season 1", and "Entire series (never trimmed)"; review modes, expiry, strategies, and Yes/No read as words.
 - Rule pages name what a blank field resolves to: "Built-in default (value)" on global defaults, which have nothing to inherit from, and "Inherit global default (value)" or "Inherit built-in default (value)" on a library.
@@ -67,10 +69,10 @@
 - Packaging fix: migrations moved into the package (`curatarr/migrations`) and templates, static files, and migrations are declared as package data, so installed copies run without the source tree. The Docker image now runs the installed package as a non-root user.
 - Repository hygiene test for publishable tracked files.
 - Review queue shows library, media type, proposed action, last watcher, acquisition date, and meaningful-watch state.
-- Sign-in with Jellyfin administrator accounts. Sign-in is now required by default; `CURATARR_ALLOW_UNAUTHENTICATED=true` remains for deployments behind an authenticating proxy. New optional `CURATARR_JELLYFIN_URL`.
+- Sign-in with Jellyfin accounts. Administrator access is available by default, while non-admin household users require an explicit allowlist entry. `CURATARR_ALLOW_UNAUTHENTICATED=true` remains for deployments behind an authenticating proxy. New optional `CURATARR_JELLYFIN_URL`.
 - First-run setup checklist; Overview shows scheduled deletions and recent cleanup.
 - Acquisition and Retention rule pages with global defaults and per-library scopes. Policy saves now merge with stored values instead of replacing them.
-- Structured JSON operational logs, `CURATARR_LOG_LEVEL`, durable metric counters, `/api/v1/metrics`, and an Operations table on Overview. Requires `flask --app curatarr db upgrade` (adds `metric_counters`).
+- Structured JSON operational logs, `CURATARR_LOG_LEVEL`, durable metric counters, `/api/v1/metrics`, and a dedicated Operations page. Requires `flask --app curatarr db upgrade` (adds `metric_counters`).
 - Tests keep instance data in temporary directories.
 
 ## 0.1.0 (2026-10-04)

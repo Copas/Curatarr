@@ -112,6 +112,6 @@ def test_reconcile_records_duration_and_overview_shows_operations(app):
         assert isinstance(metrics["last_reconcile_duration_ms"], int)
         assert metrics["purge_candidates_created"] > 0
         assert metrics["bytes_proposed"] > 0
-    page = app.test_client().get("/")
+    page = app.test_client().get("/operations")
     assert page.status_code == 200
     assert b"Duplicate events ignored" in page.data
