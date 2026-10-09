@@ -438,6 +438,10 @@ class DemoClient:
             raise IntegrationError("Demo user missing", 404)
         return self._demo_user(name)
 
+    def users(self):
+        self._check()
+        return [self._demo_user(name) for name in DEMO_USERS]
+
 
 def demo_client(kind):
     if not current_app.config["DEMO_MODE"]:

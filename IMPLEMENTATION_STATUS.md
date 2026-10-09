@@ -4,6 +4,8 @@
 Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; live validation pending)
 
 ## Completed
+- v0.2.0rc1 release candidate: full tests and Ruff checks pass; the packaged install serves the main pages from outside the checkout; a scratch native upgrade retains the previous release and creates an integrity-checked SQLite backup. The installer now builds before stopping services, migrates before switching `current`, and restores the previous release and default SQLite database on upgrade failure. Live lifecycle validation remains pending before v0.2.0.
+- UI/UX pass: grouped navigation, responsive review cards, browsable title list, clearer policy sections, a dedicated Operations page, light/dark theme choice, and deletion confirmation. Admins can allowlist non-admin Jellyfin household accounts for focused viewing and Keep/Snooze/Never Purge decisions; route-level checks keep administration and deletion approval with admins.
 - v0.1.0 tagged 2026-10-04 after the Section 92 release checks: tests and lint, migration upgrade/check/downgrade/re-upgrade on a fresh database, and fresh-install and demo-mode startup with all main pages and API endpoints returning 200.
 - Flask app, database schema and migrations, health/status API, Bootstrap shell, branding, and container skeleton.
 - Jellyfin/Sonarr/Radarr clients and read-only discovery with stable provider-ID matching.
@@ -21,7 +23,7 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Automatic lifecycle: per-rule review modes (inactivity, quota, low/critical disk pressure) inherit the library mode and stay opt-in alongside dry run. Notice expiry and approved deletes process pending playback first; deletes deferred by unprocessed events are retried by the worker. Quota runs continue to the low-water target after Curatarr's own deletes, while external drops below high water still invalidate queued candidates. Confirmed movie deletes mark files absent immediately.
 - End-to-end demo lifecycle: the reconcile CLI creates, expires, validates, and deletes quota candidates to the low-water target with reclaimed-space reporting; a simulated Radarr outage blocks every automatic delete.
 - All Section 98 acceptance edge cases have explicit tests.
-- Acquisition and Retention rule pages edit global defaults or one library. Saves merge only the shown fields, library-only fields (size limits, disk pressure, dry run) are excluded globally, and global changes are validated against every library. Navigation follows section 39 (Overrides is the title search).
+- Acquisition and Retention rule pages edit global defaults or one library. Saves merge only the shown fields, library-only fields (size limits, disk pressure, dry run) are excluded globally, and global changes are validated against every library. Title search and browsing are under Library.
 - Source and installed copies are separate (docs/decisions/008-source-and-installed-copies.md, docs/INSTALL.md). The package now ships templates, static files, and migrations, so it runs without a checkout. `scripts/install.sh` and `scripts/uninstall.sh` manage native systemd installs under `/opt/curatarr`, `/etc/curatarr`, and `/var/lib/curatarr`, with database backup before upgrade and the previous release kept for rollback. The Docker image runs the installed package as a non-root user. A hygiene test keeps tracked files publishable. Verified: wheel installed outside the repo, installer fresh install and upgrade into scratch locations without systemd, Docker image build and start.
 - Live webhook verified (2026-10-04): deliveries accepted and matched to The Office S03E11. Setup exposed two issues, both fixed: reloading Settings regenerated the token, and movies in Jellyfin collections were invisible to discovery (CollapseBoxSetItems). Live re-discovery then found 978 movies in Movies (previously 130) and 199 in Classic Movies (previously 107).
 - Spec sections 92 and 93 closed: the stored policy format is versioned, and route handlers delegate data access to services.
@@ -36,7 +38,7 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Sign-in with Jellyfin administrator accounts (docs/decisions/007-jellyfin-sign-in.md): password verified by Jellyfin and never stored, the Jellyfin session ended immediately, administrator status re-checked every five minutes with a one-hour outage grace period, rate-limited failures, safe post-sign-in redirects, and first-run server binding. `/health`, `/api/v1/status`, and the webhook remain public.
 - Review queue shows every section 29 field: library, media type, proposed action (movie delete, or the number of episode files outside the footprint), last watched and by whom (Jellyfin display names cached during reconciliation), acquisition date, favorite and meaningful-watch state.
 - First-run `/setup` checklist derived from stored state, with an Overview prompt until required steps are done. Overview also lists scheduled deletions and recent cleanup (deleted vs dry run).
-- Section 94 observability: JSON operational logs limited to the specified fields, durable metric counters, `/api/v1/metrics`, and an Operations table on Overview. Tests use temporary data directories, so they no longer write posters into `instance/`.
+- Section 94 observability: JSON operational logs limited to the specified fields, durable metric counters, `/api/v1/metrics`, and a dedicated Operations page. Tests use temporary data directories, so they no longer write posters into `instance/`.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
 ## In Progress
@@ -62,7 +64,7 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Favorites rank last but do not protect a title; only Never Purge does.
 - Dry run rehearses everything visible, including Leaving Soon poster badges; only the deletion request is withheld (docs/decisions/004).
 - First sync acts on existing watch history: past completions trigger acquisition like new ones (owner's choice, 2026-10-04; docs/decisions/006). Acquisition is not dry-run gated, and prior Sonarr monitored state is not recorded before Curatarr changes it.
-- Authentication uses Jellyfin administrator accounts (owner's choice, like Seerr) behind an isolated adapter, rather than local accounts. Non-administrators cannot sign in.
+- Authentication uses Jellyfin accounts behind an isolated adapter, rather than local accounts. Administrators have full access; enabled non-admin users require an explicit Curatarr allowlist entry and can make only non-destructive review decisions.
 - External side effects are represented by persisted actions.
 - Dry run is the default; each library can explicitly override it.
 

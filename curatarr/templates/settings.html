@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>Settings</h1><p class="text-secondary">Connect each application with its API URL and key. Saved keys are never shown here. The <a href="{{ url_for('main.setup') }}">setup checklist</a> shows what remains.</p>
+<div class="eyebrow">Manage</div><h1>Integrations and access</h1><p class="text-secondary">Connect each application with its API URL and key. Saved keys are never shown here. The <a href="{{ url_for('main.setup') }}">setup checklist</a> shows what remains.</p>
 {% if new_token %}<div class="alert alert-info">Copy this webhook token now; it will not be shown again: <code>{{ new_token }}</code></div>{% endif %}
 <div class="row g-3">
 {% for kind in ['jellyfin', 'sonarr', 'radarr'] %}
@@ -41,5 +41,8 @@
 Then Save the destination in Jellyfin.</li>
 </ol></details><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="webhook"><label class="form-label w-100">Your own token (optional)<input class="form-control" type="password" name="webhook_token" placeholder="Leave empty to generate a random one"></label><div class="form-text mb-2">Only needed to reuse a token you already have. Empty is recommended: Curatarr creates a random token and shows it once.</div><button class="btn btn-outline-light">Save or generate token</button></form></div>
 <div class="card p-3 mt-4"><h2 class="h5">Reconciliation schedule</h2><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="scheduler"><label class="form-label">Interval (minutes)<input class="form-control" type="number" min="5" max="1440" name="interval_minutes" value="{{ interval_minutes }}"></label><button class="btn btn-outline-light">Save interval</button></form></div>
+<div class="card p-3 mt-4"><h2 class="h5">Household access</h2><p class="text-secondary">Enable individual Jellyfin users to view managed titles and choose Keep, Snooze, or Never Purge. Only administrators can approve deletion or change settings.</p>
+{% if household_error %}<div class="alert alert-warning">Jellyfin users could not be loaded: {{ household_error }}. Connect Jellyfin above, then try again.</div>
+{% else %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="household"><div class="d-grid gap-2 mb-3">{% for user in household_users %}<label class="form-check"><input class="form-check-input" type="checkbox" name="user_id" value="{{ user.Id }}"{% if user.Id|string in household_allowed %} checked{% endif %}><span class="form-check-label">{{ user.Name or user.Id }}</span></label>{% else %}<p class="text-secondary mb-0">No enabled non-admin Jellyfin users were found.</p>{% endfor %}</div><button class="btn btn-outline-light">Save access</button></form>{% endif %}</div>
 <p class="mt-4 text-secondary">Dry run is on by default: Curatarr records what it would remove but never deletes. Turn it off on the <a href="{{ url_for('main.rules', section='retention') }}">Retention page</a>, as the global default or for one library.</p>
 {% endblock %}
