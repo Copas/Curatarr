@@ -14,7 +14,7 @@ A running installation is an **installed copy** with its own code, configuration
 | Data | `instance/` (git-ignored, disposable) | `/var/lib/curatarr` | Docker volumes `config` and `database` |
 | Runs as | Your shell | `curatarr-web` and `curatarr-worker` systemd services | `web` and `worker` containers |
 
-Changing, testing, or resetting the checkout never touches an installed copy. Nothing from an installed copy, such as its database, keys, posters, or logs, ends up in Git. Install from a tagged release (for example `v0.2.0rc1`), never from an unreleased branch.
+Changing, testing, or resetting the checkout never touches an installed copy. Nothing from an installed copy, such as its database, keys, posters, or logs, ends up in Git. Install from a tagged release (for example `v0.2.0rc2`), never from an unreleased branch.
 
 ## Native install (Linux with systemd)
 
@@ -23,7 +23,7 @@ Requirements: Python 3.12 or newer with the `venv` module, systemd, and root acc
 ```bash
 git clone <repository-url> curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc1         # the release you want
+git checkout v0.2.0rc2         # the release you want
 sudo ./scripts/install.sh
 ```
 
@@ -45,7 +45,7 @@ To change locations or the service account, set `PREFIX`, `CONFIG_DIR`, `DATA_DI
 ```bash
 cd curatarr-release
 git fetch --tags
-git checkout v0.2.0rc1
+git checkout v0.2.0rc2
 sudo ./scripts/install.sh
 ```
 
@@ -56,7 +56,7 @@ If the tagged checkout is already on the same host as the installation, use it d
 ```bash
 cd /home/jon/Curatarr
 git status --short                   # must print nothing
-git describe --tags --exact-match   # must print v0.2.0rc1
+git describe --tags --exact-match   # must print v0.2.0rc2
 sudo ./scripts/install.sh
 sudo systemctl is-active curatarr-web curatarr-worker
 curl -fsS http://127.0.0.1:8787/api/v1/status | python3 -m json.tool
@@ -91,7 +91,7 @@ Use a deployment directory that is separate from any development checkout, for e
 ```bash
 git clone <repository-url> curatarr-deploy
 cd curatarr-deploy
-git checkout v0.2.0rc1
+git checkout v0.2.0rc2
 cp .env.example .env    # set CURATARR_SECRET_KEY and CURATARR_DB_PASSWORD
 docker compose up -d --build
 ```
