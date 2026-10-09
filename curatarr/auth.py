@@ -1,10 +1,9 @@
-"""Sign-in with Jellyfin administrator accounts (docs/decisions/007-jellyfin-sign-in.md).
+"""Sign-in with Jellyfin accounts (docs/decisions/007-jellyfin-sign-in.md).
 
 Curatarr never stores passwords or Jellyfin user tokens. A sign-in verifies
-the credentials against Jellyfin, requires the Administrator policy, ends the
-Jellyfin session it just created, and keeps only the user ID and name in the
-signed Flask session. The account is re-checked with Curatarr's own API key
-every few minutes so removed or demoted administrators lose access.
+the credentials against Jellyfin, ends the Jellyfin session it just created,
+and keeps only the user ID, name, role, and verification time in the signed
+Flask session. Non-admin accounts require an explicit Curatarr allowlist entry.
 """
 
 import os
@@ -26,7 +25,8 @@ REVALIDATE_SECONDS = 300
 OUTAGE_GRACE = timedelta(hours=1)
 MAX_FAILURES = 5
 FAILURE_WINDOW_SECONDS = 900
-ADMIN_REQUIRED = "Curatarr requires a Jellyfin administrator account."
+HOUSEHOLD_DENIED = "Ask a Curatarr administrator to enable your Jellyfin account."
+ACCOUNT_DISABLED = "This Jellyfin account is disabled."
 
 _failures: dict[str, deque] = defaultdict(deque)
 _lock = threading.Lock()
@@ -85,6 +85,15 @@ def _is_admin(user):
     )
 
 
+def _is_enabled(user):
+    policy = user.get("Policy") if isinstance(user, dict) else None
+    return isinstance(policy, dict) and not policy.get("IsDisabled")
+
+
+def household_user_ids():
+    return set(setting("household_user_ids", []))
+
+
 def sign_in(username, password, remote_addr, server_url=None):
     if _rate_limited(remote_addr):
         raise SignInError("Too many failed sign-in attempts. Try again in 15 minutes.")
@@ -122,9 +131,19 @@ def sign_in(username, password, remote_addr, server_url=None):
             log_operation("sign_in_end_session", "error")
     if not isinstance(user, dict) or not user.get("Id"):
         raise SignInError("Jellyfin returned an invalid sign-in response.")
-    if not _is_admin(user):
-        log_operation("sign_in", "not_administrator")
-        raise SignInError(ADMIN_REQUIRED)
+    if not _is_enabled(user):
+        log_operation("sign_in", "disabled")
+        raise SignInError(ACCOUNT_DISABLED)
+    role = "admin" if _is_admin(user) else "household"
+    if role == "household" and (
+        (
+            not demo
+            and not db.session.query(Integration).filter_by(kind="jellyfin").first()
+        )
+        or str(user["Id"]) not in household_user_ids()
+    ):
+        log_operation("sign_in", "not_allowed")
+        raise SignInError(HOUSEHOLD_DENIED)
     if (
         not demo
         and not db.session.query(Integration).filter_by(kind="jellyfin").first()
@@ -133,11 +152,11 @@ def sign_in(username, password, remote_addr, server_url=None):
         db.session.add(
             Integration(kind="jellyfin", base_url=url, health_state="unconfigured")
         )
-    name = str(user.get("Name") or "Jellyfin administrator")
+    name = str(user.get("Name") or "Jellyfin user")
     audit(
-        "admin_signed_in",
+        "admin_signed_in" if role == "admin" else "household_signed_in",
         None,
-        f"{name} signed in with a Jellyfin administrator account.",
+        f"{name} signed in to Curatarr.",
         f"sign-in:{user['Id']}:{utcnow().isoformat()}",
     )
     db.session.commit()
@@ -148,6 +167,7 @@ def sign_in(username, password, remote_addr, server_url=None):
     session["user"] = {
         "id": str(user["Id"]),
         "name": name,
+        "role": role,
         "verified_at": utcnow().isoformat(),
     }
     log_operation("sign_in", "ok")
@@ -159,9 +179,15 @@ def sign_out():
 
 
 def current_user():
-    """The signed-in administrator, re-checked with Jellyfin periodically."""
+    """The signed-in user, re-checked with Jellyfin periodically."""
     data = session.get("user")
     if not isinstance(data, dict) or not data.get("id"):
+        return None
+    if (
+        data.get("role", "admin") == "household"
+        and data["id"] not in household_user_ids()
+    ):
+        sign_out()
         return None
     now = utcnow()
     verified = _as_datetime(data.get("verified_at"))
@@ -175,8 +201,9 @@ def current_user():
         log_operation("session_revalidate", "signed_out", status_code=exc.status_code)
         sign_out()
         return None
-    if not _is_admin(user):
-        log_operation("session_revalidate", "not_administrator")
+    role = "admin" if _is_admin(user) else "household"
+    if not _is_enabled(user) or role != data.get("role", "admin"):
+        log_operation("session_revalidate", "role_changed")
         sign_out()
         return None
     data = data | {"name": str(user.get("Name") or data["name"])}

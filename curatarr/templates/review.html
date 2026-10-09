@@ -1,18 +1,16 @@
 {% extends 'base.html' %}
+{% block title %}Review · Curatarr{% endblock %}
 {% block content %}
-<h1>Review queue</h1>
-<p class="text-secondary">Every candidate shows the observed reason, what would be removed, and current review state. Open Details for its effective policy and decision history.</p>
-<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Title</th><th>State</th><th>Why</th><th>Proposed action</th><th>Last watched</th><th>Added</th><th>Signals</th><th>Reclaimable</th><th>Delete date</th><th>Decision</th></tr></thead><tbody>
-{% for row in rows %}{% set candidate = row.candidate %}<tr>
-  <td><div class="d-flex align-items-center gap-2"><img src="{{ url_for('main.poster', media_id=row.media.id) }}" width="44" height="66" loading="lazy" alt=""><div><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a><div class="small text-secondary">{{ row.library }} · {{ 'TV' if row.media.media_type == 'series' else 'Movie' }}</div></div></div></td>
-  <td>{{ candidate.state.replace('_', ' ')|title }}</td><td>{{ candidate.reason_text }}</td>
-  <td>{{ row.proposed_action }}</td>
-  <td>{% if row.last_played %}{{ row.last_played.strftime('%Y-%m-%d') }}{% if row.last_watcher %}<div class="small text-secondary">by {{ row.last_watcher }}</div>{% endif %}{% else %}Never observed{% endif %}</td>
-  <td>{{ row.added_at.strftime('%Y-%m-%d') if row.added_at else '—' }}</td>
-  <td class="small">Favorite: {{ 'Yes' if row.favorite else 'No' }}<br>Meaningful watch: {{ 'Yes' if row.meaningful else 'No' }}</td>
-  <td>{{ candidate.reclaimable_bytes|size }}</td>
-  <td>{{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') if candidate.scheduled_delete_at else '—' }}</td>
-  <td><div class="d-flex flex-wrap gap-1"><a class="btn btn-sm btn-outline-info" href="{{ url_for('main.title', media_id=row.media.id) }}">Details</a>{% set choices = ['keep', 'snooze_30', 'snooze_90', 'never_purge'] if candidate.state == 'ELIGIBLE' else ['delete', 'keep', 'snooze_30', 'snooze_90', 'never_purge'] %}{% for choice in choices %}<form method="post" action="{{ url_for('main.review_action', candidate_id=candidate.id, choice=choice) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ 'btn-danger' if choice == 'delete' else 'btn-outline-light' }}">{{ choice.replace('_', ' ')|title }}</button></form>{% endfor %}</div></td>
-</tr>{% else %}<tr><td colspan="10">No pending candidates.</td></tr>{% endfor %}
-</tbody></table></div>
+<header class="page-heading"><div><div class="eyebrow">Decisions</div><h1>Review queue</h1><p class="text-secondary mb-0">See why a title was selected and choose what happens next.</p></div><span class="status-pill">{{ rows|length }} candidate{{ '' if rows|length == 1 else 's' }}</span></header>
+{% if rows %}<div class="d-grid gap-3">
+{% for row in rows %}{% set candidate = row.candidate %}
+<article class="card review-card">
+  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <div class="d-flex gap-3"><img class="poster" src="{{ url_for('main.poster', media_id=row.media.id) }}" loading="lazy" alt=""><div><div class="d-flex align-items-center gap-2 flex-wrap"><h2 class="h5 mb-0"><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a></h2><span class="status-pill">{{ candidate.state.replace('_',' ')|title }}</span></div><p class="text-secondary small mb-2">{{ row.library }} · {{ 'TV' if row.media.media_type == 'series' else 'Movie' }}</p><p class="mb-1">{{ candidate.reason_text }}</p><p class="small text-secondary mb-0">{{ row.proposed_action }}</p></div></div>
+    <div class="text-lg-end"><div class="fw-semibold">{{ candidate.reclaimable_bytes|size }}</div><div class="small text-secondary">reclaimable</div></div>
+  </div>
+  <div class="review-meta mt-3"><span>Last watched: {{ row.last_played.strftime('%Y-%m-%d') if row.last_played else 'Never observed' }}{% if is_admin and row.last_watcher %} by {{ row.last_watcher }}{% endif %}</span><span>Added: {{ row.added_at.strftime('%Y-%m-%d') if row.added_at else 'Unknown' }}</span><span>Favorite: {{ 'Yes' if row.favorite else 'No' }}</span><span>Meaningful watch: {{ 'Yes' if row.meaningful else 'No' }}</span>{% if candidate.scheduled_delete_at %}<span>Delete date: {{ candidate.scheduled_delete_at.strftime('%Y-%m-%d') }}</span>{% endif %}</div>
+  <div class="review-actions mt-3"><a class="btn btn-sm btn-outline-info" href="{{ url_for('main.title', media_id=row.media.id) }}">Details</a>{% for choice, label in [('keep','Keep'),('snooze_30','Snooze 30 days'),('snooze_90','Snooze 90 days'),('never_purge','Never purge')] %}<form method="post" action="{{ url_for('main.review_action', candidate_id=candidate.id, choice=choice) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary">{{ label }}</button></form>{% endfor %}{% if is_admin and candidate.state != 'ELIGIBLE' %}<a class="btn btn-sm btn-outline-danger" href="{{ url_for('main.review_delete_confirm', candidate_id=candidate.id) }}">Approve deletion…</a>{% endif %}</div>
+</article>
+{% endfor %}</div>{% else %}<div class="empty-state"><h2 class="h5">Nothing needs review</h2><p class="mb-0">New cleanup candidates appear here when the rules select them.</p></div>{% endif %}
 {% endblock %}
