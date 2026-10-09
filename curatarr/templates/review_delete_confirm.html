@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block content %}
+<p><a href="{{ url_for('main.review') }}">← Review queue</a></p>
+<div class="eyebrow">Confirm decision</div><h1>Approve deletion of {{ candidate.media.title }}?</h1>
+<div class="card p-4 mb-3"><p>{{ candidate.reason_text }}</p><dl class="row mb-0"><dt class="col-sm-4">What Curatarr may remove</dt><dd class="col-sm-8">{{ candidate.reclaimable_bytes|size }} from {{ candidate.media.library.name }}</dd><dt class="col-sm-4">Current state</dt><dd class="col-sm-8">{{ candidate.state.replace('_',' ')|title }}</dd></dl></div>
+<p class="text-secondary">Curatarr rechecks playback, downloads, policy, and integration health before the worker removes any files. If this library is in dry run, no files are removed.</p>
+<form method="post" action="{{ url_for('main.review_action', candidate_id=candidate.id, choice='delete') }}" class="d-flex gap-2"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="confirm" value="delete"><a class="btn btn-outline-secondary" href="{{ url_for('main.review') }}">Cancel</a><button class="btn btn-danger">Approve deletion</button></form>
+{% endblock %}

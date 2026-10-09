@@ -3,7 +3,13 @@ from datetime import timedelta
 import pytest
 
 from curatarr import db
-from curatarr.models import AppSetting, Integration, LifecycleAction, utcnow
+from curatarr.models import (
+    AppSetting,
+    Integration,
+    LifecycleAction,
+    PurgeCandidate,
+    utcnow,
+)
 
 
 @pytest.fixture
@@ -56,7 +62,7 @@ def test_administrator_signs_in_and_out(secured, client):
 @pytest.mark.parametrize(
     ("username", "password", "message"),
     [
-        ("demo-viewer", "demo", b"requires a Jellyfin administrator account"),
+        ("demo-viewer", "demo", b"Ask a Curatarr administrator"),
         ("demo-admin", "wrong", b"did not accept that username and password"),
     ],
 )
@@ -149,3 +155,93 @@ def test_jellyfin_outage_allows_a_grace_period(secured, client):
     assert client.get("/").status_code == 200
     _age_session(client, 61)
     assert client.get("/").status_code == 302
+
+
+def test_allowlisted_household_can_review_but_not_administer(secured, client):
+    from curatarr.demo import seed_demo
+    from curatarr.services import setting
+
+    seed_demo()
+    _sign_in(client)
+    response = client.post(
+        "/settings", data={"kind": "household", "user_id": "user-demo-viewer"}
+    )
+    assert response.status_code == 302
+    assert setting("household_user_ids") == ["user-demo-viewer"]
+    client.post("/logout")
+    assert _sign_in(client, "demo-viewer").status_code == 303
+    for path in ("/", "/review", "/titles", "/shows"):
+        assert client.get(path).status_code == 200, path
+    review = client.get("/review").text
+    assert "Never purge" in review
+    assert "Approve deletion" not in review
+    assert "by Avery" not in review and "by Blake" not in review
+    shows = client.get("/shows").text
+    assert "Reset…" not in shows and "by Avery" not in shows
+    for path in (
+        "/settings",
+        "/setup",
+        "/rules/retention",
+        "/history",
+        "/operations",
+        "/cleanup-preview",
+        "/api/v1/history",
+        "/api/v1/metrics",
+    ):
+        assert client.get(path).status_code == 403, path
+    candidate = db.session.query(PurgeCandidate).filter_by(state="REVIEW").first()
+    assert candidate is not None
+    media_id = candidate.media_identity_id
+    assert client.get(f"/titles/{media_id}").status_code == 200
+    assert "Save overrides" not in client.get(f"/titles/{media_id}").text
+    assert client.post(f"/titles/{media_id}", data={}).status_code == 403
+    assert client.get(f"/titles/{media_id}/reset").status_code == 403
+    assert client.post(f"/titles/{media_id}/request").status_code == 403
+    assert (
+        client.post(
+            f"/review/{candidate.id}/delete", data={"confirm": "delete"}
+        ).status_code
+        == 403
+    )
+    assert client.post(f"/review/{candidate.id}/keep").status_code == 302
+
+
+def test_household_allowlist_revocation_ends_session(secured, client):
+    from curatarr.services import set_setting
+
+    set_setting("household_user_ids", ["user-demo-viewer"])
+    _sign_in(client, "demo-viewer")
+    assert client.get("/").status_code == 200
+    set_setting("household_user_ids", [])
+    assert client.get("/").status_code == 302
+
+
+def test_delete_requires_confirmation(secured, client):
+    from curatarr.demo import seed_demo
+
+    seed_demo()
+    _sign_in(client)
+    candidate = db.session.query(PurgeCandidate).filter_by(state="REVIEW").first()
+    assert client.get(f"/review/{candidate.id}/delete").status_code == 200
+    assert client.post(f"/review/{candidate.id}/delete").status_code == 400
+
+
+def test_household_allowlist_rejects_unknown_ids(secured, client):
+    from curatarr.services import setting
+
+    _sign_in(client)
+    client.post("/settings", data={"kind": "household", "user_id": "unknown"})
+    assert setting("household_user_ids", []) == []
+
+
+def test_theme_preference_persists_in_cookie(secured, client):
+    _sign_in(client)
+    response = client.post(
+        "/preferences/theme", data={"theme": "light", "back": "/review"}
+    )
+    assert response.status_code == 303
+    assert response.headers["Location"] == "/review"
+    assert b'data-bs-theme="light"' in client.get("/login").data
+    assert (
+        client.post("/preferences/theme", data={"theme": "unknown"}).status_code == 400
+    )

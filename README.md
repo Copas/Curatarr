@@ -8,24 +8,29 @@ This is an early implementation. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_S
 
 ## Installing
 
-- **Native (Linux, systemd):** from a release checkout, run `sudo ./scripts/install.sh`. Re-run it from a newer release to upgrade; it backs up the database first.
+- **Native (Linux, systemd):** from a release checkout, run `sudo ./scripts/install.sh`. Re-run it from a newer release to upgrade; it backs up the default SQLite database before migration.
+- **Updating this host:** use the clean local `v0.2.0rc1` checkout and the verified commands in [docs/INSTALL.md](docs/INSTALL.md#upgrade). The installer leaves `/etc/curatarr/curatarr.env` and live data in place.
 - **Docker:** in a separate deployment directory, copy `.env.example` to `.env`, set the secrets, and run `docker compose up -d --build`.
 
 [docs/INSTALL.md](docs/INSTALL.md) covers both in full, plus configuration, upgrades, rollback, backup, and uninstalling.
 
 ## First run
 
-Open `http://<host>:8787` and sign in with a Jellyfin administrator account (see Signing in below). Until setup is complete, Overview links to the `/setup` checklist: connect Jellyfin, Sonarr, and Radarr in Settings, create the webhook token, run Discover from Overview, then optionally review the Acquisition and Retention rules. Saved keys are masked in the UI. The first Settings visit generates a webhook token and shows it once. Configure Jellyfin's webhook plugin to send JSON to `/api/v1/webhook/jellyfin` with that token in the `X-Curatarr-Token` request header. The webhook stays closed until the token exists.
+Open `http://<host>:8787` and sign in with a Jellyfin administrator account (see Signing in below). Until setup is complete, Overview links to the `/setup` checklist: connect Jellyfin, Sonarr, and Radarr in Manage → Integrations, create the webhook token, run Discover from Overview, then optionally review the Acquisition and Retention rules. Saved keys are masked in the UI. The first Integrations visit generates a webhook token and shows it once. Configure Jellyfin's webhook plugin to send JSON to `/api/v1/webhook/jellyfin` with that token in the `X-Curatarr-Token` request header. The webhook stays closed until the token exists.
 
 Integration keys and the webhook token are encrypted in the database with a key derived from `CURATARR_SECRET_KEY`. Losing or changing that key makes them unreadable, so back up the key together with the database. The application needs no media volume; deletion always goes through Sonarr or Radarr.
 
 ## Signing in
 
-Sign in with a Jellyfin account that has the Administrator permission, which is the permission Jellyfin uses for server configuration. Other Jellyfin accounts are refused. Curatarr checks the password with Jellyfin, ends the Jellyfin session it created, and keeps only the user's ID and name in a signed session cookie that lasts up to seven days. Passwords and Jellyfin user tokens are never stored. Every five minutes Curatarr re-checks the account using its own Jellyfin API key, so a removed, disabled, or demoted administrator loses access. If Jellyfin is unreachable, an existing session continues for up to one hour after its last successful check. After five failed sign-ins from one address within 15 minutes, further attempts are refused until the window passes.
+Sign in with a Jellyfin account that has the Administrator permission, or with an enabled non-admin account that an administrator has allowed in Curatarr. Curatarr checks the password with Jellyfin, ends the Jellyfin session it created, and keeps only the user's ID, name, role, and verification time in a signed session cookie that lasts up to seven days. Passwords and Jellyfin user tokens are never stored. Every five minutes Curatarr re-checks the account using its own Jellyfin API key, so a removed, disabled, or role-changed account loses access. If Jellyfin is unreachable, an existing session continues for up to one hour after its last successful check. After five failed sign-ins from one address within 15 minutes, further attempts are refused until the window passes.
 
-On first run, the sign-in page also asks for the Jellyfin server URL and binds Curatarr to it. Until that first administrator signs in, anyone who can reach the page could bind a different server, so keep Curatarr on a trusted network until setup is done. Alternatively, set `CURATARR_JELLYFIN_URL` so the server is fixed from the start. After sign-in, add a Jellyfin API key in Settings; it is needed for library discovery and the periodic account re-check.
+On first run, the sign-in page also asks for the Jellyfin server URL and binds Curatarr to it. Until that first administrator signs in, anyone who can reach the page could bind a different server, so keep Curatarr on a trusted network until setup is done. Alternatively, set `CURATARR_JELLYFIN_URL` so the server is fixed from the start. After sign-in, add a Jellyfin API key in Manage → Integrations; it is needed for library discovery and the periodic account re-check.
 
-`/health`, `/api/v1/status`, and the token-protected webhook stay public for dashboards. Every other page and API endpoint requires sign-in. Set `CURATARR_ALLOW_UNAUTHENTICATED=true` only when another layer, such as an authenticating reverse proxy, already restricts access. In demo mode, sign in as `demo-admin` with password `demo`; `demo-viewer` shows the refusal for non-administrators.
+Administrators can enable specific non-admin Jellyfin users in Manage → Integrations → Household access. Those users can browse managed titles and choose Keep, Snooze, or Never Purge in Review. They cannot approve deletion, change rules or integrations, run discovery, reset or request a show, or see full History and Operations. Curatarr rechecks their Jellyfin account periodically and ends a household session immediately when its allowlist entry is removed. Admins use the full interface. First-run server binding still requires an administrator.
+
+`/health`, `/api/v1/status`, and the token-protected webhook stay public for dashboards. Every other page and API endpoint requires sign-in; operational APIs require administrator access. Set `CURATARR_ALLOW_UNAUTHENTICATED=true` only when another layer, such as an authenticating reverse proxy, already restricts access; it grants the full admin interface. In demo mode, sign in as `demo-admin` with password `demo`, then enable `demo-viewer` from the household list to try that view.
+
+The interface groups daily decisions under Overview and Review, title browsing under Library, and administrator controls under Activity and Manage. The theme button in the header switches between dark and light on that browser. Approving a deletion has a confirmation page; Curatarr still performs its fresh safety checks before the worker removes files.
 
 ## Retention behavior
 
@@ -51,7 +56,7 @@ Curatarr runs on its own and does not depend on any dashboard. To add it to a ho
 
 Operational log lines from the `curatarr.ops` logger are single JSON objects. They are limited to `event_id`, `action_id`, `media_identity_id`, `candidate_id`, `integration`, `operation`, `duration_ms`, `result`, and `status_code`, and never include API keys or payloads. Each external call, processed event, executed action, and reconciliation is logged. Successful GET requests log at DEBUG, failures at WARNING, and everything else at INFO. Set the level with `CURATARR_LOG_LEVEL`.
 
-`/api/v1/metrics` and the Operations table on Overview report: events processed, duplicate events ignored, acquisition actions, purge candidates created, rescues, bytes proposed and actually reclaimed, external API failures per integration, last reconciliation duration, pending actions, and oldest pending action age. Most values are computed from stored history. Duplicate-event and API-failure counts are held in memory and written to the `metric_counters` table when each request or worker cycle ends.
+`/api/v1/metrics` and Manage → Operations report: events processed, duplicate events ignored, acquisition actions, purge candidates created, rescues, bytes proposed and actually reclaimed, external API failures per integration, last reconciliation duration, pending actions, and oldest pending action age. Most values are computed from stored history. Duplicate-event and API-failure counts are held in memory and written to the `metric_counters` table when each request or worker cycle ends.
 
 ## Developing Curatarr
 

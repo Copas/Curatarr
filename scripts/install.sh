@@ -50,33 +50,65 @@ elif [ "$(id -un)" != "$SERVICE_USER" ]; then
     fail "run as root, or set SERVICE_USER to your own account for a user install"
 fi
 
-if [ "$NO_SYSTEMD" != 1 ] && systemctl is-active --quiet curatarr-web 2>/dev/null; then
-    say "Stopping running services for upgrade"
-    systemctl stop curatarr-worker curatarr-web
-fi
-
 say "Installing code to $PREFIX"
 mkdir -p "$PREFIX/releases" "$CONFIG_DIR" "$DATA_DIR"
-release="$PREFIX/releases/$(date +%Y%m%d-%H%M%S)"
+previous=$(readlink -f "$PREFIX/current" 2>/dev/null || true)
+release=$(mktemp -d "$PREFIX/releases/$(date +%Y%m%d-%H%M%S)-XXXXXX")
+staging=""
+backup=""
+next="$PREFIX/.current-$$"
+services_stopped=0
+migration_started=0
+switched=0
+completed=0
+web_was_active=0
+worker_was_active=0
+cleanup() {
+    status=$?
+    trap - EXIT
+    [ -z "$staging" ] || rm -rf "$staging"
+    rm -f "$next"
+    if [ "$status" -ne 0 ] && [ "$completed" -eq 0 ]; then
+        if [ "$switched" -eq 1 ] && [ "$NO_SYSTEMD" != 1 ]; then
+            systemctl stop curatarr-worker curatarr-web || true
+        fi
+        if [ "$switched" -eq 1 ]; then
+            if [ -n "$previous" ]; then
+                ln -s "$previous" "$next"
+                mv -Tf "$next" "$PREFIX/current"
+            else
+                rm -f "$PREFIX/current"
+            fi
+        fi
+        if [ "$migration_started" -eq 1 ] && [ -n "$backup" ]; then
+            say "Restoring SQLite database from $backup"
+            rm -f "$DATA_DIR/curatarr.db-wal" "$DATA_DIR/curatarr.db-shm"
+            cp -p "$backup" "$DATA_DIR/curatarr.db"
+        fi
+        if [ "$services_stopped" -eq 1 ] && [ -n "$previous" ]; then
+            if [ "$migration_started" -eq 0 ] || [ -n "$backup" ]; then
+                [ "$web_was_active" -eq 0 ] || systemctl start curatarr-web
+                [ "$worker_was_active" -eq 0 ] || systemctl start curatarr-worker
+            else
+                say "Database migration may have changed an external database; services remain stopped for manual recovery."
+            fi
+        fi
+        rm -rf "$release"
+        fail "installation failed; previous release remains selected"
+    fi
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 # Virtualenvs cannot be moved, so each install gets its own release
 # directory and "current" switches only after it installed successfully.
 "$PYTHON" -m venv "$release"
 "$release/bin/python" -m pip install --quiet --upgrade pip
 # Build from a temporary copy so the source checkout is never written to.
 staging=$(mktemp -d)
-trap 'rm -rf "$staging"' EXIT
 cp -R "$SOURCE_DIR/pyproject.toml" "$SOURCE_DIR/README.md" "$SOURCE_DIR/LICENSE" \
     "$SOURCE_DIR/curatarr" "$staging/"
 find "$staging" -name __pycache__ -prune -exec rm -rf {} +
 "$release/bin/python" -m pip install --quiet "$staging"
-previous=$(readlink "$PREFIX/current" 2>/dev/null || true)
-ln -sfn "$release" "$PREFIX/current"
-# Keep the new release and the one before it for rollback.
-for old in "$PREFIX"/releases/*; do
-    if [ "$old" != "$release" ] && [ "$old" != "$previous" ]; then
-        rm -rf "$old"
-    fi
-done
 
 if [ ! -f "$ENV_FILE" ]; then
     say "Writing new configuration to $ENV_FILE"
@@ -107,31 +139,53 @@ if [ "$(id -u)" -eq 0 ]; then
     chmod 640 "$ENV_FILE"
 fi
 
+if [ "$NO_SYSTEMD" != 1 ]; then
+    if systemctl is-active --quiet curatarr-web 2>/dev/null; then web_was_active=1; fi
+    if systemctl is-active --quiet curatarr-worker 2>/dev/null; then worker_was_active=1; fi
+    if [ "$web_was_active" -eq 1 ] || [ "$worker_was_active" -eq 1 ]; then
+        say "Stopping running services for upgrade"
+        services_stopped=1
+        systemctl stop curatarr-worker curatarr-web
+    fi
+fi
+
 if [ -f "$DATA_DIR/curatarr.db" ]; then
-    backup="$DATA_DIR/backups/curatarr-$(date +%Y%m%d-%H%M%S).db"
-    say "Backing up database to $backup"
     mkdir -p "$DATA_DIR/backups"
-    cp -p "$DATA_DIR/curatarr.db" "$backup"
+    backup=$(mktemp "$DATA_DIR/backups/curatarr-$(date +%Y%m%d-%H%M%S)-XXXXXX.db")
+    say "Backing up database to $backup"
+    "$PYTHON" - "$DATA_DIR/curatarr.db" "$backup" <<'PY'
+import sqlite3
+import sys
+
+source = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+target = sqlite3.connect(sys.argv[2])
+source.backup(target)
+assert target.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+target.close()
+source.close()
+PY
     if [ "$(id -u)" -eq 0 ]; then
         chown -R "$SERVICE_USER:" "$DATA_DIR/backups"
     fi
 fi
 
 say "Applying database migrations"
+migration_started=1
 (
     set -a
     . "$ENV_FILE"
     set +a
     cd "$DATA_DIR"
-    as_service_user "$PREFIX/current/bin/flask" --app curatarr db upgrade
-    as_service_user "$PREFIX/current/bin/flask" --app curatarr encrypt-secrets
+    as_service_user "$release/bin/flask" --app curatarr db upgrade
+    as_service_user "$release/bin/flask" --app curatarr encrypt-secrets
 )
+ln -s "$release" "$next"
+mv -Tf "$next" "$PREFIX/current"
+switched=1
 
 if [ "$NO_SYSTEMD" = 1 ]; then
     say "Skipping systemd units (NO_SYSTEMD=1)"
-    exit 0
-fi
-
+else
 say "Installing systemd units"
 cat > "$SYSTEMD_DIR/curatarr-web.service" <<EOF
 [Unit]
@@ -178,3 +232,14 @@ EOF
 systemctl daemon-reload
 systemctl enable --now curatarr-web curatarr-worker
 say "Curatarr is running. Open http://<this-host>:8787 and sign in with a Jellyfin administrator."
+fi
+
+completed=1
+# Keep the new release and the one before it for rollback, only after success.
+for old in "$PREFIX"/releases/*; do
+    if [ "$old" != "$release" ] && [ "$old" != "$previous" ]; then
+        if ! rm -rf "$old"; then
+            say "Could not remove old release $old; remove it manually if needed."
+        fi
+    fi
+done

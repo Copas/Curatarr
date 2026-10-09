@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>History</h1><p class="text-secondary">Observed events, decisions, external requests, and outcomes.</p>
+<div class="eyebrow">Activity</div><h1>History</h1><p class="text-secondary">Observed events, decisions, external requests, and outcomes. Filter to follow a particular title or period.</p>
 <form method="get" class="row g-2 mb-4">
   <div class="col-md-3"><label class="form-label w-100">Title<input class="form-control" name="q" value="{{ filters.q }}"></label></div>
   <div class="col-md-3"><label class="form-label w-100">Library<select class="form-select" name="library"><option value="">All libraries</option>{% for library in libraries %}<option value="{{ library.id }}" {% if library.id == filters.library %}selected{% endif %}>{{ library.name }}</option>{% endfor %}</select></label></div>

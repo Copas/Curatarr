@@ -84,10 +84,7 @@ def test_preview_flags_disks_it_cannot_measure(app, client, monkeypatch, tmp_pat
 
 def test_preview_page_sits_under_retention(app, client):
     page = client.get("/cleanup-preview").text
-    assert (
-        'class="nav-link active" href="/rules/retention" aria-current="page">Retention<'
-        in page
-    )
+    assert 'href="/rules/retention" aria-current="page">Retention<' in page
     assert "Preview" in page
     retention = client.get("/rules/retention").text
     assert "Preview what free-space cleanup would pick" in retention

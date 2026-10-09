@@ -1,13 +1,14 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>Setup</h1>
-<p class="text-secondary">Curatarr is configured from the web interface. Work through these steps in order; each one updates as soon as it is complete.</p>
+<div class="eyebrow">Manage</div><h1>Setup</h1>
+<p class="text-secondary">Connect your services, discover libraries, and review the safety settings. Each step updates when it is complete.</p>
+<div class="card p-3 mb-4"><strong>{{ steps|selectattr('done')|list|length }} of {{ steps|length }} steps complete</strong><progress class="w-100 mt-2" aria-label="Setup progress" value="{{ steps|selectattr('done')|list|length }}" max="{{ steps|length }}"></progress></div>
 <ol class="list-group list-group-numbered mb-4">
 {% for step in steps %}
   <li class="list-group-item d-flex justify-content-between align-items-start">
     <div class="ms-2 me-auto">{{ step.label }}{% if step.optional %} <span class="text-secondary">(optional)</span>{% endif %}</div>
     {% if step.done %}<span class="badge text-bg-success">Done</span>
-    {% else %}<a class="btn btn-sm btn-outline-light" href="{{ url_for(step.endpoint, **step.get('args', {})) }}">Open</a>{% endif %}
+    {% else %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for(step.endpoint, **step.get('args', {})) }}">Open step</a>{% endif %}
   </li>
 {% endfor %}
 </ol>
