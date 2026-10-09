@@ -21,7 +21,7 @@ Changing, testing, or resetting the checkout never touches an installed copy. No
 Requirements: Python 3.12 or newer with the `venv` module, systemd, and root access.
 
 ```bash
-git clone <repository-url> curatarr-release
+git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
 git checkout v0.2.0rc2         # the release you want
 sudo ./scripts/install.sh
@@ -89,7 +89,7 @@ sudo ./scripts/uninstall.sh --purge   # also deletes configuration, data, and th
 Use a deployment directory that is separate from any development checkout, for example a release checkout used only for this purpose:
 
 ```bash
-git clone <repository-url> curatarr-deploy
+git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 cd curatarr-deploy
 git checkout v0.2.0rc2
 cp .env.example .env    # set CURATARR_SECRET_KEY and CURATARR_DB_PASSWORD
