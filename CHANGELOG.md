@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The light/dark theme button is now a sun icon in dark theme and a moon icon in light theme, with a "Switch to … theme" tooltip and label.
+
 - Shows by size has "Reset all unwatched shows…" (administrators only). Its confirmation page lists every show nobody has ever started that would be reset, with the files and space removed, and the unwatched shows it skips and why: daily shows, Never Purge, a cleanup already running, already at the minimum, and shows added in the last 30 days (adjustable). It warns separately when any affected library is not in dry run. Confirming requires typing the exact phrase (e.g. "reset 143 shows"), and a list that changed since the page was opened is refused. Each show is then reset by the worker with the usual checks.
 
 ## 0.2.0rc3 (2026-10-09)
