@@ -14,6 +14,7 @@ from .chapters import (
 from .enrichment import (
     describe,
     environment_status,
+    file_locations_known,
     flatten,
     form_values,
     global_layer,
@@ -24,11 +25,13 @@ from .enrichment import (
     queue_library,
     queue_scan,
     queue_selected,
+    request_scan_after_discovery,
     save_settings,
     state_for,
 )
 from .models import ChapterState, Library, MediaIdentity, MediaPart
 from .routes import NAV_SECTIONS, bp
+from .services import request_reconciliation
 
 NAV_SECTIONS.update(
     {
@@ -124,11 +127,25 @@ def chapter_maintenance():
 def chapter_scan():
     library_id = request.form.get("library") or None
     count = queue_scan(library_id)
-    flash(
-        f"Queued {count} files for a read-only chapter scan. The worker inspects "
-        "them in the background; reload to see the counts.",
-        "success",
-    )
+    if count:
+        flash(
+            f"Queued {count} files for a read-only chapter scan. The worker "
+            "inspects them in the background; reload to see the counts.",
+            "success",
+        )
+    elif not file_locations_known():
+        # Discovery records each file's location; it has not run since the
+        # upgrade that added them. Run it now, then scan.
+        request_scan_after_discovery(library_id)
+        request_reconciliation()
+        flash(
+            "Curatarr has not recorded where your files are yet. It is "
+            "discovering them now (a minute or two), and the scan starts "
+            "automatically afterwards. Reload this page in a few minutes.",
+            "info",
+        )
+    else:
+        flash("Every file is already scanned or has a chapter job queued.", "info")
     return redirect(url_for("main.chapter_maintenance", library=library_id))
 
 
