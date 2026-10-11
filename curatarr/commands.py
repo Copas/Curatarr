@@ -7,6 +7,7 @@ from flask import current_app
 
 from . import db
 from .artwork import reconcile_artwork
+from .enrichment import dispatch, queue_new_media
 from .integrations import IntegrationError
 from .lifecycle import (
     evaluate_retention,
@@ -70,6 +71,7 @@ def worker_cycle():
     resume_approved()
     expire_notices()
     reconcile_artwork()
+    _dispatch_chapters()
     now = utcnow()
     if not _reconcile_due(now):
         return "idle"
@@ -92,10 +94,27 @@ def worker_cycle():
     evaluate_retention()
     set_setting("last_reconcile_at", utcnow().isoformat())
     _record_reconcile_duration(started)
+    if not demo:
+        # Discovery just recorded new imports; queue their chapter jobs.
+        queue_new_media()
+        _dispatch_chapters()
     return "reconciled"
 
 
+def _dispatch_chapters():
+    """Start chapter jobs in background threads; never blocks the cycle."""
+    try:
+        dispatch()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Chapter job dispatch failed")
+
+
 def register_commands(app):
+    from .chapter_commands import chapters_group
+
+    app.cli.add_command(chapters_group)
+
     @app.cli.command("encrypt-secrets")
     def encrypt_secrets_command():
         """Encrypt credentials saved by older Curatarr versions."""

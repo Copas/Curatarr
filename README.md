@@ -40,6 +40,14 @@ Policy resolves title override → library → global → built-in default. The 
 
 Dry run is on by default. In dry run, Curatarr goes through the whole process and records what it would remove in History, but never asks Sonarr or Radarr to delete anything. The banner at the top of every page says which libraries are in dry run. Turn it off globally or per library. Before each deletion, Curatarr rechecks mapping, activity, grace, policy, queue state, and integration health. If it cannot verify these, it blocks deletion.
 
+## Chapter generation
+
+Optional, and off until enabled: Manage → Chapters. After Sonarr or Radarr finish importing a movie or episode of at least 20 minutes that has no chapters, Curatarr can add them. *Navigation Chapters* places one about every 7 minutes (4–10 minutes apart), moved to the nearest scene change. *Smart Chapters* also transcribes the audio locally with faster-whisper. It asks an Ollama model where the story moves on and what to call each chapter, and falls back to Navigation Chapters if that fails. Chapters are written into MKV files in place with `mkvpropedit`, which re-encodes nothing; other containers are reported as unsupported. Every file is verified afterwards, and only that item is refreshed in Jellyfin.
+
+Existing chapters are preserved. Curatarr regenerates or removes only chapters it can show it wrote. Enabling the feature never processes the existing library: Chapter maintenance scans it read-only, shows counts, and processes only the files or library you confirm. Each file's page under its title shows a preview with the scene changes, the plan from each method, and the exact write command, before anything is modified. Settings are global with per-library overrides, and dry run is available. Jobs run in the background with a configurable concurrency (default 1), so they never delay lifecycle work. See docs/decisions/009-chapter-enrichment.md.
+
+Smart Chapters needs `pip install "curatarr[chapters]"` (or `chapters-gpu` for CUDA), Ollama with a model, and write access to the media files for the worker's user. `flask --app curatarr chapters preview <file>` prints the full analysis for one file without changing it.
+
 ## API and health
 
 Read-only endpoints (all except `/health` and `/api/v1/status` require sign-in): `/health`, `/api/v1/status`, `/api/v1/metrics`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. The webhook endpoint is `/api/v1/webhook/jellyfin`.

@@ -132,6 +132,17 @@ docker compose ps
 
 Keep the named volumes when replacing containers: `docker compose down --volumes` deletes the database and saved posters. Use `docker compose logs --tail=100 web worker` if startup fails.
 
+### Optional: chapter generation
+
+FFmpeg/ffprobe (Jellyfin's bundled copy is found automatically) and MKVToolNix (`mkvpropedit`) are needed to add chapters. Smart Chapters also needs faster-whisper, which the installer adds when asked:
+
+```bash
+sudo EXTRAS=chapters-gpu ./scripts/install.sh   # NVIDIA GPU (adds cuBLAS/cuDNN)
+sudo EXTRAS=chapters ./scripts/install.sh       # CPU only
+```
+
+Give EXTRAS again on every upgrade, or the next install leaves it out. The worker downloads the transcription model to `$DATA_DIR/models` on first use (about 1.5 GB for `medium`). It also needs Ollama with a model, and permission to modify the media files. For a CIFS/SMB mount with a forced owner, add the `curatarr` user to the mount's group (`usermod -aG <group> curatarr`, then restart the worker), if the mount grants that group write access.
+
 ## First run
 
 1. Open `http://<host>:8787`. Sign in with a Jellyfin **administrator** account. On first run, also enter your Jellyfin server URL (unless `CURATARR_JELLYFIN_URL` is set). Do this before exposing Curatarr beyond a trusted network.

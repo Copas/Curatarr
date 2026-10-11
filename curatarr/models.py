@@ -134,6 +134,8 @@ class MediaPart(db.Model, Timed):
     has_file = db.Column(db.Boolean, default=False, nullable=False)
     air_date = db.Column(db.DateTime(timezone=True))
     acquired_at = db.Column(db.DateTime(timezone=True))
+    # The file's path as Sonarr/Radarr report it (see chapter path mappings).
+    file_path = db.Column(db.Text)
     __table_args__ = (
         db.UniqueConstraint(
             "media_identity_id", "kind", "season_number", "episode_number"
@@ -286,3 +288,46 @@ class WatchStateSnapshot(db.Model, Timed):
     playback_position_ticks = db.Column(db.BigInteger, default=0, nullable=False)
     date_played = db.Column(db.DateTime(timezone=True))
     restored_at = db.Column(db.DateTime(timezone=True))
+
+
+class ChapterState(db.Model, Timed):
+    """Chapter enrichment for one media file (see enrichment.py).
+
+    ``chapter_file_size``/``chapter_file_mtime`` describe the file as Curatarr
+    last left it, so an unchanged file is never processed twice. A file counts
+    as carrying Curatarr's chapters only while its chapters still match
+    ``written_fingerprint``.
+    """
+
+    __tablename__ = "chapter_states"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    media_part_id = db.Column(
+        db.String(36), db.ForeignKey("media_parts.id"), unique=True, nullable=False
+    )
+    media_identity_id = db.Column(
+        db.String(36), db.ForeignKey("media_identities.id"), nullable=False, index=True
+    )
+    chapter_status = db.Column(db.String(30), default="not_processed", nullable=False)
+    chapter_source = db.Column(db.String(20))
+    chapter_count = db.Column(db.Integer)
+    chapter_processed_at = db.Column(db.DateTime(timezone=True))
+    chapter_file_mtime = db.Column(db.Float)
+    chapter_file_size = db.Column(db.BigInteger)
+    chapter_generation_version = db.Column(db.Integer)
+    chapter_config_hash = db.Column(db.String(32))
+    chapter_error = db.Column(db.Text)
+    duration_seconds = db.Column(db.Float)
+    container = db.Column(db.String(60))
+    # Work queue: idle, queued, running. ``requested_action`` is what to run.
+    job_state = db.Column(db.String(20), default="idle", nullable=False, index=True)
+    requested_action = db.Column(db.String(20))
+    requested_at = db.Column(db.DateTime(timezone=True))
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    next_attempt_at = db.Column(db.DateTime(timezone=True))
+    written_fingerprint = db.Column(db.String(64))
+    written_chapters_json = db.Column(db.JSON)
+    # Chapters that were in the file before Curatarr replaced them, as XML.
+    original_chapters_xml = db.Column(db.Text)
+    last_preview_json = db.Column(db.JSON)
+    part = db.relationship("MediaPart")
+    media = db.relationship("MediaIdentity")

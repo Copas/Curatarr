@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Optional chapter generation (Manage → Chapters). Long movies and episodes without chapters get them after import: Navigation Chapters (about every 7 minutes, aligned to scene changes) or Smart Chapters (local faster-whisper transcript plus an Ollama model choose the boundaries and name them), with fixed intervals as the last fallback. MKV files are edited in place with mkvpropedit, with no re-encoding, then verified, and only that item is refreshed in Jellyfin. Existing chapters are preserved, and Curatarr removes or regenerates only chapters it wrote. Enabling it never sweeps the existing library; Chapter maintenance scans, shows counts, and processes what you confirm. Each file has a preview page. Install with `EXTRAS=chapters-gpu` (or `chapters`) for Smart Chapters. Discovery now also records each file's path from Sonarr/Radarr (migration e7c3a9f15d42).
+
 - The light/dark theme button is now a sun icon in dark theme and a moon icon in light theme, with a "Switch to … theme" tooltip and label.
 
 - Shows by size has "Reset all unwatched shows…" (administrators only). Its confirmation page lists every show nobody has ever started that would be reset, with the files and space removed, and the unwatched shows it skips and why: daily shows, Never Purge, a cleanup already running, already at the minimum, and shows added in the last 30 days (adjustable). It warns separately when any affected library is not in dry run. Confirming requires typing the exact phrase (e.g. "reset 143 shows"), and a list that changed since the page was opened is refused. Each show is then reset by the worker with the usual checks.

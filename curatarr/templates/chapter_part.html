@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Chapters · {{ media.title }} · Curatarr{% endblock %}
+{% set labels = {'semantic': 'Smart (semantic)', 'scene_aligned': 'Scene-aligned', 'fixed': 'Fixed interval'} %}
+{% block content %}
+<div class="eyebrow"><a href="{{ url_for('main.title', media_id=media.id) }}">{{ media.title }}</a>{% if part.kind == 'episode' %} · S{{ '%02d'|format(part.season_number or 0) }}E{{ '%02d'|format(part.episode_number or 0) }}{% endif %}</div><h1>Chapters</h1>
+<div class="card p-3 mb-4"><div class="row g-3">
+  <div class="col-6 col-md-3"><div class="text-secondary small">Chapters</div><div class="h5 mb-0">{{ info.label }}</div></div>
+  <div class="col-6 col-md-3"><div class="text-secondary small">Source</div><div class="h5 mb-0">{{ info.source }}</div></div>
+  <div class="col-6 col-md-3"><div class="text-secondary small">Count</div><div class="h5 mb-0">{{ info.count if info.count is not none else '—' }}</div></div>
+  <div class="col-6 col-md-3"><div class="text-secondary small">Last processed</div><div class="h5 mb-0">{{ info.processed_at.strftime('%Y-%m-%d %H:%M') ~ ' UTC' if info.processed_at else 'Never' }}</div></div>
+</div>
+{% if state and state.chapter_error %}<div class="alert alert-{{ 'secondary' if state.chapter_error.startswith('Waiting') else 'warning' }} mt-3 mb-0">{{ state.chapter_error }}</div>{% endif %}
+{% if info.queued %}<div class="alert alert-info mt-3 mb-0">A chapter job for this file is {{ state.job_state }} ({{ state.requested_action }}). Reload to see the result.</div>{% endif %}
+<div class="d-flex flex-wrap gap-2 mt-3">
+  {% for action, label, style, allowed in [('preview', 'Preview chapters', 'btn-outline-light', true), ('generate', 'Generate chapters', 'btn-primary', not info.can_remove), ('regenerate', 'Regenerate chapters', 'btn-outline-light', info.can_remove), ('remove', 'Remove Curatarr-generated chapters', 'btn-outline-danger', info.can_remove)] %}
+  {% if allowed %}<form method="post" action="{{ url_for('main.chapter_part_action', part_id=part.id, action=action) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ style }}"{% if info.queued %} disabled{% endif %}>{{ label }}</button></form>{% endif %}
+  {% endfor %}
+</div>
+{% if not info.can_remove %}<p class="small text-secondary mt-2 mb-0">Regenerate and remove appear only for chapters Curatarr wrote itself and that are still unchanged in the file.</p>{% endif %}
+</div>
+{% if state and state.written_chapters_json %}<h2 class="h4">Chapters in the file</h2><ol class="mb-4">{% for c in state.written_chapters_json %}<li><code>{{ c.start|chapter_time }}</code> {{ c.name }}</li>{% endfor %}</ol>{% endif %}
+{% if preview %}
+<h2 class="h4">{{ 'Last run' if preview.written_at else 'Preview' }} <small class="text-secondary h6">{{ preview.generated_at[:16].replace('T', ' ') }} UTC</small></h2>
+<div class="card p-3 mb-3"><ul class="mb-0">
+  <li>Duration: {{ preview.file.duration|chapter_time }} ({{ (preview.file.duration / 60)|round(1) }} min) · {{ preview.file.container }}</li>
+  <li>Existing chapters: {{ preview.existing_chapters|length or 'none' }}{% if preview.existing_written_by_curatarr %} (written by Curatarr){% endif %}</li>
+  {% if preview.too_short %}<li>Shorter than the {{ preview.minimum_duration_minutes }}-minute minimum; nothing would be added.</li>{% endif %}
+  {% if preview.analysis %}
+  <li>Scene changes: {% if preview.analysis.scenes %}{{ preview.analysis.scenes.count }} at threshold {{ preview.analysis.scenes.threshold }}{% else %}failed ({{ preview.analysis.scene_error }}){% endif %}</li>
+  {% if preview.analysis.transcript %}<li>Transcript: {{ preview.analysis.transcript.segments }} segments, {{ preview.analysis.transcript.words }} words{% if preview.analysis.transcript.cached %} (cached){% else %}, {{ preview.analysis.transcript.model }} on {{ preview.analysis.transcript.device }}{% endif %}</li>{% endif %}
+  <li>Method used: {{ labels.get(preview.analysis.chosen, 'none — every method failed') }} · analysis took {{ preview.analysis.elapsed_seconds }} s</li>
+  {% endif %}
+  {% if preview.jellyfin_refresh %}<li>Jellyfin: {{ 'refresh requested' if preview.jellyfin_refresh == 'requested' else preview.jellyfin_refresh }}</li>{% endif %}
+</ul></div>
+{% if preview.analysis %}<div class="row g-3 mb-3">
+{% for attempt in preview.analysis.attempts %}<div class="col-lg-4"><div class="card p-3 h-100"><h3 class="h6">{{ labels[attempt.method] }}{% if attempt.method == preview.analysis.chosen %} <span class="badge text-bg-primary">chosen</span>{% endif %}</h3>
+{% if attempt.ok %}{% set plan = preview.analysis.plans[attempt.method] %}<ol class="small mb-0">{% for c in plan.chapters %}<li><code>{{ c.start|chapter_time }}</code> {{ c.name }}</li>{% endfor %}</ol>{% for note in plan.notes %}<p class="small text-secondary mt-2 mb-0">{{ note }}</p>{% endfor %}
+{% else %}<p class="small text-warning mb-0">Failed: {{ attempt.error }}</p>{% endif %}</div></div>{% endfor %}
+</div>
+{% if preview.analysis.scenes and preview.analysis.scenes.changes %}<details class="mb-3"><summary>Scene-change candidates ({{ preview.analysis.scenes.count }})</summary><p class="small mt-2">{% for t, s in preview.analysis.scenes.changes %}<code>{{ t|chapter_time }}</code> ({{ '%.2f'|format(s) }}){{ ', ' if not loop.last }}{% endfor %}</p></details>{% endif %}
+{% endif %}
+{% if preview.write %}<details class="mb-3"{% if not preview.written_at %} open{% endif %}><summary>{{ 'Write operation performed' if preview.written_at else 'Write operation (not performed)' }}</summary>
+<pre class="mt-2 overflow-auto"><code>{{ preview.write.command|join(' ') }}</code></pre><pre class="overflow-auto"><code>{{ preview.write.chapter_file }}</code></pre>
+<p class="small text-secondary">In place with mkvpropedit; nothing is re-encoded or remuxed. Streams, duration, and the chapters are verified afterwards.{% if preview.writable != 'yes' %} Right now it could not be written: {{ preview.writable }}{% endif %}</p></details>{% endif %}
+{% endif %}
+{% endblock %}

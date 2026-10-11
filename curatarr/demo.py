@@ -415,6 +415,13 @@ class DemoClient:
     def mark_played(self, _user_id, _item_id):
         self._check()
 
+    def sessions(self):
+        self._check()
+        return []
+
+    def refresh_item(self, _item_id):
+        self._check()
+
     def _demo_user(self, name):
         return {
             "Id": f"user-{name}",

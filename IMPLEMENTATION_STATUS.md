@@ -41,10 +41,14 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Section 94 observability: JSON operational logs limited to the specified fields, durable metric counters, `/api/v1/metrics`, and a dedicated Operations page. Tests use temporary data directories, so they no longer write posters into `instance/`.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
+- Chapter generation (2026-10-11; docs/decisions/009-chapter-enrichment.md). It covers settings (global and per library), the job queue in the worker, the safety checks before writing, verification, the single-item Jellyfin refresh, maintenance and per-file preview pages, and the `chapters` CLI. Tested with fake media tools and integrations. First live test on the owner's server: a 58-minute MKV episode (The Morning Show S02E09) got 9 Smart Chapters written and verified, and Jellyfin showed them after an item refresh. The owner judged them very good. That run used the new code from a script against the checkout, not the installed worker.
+
 ## In Progress
 - Live validation on the owner's installed copy (since 2026-10-04). Verified live: Jellyfin administrator sign-in and session checks, the integration keys, discovery (about 440 titles, 6 libraries), reconciliation of watch history, acquisition (34 Sonarr requests, sent and grabbed), free-space measurement of the NAS, and the native installer including systemd.
 
 ## Next
+- Chapters on the installed copy: install with `EXTRAS=chapters-gpu`, give the `curatarr` user write access to the NAS mount, then enable one library (dry run first) and work through the backlog from Chapter maintenance (about 3,200 MKV files, roughly 20 days of Smart Chapters at concurrency 1).
+- Chapter speed: Ollama requests averaged about 27 s with qwen3:14b while Jellyfin was transcoding on the same GPU; check whether the model was partly on the CPU.
 - Configure the Jellyfin Webhook plugin on the live server and confirm a real delivery is matched. So far every live event came from reconciliation, none from the webhook.
 - Exercise cleanup live under controlled conditions: Leaving Soon poster badge and restore on a real Jellyfin, then a Sonarr episode-file and a Radarr movie deletion, then played-state restoration when a trimmed episode returns. Suggested approach: one library in dry run, with a temporary low free-space threshold above current usage.
 - Tag v0.2.0 once the live checks above pass.
