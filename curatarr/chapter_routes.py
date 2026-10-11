@@ -12,12 +12,15 @@ from .chapters import (
     timestamp,
 )
 from .enrichment import (
+    ACTION_LABELS,
     describe,
     environment_status,
+    file_label,
     file_locations_known,
     flatten,
     form_values,
     global_layer,
+    job_activity,
     library_layers,
     maintenance_summary,
     needs_chapters_query,
@@ -114,6 +117,9 @@ def chapter_maintenance():
         libraries=_managed_libraries(),
         library_id=library_id,
         summary=maintenance_summary(library_id),
+        activity=job_activity(),
+        action_labels=ACTION_LABELS,
+        file_label=file_label,
         candidates=candidates,
         enabled_libraries={
             row.id

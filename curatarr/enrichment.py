@@ -1305,6 +1305,66 @@ def needs_chapters_query(library_id=None):
     return query
 
 
+ACTION_LABELS = {
+    "scan": "Scan",
+    "auto": "New import",
+    "generate": "Generate",
+    "regenerate": "Regenerate",
+    "remove": "Remove",
+    "preview": "Preview",
+}
+
+
+def job_activity(recent=10) -> dict:
+    """What the chapter jobs are doing now, for the maintenance page."""
+    running = (
+        db.session.query(ChapterState)
+        .filter(ChapterState.job_state == "running")
+        .order_by(ChapterState.updated_at)
+        .all()
+    )
+    queued = dict(
+        db.session.query(ChapterState.requested_action, func.count(ChapterState.id))
+        .filter(ChapterState.job_state == "queued")
+        .group_by(ChapterState.requested_action)
+        .all()
+    )
+    waiting = (
+        db.session.query(ChapterState)
+        .filter(
+            ChapterState.job_state == "queued",
+            ChapterState.next_attempt_at.isnot(None),
+        )
+        .order_by(ChapterState.next_attempt_at)
+        .limit(5)
+        .all()
+    )
+    finished = (
+        db.session.query(ChapterState)
+        .filter(
+            ChapterState.job_state == "idle",
+            ChapterState.chapter_processed_at.isnot(None),
+        )
+        .order_by(ChapterState.chapter_processed_at.desc())
+        .limit(recent)
+        .all()
+    )
+    return {
+        "running": running,
+        "queued": {ACTION_LABELS.get(k, k): v for k, v in queued.items()},
+        "queued_total": sum(queued.values()),
+        "waiting": waiting,
+        "finished": finished,
+    }
+
+
+def file_label(state: ChapterState) -> str:
+    part, media = state.part, state.media
+    if part.kind == "episode":
+        return f"{media.title} · S{part.season_number or 0:02}E{part.episode_number or 0:02}"
+    return media.title
+
+
 def maintenance_summary(library_id=None) -> dict:
     parts = _parts_query(library_id).count()
     rows = (
