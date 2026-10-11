@@ -20,6 +20,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+# Smart Chapters transcription. faster-whisper 1.2 still passes an argument
+# that PyAV 16 removed. chapters-gpu adds the CUDA runtime libraries
+# (cuBLAS 12, cuDNN 9) for transcription on an NVIDIA GPU.
+chapters = ["faster-whisper>=1.1,<2", "av>=11,<16"]
+chapters-gpu = [
+  "curatarr[chapters]",
+  "nvidia-cublas-cu12>=12,<13",
+  "nvidia-cudnn-cu12>=9,<10",
+]
 
 [tool.setuptools.packages.find]
 include = ["curatarr*"]

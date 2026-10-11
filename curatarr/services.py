@@ -314,6 +314,7 @@ def discover():
                             )
                             part.sonarr_episode_id = episode.get("id")
                             part.arr_file_id = episode.get("episodeFileId") or None
+                            part.file_path = (file_entry or {}).get("path")
                             size = file_sizes.get(part.arr_file_id, 0)
                             part.size_bytes = (
                                 size if type(size) is int and size >= 0 else 0
@@ -325,7 +326,7 @@ def discover():
                         media.radarr_id = match["id"]
                         media.arr_monitored = match.get("monitored")
                         file_data = match.get("movieFile") or {}
-                        _upsert_part(
+                        movie_part = _upsert_part(
                             media,
                             "movie_file",
                             None,
@@ -338,6 +339,7 @@ def discover():
                                 ),
                             },
                         )
+                        movie_part.file_path = file_data.get("path")
             offset += len(entries)
             if not entries or offset >= page.get("TotalRecordCount", offset):
                 break
@@ -2235,4 +2237,21 @@ def title_view(media):
         .order_by(LifecycleAction.created_at.desc())
         .limit(10)
         .all(),
+        "chapter_rows": _chapter_rows(media),
     }
+
+
+def _chapter_rows(media):
+    """Each file of a title with its chapter state, for the title page."""
+    from .enrichment import describe
+    from .models import ChapterState
+
+    states = {
+        row.media_part_id: row
+        for row in db.session.query(ChapterState).filter_by(media_identity_id=media.id)
+    }
+    parts = sorted(
+        (p for p in media.parts if p.has_file),
+        key=lambda p: (p.season_number or 0, p.episode_number or 0),
+    )
+    return [(part, describe(states.get(part.id))) for part in parts]

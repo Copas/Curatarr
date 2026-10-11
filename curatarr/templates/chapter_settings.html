@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Chapter generation · Curatarr{% endblock %}
+{% macro yes_no(name, label, help=none) %}
+  {% set current = values[name] %}
+  <div class="col-md-6">
+  {% if library %}<label class="form-label w-100">{{ label }}<select class="form-select" name="{{ name }}"><option value="inherit">Inherit ({{ 'Yes' if inherited_values[name] else 'No' }})</option><option value="true"{% if current is sameas true %} selected{% endif %}>Yes</option><option value="false"{% if current is sameas false %} selected{% endif %}>No</option></select></label>
+  {% else %}<label class="form-check"><input class="form-check-input" type="checkbox" name="{{ name }}" value="true"{% if current %} checked{% endif %}><span class="form-check-label">{{ label }}</span></label>{% endif %}
+  {% if help %}<div class="form-text">{{ help }}</div>{% endif %}
+  </div>
+{% endmacro %}
+{% macro number(name, label, unit='minutes') %}
+  <div class="col-md-3"><label class="form-label w-100">{{ label }}<div class="input-group"><input class="form-control" type="number" min="1" name="{{ name }}" value="{{ values[name] if values[name] is not none else '' }}"{% if library %} placeholder="Inherit ({{ inherited_values[name] }})"{% endif %}><span class="input-group-text">{{ unit }}</span></div></label></div>
+{% endmacro %}
+{% block content %}
+<div class="eyebrow">Manage · {{ 'Library' if library else 'Global defaults' }}</div><h1>Chapter generation{% if library %} · {{ library.name }}{% endif %}</h1>
+<p class="text-secondary">Adds chapters to long movies and episodes that have none, after Sonarr or Radarr finish importing them. Chapters are written into MKV files in place: nothing is re-encoded, and files that already have chapters are left alone. Turning this on never processes your existing library; use <a href="{{ url_for('main.chapter_maintenance') }}">Chapter maintenance</a> for that.</p>
+<div class="d-flex flex-wrap gap-2 mb-3" aria-label="Settings scope">
+  <a class="btn btn-sm {{ 'btn-primary' if not library else 'btn-outline-light' }}" href="{{ url_for('main.chapter_settings', scope='global') }}">Global defaults</a>
+  {% for other in libraries %}<a class="btn btn-sm {{ 'btn-primary' if library and other.id == library.id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_settings', scope=other.id) }}">{{ other.name }}</a>{% endfor %}
+</div>
+{% if library %}<p class="text-secondary">Fields left on <em>Inherit</em> use the global default. In effect for this library: <strong>{{ ('Smart Chapters' if effective.mode == 'smart' else 'Navigation Chapters') if effective.enabled else 'Disabled' }}</strong>.</p>{% endif %}
+<form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="row g-3">
+  <div class="col-12"><h2 class="h5 mb-1">Mode</h2>
+  <fieldset class="d-grid gap-2">
+    {% if library %}<label class="form-check"><input class="form-check-input" type="radio" name="chapter_mode" value="inherit"{% if values.chapter_mode is none %} checked{% endif %}><span class="form-check-label">Inherit ({{ ('Smart Chapters' if inherited.mode == 'smart' else 'Navigation Chapters') if inherited.enabled else 'Disabled' }})</span></label>{% endif %}
+    <label class="form-check"><input class="form-check-input" type="radio" name="chapter_mode" value="disabled"{% if values.chapter_mode == 'disabled' %} checked{% endif %}><span class="form-check-label"><strong>Disabled</strong> — no automatic chapters.</span></label>
+    <label class="form-check"><input class="form-check-input" type="radio" name="chapter_mode" value="navigation"{% if values.chapter_mode == 'navigation' %} checked{% endif %}><span class="form-check-label"><strong>Navigation Chapters</strong> — about every {{ effective.target_spacing_minutes }} minutes, moved to the nearest scene change. Fast; no transcription.</span></label>
+    <label class="form-check"><input class="form-check-input" type="radio" name="chapter_mode" value="smart"{% if values.chapter_mode == 'smart' %} checked{% endif %}><span class="form-check-label"><strong>Smart Chapters</strong> — transcribes the audio locally and asks your Ollama model where the story moves on and what to call each chapter. Falls back to Navigation Chapters if that fails.</span></label>
+  </fieldset></div>
+
+  <div class="col-12 mt-4"><h2 class="h5 mb-1">Spacing</h2><p class="form-text mb-0">Every file gets a chapter at 00:00:00, and none within about two minutes of the end.</p></div>
+  {{ number('minimum_duration_minutes', 'Minimum video length') }}
+  {{ number('target_spacing_minutes', 'Target spacing') }}
+  {{ number('minimum_spacing_minutes', 'Minimum spacing') }}
+  {{ number('maximum_spacing_minutes', 'Maximum spacing') }}
+
+  <div class="col-12 mt-4"><h2 class="h5 mb-1">Methods</h2></div>
+  {{ yes_no('preserve_existing', 'Preserve existing chapters', 'Recommended. If off, chapters made by someone else are replaced, and Curatarr keeps a copy so removing its chapters restores them.') }}
+  {{ yes_no('scene_detection', 'Align chapters to scene changes') }}
+  {{ yes_no('fixed_intervals', 'Use fixed intervals as the last fallback') }}
+
+  <div class="col-12 mt-4"><h2 class="h5 mb-1">Smart Chapters</h2></div>
+  {{ yes_no('semantic_enabled', 'Enable local transcription', 'Transcription engine: faster-whisper, on the GPU when available.') }}
+  <div class="col-md-3"><label class="form-label w-100">Transcription model<select class="form-select" name="whisper_model">{% if library %}<option value="inherit">Inherit ({{ inherited.semantic.model }})</option>{% endif %}{% for model in whisper_models %}<option{% if values.whisper_model == model %} selected{% endif %}>{{ model }}</option>{% endfor %}</select></label></div>
+  <div class="col-md-3"><label class="form-label w-100">Ollama model<input class="form-control" name="llm_model" list="ollama-models" value="{{ values.llm_model or '' }}" placeholder="{{ 'Inherit (' ~ (inherited.semantic.llm_model or 'not set') ~ ')' if library else 'e.g. qwen3:14b' }}"></label>
+  <datalist id="ollama-models">{% for model in environment.ollama_models %}<option value="{{ model }}">{% endfor %}</datalist></div>
+  {{ yes_no('semantic_names', 'Name chapters from their content') }}
+  <div class="col-md-6"><label class="form-label w-100">Fallback chapter names<input class="form-control" name="fallback_format" value="{{ values.fallback_format or '' }}"{% if library %} placeholder="Inherit ({{ inherited.naming.fallback_format }})"{% endif %}></label><div class="form-text">Must contain <code>{number}</code>.</div></div>
+
+  <div class="col-12 mt-4"><h2 class="h5 mb-1">Processing</h2></div>
+  {{ yes_no('new_media', 'Process newly imported media') }}
+  {{ yes_no('existing_library', 'Process the existing library automatically', 'Off by default. Prefer Chapter maintenance, which shows counts before anything runs.') }}
+  {{ yes_no('dry_run', 'Dry run', 'Plan chapters and show them on each file’s page, without modifying any file.') }}
+
+  {% if not library and opts %}
+  <div class="col-12 mt-4"><h2 class="h5 mb-1">This server</h2><p class="form-text mb-0">These apply to every library.</p></div>
+  <div class="col-md-3"><label class="form-label w-100">Concurrent chapter jobs<input class="form-control" type="number" min="1" max="4" name="concurrency" value="{{ opts.concurrency }}"></label><div class="form-text">Transcription is GPU-heavy; 1 is usually right.</div></div>
+  <div class="col-md-3"><label class="form-label w-100">Wait after a file changes<div class="input-group"><input class="form-control" type="number" min="1" name="settle_minutes" value="{{ opts.settle_minutes }}"><span class="input-group-text">minutes</span></div></label></div>
+  <div class="col-md-3"><label class="form-label w-100">Scene-change threshold<input class="form-control" type="number" min="0.05" max="0.95" step="0.05" name="scene_threshold" value="{{ opts.scene_threshold }}"></label><div class="form-text">Lower finds more, subtler changes.</div></div>
+  <div class="col-md-3"><label class="form-label w-100">Transcription device<select class="form-select" name="whisper_device">{% for device in ['auto', 'cuda', 'cpu'] %}<option{% if opts.whisper_device == device %} selected{% endif %}>{{ device }}</option>{% endfor %}</select></label></div>
+  <div class="col-md-6"><label class="form-label w-100">Ollama URL<input class="form-control" name="ollama_url" value="{{ opts.ollama_url }}"></label></div>
+  <div class="col-md-6"><label class="form-label w-100">Path mappings<textarea class="form-control font-monospace" rows="2" name="path_mappings" placeholder="/tv => /mnt/media/tv">{% for m in opts.path_mappings %}{{ m.arr }} => {{ m.local }}
+{% endfor %}</textarea></label><div class="form-text">Only needed when Sonarr/Radarr see the files at a different path than Curatarr does (for example in Docker).</div></div>
+  {% endif %}
+</div>
+<div class="border-top border-secondary-subtle mt-4 pt-3"><button class="btn btn-primary">Save {{ 'library settings' if library else 'global defaults' }}</button></div></form>
+
+{% if not library %}<div class="card p-3 mt-4"><h2 class="h5">Tools on this server</h2><ul class="mb-0">
+  {% for name in ['ffprobe', 'ffmpeg', 'mkvpropedit', 'mkvextract'] %}<li>{{ name }}: {% if environment[name] %}<code>{{ environment[name] }}</code>{% else %}<span class="text-warning">not found</span>{% endif %}</li>{% endfor %}
+  <li>faster-whisper: {{ 'installed' if environment.faster_whisper else 'not installed — Smart Chapters falls back to Navigation Chapters (pip install "curatarr[chapters]")' }}</li>
+  <li>Ollama: {% if environment.ollama %}reachable, {{ environment.ollama_models|length }} model{{ '' if environment.ollama_models|length == 1 else 's' }}{% else %}<span class="text-warning">not reachable</span>{% endif %}</li>
+</ul></div>{% endif %}
+{% endblock %}
