@@ -21,6 +21,7 @@ from pathlib import Path
 
 from flask import current_app
 from sqlalchemy import func
+from sqlalchemy.exc import OperationalError
 
 from . import db, leases
 from .chapters import (
@@ -1111,30 +1112,73 @@ def _due_jobs(limit, *, scans):
     ][:limit]
 
 
+class DatabaseBusy(RuntimeError):
+    pass
+
+
+def _run_one(app, state_id, llm):
+    scope = f"chapters:{state_id}"
+    try:
+        owner = leases.acquire(scope, LEASE_SECONDS)
+    except OperationalError as exc:
+        db.session.rollback()
+        raise DatabaseBusy from exc
+    if not owner:
+        return
+    try:
+        state = db.session.get(ChapterState, state_id)
+        if not state or state.job_state != "queued":
+            return
+        state.job_state = "running"
+        db.session.commit()
+        with leases.keep_alive(scope, owner, LEASE_SECONDS):
+            run_job(state_id, llm=llm)
+    except OperationalError as exc:
+        # SQLite allows one writer; discovery holds a long write transaction.
+        # Put the job back rather than failing it.
+        db.session.rollback()
+        _best_effort(lambda: _requeue(state_id))
+        raise DatabaseBusy from exc
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Chapter job %s failed unexpectedly", state_id)
+        _best_effort(lambda: _fail_unexpected(state_id))
+    finally:
+        # If this cannot be released now, it expires and the job is requeued.
+        _best_effort(lambda: leases.release(scope, owner))
+
+
+def _requeue(state_id):
+    state = db.session.get(ChapterState, state_id)
+    if state and state.job_state == "running":
+        state.job_state = "queued"
+        db.session.commit()
+
+
+def _fail_unexpected(state_id):
+    state = db.session.get(ChapterState, state_id)
+    if state and state.job_state == "running":
+        _fail(state, "Unexpected error; see the worker log")
+        db.session.commit()
+
+
+def _best_effort(write):
+    try:
+        write()
+    except OperationalError:
+        db.session.rollback()
+
+
 def _run_leased(app, state_ids, llm=None):
     with app.app_context():
         for state_id in state_ids:
-            scope = f"chapters:{state_id}"
-            owner = leases.acquire(scope, LEASE_SECONDS)
-            if not owner:
-                continue
             try:
-                state = db.session.get(ChapterState, state_id)
-                if not state or state.job_state != "queued":
-                    continue
-                state.job_state = "running"
-                db.session.commit()
-                with leases.keep_alive(scope, owner, LEASE_SECONDS):
-                    run_job(state_id, llm=llm)
-            except Exception:
-                db.session.rollback()
-                app.logger.exception("Chapter job %s failed unexpectedly", state_id)
-                state = db.session.get(ChapterState, state_id)
-                if state and state.job_state == "running":
-                    _fail(state, "Unexpected error; see the worker log")
-                    db.session.commit()
-            finally:
-                leases.release(scope, owner)
+                _run_one(app, state_id, llm)
+            except DatabaseBusy:
+                app.logger.warning(
+                    "Chapter jobs paused: the database is busy; resuming next cycle"
+                )
+                return
 
 
 def dispatch(*, synchronous=False, llm=None) -> int:
