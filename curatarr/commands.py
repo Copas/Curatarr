@@ -7,7 +7,7 @@ from flask import current_app
 
 from . import db
 from .artwork import reconcile_artwork
-from .enrichment import dispatch, queue_new_media
+from .enrichment import dispatch, queue_new_media, run_requested_scan
 from .integrations import IntegrationError
 from .lifecycle import (
     evaluate_retention,
@@ -97,6 +97,7 @@ def worker_cycle():
     if not demo:
         # Discovery just recorded new imports; queue their chapter jobs.
         queue_new_media()
+        run_requested_scan()
         _dispatch_chapters()
     return "reconciled"
 

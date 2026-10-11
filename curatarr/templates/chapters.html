@@ -12,6 +12,7 @@
   <div class="col-6 col-md-3"><div class="card p-3 stat-card h-100"><h2 class="h6">{{ label }}</h2><p class="h4 mb-0">{{ value }}</p></div></div>
   {% endfor %}
 </div>
+{% if not summary.files %}<div class="alert alert-info">No file locations are recorded yet. Curatarr records them during discovery (hourly, or Discover on Overview); pressing Scan starts discovery and then the scan.</div>{% endif %}
 <p class="text-secondary">{% if summary.not_scanned %}{{ summary.not_scanned }} file{{ '' if summary.not_scanned == 1 else 's' }} not scanned yet. {% endif %}{% if summary.queued %}{{ summary.queued }} chapter job{{ '' if summary.queued == 1 else 's' }} queued or running.{% endif %}{% if summary.failed %} {{ summary.failed }} failed (shown below with the reason).{% endif %}</p>
 <div class="d-flex flex-wrap gap-2 mb-4">
   <form method="post" action="{{ url_for('main.chapter_scan') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-outline-light">Scan {{ 'this library' if library_id else 'every library' }}</button></form>
