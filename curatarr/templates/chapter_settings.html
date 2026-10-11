@@ -44,7 +44,7 @@
   <div class="col-12 mt-4"><h2 class="h5 mb-1">Smart Chapters</h2></div>
   {{ yes_no('semantic_enabled', 'Enable local transcription', 'Transcription engine: faster-whisper, on the GPU when available.') }}
   <div class="col-md-3"><label class="form-label w-100">Transcription model<select class="form-select" name="whisper_model">{% if library %}<option value="inherit">Inherit ({{ inherited.semantic.model }})</option>{% endif %}{% for model in whisper_models %}<option{% if values.whisper_model == model %} selected{% endif %}>{{ model }}</option>{% endfor %}</select></label></div>
-  <div class="col-md-3"><label class="form-label w-100">Ollama model<input class="form-control" name="llm_model" list="ollama-models" value="{{ values.llm_model or '' }}" placeholder="{{ 'Inherit (' ~ (inherited.semantic.llm_model or 'not set') ~ ')' if library else 'e.g. qwen3:14b' }}"></label>
+  <div class="col-md-3"><label class="form-label w-100">Ollama model<input class="form-control" name="llm_model" list="ollama-models" value="{{ values.llm_model or '' }}" placeholder="{{ 'Inherit (' ~ (inherited.semantic.llm_model or 'not set') ~ ')' if library else 'Type or pick a model, e.g. qwen3:14b' }}"></label>
   <datalist id="ollama-models">{% for model in environment.ollama_models %}<option value="{{ model }}">{% endfor %}</datalist></div>
   {{ yes_no('semantic_names', 'Name chapters from their content') }}
   <div class="col-md-6"><label class="form-label w-100">Fallback chapter names<input class="form-control" name="fallback_format" value="{{ values.fallback_format or '' }}"{% if library %} placeholder="Inherit ({{ inherited.naming.fallback_format }})"{% endif %}></label><div class="form-text">Must contain <code>{number}</code>.</div></div>
