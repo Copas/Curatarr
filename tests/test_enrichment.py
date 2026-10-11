@@ -598,3 +598,23 @@ def test_a_busy_database_requeues_the_job_instead_of_failing(media_env, monkeypa
     db.session.expire_all()
     state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
     assert state.job_state == "queued" and state.chapter_status == "not_processed"
+
+
+def test_maintenance_page_shows_activity(app, client, media_env):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    _navigation(library)
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Idle: nothing is queued." in page
+    state = enrichment.request(part, "generate")
+    state.job_state = "running"
+    db.session.commit()
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Working" in page and "Generate" in page and "Film" in page
+    state.job_state = "queued"
+    db.session.commit()
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Last 1 finished" in page and "generated scene aligned" in page
