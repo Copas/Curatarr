@@ -229,6 +229,26 @@ class JellyfinClient(Client):
     def mark_played(self, user_id, item_id):
         return self.request("POST", f"/Users/{user_id}/PlayedItems/{item_id}")
 
+    def sessions(self):
+        return self.request("GET", "/Sessions")
+
+    def refresh_item(self, item_id):
+        """Re-read one item's file so Jellyfin picks up changed chapters.
+
+        A default refresh re-probes media whose file changed and keeps edited
+        metadata and images; it does not touch the rest of the library.
+        """
+        return self.request(
+            "POST",
+            f"/Items/{item_id}/Refresh",
+            params={
+                "MetadataRefreshMode": "Default",
+                "ImageRefreshMode": "Default",
+                "ReplaceAllMetadata": "false",
+                "ReplaceAllImages": "false",
+            },
+        )
+
 
 class SonarrClient(Client):
     status_path = "/api/v3/system/status"
@@ -360,6 +380,9 @@ class RadarrClient(Client):
 
     def queue(self):
         return self.request("GET", "/api/v3/queue/details")
+
+    def commands(self):
+        return self.request("GET", "/api/v3/command")
 
     def diskspace(self):
         return self.request("GET", "/api/v3/diskspace")

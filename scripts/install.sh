@@ -7,6 +7,8 @@
 #                          "current" symlink; the previous release is kept)
 #   config  $CONFIG_DIR   (default /etc/curatarr; created once, never overwritten)
 #   data    $DATA_DIR     (default /var/lib/curatarr; database and posters)
+# EXTRAS installs optional features, e.g. EXTRAS=chapters (Smart Chapters
+# transcription) or EXTRAS=chapters-gpu (the same, with CUDA libraries).
 # Re-running the script upgrades in place, backing up the SQLite database first.
 set -eu
 
@@ -17,6 +19,7 @@ DATA_DIR=${DATA_DIR:-/var/lib/curatarr}
 SYSTEMD_DIR=${SYSTEMD_DIR:-/etc/systemd/system}
 SERVICE_USER=${SERVICE_USER:-curatarr}
 PYTHON=${PYTHON:-python3}
+EXTRAS=${EXTRAS:-}
 NO_SYSTEMD=${NO_SYSTEMD:-0}
 ENV_FILE="$CONFIG_DIR/curatarr.env"
 
@@ -110,7 +113,11 @@ staging=$(mktemp -d)
 cp -R "$SOURCE_DIR/pyproject.toml" "$SOURCE_DIR/README.md" "$SOURCE_DIR/LICENSE" \
     "$SOURCE_DIR/curatarr" "$staging/"
 find "$staging" -name __pycache__ -prune -exec rm -rf {} +
-"$release/bin/python" -m pip install --quiet "$staging"
+if [ -n "$EXTRAS" ]; then
+    "$release/bin/python" -m pip install --quiet "$staging[$EXTRAS]"
+else
+    "$release/bin/python" -m pip install --quiet "$staging"
+fi
 
 if [ ! -f "$ENV_FILE" ]; then
     say "Writing new configuration to $ENV_FILE"
@@ -222,6 +229,8 @@ Group=$SERVICE_USER
 EnvironmentFile=$ENV_FILE
 WorkingDirectory=$DATA_DIR
 ExecStart=$PREFIX/current/bin/flask --app curatarr worker
+# Transcription models (Smart Chapters) are downloaded here on first use.
+Environment=HF_HOME=$DATA_DIR/models
 Restart=on-failure
 RestartSec=15
 NoNewPrivileges=true
