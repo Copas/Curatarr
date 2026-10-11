@@ -579,3 +579,22 @@ def test_scan_before_discovery_requests_it_then_scans(
     files.add(part.file_path)
     assert enrichment.run_requested_scan() == 1
     assert enrichment.run_requested_scan() == 0  # only once
+
+
+def test_a_busy_database_requeues_the_job_instead_of_failing(media_env, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    _navigation(library)
+
+    def locked(*_args, **_kwargs):
+        raise OperationalError("UPDATE", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(enrichment, "run_job", locked)
+    enrichment.request(part, "generate")
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+    assert state.job_state == "queued" and state.chapter_status == "not_processed"
