@@ -618,3 +618,17 @@ def test_maintenance_page_shows_activity(app, client, media_env):
     db.session.expire_all()
     page = client.get("/chapters").get_data(as_text=True)
     assert "Last 1 finished" in page and "generated scene aligned" in page
+
+
+def test_settings_warn_when_smart_chapters_has_no_model(app, client):
+    set_setting("chapter_settings", {"enabled": True, "mode": "smart"})
+    assert "No Ollama model is set" in client.get("/chapters/settings").get_data(
+        as_text=True
+    )
+    set_setting(
+        "chapter_settings",
+        {"enabled": True, "mode": "smart", "semantic": {"llm_model": "qwen3:14b"}},
+    )
+    assert "No Ollama model is set" not in client.get("/chapters/settings").get_data(
+        as_text=True
+    )
