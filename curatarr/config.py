@@ -23,6 +23,12 @@ def configure_app(app, overrides: dict) -> None:
         ALLOW_UNAUTHENTICATED=_bool("CURATARR_ALLOW_UNAUTHENTICATED", False),
     )
     app.config.update(overrides)
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+        # The worker's background chapter jobs write while discovery holds a
+        # long transaction; wait for the lock instead of failing after 5 s.
+        app.config.setdefault(
+            "SQLALCHEMY_ENGINE_OPTIONS", {"connect_args": {"timeout": 30}}
+        )
     if (
         not app.debug
         and not app.testing
