@@ -560,3 +560,22 @@ def test_part_page_shows_a_preview(app, client, media_env):
 
 def test_chapter_dataclass_round_trip():
     assert Chapter(1.23456, "x").as_dict() == {"start": 1.235, "name": "x"}
+
+
+def test_scan_before_discovery_requests_it_then_scans(
+    app, client, media_env, monkeypatch
+):
+    from curatarr.services import setting
+
+    files, _arr = media_env
+    _library, _media, part = _movie()
+    part.file_path = None  # recorded by the first discovery after upgrading
+    db.session.commit()
+    page = client.post("/chapters/scan", follow_redirects=True).get_data(as_text=True)
+    assert "has not recorded where your files are" in page
+    assert setting("reconcile_requested_at")
+    part.file_path = "/movies/Film (2020)/Film.mkv"
+    db.session.commit()
+    files.add(part.file_path)
+    assert enrichment.run_requested_scan() == 1
+    assert enrichment.run_requested_scan() == 0  # only once

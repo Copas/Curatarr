@@ -1228,6 +1228,23 @@ def queue_scan(library_id=None) -> int:
     return count
 
 
+def file_locations_known() -> bool:
+    return _parts_query().first() is not None
+
+
+def request_scan_after_discovery(library_id=None):
+    set_setting("chapter_scan_requested", {"library_id": library_id})
+
+
+def run_requested_scan() -> int:
+    """After discovery: start a scan that was asked for before paths existed."""
+    requested = setting("chapter_scan_requested")
+    if not requested:
+        return 0
+    set_setting("chapter_scan_requested", None)
+    return queue_scan(requested.get("library_id"))
+
+
 def needs_chapters_query(library_id=None):
     query = (
         db.session.query(ChapterState)
