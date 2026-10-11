@@ -19,6 +19,7 @@
   {% for other in libraries %}<a class="btn btn-sm {{ 'btn-primary' if library and other.id == library.id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_settings', scope=other.id) }}">{{ other.name }}</a>{% endfor %}
 </div>
 {% if library %}<p class="text-secondary">Fields left on <em>Inherit</em> use the global default. In effect for this library: <strong>{{ ('Smart Chapters' if effective.mode == 'smart' else 'Navigation Chapters') if effective.enabled else 'Disabled' }}</strong>.</p>{% endif %}
+{% if effective.enabled and effective.mode == 'smart' and effective.semantic.enabled and not effective.semantic.llm_model %}<div class="alert alert-warning"><strong>No Ollama model is set.</strong> Smart Chapters cannot choose boundaries or names without one, so every file falls back to scene-aligned chapters named "Chapter 1, 2…". Pick a model under Smart Chapters below.</div>{% endif %}
 <form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <div class="row g-3">
   <div class="col-12"><h2 class="h5 mb-1">Mode</h2>
