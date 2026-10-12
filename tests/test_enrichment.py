@@ -713,3 +713,39 @@ def test_saving_a_page_without_the_pause_option_keeps_it(app, client):
         | {"pause_during_playback_shown": "1", "pause_during_playback": "true"},
     )
     assert options()["pause_during_playback"] is True
+
+
+def test_process_all_libraries_queues_only_enabled_ones(app, client, media_env):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    other = Library(jellyfin_library_id="lib-other", name="Other", media_type="tv")
+    db.session.add(other)
+    db.session.flush()
+    show = MediaIdentity(library_id=other.id, media_type="series", title="Show")
+    db.session.add(show)
+    db.session.flush()
+    episode = MediaPart(
+        media_identity_id=show.id,
+        kind="episode",
+        season_number=1,
+        episode_number=1,
+        has_file=True,
+        file_path="/tv/show.mkv",
+    )
+    db.session.add(episode)
+    db.session.commit()
+    files.add(part.file_path)
+    files.add(episode.file_path)
+    _navigation(library)  # only the movie library has chapters enabled
+    enrichment.queue_scan()
+    enrichment.dispatch(synchronous=True)
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Process all libraries" in page
+    confirm = client.get("/chapters/libraries/all/process").get_data(as_text=True)
+    assert (
+        "every library with chapters enabled" in confirm and "Queue 1 files" in confirm
+    )
+    client.post("/chapters/libraries/all/process", data={"confirm": "1"})
+    db.session.expire_all()
+    queued = db.session.query(ChapterState).filter_by(job_state="queued").all()
+    assert [state.media_part_id for state in queued] == [part.id]
