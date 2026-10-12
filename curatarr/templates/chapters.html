@@ -21,15 +21,8 @@
   {% if summary.needing %}<a class="btn btn-outline-warning" href="{{ url_for('main.chapter_confirm_library', library_id=library_id or 'all') }}">{{ 'Process entire library…' if library_id else 'Process all libraries…' }}</a>{% endif %}
 </div>
 <h2 class="h4">Activity</h2>
-<div class="card p-3 mb-4" id="chapter-activity">
-{% if activity.paused_since %}<div class="alert alert-secondary py-2">Paused since {{ activity.paused_since|when('time') }} because someone is watching in Jellyfin. Running jobs are suspended where they are and continue when playback stops.</div>{% endif %}
-{% if activity.running %}{% for state in activity.running %}<div><span class="badge text-bg-primary me-2">Working</span><strong>{{ action_labels.get(state.requested_action, state.requested_action) }}</strong> · <a href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }} <span class="text-secondary small">since {{ state.updated_at|when('seconds') }}</span></div>{% endfor %}
-{% else %}<div class="text-secondary">{{ 'Nothing running right now; queued jobs start within 15 seconds.' if activity.queued_total else 'Idle: nothing is queued.' }}</div>{% endif %}
-{% if activity.queued_total %}<div class="mt-2">Queued: {% for label, count in activity.queued.items() %}{{ count|commas }} {{ label|lower }}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
-{% for state in activity.waiting %}<div class="small text-secondary mt-1">Waiting until {{ state.next_attempt_at|when('time') }}: {{ file_label(state) }} — {{ (state.chapter_error or '').removeprefix('Waiting: ') }}</div>{% endfor %}
-{% if activity.finished %}<details class="mt-2"><summary>Last {{ activity.finished|length }} finished</summary><ul class="small mb-0 mt-2">{% for state in activity.finished %}<li>{{ state.chapter_processed_at|when('seconds') }} · <a href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }} · {{ state.chapter_status.replace('_', ' ') }}{% if state.chapter_error %} — {{ state.chapter_error }}{% endif %}</li>{% endfor %}</ul></details>{% endif %}
-<div class="small mt-2"><a href="{{ request.full_path.rstrip('?') }}">Refresh</a></div>
-</div>
+{% include "_chapter_activity.html" %}
+<script src="{{ url_for('static', filename='chapter-activity.js', v='1') }}" defer></script>
 <h2 class="h4">Files needing chapters</h2>
 {% if candidates %}
 <form method="post" action="{{ url_for('main.chapter_queue') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}">
