@@ -379,7 +379,13 @@ def test_failed_semantic_step_falls_back_to_scene_alignment(media_env, monkeypat
     files.add(part.file_path)
     set_setting(
         "chapter_library_settings",
-        {library.id: {"enabled": True, "mode": "smart"}},
+        {
+            library.id: {
+                "enabled": True,
+                "mode": "smart",
+                "semantic": {"llm_model": "qwen3:14b"},
+            }
+        },
     )
 
     def no_transcriber(*_args, **_kwargs):
@@ -749,3 +755,87 @@ def test_process_all_libraries_queues_only_enabled_ones(app, client, media_env):
     db.session.expire_all()
     queued = db.session.query(ChapterState).filter_by(job_state="queued").all()
     assert [state.media_part_id for state in queued] == [part.id]
+
+
+class _UnavailableModel:
+    model = "fake"
+    calls = 0
+
+    def ask(self, prompt, schema):
+        from curatarr.semantic import LanguageModelUnavailable
+
+        raise LanguageModelUnavailable("Ollama request failed")
+
+
+def _smart_library_with_transcript(library, monkeypatch):
+    from curatarr.chapters import Segment
+
+    set_setting(
+        "chapter_library_settings",
+        {library.id: {"enabled": True, "mode": "smart"}},
+    )
+    segments = [Segment(t, t + 15, f"line {t}") for t in range(0, 3600, 20)]
+    monkeypatch.setattr(
+        "curatarr.transcribe.transcribe",
+        lambda *_a, **_k: (segments, {"cached": True, "device": "cuda"}),
+    )
+
+
+def _dispatch_again(part, llm):
+    state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+    state.next_attempt_at = None  # due now instead of in 15 minutes
+    db.session.commit()
+    enrichment.dispatch(synchronous=True, llm=llm)
+    db.session.expire_all()
+    return db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+
+
+def test_ollama_unavailable_waits_before_settling_for_navigation(
+    media_env, monkeypatch
+):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    _smart_library_with_transcript(library, monkeypatch)
+    enrichment.request(part, "generate")
+    enrichment.dispatch(synchronous=True, llm=_UnavailableModel())
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+    assert state.job_state == "queued" and state.attempts == 1
+    assert state.chapter_error.startswith("Waiting: Ollama did not answer")
+    assert not files.files[part.file_path]["chapters"]
+
+    assert _dispatch_again(part, _UnavailableModel()).attempts == 2
+    # The last attempt writes Navigation chapters rather than nothing.
+    state = _dispatch_again(part, _UnavailableModel())
+    assert state.chapter_status == "generated_scene_aligned"
+    assert state.attempts == 0
+
+
+def test_navigation_fallbacks_can_be_redone_with_smart_chapters(media_env, monkeypatch):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    _navigation(library)
+    assert _run(part, "generate").chapter_status == "generated_scene_aligned"
+    assert enrichment.maintenance_summary()["smart_upgradable"] == 0  # not Smart
+
+    _smart_library_with_transcript(library, monkeypatch)
+    assert enrichment.maintenance_summary()["smart_upgradable"] == 1
+    assert enrichment.queue_smart_upgrade() == 1
+
+    class Model:
+        model = "fake"
+        calls = 0
+
+        def ask(self, prompt, schema):
+            self.calls += 1
+            if "choice" in schema["properties"]:
+                return {"choice": "A"}
+            return {"summary": "Something happens.", "name": f"Scene {self.calls}"}
+
+    enrichment.dispatch(synchronous=True, llm=Model())
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+    assert state.chapter_status == "generated_semantic"
+    assert enrichment.maintenance_summary()["smart_upgradable"] == 0
