@@ -93,6 +93,9 @@ def check_integration(kind):
         status = client(kind).health()
         row.health_state = "healthy"
         row.detected_version = status.get("Version") or status.get("version")
+        if kind == "jellyfin" and status.get("Id"):
+            # Lets links open the item on this server in Jellyfin's web app.
+            set_setting("jellyfin_server_id", str(status["Id"]))
         row.last_error = None
     except IntegrationError:
         row.health_state = "unhealthy"

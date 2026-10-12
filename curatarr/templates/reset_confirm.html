@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<p class="mb-2"><a class="link-secondary" href="{{ url_for('main.title', media_id=media.id) }}">&larr; {{ media.title }}</a></p>
+<p class="mb-2"><a class="link-secondary" href="{{ url_for('main.title', media_id=media.id) }}">&larr; {{ media.title }}</a>{{ jellyfin_link_for(media) }}</p>
 <h1 class="h3">Reset {{ media.title }} to minimum?</h1>
 <p class="text-secondary">Trims the show back to its always-keep episodes, as if nobody had watched it.</p>
 <div class="card p-3 mb-3">

@@ -76,3 +76,7 @@ html[data-bs-theme="light"] .curatarr-arrow-bottom { fill: #b46208; }
 
 /* Theme switch: an icon button (sun in dark mode, moon in light mode). */
 .theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 2.1rem; height: 2.1rem; padding: 0; }
+
+/* Link to the same item in Jellyfin, shown beside a title. */
+.jf-link { display: inline-flex; align-items: center; vertical-align: -.1em; margin-left: .35rem; color: var(--bs-secondary-color); position: relative; z-index: 2; }
+.jf-link:hover, .jf-link:focus-visible { color: var(--bs-link-hover-color); }

@@ -12,6 +12,6 @@
   <div class="col-md-3 align-self-end"><button class="btn btn-outline-light w-100">Filter</button></div>
 </form>
 <div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Title</th><th>Action</th><th>State</th><th>Reason</th></tr></thead><tbody>
-{% for action in actions %}<tr><td>{{ action.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ media_titles.get(action.media_identity_id, '—') }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type.replace('_',' ')|title }}</a></td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No matching history.</td></tr>{% endfor %}
+{% for action in actions %}<tr><td>{{ action.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ media_titles.get(action.media_identity_id, '—') }}{{ jellyfin_link_for(action.media_identity_id) if action.media_identity_id }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type.replace('_',' ')|title }}</a></td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No matching history.</td></tr>{% endfor %}
 </tbody></table></div>
 {% endblock %}
