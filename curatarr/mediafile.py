@@ -14,6 +14,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import throttle
 from .chapters import Chapter, chapter_file_text
 
 # Jellyfin's bundled FFmpeg is the usual copy on a Jellyfin host without a
@@ -45,11 +46,9 @@ def required_tool(name: str) -> str:
     return path
 
 
-def _run(args, timeout, **kwargs):
+def _run(args, timeout):
     try:
-        return subprocess.run(
-            args, capture_output=True, text=True, timeout=timeout, check=False, **kwargs
-        )
+        return throttle.run(args, timeout)
     except subprocess.TimeoutExpired as exc:
         raise MediaToolError(f"{Path(args[0]).name} timed out") from exc
     except OSError as exc:
