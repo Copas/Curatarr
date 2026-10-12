@@ -17,7 +17,7 @@
     Needs {{ disk.needed|size }} freed to get back to the threshold. {{ disk.eligible }} titles are eligible; {{ disk.picks|length }} would be picked{% if disk.level == 'critical' %} and removed without a notice period{% else %} and marked Leaving Soon{% endif %}.</p>
     {% if disk.deficit %}<div class="alert alert-warning">Even every eligible title is {{ disk.deficit|size }} short of the threshold.</div>{% endif %}
     <div class="table-responsive"><table class="table"><thead><tr><th>#</th><th>Title</th><th>Library</th><th>Frees</th><th>Running total</th><th>Last watched</th><th>Added</th><th>Favorite</th></tr></thead><tbody>
-    {% for row in disk.picks %}<tr><td>{{ loop.index }}</td><td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}</td><td>{{ row.library }}</td><td>{{ row.size|size }}</td><td>{{ row.running|size }}</td><td>{{ row.last_activity.strftime('%Y-%m-%d') if row.last_activity else 'Never' }}</td><td>{{ row.added.strftime('%Y-%m-%d') if row.added else '—' }}</td><td>{{ 'Yes' if row.favorite else 'No' }}</td></tr>{% endfor %}
+    {% for row in disk.picks %}<tr><td>{{ loop.index }}</td><td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}</td><td>{{ row.library }}</td><td>{{ row.size|size }}</td><td>{{ row.running|size }}</td><td>{{ row.last_activity|when('date') if row.last_activity else 'Never' }}</td><td>{{ row.added|when('date') if row.added else '—' }}</td><td>{{ 'Yes' if row.favorite else 'No' }}</td></tr>{% endfor %}
     </tbody></table></div>
   </div>
   {% else %}
