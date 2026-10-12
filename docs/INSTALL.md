@@ -98,6 +98,23 @@ docker compose up -d --build
 
 The image contains the installed package, not the source tree. Data lives in the `config` and `database` volumes, and migrations run when the web container starts. The example compose file binds the UI to `127.0.0.1:8787`; change the `ports` entry to reach it from your network. To upgrade, check out the new tag and run `docker compose up -d --build` again after backing up the volumes.
 
+### Chapter generation in Docker
+
+The default image has no media tools. Build with an extra to add FFmpeg, MKVToolNix, and faster-whisper:
+
+```yaml
+  worker:
+    build:
+      context: .
+      args:
+        EXTRAS: chapters        # or chapters-gpu with the NVIDIA Container Toolkit
+    volumes:
+      - config:/config
+      - /path/to/media:/media   # writable: chapters are written into the files
+```
+
+Only the worker needs the media mount. If Sonarr and Radarr see the files under a different path, add a path mapping in Chapter settings → This server (for example `/tv => /media/tv`). Transcription models download to `/config/models`. For `chapters-gpu`, give the worker the GPU (`deploy.resources.reservations.devices` with `driver: nvidia`, `capabilities: [gpu]`), and point the Ollama URL at an Ollama the container can reach.
+
 ### Windows with Docker Desktop
 
 Install Git and [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/), using its Linux containers backend (WSL 2 is the usual choice). Run these commands in PowerShell from a directory where you keep deployments:
