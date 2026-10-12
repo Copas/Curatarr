@@ -638,6 +638,37 @@ def test_maintenance_page_shows_activity(app, client, media_env):
     assert "Last 1 finished" in page and "generated scene aligned" in page
 
 
+def test_maintenance_page_shows_recent_subtitle_checks_instead_of_idle(
+    app, client, media_env
+):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    _navigation(library)
+    state = enrichment.request(part, "generate")
+    state.subtitle_status = "existing"
+    state.subtitle_processed_at = utcnow()
+    db.session.commit()
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Nothing running right now" not in page
+    assert "Working" in page and "Subtitles" in page and "Film" in page
+
+    state.subtitle_processed_at = utcnow() - timedelta(seconds=30)
+    db.session.commit()
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Nothing running right now" in page
+
+
+def test_chapter_activity_fragment_matches_the_page(app, client, media_env):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    _navigation(library)
+    fragment = client.get("/chapters/activity").get_data(as_text=True)
+    assert 'id="chapter-activity"' in fragment
+    assert "Idle: nothing is queued." in fragment
+
+
 def test_settings_warn_when_smart_chapters_has_no_model(app, client):
     set_setting("chapter_settings", {"enabled": True, "mode": "smart"})
     assert "No Ollama model is set" in client.get("/chapters/settings").get_data(

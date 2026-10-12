@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Chapter maintenance's Activity card updates itself every 5 seconds instead of needing a manual refresh, and no longer says "Nothing running right now" while it's actually racing through subtitle existence checks (each finishes in under a second, too fast for the old "running" indicator to catch) — it now shows the file just checked, and a "Last N subtitle checks" list.
+
 - Large counts on Chapter maintenance (files needing chapters, queued jobs, and the rest) now show thousands separators (e.g. "2,857") instead of running digits together.
 
 - A read-only API key (Manage → Integrations → API key) lets other tools, such as a home dashboard, read `/api/v1/` status and history without signing in. It is shown once and stored only as a hash. `/api/v1/history` now includes each action's title, library, Jellyfin item ID, and links to Curatarr's pages, and filters by action type with `type=` and `exclude=`.
