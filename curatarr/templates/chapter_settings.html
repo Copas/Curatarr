@@ -50,7 +50,7 @@
   <div class="col-md-6"><label class="form-label w-100">Fallback chapter names<input class="form-control" name="fallback_format" value="{{ values.fallback_format or '' }}"{% if library %} placeholder="Inherit ({{ inherited.naming.fallback_format }})"{% endif %}></label><div class="form-text">Must contain <code>{number}</code>.</div></div>
 
   <div class="col-12 mt-4"><h2 class="h5 mb-1">Subtitles</h2></div>
-  {{ yes_no('subtitles_enabled', 'Generate English subtitles when a file has none', 'Uses the same local transcript, so it costs almost nothing after Smart Chapters. Written beside the video as “.en.Generated.srt”; never added when English subtitles exist (in the file or beside it), and never over someone else’s file. Works for MP4 as well as MKV.') }}
+  {{ yes_no('subtitles_enabled', 'Generate English subtitles when a file has none', 'Uses the same local transcript, so it costs almost nothing after Smart Chapters. Written beside the video as “.en.Curatarr.srt”; never added when English subtitles exist (in the file or beside it), and never over someone else’s file. Works for MP4 as well as MKV.') }}
 
   <div class="col-12 mt-4"><h2 class="h5 mb-1">Processing</h2></div>
   {{ yes_no('new_media', 'Process newly imported media') }}
