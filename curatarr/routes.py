@@ -18,6 +18,7 @@ from flask import (
     session,
     url_for,
 )
+from markupsafe import Markup
 from sqlalchemy import func
 
 from . import db, jellyfin_links
@@ -42,6 +43,7 @@ from .policy import effective_policy
 from .services import (
     RoutineWebhookEvent,
     UnsupportedWebhookEvent,
+    _as_datetime,
     action_context,
     dry_run_by_library,
     history_actions,
@@ -229,6 +231,29 @@ CHOICE_LABELS = {
     "true": "Yes",
     "false": "No",
 }
+
+
+WHEN_FORMATS = {
+    "date": "%Y-%m-%d",
+    "time": "%H:%M",
+    "seconds": "%H:%M:%S",
+    "datetime": "%Y-%m-%d %H:%M",
+}
+
+
+@bp.app_template_filter("when")
+def when(value, style="datetime"):
+    """A stored UTC time, shown in the viewer's time zone by local-time.js.
+
+    The UTC text inside the element is what shows if scripts do not run.
+    """
+    moment = _as_datetime(value)
+    if moment is None:
+        return ""
+    text = moment.strftime(WHEN_FORMATS[style]) + ("" if style == "date" else " UTC")
+    return Markup(
+        f'<time datetime="{moment.isoformat()}" data-style="{style}">{text}</time>'
+    )
 
 
 @bp.app_template_filter("size")

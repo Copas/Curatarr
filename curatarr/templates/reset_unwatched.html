@@ -32,7 +32,7 @@
   <td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}<div class="small text-secondary">{{ row.library }}{% if row.dry_run %} · dry run{% endif %}</div></td>
   <td class="text-end text-nowrap">{{ row.on_disk|size }}</td>
   <td class="text-end text-nowrap">{{ row.frees|size }}</td>
-  <td class="text-nowrap">{{ row.media.added_at.strftime('%Y-%m-%d') if row.media.added_at else '—' }}</td>
+  <td class="text-nowrap">{{ row.media.added_at|when('date') if row.media.added_at else '—' }}</td>
 </tr>{% else %}<tr><td colspan="4" class="text-secondary">No unwatched shows to reset.</td></tr>{% endfor %}</tbody>
 </table></div>
 
