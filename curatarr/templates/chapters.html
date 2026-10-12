@@ -8,7 +8,7 @@
   {% for other in libraries %}<a class="btn btn-sm {{ 'btn-primary' if other.id == library_id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_maintenance', library=other.id) }}">{{ other.name }}{% if other.id not in enabled_libraries %} (off){% endif %}</a>{% endfor %}
 </div>
 <div class="row g-3 mb-3">
-  {% for label, value in [('Files', summary.files), ('Scanned', summary.scanned), ('With existing chapters', summary.existing), ('Chapters added by Curatarr', summary.generated), ('Needing chapters', summary.needing), ('Below minimum length', summary.short), ('Unsupported (not MKV)', summary.unsupported), ('Would need transcription', summary.transcription_estimate)] %}
+  {% for label, value in [('Files', summary.files), ('Scanned', summary.scanned), ('With existing chapters', summary.existing), ('Chapters added by Curatarr', summary.generated), ('Needing chapters', summary.needing), ('Needing subtitles', summary.needing_subtitles), ('Below minimum length', summary.short), ('Unsupported (not MKV)', summary.unsupported), ('Would need transcription', summary.transcription_estimate)] %}
   <div class="col-6 col-md-3"><div class="card p-3 stat-card h-100"><h2 class="h6">{{ label }}</h2><p class="h4 mb-0">{{ value|commas }}</p></div></div>
   {% endfor %}
 </div>
