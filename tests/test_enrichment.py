@@ -839,3 +839,45 @@ def test_navigation_fallbacks_can_be_redone_with_smart_chapters(media_env, monke
     state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
     assert state.chapter_status == "generated_semantic"
     assert enrichment.maintenance_summary()["smart_upgradable"] == 0
+
+
+def test_quick_jobs_run_before_the_backlog(media_env):
+    _library, media, _part = _movie()
+    rows = []
+    for action in ("generate", "auto", "regenerate", "subtitles"):
+        other = MediaPart(
+            media_identity_id=media.id,
+            kind="movie",
+            has_file=True,
+            file_path=f"/movies/{action}.mkv",
+        )
+        db.session.add(other)
+        db.session.flush()
+        state = enrichment.state_for(other)
+        state.job_state, state.requested_action = "queued", action
+        state.requested_at = utcnow()  # later requests, higher priority
+        rows.append(state)
+    db.session.commit()
+    due = enrichment._due_jobs(4, scans=False)
+    assert [row.requested_action for row in due] == [
+        "subtitles",
+        "regenerate",
+        "auto",
+        "generate",
+    ]
+
+
+def test_redo_takes_over_a_file_waiting_only_for_subtitles(media_env, monkeypatch):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    _navigation(library)
+    state = _run(part, "generate")
+    state.job_state, state.requested_action = "queued", "subtitles"
+    db.session.commit()
+    _smart_library_with_transcript(library, monkeypatch)
+    assert enrichment.maintenance_summary()["smart_upgradable"] == 1
+    assert enrichment.queue_smart_upgrade() == 1
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+    assert state.requested_action == "regenerate"
