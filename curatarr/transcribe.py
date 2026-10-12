@@ -18,6 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from . import throttle
 from .chapters import Segment
 from .mediafile import MediaInfo, MediaToolError, extract_audio, speech_stream
 
@@ -84,7 +85,7 @@ def transcribe(info: MediaInfo, model: str, device: str, cache_dir: Path):
         env = os.environ | {"LD_LIBRARY_PATH": _cuda_library_path()}
         partial = target.with_suffix(".partial")
         try:
-            result = subprocess.run(
+            result = throttle.run(
                 [
                     sys.executable,
                     "-m",
@@ -98,11 +99,8 @@ def transcribe(info: MediaInfo, model: str, device: str, cache_dir: Path):
                     "--device",
                     device,
                 ],
-                capture_output=True,
-                text=True,
                 env=env,
                 timeout=max(1800, int(info.duration * 3)),
-                check=False,
             )
         except subprocess.TimeoutExpired as exc:
             raise MediaToolError("Transcription timed out") from exc

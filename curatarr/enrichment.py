@@ -23,7 +23,7 @@ from flask import current_app
 from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 
-from . import db, leases
+from . import db, leases, throttle
 from .chapters import (
     DEFAULTS,
     GENERATED_STATUSES,
@@ -230,6 +230,11 @@ def parse_options(form) -> dict:
         raw = (form.get(key) or "").strip()
         if raw:
             values[key] = raw
+    values["pause_during_playback"] = form.get("pause_during_playback") in {
+        "true",
+        "on",
+        "1",
+    }
     mappings = []
     for line in (form.get("path_mappings") or "").splitlines():
         if not line.strip():
@@ -1181,6 +1186,34 @@ def _run_leased(app, state_ids, llm=None):
                 return
 
 
+def playback_active() -> bool:
+    """Whether anyone is playing something in Jellyfin right now."""
+    try:
+        sessions = client("jellyfin").sessions() or []
+    except IntegrationError:
+        return False  # cannot tell; do not hold work back indefinitely
+    return any(session.get("NowPlayingItem") for session in sessions)
+
+
+def _pause_for_playback() -> bool:
+    """Suspend chapter work while someone watches; resume when they stop."""
+    try:
+        enabled = options()["pause_during_playback"]
+    except ChapterConfigError:
+        enabled = True
+    has_work = (
+        db.session.query(ChapterState.id)
+        .filter(ChapterState.job_state.in_(("queued", "running")))
+        .first()
+        is not None
+    )
+    pause = bool(enabled and has_work and playback_active())
+    if throttle.set_paused(pause):
+        set_setting("chapters_paused_since", utcnow().isoformat() if pause else None)
+        _log("chapters_paused" if pause else "chapters_resumed")
+    return pause
+
+
 def dispatch(*, synchronous=False, llm=None) -> int:
     """Start queued chapter jobs up to the configured concurrency.
 
@@ -1188,6 +1221,8 @@ def dispatch(*, synchronous=False, llm=None) -> int:
     does not wait behind, or crowd out, transcription jobs.
     """
     recover_stale_jobs()
+    if _pause_for_playback():
+        return 0
     app = current_app._get_current_object()
     started = 0
     running = _alive()
@@ -1350,6 +1385,7 @@ def job_activity(recent=10) -> dict:
         .all()
     )
     return {
+        "paused_since": _as_datetime(setting("chapters_paused_since")),
         "running": running,
         "queued": {ACTION_LABELS.get(k, k): v for k, v in queued.items()},
         "queued_total": sum(queued.values()),

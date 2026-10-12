@@ -54,6 +54,7 @@ DEFAULTS: dict[str, Any] = {
 # Values that only make sense once per installation, not per library.
 GLOBAL_DEFAULTS: dict[str, Any] = {
     "concurrency": 1,
+    "pause_during_playback": True,
     "settle_minutes": 10,
     "scene_threshold": 0.3,
     "ollama_url": "http://127.0.0.1:11434",
@@ -208,6 +209,8 @@ def validate_global_options(values: dict) -> dict:
     threshold = merged["scene_threshold"]
     if not isinstance(threshold, int | float) or not 0.05 <= threshold <= 0.95:
         raise ChapterConfigError("Scene threshold must be between 0.05 and 0.95")
+    if type(merged["pause_during_playback"]) is not bool:
+        raise ChapterConfigError("Invalid pause during playback")
     if merged["whisper_device"] not in WHISPER_DEVICES:
         raise ChapterConfigError("Transcription device must be auto, cuda, or cpu")
     if not str(merged["ollama_url"]).startswith(("http://", "https://")):
