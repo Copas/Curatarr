@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Times are shown in your own time zone (from the browser) instead of UTC, everywhere: chapter activity, Overview, History, Review, Settings, and title pages. Hover a time to see its zone. Without JavaScript the UTC time still shows.
+
 - The worker no longer exits when the database stays locked for more than 30 seconds (it did six times one night, abandoning the chapter jobs it was running). It logs a warning and tries the cycle again 15 seconds later.
 
 - Smart Chapters no longer fall back to Navigation chapters when the GPU is busy. Transcription and Ollama now take turns on the GPU: before a transcription starts, Curatarr waits for running Ollama requests and asks Ollama to unload its model. A failed Ollama request is retried, and a job whose requests still fail waits 15 minutes and tries again; only the third attempt settles for Navigation chapters. Chapter maintenance has **Redo with Smart Chapters** for files that got Navigation chapters in a Smart library, including files waiting only for their subtitle job. Queued jobs now run quickest first: subtitles (which reuse the saved transcript), then redos, then automatic jobs, then the backlog you queued.

@@ -7,7 +7,7 @@
   <div class="col-6 col-md-3"><div class="text-secondary small">Chapters</div><div class="h5 mb-0">{{ info.label }}</div></div>
   <div class="col-6 col-md-3"><div class="text-secondary small">Source</div><div class="h5 mb-0">{{ info.source }}</div></div>
   <div class="col-6 col-md-3"><div class="text-secondary small">Count</div><div class="h5 mb-0">{{ info.count if info.count is not none else '—' }}</div></div>
-  <div class="col-6 col-md-3"><div class="text-secondary small">Last processed</div><div class="h5 mb-0">{{ info.processed_at.strftime('%Y-%m-%d %H:%M') ~ ' UTC' if info.processed_at else 'Never' }}</div></div>
+  <div class="col-6 col-md-3"><div class="text-secondary small">Last processed</div><div class="h5 mb-0">{{ info.processed_at|when if info.processed_at else 'Never' }}</div></div>
 </div>
 {% if state and state.chapter_error %}<div class="alert alert-{{ 'secondary' if state.chapter_error.startswith('Waiting') else 'warning' }} mt-3 mb-0">{{ state.chapter_error }}</div>{% endif %}
 {% if info.queued %}<div class="alert alert-info mt-3 mb-0">A chapter job for this file is {{ state.job_state }} ({{ state.requested_action }}). Reload to see the result.</div>{% endif %}
@@ -24,7 +24,7 @@
 </div>
 {% if state and state.written_chapters_json %}<h2 class="h4">Chapters in the file</h2><ol class="mb-4">{% for c in state.written_chapters_json %}<li><code>{{ c.start|chapter_time }}</code> {{ c.name }}</li>{% endfor %}</ol>{% endif %}
 {% if preview %}
-<h2 class="h4">{{ 'Last run' if preview.written_at else 'Preview' }} <small class="text-secondary h6">{{ preview.generated_at[:16].replace('T', ' ') }} UTC</small></h2>
+<h2 class="h4">{{ 'Last run' if preview.written_at else 'Preview' }} <small class="text-secondary h6">{{ preview.generated_at|when }}</small></h2>
 <div class="card p-3 mb-3"><ul class="mb-0">
   <li>Duration: {{ preview.file.duration|chapter_time }} ({{ (preview.file.duration / 60)|round(1) }} min) · {{ preview.file.container }}</li>
   <li>Existing chapters: {{ preview.existing_chapters|length or 'none' }}{% if preview.existing_written_by_curatarr %} (written by Curatarr){% endif %}</li>
