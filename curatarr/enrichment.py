@@ -20,7 +20,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from flask import current_app
-from sqlalchemy import func
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import OperationalError
 
 from . import db, leases, throttle
@@ -1322,7 +1322,17 @@ def _due_jobs(limit, *, scans):
         query = query.filter(ChapterState.requested_action == "scan")
     else:
         query = query.filter(ChapterState.requested_action != "scan")
-    rows = query.order_by(ChapterState.requested_at).limit(limit * 4).all()
+    # Subtitles reuse a saved transcript and take seconds, and a redo reuses
+    # its transcript too; neither should wait behind a backlog of thousands.
+    priority = case(
+        (ChapterState.requested_action == "subtitles", 0),
+        (ChapterState.requested_action == "regenerate", 1),
+        (ChapterState.requested_action == "auto", 2),
+        else_=3,
+    )
+    rows = (
+        query.order_by(priority, ChapterState.requested_at).limit(limit * 4 + 100).all()
+    )
     return [
         row
         for row in rows
@@ -1558,7 +1568,7 @@ def needs_chapters_query(library_id=None):
 
 ACTION_LABELS = {
     "scan": "Scan",
-    "auto": "New import",
+    "auto": "Automatic",
     "generate": "Generate",
     "regenerate": "Regenerate",
     "remove": "Remove",
@@ -1700,7 +1710,14 @@ def smart_upgrade_query(library_id=None):
                 (GENERATED_STATUSES["scene_aligned"], GENERATED_STATUSES["fixed"])
             ),
             ChapterState.written_fingerprint.isnot(None),
-            ChapterState.job_state == "idle",
+            # Waiting only for subtitles counts: the redo adds them afterwards.
+            or_(
+                ChapterState.job_state == "idle",
+                and_(
+                    ChapterState.job_state == "queued",
+                    ChapterState.requested_action == "subtitles",
+                ),
+            ),
             MediaPart.has_file.is_(True),
             MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
         )
@@ -1711,9 +1728,16 @@ def smart_upgrade_query(library_id=None):
 
 
 def queue_smart_upgrade(library_id=None) -> int:
-    return queue_selected(
-        [state.id for state in smart_upgrade_query(library_id)], "regenerate"
-    )
+    count = 0
+    for state in smart_upgrade_query(library_id):
+        state.job_state = "queued"
+        state.requested_action = "regenerate"
+        state.requested_at = utcnow()
+        state.attempts = 0
+        state.next_attempt_at = None
+        count += 1
+    db.session.commit()
+    return count
 
 
 def queue_selected(state_ids, action) -> int:
