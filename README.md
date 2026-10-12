@@ -46,6 +46,8 @@ Optional, and off until enabled: Manage → Chapters. After Sonarr or Radarr fin
 
 Existing chapters are preserved. Curatarr regenerates or removes only chapters it can show it wrote. Enabling the feature never processes the existing library: Chapter maintenance scans it read-only, shows counts, and processes only the files or library you confirm. Each file's page under its title shows a preview with the scene changes, the plan from each method, and the exact write command, before anything is modified. Settings are global with per-library overrides, and dry run is available. Jobs run in the background with a configurable concurrency (default 1), so they never delay lifecycle work. See docs/decisions/009-chapter-enrichment.md.
 
+The same transcript can also produce English subtitles (`<video>.en.Generated.srt`), a separate per-library setting. They are added only when a file has no English subtitles of its own, are never written over another file, and can be removed from the file's page.
+
 Smart Chapters needs `pip install "curatarr[chapters]"` (or `chapters-gpu` for CUDA), Ollama with a model, and write access to the media files for the worker's user. `flask --app curatarr chapters preview <file>` prints the full analysis for one file without changing it.
 
 ## API and health

@@ -13,9 +13,10 @@
   {% endfor %}
 </div>
 {% if not summary.files %}<div class="alert alert-info">No file locations are recorded yet. Curatarr records them during discovery (hourly, or Discover on Overview); pressing Scan starts discovery and then the scan.</div>{% endif %}
-<p class="text-secondary">{% if summary.not_scanned %}{{ summary.not_scanned }} file{{ '' if summary.not_scanned == 1 else 's' }} not scanned yet. {% endif %}{% if summary.queued %}{{ summary.queued }} chapter job{{ '' if summary.queued == 1 else 's' }} queued or running.{% endif %}{% if summary.failed %} {{ summary.failed }} failed (shown below with the reason).{% endif %}</p>
+<p class="text-secondary">{% if summary.not_scanned %}{{ summary.not_scanned }} file{{ '' if summary.not_scanned == 1 else 's' }} not scanned yet. {% endif %}{% if summary.queued %}{{ summary.queued }} chapter job{{ '' if summary.queued == 1 else 's' }} queued or running.{% endif %}{% if summary.failed %} {{ summary.failed }} failed (shown below with the reason).{% endif %}{% if summary.subtitles_checked %} Subtitles: {{ summary.subtitles_generated }} generated, {{ summary.subtitles_existing }} already had English, of {{ summary.subtitles_checked }} checked.{% endif %}</p>
 <div class="d-flex flex-wrap gap-2 mb-4">
   <form method="post" action="{{ url_for('main.chapter_scan') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-outline-light">Scan {{ 'this library' if library_id else 'every library' }}</button></form>
+  <form method="post" action="{{ url_for('main.chapter_subtitles') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-outline-light">Generate missing subtitles in {{ 'this library' if library_id else 'every library' }}</button></form>
   {% if library_id and summary.needing %}<a class="btn btn-outline-warning" href="{{ url_for('main.chapter_confirm_library', library_id=library_id) }}">Process entire library…</a>{% endif %}
 </div>
 <h2 class="h4">Activity</h2>

@@ -329,5 +329,12 @@ class ChapterState(db.Model, Timed):
     # Chapters that were in the file before Curatarr replaced them, as XML.
     original_chapters_xml = db.Column(db.Text)
     last_preview_json = db.Column(db.JSON)
+    # Generated English subtitles (a .en.Generated.srt beside the video). The
+    # file is Curatarr's only while its contents still hash to the fingerprint.
+    subtitle_status = db.Column(db.String(30))
+    subtitle_path = db.Column(db.Text)
+    subtitle_fingerprint = db.Column(db.String(64))
+    subtitle_processed_at = db.Column(db.DateTime(timezone=True))
+    subtitle_error = db.Column(db.Text)
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")

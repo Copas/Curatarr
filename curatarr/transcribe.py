@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 from . import throttle
@@ -27,22 +28,42 @@ class TranscriptionUnavailable(RuntimeError):
     pass
 
 
+# One transcription on the GPU at a time. Concurrent chapter jobs, Ollama and
+# Jellyfin's transcoding share one card; several transcriptions at once ran
+# it out of memory and fell back to the CPU, about five times slower. Other
+# jobs keep reading files and asking Ollama while one transcribes.
+_one_at_a_time = threading.Lock()
+
+
 def available() -> bool:
     return importlib.util.find_spec("faster_whisper") is not None
 
 
 def cache_key(info: MediaInfo, model: str) -> str:
-    identity = f"{info.path}|{info.size}|{int(info.mtime)}|{model}"
+    """Identifies the audio, not the file bytes.
+
+    Adding chapters (or subtitles beside the file) changes the file's size and
+    modification time but not its audio, so those must not invalidate the
+    transcript. A replacement file (an upgrade) differs in duration or tracks.
+    """
+    audio = [
+        (s.get("index"), s.get("codec_name"), s.get("language"))
+        for s in info.streams
+        if s.get("codec_type") == "audio"
+    ]
+    identity = f"{info.path}|{round(info.duration, 1)}|{audio}|{model}"
     return hashlib.sha256(identity.encode()).hexdigest()[:32]
 
 
-def cached(info: MediaInfo, model: str, cache_dir: Path) -> list[Segment] | None:
+def cached(info: MediaInfo, model: str, cache_dir: Path):
+    """(segments, details) from the cache, or None."""
     path = cache_dir / f"{cache_key(info, model)}.json"
     if not path.exists():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return [Segment(s["start"], s["end"], s["text"]) for s in data["segments"]]
+        segments = [Segment(s["start"], s["end"], s["text"]) for s in data["segments"]]
+        return segments, data.get("details") or {}
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -70,7 +91,8 @@ def transcribe(info: MediaInfo, model: str, device: str, cache_dir: Path):
     cache_dir.mkdir(parents=True, exist_ok=True)
     hit = cached(info, model, cache_dir)
     if hit is not None:
-        return hit, {"cached": True}
+        segments, details = hit
+        return segments, {**details, "cached": True}
     if not available():
         raise TranscriptionUnavailable(
             "faster-whisper is not installed (pip install 'curatarr[chapters]')"
@@ -85,34 +107,39 @@ def transcribe(info: MediaInfo, model: str, device: str, cache_dir: Path):
         env = os.environ | {"LD_LIBRARY_PATH": _cuda_library_path()}
         partial = target.with_suffix(".partial")
         try:
-            result = throttle.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "curatarr.transcribe",
-                    "--audio",
-                    audio,
-                    "--out",
-                    str(partial),
-                    "--model",
-                    model,
-                    "--device",
-                    device,
-                ],
-                env=env,
-                timeout=max(1800, int(info.duration * 3)),
-            )
+            with _one_at_a_time:
+                result = _run_transcriber(audio, partial, model, device, env, info)
         except subprocess.TimeoutExpired as exc:
             raise MediaToolError("Transcription timed out") from exc
         if result.returncode != 0 or not partial.exists():
             message = (result.stderr.strip().splitlines() or ["unknown error"])[-1]
             raise MediaToolError(f"Transcription failed: {message[:200]}")
         partial.replace(target)
-    segments = cached(info, model, cache_dir)
-    if segments is None:
+    hit = cached(info, model, cache_dir)
+    if hit is None:
         raise MediaToolError("Transcription produced no readable output")
-    details = json.loads(target.read_text(encoding="utf-8")).get("details", {})
-    return segments, {"cached": False, **details}
+    segments, details = hit
+    return segments, {**details, "cached": False}
+
+
+def _run_transcriber(audio, partial, model, device, env, info):
+    return throttle.run(
+        [
+            sys.executable,
+            "-m",
+            "curatarr.transcribe",
+            "--audio",
+            audio,
+            "--out",
+            str(partial),
+            "--model",
+            model,
+            "--device",
+            device,
+        ],
+        env=env,
+        timeout=max(1800, int(info.duration * 3)),
+    )
 
 
 def _run_model(audio, model_name, device):

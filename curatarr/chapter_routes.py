@@ -28,6 +28,7 @@ from .enrichment import (
     queue_library,
     queue_scan,
     queue_selected,
+    queue_subtitles,
     request_scan_after_discovery,
     save_settings,
     state_for,
@@ -155,6 +156,18 @@ def chapter_scan():
     return redirect(url_for("main.chapter_maintenance", library=library_id))
 
 
+@bp.post("/chapters/subtitles")
+def chapter_subtitles():
+    library_id = request.form.get("library") or None
+    count = queue_subtitles(library_id)
+    flash(
+        f"Queued {count} files. Each is checked for English subtitles; only "
+        "those without get generated ones (transcribing first if needed).",
+        "success",
+    )
+    return redirect(url_for("main.chapter_maintenance", library=library_id))
+
+
 @bp.post("/chapters/queue")
 def chapter_queue():
     action = request.form.get("action")
@@ -227,9 +240,19 @@ def chapter_part_action(part_id, action):
     from .enrichment import request as request_action
 
     part = db.session.get(MediaPart, part_id)
-    if not part or action not in {"preview", "generate", "regenerate", "remove"}:
+    if not part or action not in {
+        "preview",
+        "generate",
+        "regenerate",
+        "remove",
+        "subtitles",
+        "remove_subtitles",
+    }:
         abort(404)
     state = state_for(part)
+    if action == "remove_subtitles" and not state.subtitle_fingerprint:
+        flash("Curatarr can only remove subtitles it generated itself.", "danger")
+        return redirect(url_for("main.chapter_part", part_id=part.id))
     if action in {"regenerate", "remove"} and not state.written_fingerprint:
         flash(
             "Curatarr can only regenerate or remove chapters it wrote itself.",
@@ -249,6 +272,8 @@ def chapter_part_action(part_id, action):
                 "generate": "Chapter generation queued.",
                 "regenerate": "Regeneration queued.",
                 "remove": "Removal queued.",
+                "subtitles": "Subtitle generation queued.",
+                "remove_subtitles": "Subtitle removal queued.",
             }[action],
             "success",
         )
