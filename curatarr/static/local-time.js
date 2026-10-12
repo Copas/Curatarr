@@ -8,15 +8,19 @@
     if (seconds) options.second = "2-digit";
     return d.toLocaleTimeString([], options);
   }
-  document.querySelectorAll("time[data-style]").forEach(function (el) {
-    var d = new Date(el.getAttribute("datetime"));
-    if (isNaN(d)) return;
-    var style = el.dataset.style;
-    el.textContent =
-      style === "date" ? date(d)
-      : style === "time" ? clock(d, false)
-      : style === "seconds" ? clock(d, true)
-      : date(d) + " " + clock(d, false);
-    el.title = d.toLocaleString([], { timeZoneName: "short" });
-  });
+  function apply(root) {
+    (root || document).querySelectorAll("time[data-style]").forEach(function (el) {
+      var d = new Date(el.getAttribute("datetime"));
+      if (isNaN(d)) return;
+      var style = el.dataset.style;
+      el.textContent =
+        style === "date" ? date(d)
+        : style === "time" ? clock(d, false)
+        : style === "seconds" ? clock(d, true)
+        : date(d) + " " + clock(d, false);
+      el.title = d.toLocaleString([], { timeZoneName: "short" });
+    });
+  }
+  window.curatarrLocalTime = apply;
+  apply();
 })();

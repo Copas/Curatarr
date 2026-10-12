@@ -131,6 +131,20 @@ def chapter_maintenance():
     )
 
 
+@bp.get("/chapters/activity")
+def chapter_activity_fragment():
+    library_id = request.args.get("library") or None
+    if library_id and not db.session.get(Library, library_id):
+        abort(404)
+    return render_template(
+        "_chapter_activity.html",
+        library_id=library_id,
+        activity=job_activity(),
+        action_labels=ACTION_LABELS,
+        file_label=file_label,
+    )
+
+
 @bp.post("/chapters/scan")
 def chapter_scan():
     library_id = request.form.get("library") or None

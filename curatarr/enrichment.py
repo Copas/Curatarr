@@ -1612,9 +1612,28 @@ def job_activity(recent=10) -> dict:
         .limit(recent)
         .all()
     )
+    # Subtitle existence checks finish in milliseconds, so "running" is almost
+    # never caught mid-job; show the most recent ones directly instead of
+    # saying nothing is happening.
+    subtitles_finished = (
+        db.session.query(ChapterState)
+        .filter(
+            ChapterState.subtitle_status.isnot(None),
+            ChapterState.subtitle_processed_at.isnot(None),
+        )
+        .order_by(ChapterState.subtitle_processed_at.desc())
+        .limit(recent)
+        .all()
+    )
+    recent_cutoff = utcnow() - timedelta(seconds=20)
+    recently_active = bool(subtitles_finished) and _as_datetime(
+        subtitles_finished[0].subtitle_processed_at
+    ) >= recent_cutoff
     return {
         "paused_since": _as_datetime(setting("chapters_paused_since")),
         "running": running,
+        "recently_active": recently_active,
+        "subtitles_finished": subtitles_finished,
         "queued": {ACTION_LABELS.get(k, k): v for k, v in queued.items()},
         "queued_total": sum(queued.values()),
         "waiting": waiting,
