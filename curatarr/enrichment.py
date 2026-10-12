@@ -1566,6 +1566,21 @@ def needs_chapters_query(library_id=None):
     return query
 
 
+def needs_subtitles_query(library_id=None):
+    """Files not yet checked for subtitles, or whose check failed (mirrors queue_subtitles)."""
+    return (
+        _parts_query(library_id)
+        .outerjoin(ChapterState, ChapterState.media_part_id == MediaPart.id)
+        .filter(
+            or_(
+                ChapterState.subtitle_status.is_(None),
+                ChapterState.subtitle_status == "failed",
+            ),
+            or_(ChapterState.job_state.is_(None), ChapterState.job_state == "idle"),
+        )
+    )
+
+
 ACTION_LABELS = {
     "scan": "Scan",
     "auto": "Automatic",
@@ -1692,6 +1707,7 @@ def maintenance_summary(library_id=None) -> dict:
         "existing": by_status.get("existing", 0),
         "generated": generated,
         "needing": needing,
+        "needing_subtitles": needs_subtitles_query(library_id).count(),
         "short": by_status.get("skipped_short", 0),
         "unsupported": by_status.get("unsupported_container", 0),
         "failed": by_status.get("failed", 0),

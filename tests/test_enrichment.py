@@ -492,6 +492,43 @@ def test_maintenance_scan_counts_without_generating(media_env):
     assert needing.media_part_id == second.id
 
 
+def test_maintenance_summary_counts_files_needing_subtitles(media_env):
+    files, _arr = media_env
+    _library, media, part = _movie()
+    files.add(part.file_path)
+    never_checked = MediaPart(
+        media_identity_id=media.id,
+        kind="episode",
+        season_number=1,
+        episode_number=1,
+        has_file=True,
+        file_path="/movies/b.mkv",
+    )
+    already_has = MediaPart(
+        media_identity_id=media.id,
+        kind="episode",
+        season_number=1,
+        episode_number=2,
+        has_file=True,
+        file_path="/movies/c.mkv",
+    )
+    db.session.add_all([never_checked, already_has])
+    db.session.commit()
+    files.add(never_checked.file_path)
+    files.add(already_has.file_path)
+    state = enrichment.state_for(already_has)
+    state.subtitle_status = "existing"
+    db.session.commit()
+
+    summary = enrichment.maintenance_summary()
+    assert summary["needing_subtitles"] == 2  # part (never scanned) + never_checked
+
+    enrichment.queue_subtitles()
+    db.session.commit()
+    summary = enrichment.maintenance_summary()
+    assert summary["needing_subtitles"] == 0  # both now queued, not idle
+
+
 def test_pages_render_and_settings_save(app, client, media_env):
     files, _arr = media_env
     library, media, part = _movie()
