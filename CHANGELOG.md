@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Large counts on Chapter maintenance (files needing chapters, queued jobs, and the rest) now show thousands separators (e.g. "2,857") instead of running digits together.
+
 - A read-only API key (Manage → Integrations → API key) lets other tools, such as a home dashboard, read `/api/v1/` status and history without signing in. It is shown once and stored only as a hash. `/api/v1/history` now includes each action's title, library, Jellyfin item ID, and links to Curatarr's pages, and filters by action type with `type=` and `exclude=`.
 
 - Times are shown in your own time zone (from the browser) instead of UTC, everywhere: chapter activity, Overview, History, Review, Settings, and title pages. Hover a time to see its zone. Without JavaScript the UTC time still shows.

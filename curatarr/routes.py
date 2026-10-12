@@ -267,6 +267,14 @@ def when(value, style="datetime"):
     )
 
 
+@bp.app_template_filter("commas")
+def commas(value):
+    """An integer count with thousands separators (e.g. 2857 -> "2,857")."""
+    if value is None:
+        return value
+    return f"{value:,}"
+
+
 @bp.app_template_filter("size")
 def size_label(value):
     """Bytes as MB, GB, or TB (binary, matching Sonarr/Radarr/Jellyfin)."""
