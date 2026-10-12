@@ -40,6 +40,7 @@ from .models import (
 )
 from .policy import effective_policy
 from .services import (
+    RoutineWebhookEvent,
     UnsupportedWebhookEvent,
     action_context,
     dry_run_by_library,
@@ -607,6 +608,9 @@ def webhook():
         abort(400)
     try:
         event, created = ingest_event(payload)
+    except RoutineWebhookEvent as exc:
+        # Expected every few seconds during playback; not worth a warning.
+        return jsonify({"accepted": False, "ignored": str(exc)}), 202
     except UnsupportedWebhookEvent as exc:
         # Acknowledge so the plugin does not report errors for extra types.
         record_webhook("ignored", reason=str(exc))
