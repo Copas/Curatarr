@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Optional generated English subtitles from the Smart Chapters transcript (Chapter settings → Subtitles, per library). They are written as `<video>.en.Generated.srt` only when a file has no English subtitles inside it or beside it, never over another file, and removable from the file's page. Chapter maintenance can queue every file that is missing them. Transcripts now survive adding chapters to a file, and one transcription runs at a time, so jobs no longer fall back to slow CPU transcription when the GPU is full (migration f1b6d2e8c047).
+- Optional generated English subtitles from the Smart Chapters transcript (Chapter settings → Subtitles, per library). They are written as `<video>.en.Curatarr.srt` only when a file has no English subtitles inside it or beside it, never over another file, and removable from the file's page. Chapter maintenance can queue every file that is missing them. Transcripts now survive adding chapters to a file, and one transcription runs at a time, so jobs no longer fall back to slow CPU transcription when the GPU is full (migration f1b6d2e8c047).
 
 - Chapter generation pauses while anything is playing in Jellyfin (on by default; Chapter settings → This server). Running jobs are suspended where they are and resume when playback stops; no new jobs start. Chapter maintenance shows the pause, what each job is working on, what is queued, and the last files finished.
 
