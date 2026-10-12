@@ -193,10 +193,21 @@ def chapter_queue():
 
 @bp.route("/chapters/libraries/<library_id>/process", methods=["GET", "POST"])
 def chapter_confirm_library(library_id):
-    library = db.session.get(Library, library_id)
-    if not library or not library.managed:
-        abort(404)
-    count = needs_chapters_query(library_id).count()
+    """Queue one library's backlog, or (library_id "all") every enabled one's."""
+    if library_id == "all":
+        library = None
+        targets = [
+            row.id
+            for row in _managed_libraries()
+            if effective_config(global_layer(), library_layers().get(row.id))["enabled"]
+        ]
+    else:
+        library = db.session.get(Library, library_id)
+        if not library or not library.managed:
+            abort(404)
+        targets = [library.id]
+    count = sum(needs_chapters_query(target).count() for target in targets)
+    name = library.name if library else "every library with chapters enabled"
     if request.method == "POST":
         if request.form.get("confirm") != str(count):
             flash(
@@ -206,15 +217,20 @@ def chapter_confirm_library(library_id):
             return redirect(
                 url_for("main.chapter_confirm_library", library_id=library_id)
             )
-        queued = queue_library(library_id)
-        flash(f"Queued {queued} files in {library.name} for chapters.", "success")
-        return redirect(url_for("main.chapter_maintenance", library=library_id))
+        queued = sum(queue_library(target) for target in targets)
+        flash(f"Queued {queued} files in {name} for chapters.", "success")
+        return redirect(
+            url_for("main.chapter_maintenance", library=library.id if library else None)
+        )
     return render_template(
         "chapter_confirm.html",
         library=library,
+        name=name,
         count=count,
-        summary=maintenance_summary(library_id),
-        config=effective_config(global_layer(), library_layers().get(library_id)),
+        summary=maintenance_summary(library.id if library else None),
+        config=effective_config(
+            global_layer(), library_layers().get(library.id) if library else None
+        ),
     )
 
 
