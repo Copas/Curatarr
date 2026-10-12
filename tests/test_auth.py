@@ -6,7 +6,9 @@ from curatarr import db
 from curatarr.models import (
     AppSetting,
     Integration,
+    Library,
     LifecycleAction,
+    MediaIdentity,
     PurgeCandidate,
     utcnow,
 )
@@ -247,3 +249,68 @@ def test_theme_preference_persists_in_cookie(secured, client):
     assert (
         client.post("/preferences/theme", data={"theme": "unknown"}).status_code == 400
     )
+
+
+def test_api_key_reads_history_and_nothing_else(secured, client):
+    from curatarr.services import revoke_api_key, rotate_api_key
+
+    media = MediaIdentity(
+        id="m1", library_id="lib", media_type="movie", title="Heat", jellyfin_id="jf1"
+    )
+    db.session.add_all(
+        [
+            Library(
+                id="lib",
+                jellyfin_library_id="lib-jf",
+                name="Movies",
+                media_type="movies",
+            ),
+            media,
+            LifecycleAction(
+                idempotency_key="a1",
+                action_type="chapters_generated",
+                state="SUCCEEDED",
+                media_identity_id="m1",
+                reason_text="Added 9 chapters to Heat.",
+                payload_json={},
+            ),
+            LifecycleAction(
+                idempotency_key="a2",
+                action_type="admin_signed_in",
+                state="SUCCEEDED",
+                reason_text="Signed in",
+                payload_json={},
+            ),
+        ]
+    )
+    db.session.commit()
+    key = rotate_api_key()
+    headers = {"X-Api-Key": key}
+    assert client.get("/api/v1/history").status_code == 401
+    assert (
+        client.get("/api/v1/history", headers={"X-Api-Key": "wrong"}).status_code == 401
+    )
+    rows = client.get(
+        "/api/v1/history?exclude=admin_signed_in", headers=headers
+    ).get_json()
+    assert [row["title"] for row in rows] == ["Heat"]
+    assert rows[0]["library"] == "Movies"
+    assert rows[0]["jellyfin_item_id"] == "jf1"
+    assert rows[0]["title_path"] == "/titles/m1"
+    assert client.get("/api/v1/metrics", headers=headers).status_code == 200
+    # Pages and anything that changes state still need a signed-in user.
+    assert client.get("/settings", headers=headers).status_code == 302
+    assert client.post("/api/v1/history", headers=headers).status_code in {401, 405}
+    revoke_api_key()
+    assert client.get("/api/v1/history", headers=headers).status_code == 401
+
+
+def test_settings_shows_a_new_api_key_once(secured, client):
+    _sign_in(client)
+    client.post("/settings", data={"kind": "api_key"})
+    page = client.get("/settings").text
+    assert 'id="new-api-key"' in page
+    assert 'id="new-api-key"' not in client.get("/settings").text
+    from curatarr.services import setting
+
+    assert setting("api_key_sha256")

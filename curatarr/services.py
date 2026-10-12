@@ -1532,6 +1532,32 @@ def rotate_webhook_token(token=None):
     return token
 
 
+def rotate_api_key():
+    """A new read-only API key; only its hash is kept, so it is shown once."""
+    import hashlib
+    import secrets
+
+    key = secrets.token_urlsafe(32)
+    set_setting("api_key_sha256", hashlib.sha256(key.encode()).hexdigest())
+    db.session.commit()
+    return key
+
+
+def revoke_api_key():
+    set_setting("api_key_sha256", None)
+    db.session.commit()
+
+
+def api_key_valid(key) -> bool:
+    import hashlib
+    import hmac
+
+    stored = setting("api_key_sha256")
+    if not stored or not key:
+        return False
+    return hmac.compare_digest(stored, hashlib.sha256(key.encode()).hexdigest())
+
+
 def save_reconcile_interval(minutes):
     if type(minutes) is not int or not 5 <= minutes <= 1440:
         raise ValueError("Reconciliation interval must be 5–1440 minutes")

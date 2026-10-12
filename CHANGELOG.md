@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A read-only API key (Manage → Integrations → API key) lets other tools, such as a home dashboard, read `/api/v1/` status and history without signing in. It is shown once and stored only as a hash. `/api/v1/history` now includes each action's title, library, Jellyfin item ID, and links to Curatarr's pages, and filters by action type with `type=` and `exclude=`.
+
 - Times are shown in your own time zone (from the browser) instead of UTC, everywhere: chapter activity, Overview, History, Review, Settings, and title pages. Hover a time to see its zone. Without JavaScript the UTC time still shows.
 
 - The worker no longer exits when the database stays locked for more than 30 seconds (it did six times one night, abandoning the chapter jobs it was running). It logs a warning and tries the cycle again 15 seconds later.
