@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The worker no longer exits when the database stays locked for more than 30 seconds (it did six times one night, abandoning the chapter jobs it was running). It logs a warning and tries the cycle again 15 seconds later.
+
 - Smart Chapters no longer fall back to Navigation chapters when the GPU is busy. Transcription and Ollama now take turns on the GPU: before a transcription starts, Curatarr waits for running Ollama requests and asks Ollama to unload its model. A failed Ollama request is retried, and a job whose requests still fail waits 15 minutes and tries again; only the third attempt settles for Navigation chapters. Chapter maintenance has **Redo with Smart Chapters** for files that got Navigation chapters in a Smart library.
 
 - Every title Curatarr shows links to the same item in Jellyfin: an "Open in Jellyfin" button on title and chapter pages, and a small Jellyfin link beside titles in Library, Review, Shows by size, Overview, History, cleanup previews, and Chapter maintenance (episodes link to the episode). When Curatarr reaches Jellyfin over localhost, links use the host the page was opened on, so they work from other devices.

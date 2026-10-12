@@ -124,3 +124,28 @@ def test_unfinished_run_is_reported_as_interrupted(app, client):
     started = utcnow() - timedelta(hours=1)
     set_setting("last_reconcile_attempt_at", started.isoformat())
     assert "did not finish" in client.get("/").text
+
+
+def test_worker_survives_a_locked_database(app, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    cycles = []
+
+    def cycle():
+        cycles.append(1)
+        if len(cycles) == 1:
+            raise OperationalError("UPDATE app_settings", {}, "database is locked")
+        return "idle"
+
+    class Stop(Exception):
+        pass
+
+    def sleep(_seconds):
+        if len(cycles) >= 2:
+            raise Stop
+
+    monkeypatch.setattr("curatarr.commands.worker_cycle", cycle)
+    monkeypatch.setattr("curatarr.commands.time.sleep", sleep)
+    result = app.test_cli_runner().invoke(args=["worker"])
+    assert isinstance(result.exception, Stop)  # still looping after the error
+    assert len(cycles) == 2
