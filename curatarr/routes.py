@@ -45,6 +45,7 @@ from .services import (
     UnsupportedWebhookEvent,
     _as_datetime,
     action_context,
+    api_key_valid,
     dry_run_by_library,
     history_actions,
     history_filter_options,
@@ -60,6 +61,8 @@ from .services import (
     request_reconciliation,
     request_title_now,
     review_rows,
+    revoke_api_key,
+    rotate_api_key,
     rotate_webhook_token,
     save_integration,
     save_policy_layer,
@@ -125,6 +128,14 @@ def require_sign_in():
     if current_app.config["ALLOW_UNAUTHENTICATED"]:
         return None
     if request.endpoint in PUBLIC_ENDPOINTS or current_user():
+        return None
+    # Other tools (a dashboard, Homepage) read status and history with the
+    # API key from Settings. It only ever grants these read-only GETs.
+    if (
+        request.method == "GET"
+        and request.path.startswith("/api/v1/")
+        and api_key_valid(request.headers.get("X-Api-Key"))
+    ):
         return None
     if request.path.startswith("/api/"):
         return jsonify({"error": "Sign-in required"}), 401
@@ -428,25 +439,47 @@ def api_review_summary():
 
 @bp.get("/api/v1/history")
 def api_history():
+    """Newest first. ``type`` and ``exclude`` (repeatable) filter by action type."""
     limit = min(max(request.args.get("limit", 50, type=int), 1), 200)
-    rows = (
-        db.session.query(LifecycleAction)
-        .order_by(LifecycleAction.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-    return jsonify(
-        [
-            {
-                "id": row.id,
-                "type": row.action_type,
-                "state": row.state,
-                "reason": row.reason_text,
-                "created_at": row.created_at.isoformat(),
-            }
-            for row in rows
-        ]
-    )
+    query = db.session.query(LifecycleAction)
+    if request.args.getlist("type"):
+        query = query.filter(
+            LifecycleAction.action_type.in_(request.args.getlist("type"))
+        )
+    if request.args.getlist("exclude"):
+        query = query.filter(
+            LifecycleAction.action_type.notin_(request.args.getlist("exclude"))
+        )
+    rows = query.order_by(LifecycleAction.created_at.desc()).limit(limit).all()
+    ids = {row.media_identity_id for row in rows if row.media_identity_id}
+    media = {
+        item.id: item
+        for item in db.session.query(MediaIdentity).filter(MediaIdentity.id.in_(ids))
+    }
+    libraries = {row.id: row.name for row in db.session.query(Library)}
+
+    def describe(row):
+        item = media.get(row.media_identity_id)
+        return {
+            "id": row.id,
+            "type": row.action_type,
+            "label": row.action_type.replace("_", " ").capitalize(),
+            "state": row.state,
+            "reason": row.reason_text,
+            "created_at": _as_datetime(row.created_at).isoformat(),
+            "completed_at": (
+                _as_datetime(row.completed_at).isoformat() if row.completed_at else None
+            ),
+            "title": item.title if item else None,
+            "media_type": item.media_type if item else None,
+            "library": libraries.get(item.library_id) if item else None,
+            "jellyfin_item_id": item.jellyfin_id if item else None,
+            # Paths on this Curatarr server; join them to its address.
+            "path": url_for("main.history_detail", action_id=row.id),
+            "title_path": url_for("main.title", media_id=item.id) if item else None,
+        }
+
+    return jsonify([describe(row) for row in rows])
 
 
 @bp.get("/")
@@ -519,6 +552,11 @@ def settings():
                     # Shown once on the next page; redirecting means a reload
                     # can never resubmit the form and create another token.
                     session["new_webhook_token"] = token
+            elif kind == "api_key":
+                session["new_api_key"] = rotate_api_key()
+            elif kind == "api_key_revoke":
+                revoke_api_key()
+                flash("API key revoked; tools using it can no longer read.", "success")
             elif kind == "scheduler":
                 try:
                     minutes = int(request.form.get("interval_minutes", ""))
@@ -573,6 +611,8 @@ def settings():
     return render_template(
         "settings.html",
         new_token=new_token,
+        new_api_key=session.pop("new_api_key", None),
+        api_key_present=bool(setting("api_key_sha256")),
         household_users=household_users,
         household_allowed=household_user_ids(),
         household_error=household_error,

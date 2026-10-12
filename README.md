@@ -52,7 +52,7 @@ Smart Chapters needs `pip install "curatarr[chapters]"` (or `chapters-gpu` for C
 
 ## API and health
 
-Read-only endpoints (all except `/health` and `/api/v1/status` require sign-in): `/health`, `/api/v1/status`, `/api/v1/metrics`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. The webhook endpoint is `/api/v1/webhook/jellyfin`.
+Read-only endpoints (all except `/health` and `/api/v1/status` require sign-in): `/health`, `/api/v1/status`, `/api/v1/metrics`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. Another tool, such as a home dashboard, can read the `/api/v1/` ones without signing in by sending an API key in an `X-Api-Key` header. Generate the key under Manage → Integrations → API key; it is shown once, stored only as a hash, and grants nothing but these GET requests. `/api/v1/history?limit=20&exclude=admin_signed_in` returns the newest actions with the title, library, Jellyfin item ID, and paths to Curatarr's own pages; repeat `type=` or `exclude=` to filter by action type. The webhook endpoint is `/api/v1/webhook/jellyfin`.
 
 ## Dashboard integration
 
