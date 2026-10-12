@@ -49,6 +49,7 @@ Phase 8 — Media enrichment (chapters and subtitles) running live; preparing v0
 - Every title links to the same item in Jellyfin. Loopback integration addresses are rewritten to the host the page was opened on.
 - Webhook verified live: Jellyfin deliveries arrive and are processed. Playback-progress UserDataSaved deliveries (about 4,000 a day) are now acknowledged without being stored.
 - Cleanup is live on the owner's server. Every library has deletion on, and about 2 TB has been reclaimed.
+- v0.2.0 release checks passed on 2026-10-11 (all but the tag): 272 tests and lint, the migration round trip on SQLite and on PostgreSQL 17, the four PostgreSQL lease tests, a scratch native install started outside the checkout with all 17 pages and endpoints returning 200, demo mode, and both Docker images.
 - Docker image: optional `EXTRAS=chapters` / `chapters-gpu` build argument adds FFmpeg, MKVToolNix, and faster-whisper.
 
 ## In Progress
@@ -57,7 +58,7 @@ Phase 8 — Media enrichment (chapters and subtitles) running live; preparing v0
 ## Next
 - Compare chapter throughput at 2 and 3 concurrent jobs now that transcription is serialized; settle the default.
 - Confirm the cleanup checklist from the owner's side (Leaving Soon poster badge and restore, Sonarr and Radarr deletions, played-state restoration), then release v0.2.0.
-- Lower priority: validate leases across hosts on a shared PostgreSQL (not needed for single-host installs).
+- Lower priority: validate leases across hosts on a shared PostgreSQL (not needed for single-host installs). Leases compare each worker's own clock, so hosts need synchronized clocks.
 
 ## Known Issues
 - The first-run server URL can be bound by whoever signs in first unless `CURATARR_JELLYFIN_URL` is set. The sign-in rate limit is per process and per client address, so behind a reverse proxy it applies to all users together.
