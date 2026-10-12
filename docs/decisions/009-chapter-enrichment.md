@@ -36,6 +36,10 @@ Enabling a library records the moment it was enabled. Only files imported after 
 
 The worker queues new imports after each reconciliation. On every cycle it starts due jobs in background threads, so a long transcription never delays lifecycle work. Concurrency defaults to 1 and is counted in the database, so the limit holds across processes. Each job holds a renewable lease (`chapters:<state id>`), and a job left running by a stopped worker is requeued. Scans only read files, so they run in a separate batch thread. Transcription runs in a child process, which releases the model's GPU memory after each file. Transcripts and scene lists are cached by file identity, so retries and previews do not repeat them.
 
+## Pausing during playback
+
+Chapter jobs read whole files from the media share and use the GPU. On the owner's server, three jobs running at once coincided with a Roku stream on 2.4 GHz Wi-Fi stalling repeatedly. So by default (a server setting), no chapter job starts while anything is playing in Jellyfin. Running jobs are frozen in place: each external tool runs in its own process group, which is sent SIGSTOP, then SIGCONT when playback ends. Language-model requests wait before they are sent. Time spent paused does not count toward a tool's time limit, so nothing is lost or restarted. If Jellyfin cannot be reached, work continues, so an outage cannot stall the backlog indefinitely. The maintenance page shows when work is paused.
+
 ## Measured on the owner's server (2026-10-11)
 
 For a 58-minute 1080p MKV episode on the NAS: scene detection took about 3 minutes (mostly the network read), transcription with faster-whisper `medium` on an RTX 3080 Ti about 3 minutes, and 18 Ollama requests to `qwen3:14b` about 8 minutes. That is about 14 minutes in all; the owner judged the chapters very good. The library's backlog was about 3,200 MKV files (2,040 hours) without chapters, roughly 20 days of Smart Chapters at concurrency 1. The owner accepted that: the backlog catches up, and new imports then take minutes each.

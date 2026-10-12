@@ -20,6 +20,7 @@
 </div>
 <h2 class="h4">Activity</h2>
 <div class="card p-3 mb-4" id="chapter-activity">
+{% if activity.paused_since %}<div class="alert alert-secondary py-2">Paused since {{ activity.paused_since.strftime('%H:%M') }} UTC because someone is watching in Jellyfin. Running jobs are suspended where they are and continue when playback stops.</div>{% endif %}
 {% if activity.running %}{% for state in activity.running %}<div><span class="badge text-bg-primary me-2">Working</span><strong>{{ action_labels.get(state.requested_action, state.requested_action) }}</strong> · <a href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a> <span class="text-secondary small">since {{ state.updated_at.strftime('%H:%M:%S') }} UTC</span></div>{% endfor %}
 {% else %}<div class="text-secondary">{{ 'Nothing running right now; queued jobs start within 15 seconds.' if activity.queued_total else 'Idle: nothing is queued.' }}</div>{% endif %}
 {% if activity.queued_total %}<div class="mt-2">Queued: {% for label, count in activity.queued.items() %}{{ count }} {{ label|lower }}{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}

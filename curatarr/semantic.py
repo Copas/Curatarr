@@ -10,6 +10,7 @@ import re
 
 import requests
 
+from . import throttle
 from .chapters import Candidate, Window, timestamp
 
 
@@ -43,6 +44,7 @@ class Ollama:
         return [m.get("name") for m in response.json().get("models", [])]
 
     def ask(self, prompt: str, schema: dict) -> dict:
+        throttle.wait_while_paused()
         self.calls += 1
         try:
             response = self.session.post(

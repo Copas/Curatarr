@@ -86,6 +86,15 @@ class FakeArr:
         self.refreshed.append(item_id)
 
 
+@pytest.fixture(autouse=True)
+def not_paused():
+    from curatarr import throttle
+
+    throttle.set_paused(False)
+    yield
+    throttle.set_paused(False)
+
+
 @pytest.fixture
 def media_env(app, monkeypatch, tmp_path):
     files = FakeFiles()
@@ -249,6 +258,9 @@ def test_writes_wait_for_imports_playback_and_settling(media_env):
     db.session.expire_all()
     assert "RenameMovie" in state.chapter_error and files.writes == []
     arr.running = []
+    # Pausing all chapter work during playback is tested separately; here the
+    # per-file check (never edit the file being played) is what matters.
+    set_setting("chapter_options", {"pause_during_playback": False})
     arr.sessions_list = [{"NowPlayingItem": {"Id": "jf-film"}}]
     state.next_attempt_at = None
     db.session.commit()
@@ -632,3 +644,43 @@ def test_settings_warn_when_smart_chapters_has_no_model(app, client):
     assert "No Ollama model is set" not in client.get("/chapters/settings").get_data(
         as_text=True
     )
+
+
+def test_chapter_work_pauses_while_someone_watches(app, client, media_env):
+    from curatarr import throttle
+
+    files, arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    _navigation(library)
+    enrichment.request(part, "generate")
+    arr.sessions_list = [{"NowPlayingItem": {"Id": "something-else"}}]
+    assert enrichment.dispatch(synchronous=True) == 0
+    assert throttle.paused() and files.writes == []
+    assert "because someone is watching" in client.get("/chapters").get_data(
+        as_text=True
+    )
+    arr.sessions_list = [{"DeviceName": "idle client"}]
+    assert enrichment.dispatch(synchronous=True) == 1
+    assert not throttle.paused() and len(files.writes) == 1
+    assert "because someone is watching" not in client.get("/chapters").get_data(
+        as_text=True
+    )
+
+
+def test_paused_processes_are_suspended_and_their_time_not_counted():
+    import subprocess
+    import threading
+    import time
+
+    from curatarr import throttle
+
+    throttle.set_paused(True)
+    threading.Timer(1.5, throttle.set_paused, args=(False,)).start()
+    started = time.monotonic()
+    # 1 s of work with a 1.2 s limit: it only finishes because the suspended
+    # time before it could start running is not counted.
+    result = throttle.run(["/bin/sh", "-c", "sleep 1; echo done"], timeout=1.2)
+    assert result.stdout.strip() == "done" and time.monotonic() - started >= 2.4
+    with pytest.raises(subprocess.TimeoutExpired):
+        throttle.run(["/bin/sleep", "10"], timeout=0.5)
