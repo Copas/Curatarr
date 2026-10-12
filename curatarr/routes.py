@@ -20,7 +20,7 @@ from flask import (
 )
 from sqlalchemy import func
 
-from . import db
+from . import db, jellyfin_links
 from .auth import (
     SignInError,
     current_user,
@@ -308,6 +308,10 @@ def template_values():
         "dry_run_split": dry_run_by_library(),
         "signed_in_user": signed_in_user,
         "is_admin": is_admin,
+        "jellyfin_link": jellyfin_links.link,
+        "jellyfin_link_for": jellyfin_links.link_for,
+        "jellyfin_part_link": jellyfin_links.part_link,
+        "jellyfin_url": jellyfin_links.item_url,
         "theme": request.cookies.get("curatarr_theme")
         if request.cookies.get("curatarr_theme") in {"light", "dark"}
         else "dark",

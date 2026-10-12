@@ -29,7 +29,7 @@
 <div class="table-responsive"><table class="table align-middle">
 <thead><tr><th>Show</th><th class="text-end">On disk</th><th class="text-end">Frees</th><th>Added</th></tr></thead>
 <tbody>{% for row in plan %}<tr>
-  <td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a><div class="small text-secondary">{{ row.library }}{% if row.dry_run %} · dry run{% endif %}</div></td>
+  <td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}<div class="small text-secondary">{{ row.library }}{% if row.dry_run %} · dry run{% endif %}</div></td>
   <td class="text-end text-nowrap">{{ row.on_disk|size }}</td>
   <td class="text-end text-nowrap">{{ row.frees|size }}</td>
   <td class="text-nowrap">{{ row.media.added_at.strftime('%Y-%m-%d') if row.media.added_at else '—' }}</td>
@@ -37,7 +37,7 @@
 </table></div>
 
 {% if skipped %}<details class="mb-4"><summary>Skipped unwatched shows ({{ skipped|length }})</summary>
-<div class="table-responsive mt-2"><table class="table table-sm align-middle"><tbody>{% for row in skipped %}<tr><td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a></td><td class="text-secondary">{{ row.reason }}</td><td class="text-end text-nowrap">{{ row.on_disk|size }}</td></tr>{% endfor %}</tbody></table></div>
+<div class="table-responsive mt-2"><table class="table table-sm align-middle"><tbody>{% for row in skipped %}<tr><td><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}</td><td class="text-secondary">{{ row.reason }}</td><td class="text-end text-nowrap">{{ row.on_disk|size }}</td></tr>{% endfor %}</tbody></table></div>
 </details>{% endif %}
 
 {% if plan %}

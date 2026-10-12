@@ -20,7 +20,7 @@
 <tbody>
 {% for row in rows %}<tr>
   <td><div class="d-flex align-items-center gap-2"><img src="{{ url_for('main.poster', media_id=row.media.id) }}" width="44" height="66" loading="lazy" alt="">
-    <div><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a><div class="small text-secondary">{{ row.library }} · {{ row.episodes }} episode{{ '' if row.episodes == 1 else 's' }}</div>{% if row.daily %}<div class="small text-warning">Daily show: a reset deletes every episode and Curatarr won't fetch it again</div>{% endif %}</div></div></td>
+    <div><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}<div class="small text-secondary">{{ row.library }} · {{ row.episodes }} episode{{ '' if row.episodes == 1 else 's' }}</div>{% if row.daily %}<div class="small text-warning">Daily show: a reset deletes every episode and Curatarr won't fetch it again</div>{% endif %}</div></div></td>
   <td class="text-end text-nowrap">{{ row.on_disk|size }}</td>
   <td class="text-end text-nowrap">{% if row.frees %}{{ row.frees|size }}{% else %}<span class="text-secondary">—</span>{% endif %}</td>
   <td>{% if row.last_played %}{{ row.last_played.strftime('%Y-%m-%d') }}{% if is_admin and row.last_watcher %}<div class="small text-secondary">by {{ row.last_watcher }}</div>{% endif %}{% else %}<span class="text-secondary">Never observed</span>{% endif %}</td>
