@@ -2,7 +2,7 @@
 {% block title %}Chapters · {{ media.title }} · Curatarr{% endblock %}
 {% set labels = {'semantic': 'Smart (semantic)', 'scene_aligned': 'Scene-aligned', 'fixed': 'Fixed interval'} %}
 {% block content %}
-<div class="eyebrow"><a href="{{ url_for('main.title', media_id=media.id) }}">{{ media.title }}</a>{% if part.kind == 'episode' %} · S{{ '%02d'|format(part.season_number or 0) }}E{{ '%02d'|format(part.episode_number or 0) }}{% endif %}</div><h1>Chapters</h1>
+<div class="eyebrow"><a href="{{ url_for('main.title', media_id=media.id) }}">{{ media.title }}</a>{% if part.kind == 'episode' %} · S{{ '%02d'|format(part.season_number or 0) }}E{{ '%02d'|format(part.episode_number or 0) }}{% endif %}</div><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h1 class="mb-0">Chapters</h1>{% set item = part.jellyfin_id if part.kind == 'episode' and part.jellyfin_id else media.jellyfin_id %}{% if jellyfin_url(item) %}<a class="btn btn-sm btn-outline-light" href="{{ jellyfin_url(item) }}" target="_blank" rel="noopener">Open in Jellyfin</a>{% endif %}</div>
 <div class="card p-3 mb-4"><div class="row g-3">
   <div class="col-6 col-md-3"><div class="text-secondary small">Chapters</div><div class="h5 mb-0">{{ info.label }}</div></div>
   <div class="col-6 col-md-3"><div class="text-secondary small">Source</div><div class="h5 mb-0">{{ info.source }}</div></div>
