@@ -4,6 +4,7 @@ import time
 
 import click
 from flask import current_app
+from sqlalchemy.exc import OperationalError
 
 from . import db
 from .artwork import reconcile_artwork
@@ -191,6 +192,16 @@ def register_commands(app):
                         "Reconciliation incomplete; retrying in %s seconds: %s",
                         RECONCILE_RETRY_SECONDS,
                         exc,
+                    )
+                except OperationalError as exc:
+                    # SQLite has one writer; a long discovery transaction can
+                    # outlast the 30-second wait. Restarting the worker would
+                    # also abandon running chapter jobs, so try again shortly.
+                    db.session.rollback()
+                    if once or "locked" not in str(exc):
+                        raise
+                    current_app.logger.warning(
+                        "Database busy; retrying the worker cycle in 15 seconds"
                     )
             if once:
                 break
