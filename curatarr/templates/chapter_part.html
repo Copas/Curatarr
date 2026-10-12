@@ -16,6 +16,10 @@
   {% if allowed %}<form method="post" action="{{ url_for('main.chapter_part_action', part_id=part.id, action=action) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ style }}"{% if info.queued %} disabled{% endif %}>{{ label }}</button></form>{% endif %}
   {% endfor %}
 </div>
+<div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top border-secondary-subtle"><span class="me-2"><span class="text-secondary small">Generated subtitles:</span> {{ info.subtitles }}{% if state and state.subtitle_error %} <span class="small text-secondary">({{ state.subtitle_error }})</span>{% endif %}</span>
+  <form method="post" action="{{ url_for('main.chapter_part_action', part_id=part.id, action='subtitles') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light"{% if info.queued %} disabled{% endif %}>{{ 'Regenerate subtitles' if info.subtitles_ours else 'Generate subtitles' }}</button></form>
+  {% if info.subtitles_ours %}<form method="post" action="{{ url_for('main.chapter_part_action', part_id=part.id, action='remove_subtitles') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-danger"{% if info.queued %} disabled{% endif %}>Remove generated subtitles</button></form>{% endif %}
+</div>
 {% if not info.can_remove %}<p class="small text-secondary mt-2 mb-0">Regenerate and remove appear only for chapters Curatarr wrote itself and that are still unchanged in the file.</p>{% endif %}
 </div>
 {% if state and state.written_chapters_json %}<h2 class="h4">Chapters in the file</h2><ol class="mb-4">{% for c in state.written_chapters_json %}<li><code>{{ c.start|chapter_time }}</code> {{ c.name }}</li>{% endfor %}</ol>{% endif %}
