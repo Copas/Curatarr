@@ -60,11 +60,20 @@ from .mediafile import (
 )
 from .models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
 from .services import _as_datetime, audit, client, set_setting, setting
+from .subtitles import (
+    cues_from,
+    digest,
+    embedded_english,
+    generated_path,
+    sidecar_english,
+    srt_text,
+)
 
 log = logging.getLogger("curatarr.chapters")
 
 WRITE_ACTIONS = {"auto", "generate", "regenerate", "remove"}
-ACTIONS = WRITE_ACTIONS | {"preview", "scan"}
+SUBTITLE_ACTIONS = {"subtitles", "remove_subtitles"}
+ACTIONS = WRITE_ACTIONS | SUBTITLE_ACTIONS | {"preview", "scan"}
 FINAL_STATUSES = {
     "existing",
     "generated_semantic",
@@ -153,6 +162,7 @@ FIELD_PATHS = {
     "new_media": ("processing", "new_media"),
     "existing_library": ("processing", "existing_library"),
     "dry_run": ("processing", "dry_run"),
+    "subtitles_enabled": ("subtitles", "enabled"),
 }
 
 
@@ -727,6 +737,8 @@ def run_job(state_id: str, *, llm=None) -> str:
         _fail(state, f"Invalid chapter settings: {exc}", retry=False)
         db.session.commit()
         return state.chapter_status
+    if action in SUBTITLE_ACTIONS:
+        return run_subtitles(state, action, part, media, path, config, opts)
     if not path or not file_exists(path):
         _fail(state, "The media file was not found at its expected path", retry=False)
         db.session.commit()
@@ -1073,6 +1085,184 @@ def _context(part, media):
     return f'the film "{media.title}"'
 
 
+# --- Subtitles ---------------------------------------------------------------
+
+
+def _chain_subtitles(state_id):
+    """After a chapter job, add subtitles while the transcript is fresh."""
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state_id)
+    if not state or state.job_state != "idle" or state.subtitle_status is not None:
+        return
+    try:
+        enabled = config_for(state.media.library_id)["subtitles"]["enabled"]
+    except ChapterConfigError:
+        return
+    if enabled:
+        state.job_state = "queued"
+        state.requested_action = "subtitles"
+        state.requested_at = utcnow()
+        db.session.commit()
+
+
+def _subtitles_done(state, status, *, error=None, fields=None):
+    state.subtitle_status = status
+    state.subtitle_error = error
+    state.subtitle_processed_at = utcnow()
+    state.job_state = "idle"
+    state.requested_action = None
+    state.next_attempt_at = None
+    db.session.commit()
+    _log(f"subtitles_{status}", error=error, **(fields or {}))
+    return status
+
+
+def _ours(state, target) -> bool:
+    if not state.subtitle_fingerprint or not target.exists():
+        return False
+    try:
+        return digest(target.read_text(encoding="utf-8")) == state.subtitle_fingerprint
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def run_subtitles(state, action, part, media, path, config, opts) -> str:
+    """Write (or remove) the generated English subtitle file for one video."""
+    fields = {"state_id": state.id, "action": action, "file": path}
+    if not path or not file_exists(path):
+        return _subtitles_done(
+            state, "failed", error="The media file was not found", fields=fields
+        )
+    target = generated_path(path)
+    ours = _ours(state, target)
+    if action == "remove_subtitles":
+        if not ours:
+            return _subtitles_done(
+                state,
+                state.subtitle_status or "failed",
+                error="That subtitle file was not written by Curatarr, or was "
+                "changed since, so it is left alone",
+                fields=fields,
+            )
+        try:
+            target.unlink()
+        except OSError as exc:
+            return _subtitles_done(state, "failed", error=str(exc), fields=fields)
+        state.subtitle_fingerprint = None
+        state.subtitle_path = None
+        _refresh_jellyfin(part, media)
+        audit(
+            "subtitles_removed",
+            media.id,
+            f"Removed Curatarr's generated subtitles from {_part_label(part)}.",
+            f"subtitles-remove:{state.id}:{utcnow().isoformat()}",
+            payload={"file": str(target)},
+        )
+        return _subtitles_done(state, "removed", fields=fields)
+    try:
+        info = probe(path)
+    except (MediaToolError, OSError) as exc:
+        return _subtitles_done(state, "failed", error=str(exc), fields=fields)
+    if target.exists() and not ours:
+        return _subtitles_done(
+            state,
+            "existing",
+            error=f"{target.name} already exists and was not written by Curatarr",
+            fields=fields,
+        )
+    if not ours:
+        if embedded_english(info.streams):
+            return _subtitles_done(state, "existing", fields=fields)
+        sidecars = sidecar_english(path)
+        if sidecars:
+            return _subtitles_done(state, "existing", fields=fields)
+    busy = import_activity(part, media, info, opts["settle_minutes"])
+    if busy and "playing" not in busy:  # a file beside the video is fine to add
+        state.job_state = "queued"
+        state.next_attempt_at = utcnow() + timedelta(minutes=DEFER_MINUTES)
+        state.subtitle_error = f"Waiting: {busy}"
+        db.session.commit()
+        return "deferred"
+    started = time.monotonic()
+    try:
+        from .transcribe import transcribe
+
+        segments, details = transcribe(
+            info,
+            config["semantic"]["model"],
+            opts["whisper_device"],
+            cache_dir() / "transcripts",
+        )
+    except (MediaToolError, RuntimeError) as exc:
+        return _subtitles_done(state, "failed", error=str(exc), fields=fields)
+    language = details.get("language")
+    if language and language != "en":
+        return _subtitles_done(
+            state,
+            "skipped_language",
+            error=f"The audio is not English (detected: {language})",
+            fields=fields,
+        )
+    cues = cues_from(segments)
+    if not cues:
+        return _subtitles_done(state, "no_speech", fields=fields)
+    text = srt_text(cues)
+    partial = target.with_name(target.name + ".partial")
+    try:
+        partial.write_text(text, encoding="utf-8")
+        os.replace(partial, target)
+    except OSError as exc:
+        _best_effort_unlink(partial)
+        return _subtitles_done(state, "failed", error=str(exc), fields=fields)
+    state.subtitle_fingerprint = digest(text)
+    state.subtitle_path = str(target)
+    refresh_error = _refresh_jellyfin(part, media)
+    audit(
+        "subtitles_generated",
+        media.id,
+        f"Added generated English subtitles ({len(cues)} lines) to "
+        f"{_part_label(part)}.",
+        f"subtitles:{state.id}:{state.subtitle_fingerprint[:16]}",
+        payload={
+            "file": str(target),
+            "cues": len(cues),
+            "transcript_cached": details.get("cached"),
+            "jellyfin_refresh": refresh_error or "requested",
+        },
+    )
+    fields |= {
+        "cues": len(cues),
+        "transcript_cached": details.get("cached"),
+        "processing_seconds": round(time.monotonic() - started, 1),
+    }
+    return _subtitles_done(state, "generated", fields=fields)
+
+
+def _best_effort_unlink(path):
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
+def queue_subtitles(library_id=None) -> int:
+    """Queue every file not yet checked for subtitles (or whose check failed)."""
+    count = 0
+    for part in _parts_query(library_id):
+        state = state_for(part)
+        if state.job_state != "idle" or state.subtitle_status not in {
+            None,
+            "failed",
+        }:
+            continue
+        state.job_state = "queued"
+        state.requested_action = "subtitles"
+        state.requested_at = utcnow()
+        count += 1
+    db.session.commit()
+    return count
+
+
 def _part_label(part):
     if part.kind == "episode":
         return f"S{part.season_number or 0:02}E{part.episode_number or 0:02}"
@@ -1140,10 +1330,13 @@ def _run_one(app, state_id, llm):
         state = db.session.get(ChapterState, state_id)
         if not state or state.job_state != "queued":
             return
+        action = state.requested_action
         state.job_state = "running"
         db.session.commit()
         with leases.keep_alive(scope, owner, LEASE_SECONDS):
             run_job(state_id, llm=llm)
+        if action in {"auto", "generate", "regenerate"}:
+            _chain_subtitles(state_id)
     except OperationalError as exc:
         # SQLite allows one writer; discovery holds a long write transaction.
         # Put the job back rather than failing it.
@@ -1353,6 +1546,8 @@ ACTION_LABELS = {
     "regenerate": "Regenerate",
     "remove": "Remove",
     "preview": "Preview",
+    "subtitles": "Subtitles",
+    "remove_subtitles": "Remove subtitles",
 }
 
 
@@ -1439,7 +1634,19 @@ def maintenance_summary(library_id=None) -> dict:
         .filter(ChapterState.job_state.in_(("queued", "running")))
         .scalar()
     )
+    subtitle_rows = (
+        db.session.query(ChapterState.subtitle_status, func.count(ChapterState.id))
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(ChapterState.subtitle_status.isnot(None), MediaPart.has_file.is_(True))
+    )
+    if library_id:
+        subtitle_rows = subtitle_rows.filter(MediaIdentity.library_id == library_id)
+    subtitles = dict(subtitle_rows.group_by(ChapterState.subtitle_status).all())
     return {
+        "subtitles_generated": subtitles.get("generated", 0),
+        "subtitles_existing": subtitles.get("existing", 0),
+        "subtitles_checked": sum(subtitles.values()),
         "files": parts,
         "scanned": scanned,
         "not_scanned": max(parts - scanned, 0),
@@ -1499,6 +1706,16 @@ def describe(state: ChapterState | None) -> dict:
         "count": state.chapter_count if state else None,
         "processed_at": state.chapter_processed_at if state else None,
         "can_remove": bool(state and state.written_fingerprint),
+        "subtitles": {
+            None: "Not checked",
+            "generated": "Generated",
+            "existing": "Already has English subtitles",
+            "skipped_language": "Not English audio",
+            "no_speech": "No speech found",
+            "removed": "Removed",
+            "failed": "Failed",
+        }.get(state.subtitle_status if state else None, "—"),
+        "subtitles_ours": bool(state and state.subtitle_fingerprint),
         "queued": bool(state and state.job_state in {"queued", "running"}),
     }
 

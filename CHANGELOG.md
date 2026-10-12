@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Optional generated English subtitles from the Smart Chapters transcript (Chapter settings → Subtitles, per library). They are written as `<video>.en.Generated.srt` only when a file has no English subtitles inside it or beside it, never over another file, and removable from the file's page. Chapter maintenance can queue every file that is missing them. Transcripts now survive adding chapters to a file, and one transcription runs at a time, so jobs no longer fall back to slow CPU transcription when the GPU is full (migration f1b6d2e8c047).
+
 - Chapter generation pauses while anything is playing in Jellyfin (on by default; Chapter settings → This server). Running jobs are suspended where they are and resume when playback stops; no new jobs start. Chapter maintenance shows the pause, what each job is working on, what is queued, and the last files finished.
 
 - Optional chapter generation (Manage → Chapters). Long movies and episodes without chapters get them after import: Navigation Chapters (about every 7 minutes, aligned to scene changes) or Smart Chapters (local faster-whisper transcript plus an Ollama model choose the boundaries and name them), with fixed intervals as the last fallback. MKV files are edited in place with mkvpropedit, with no re-encoding, then verified, and only that item is refreshed in Jellyfin. Existing chapters are preserved, and Curatarr removes or regenerates only chapters it wrote. Enabling it never sweeps the existing library; Chapter maintenance scans, shows counts, and processes what you confirm. Each file has a preview page. Install with `EXTRAS=chapters-gpu` (or `chapters`) for Smart Chapters. Discovery now also records each file's path from Sonarr/Radarr (migration e7c3a9f15d42).

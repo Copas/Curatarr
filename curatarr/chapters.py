@@ -49,6 +49,9 @@ DEFAULTS: dict[str, Any] = {
         "existing_library": False,
         "dry_run": False,
     },
+    "subtitles": {
+        "enabled": False,
+    },
 }
 
 # Values that only make sense once per installation, not per library.

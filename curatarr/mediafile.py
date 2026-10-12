@@ -138,6 +138,7 @@ def probe(path: str) -> MediaInfo:
                 "codec_type": s.get("codec_type"),
                 "codec_name": s.get("codec_name"),
                 "default": bool((s.get("disposition") or {}).get("default")),
+                "forced": bool((s.get("disposition") or {}).get("forced")),
                 "language": (s.get("tags") or {}).get("language"),
             }
             for s in data.get("streams") or []
