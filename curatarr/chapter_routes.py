@@ -28,6 +28,7 @@ from .enrichment import (
     queue_library,
     queue_scan,
     queue_selected,
+    queue_smart_upgrade,
     queue_subtitles,
     request_scan_after_discovery,
     save_settings,
@@ -188,6 +189,19 @@ def chapter_queue():
             ),
             "success",
         )
+    return redirect(url_for("main.chapter_maintenance", library=library_id))
+
+
+@bp.post("/chapters/upgrade")
+def chapter_upgrade():
+    """Redo Navigation chapters with Smart Chapters where Smart is the setting."""
+    library_id = request.form.get("library") or None
+    count = queue_smart_upgrade(library_id)
+    flash(
+        f"Queued {count} file{'s' if count != 1 else ''} to redo with Smart "
+        "Chapters. Each file's own chapters stay until the new ones are written.",
+        "success",
+    )
     return redirect(url_for("main.chapter_maintenance", library=library_id))
 
 

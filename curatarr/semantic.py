@@ -7,15 +7,28 @@ never sees file paths or anything outside the transcript.
 
 import json
 import re
+import time
 
 import requests
 
-from . import throttle
+from . import gpu, throttle
 from .chapters import Candidate, Window, timestamp
 
 
 class LanguageModelError(RuntimeError):
     pass
+
+
+class LanguageModelUnavailable(LanguageModelError):
+    """Ollama did not answer (down, overloaded, or out of GPU memory).
+
+    Unlike a bad answer, this is usually temporary: the job waits and tries
+    again rather than settling for Navigation chapters.
+    """
+
+
+# Waits before the second and third try of a request that failed.
+RETRY_DELAYS = (10, 30)
 
 
 SYSTEM = (
@@ -43,30 +56,59 @@ class Ollama:
             raise LanguageModelError("Ollama is not reachable") from exc
         return [m.get("name") for m in response.json().get("models", [])]
 
+    def unload(self):
+        """Free the model's GPU memory now instead of after keep_alive."""
+        try:
+            self.session.post(
+                f"{self.base_url}/api/generate",
+                json={"model": self.model, "keep_alive": 0},
+                timeout=30,
+            )
+        except requests.RequestException:
+            pass  # If Ollama is down its memory is free anyway.
+
     def ask(self, prompt: str, schema: dict) -> dict:
+        for delay in (*RETRY_DELAYS, None):
+            try:
+                return self._ask_once(prompt, schema)
+            except LanguageModelUnavailable:
+                if delay is None:
+                    raise
+                time.sleep(delay)
+        raise AssertionError("unreachable")
+
+    def _ask_once(self, prompt: str, schema: dict) -> dict:
         throttle.wait_while_paused()
         self.calls += 1
         try:
-            response = self.session.post(
-                f"{self.base_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": SYSTEM},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "format": schema,
-                    "stream": False,
-                    "think": False,
-                    "keep_alive": "2m",
-                    "options": {"temperature": 0.2},
-                },
-                timeout=self.timeout,
-            )
+            with gpu.shared():
+                response = self.session.post(
+                    f"{self.base_url}/api/chat",
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": SYSTEM},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "format": schema,
+                        "stream": False,
+                        "think": False,
+                        "keep_alive": "2m",
+                        "options": {"temperature": 0.2},
+                    },
+                    timeout=self.timeout,
+                )
+            if 400 <= response.status_code < 500:
+                # A missing model or a bad request will not fix itself.
+                raise LanguageModelError(
+                    f"Ollama refused the request ({response.status_code})"
+                )
             response.raise_for_status()
             content = response.json()["message"]["content"]
-        except (requests.RequestException, KeyError, ValueError) as exc:
-            raise LanguageModelError("Ollama request failed") from exc
+        except requests.RequestException as exc:
+            raise LanguageModelUnavailable("Ollama request failed") from exc
+        except (KeyError, ValueError) as exc:
+            raise LanguageModelError("Ollama returned an unexpected response") from exc
         # Some models still wrap JSON in reasoning text or code fences.
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
         match = re.search(r"\{.*\}", content, flags=re.DOTALL)

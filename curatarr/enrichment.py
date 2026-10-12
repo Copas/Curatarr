@@ -59,6 +59,7 @@ from .mediafile import (
     write_command,
 )
 from .models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
+from .semantic import LanguageModelUnavailable
 from .services import _as_datetime, audit, client, set_setting, setting
 from .subtitles import (
     cues_from,
@@ -479,6 +480,8 @@ def analyse(
             result["attempts"].append(
                 {"method": method, "ok": False, "error": str(exc)}
             )
+            if isinstance(exc, LanguageModelUnavailable):
+                result["language_model_unavailable"] = True
             return None
         result["attempts"].append({"method": method, "ok": True})
         result["plans"][method] = plan.as_dict()
@@ -492,11 +495,13 @@ def analyse(
             from .semantic import choose_boundary, name_chapters
             from .transcribe import transcribe
 
+            model = llm or _language_model(config, opts)
             segments, details = transcribe(
                 info,
                 config["semantic"]["model"],
                 opts["whisper_device"],
                 cache_dir() / "transcripts",
+                make_room=getattr(model, "unload", None),
             )
             result["transcript"] = {
                 **details,
@@ -504,7 +509,6 @@ def analyse(
                 "words": sum(len(s.text.split()) for s in segments),
                 "sample": [[round(s.start, 1), s.text.strip()] for s in segments[:12]],
             }
-            model = llm or _language_model(config, opts)
             plan = semantic_plan(
                 info.duration,
                 scenes or [],
@@ -854,6 +858,19 @@ def run_job(state_id: str, *, llm=None) -> str:
             **fields,
         )
         return state.chapter_status
+    if (
+        analysis.get("language_model_unavailable")
+        and action in {"auto", "generate", "regenerate"}
+        and state.attempts + 1 < MAX_ATTEMPTS
+    ):
+        # Usually Ollama out of GPU memory or restarting. The transcript and
+        # scene changes are cached, so trying again later costs little, and
+        # Smart Chapters are worth the wait over Navigation chapters.
+        state.attempts += 1
+        _defer(state, "Ollama did not answer; Smart Chapters will try again")
+        db.session.commit()
+        _log("chapters_deferred", reason=state.chapter_error, **fields)
+        return "deferred"
     if not analysis["chosen"]:
         errors = "; ".join(
             f"{a['method']}: {a['error']}" for a in analysis["attempts"] if not a["ok"]
@@ -1616,14 +1633,7 @@ def maintenance_summary(library_id=None) -> dict:
     scanned = sum(by_status.values())
     needing = sum(by_status.get(s, 0) for s in ("not_processed", "dry_run", "failed"))
     generated = sum(by_status.get(s, 0) for s in GENERATED_STATUSES.values())
-    smart_libraries = set()
-    for library in db.session.query(Library):
-        try:
-            config = config_for(library.id)
-        except ChapterConfigError:
-            continue
-        if config["mode"] == "smart" and config["semantic"]["enabled"]:
-            smart_libraries.add(library.id)
+    smart_libraries = _smart_library_ids()
     needing_smart = (
         needs_chapters_query(library_id)
         .filter(MediaIdentity.library_id.in_(smart_libraries or {""}))
@@ -1658,12 +1668,56 @@ def maintenance_summary(library_id=None) -> dict:
         "failed": by_status.get("failed", 0),
         "removed": by_status.get("removed", 0),
         "transcription_estimate": needing_smart,
+        "smart_upgradable": smart_upgrade_query(library_id).count(),
         "queued": queued,
     }
 
 
+def _smart_library_ids() -> set:
+    smart = set()
+    for library in db.session.query(Library):
+        try:
+            config = config_for(library.id)
+        except ChapterConfigError:
+            continue
+        if config["mode"] == "smart" and config["semantic"]["enabled"]:
+            smart.add(library.id)
+    return smart
+
+
+def smart_upgrade_query(library_id=None):
+    """Files in Smart libraries that got Navigation chapters instead.
+
+    That happens when Ollama or transcription was unavailable at the time.
+    Only chapters still exactly as Curatarr wrote them are listed.
+    """
+    query = (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            ChapterState.chapter_status.in_(
+                (GENERATED_STATUSES["scene_aligned"], GENERATED_STATUSES["fixed"])
+            ),
+            ChapterState.written_fingerprint.isnot(None),
+            ChapterState.job_state == "idle",
+            MediaPart.has_file.is_(True),
+            MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
+        )
+    )
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    return query
+
+
+def queue_smart_upgrade(library_id=None) -> int:
+    return queue_selected(
+        [state.id for state in smart_upgrade_query(library_id)], "regenerate"
+    )
+
+
 def queue_selected(state_ids, action) -> int:
-    if action not in {"preview", "generate"}:
+    if action not in {"preview", "generate", "regenerate"}:
         raise ValueError("Unsupported bulk action")
     count = 0
     for state in db.session.query(ChapterState).filter(ChapterState.id.in_(state_ids)):
