@@ -230,11 +230,17 @@ def parse_options(form) -> dict:
         raw = (form.get(key) or "").strip()
         if raw:
             values[key] = raw
-    values["pause_during_playback"] = form.get("pause_during_playback") in {
-        "true",
-        "on",
-        "1",
-    }
+    # A checkbox sends nothing when unticked, so only a form that showed it
+    # (marked by the hidden field) may turn it off. A page loaded before the
+    # option existed would otherwise switch it off when saved.
+    if "pause_during_playback_shown" in form:
+        values["pause_during_playback"] = form.get("pause_during_playback") in {
+            "true",
+            "on",
+            "1",
+        }
+    else:
+        values["pause_during_playback"] = options()["pause_during_playback"]
     mappings = []
     for line in (form.get("path_mappings") or "").splitlines():
         if not line.strip():
