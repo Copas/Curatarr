@@ -684,3 +684,30 @@ def test_paused_processes_are_suspended_and_their_time_not_counted():
     assert result.stdout.strip() == "done" and time.monotonic() - started >= 2.4
     with pytest.raises(subprocess.TimeoutExpired):
         throttle.run(["/bin/sleep", "10"], timeout=0.5)
+
+
+def test_saving_a_page_without_the_pause_option_keeps_it(app, client):
+    from curatarr.enrichment import options
+
+    form = {
+        "chapter_mode": "smart",
+        "minimum_duration_minutes": "20",
+        "target_spacing_minutes": "7",
+        "minimum_spacing_minutes": "4",
+        "maximum_spacing_minutes": "10",
+        "whisper_model": "medium",
+        "fallback_format": "Chapter {number}",
+        "concurrency": "2",
+    }
+    client.post("/chapters/settings", data=form)  # a page from before the option
+    assert options()["pause_during_playback"] is True
+    client.post(
+        "/chapters/settings", data=form | {"pause_during_playback_shown": "1"}
+    )  # shown and unticked
+    assert options()["pause_during_playback"] is False
+    client.post(
+        "/chapters/settings",
+        data=form
+        | {"pause_during_playback_shown": "1", "pause_during_playback": "true"},
+    )
+    assert options()["pause_during_playback"] is True
