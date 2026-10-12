@@ -39,6 +39,9 @@ a { text-underline-offset: .18em; }
 .eyebrow { color: var(--app-accent); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; font-size: .72rem; }
 .stat-card { min-height: 7.5rem; }
 .stat-card .display-6 { font-weight: 650; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 1.1rem 1.5rem; }
+.stat-grid .stat-label { font-size: .8rem; color: var(--app-muted); margin-bottom: .15rem; }
+.stat-grid .stat-value { font-size: 1.6rem; font-weight: 650; line-height: 1.15; }
 .status-pill { display: inline-block; border: 1px solid var(--app-border); background: var(--app-bg); border-radius: 999px; padding: .2rem .6rem; font-size: .78rem; font-weight: 650; }
 .empty-state { padding: 2rem; border: 1px dashed var(--app-border); border-radius: .85rem; color: var(--app-muted); }
 details > summary { cursor: pointer; }

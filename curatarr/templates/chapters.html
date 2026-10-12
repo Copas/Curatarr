@@ -7,10 +7,12 @@
   <a class="btn btn-sm {{ 'btn-primary' if not library_id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_maintenance') }}">All libraries</a>
   {% for other in libraries %}<a class="btn btn-sm {{ 'btn-primary' if other.id == library_id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_maintenance', library=other.id) }}">{{ other.name }}{% if other.id not in enabled_libraries %} (off){% endif %}</a>{% endfor %}
 </div>
-<div class="row g-3 mb-3">
+<div class="card p-3 mb-3">
+  <div class="stat-grid">
   {% for label, value in [('Files', summary.files), ('Scanned', summary.scanned), ('With existing chapters', summary.existing), ('Chapters added by Curatarr', summary.generated), ('Needing chapters', summary.needing), ('Needing subtitles', summary.needing_subtitles), ('Below minimum length', summary.short), ('Unsupported (not MKV)', summary.unsupported), ('Would need transcription', summary.transcription_estimate)] %}
-  <div class="col-6 col-md-3"><div class="card p-3 stat-card h-100"><h2 class="h6">{{ label }}</h2><p class="h4 mb-0">{{ value|commas }}</p></div></div>
+  <div><h2 class="stat-label mb-0">{{ label }}</h2><p class="stat-value mb-0">{{ value|commas }}</p></div>
   {% endfor %}
+  </div>
 </div>
 {% if not summary.files %}<div class="alert alert-info">No file locations are recorded yet. Curatarr records them during discovery (hourly, or Discover on Overview); pressing Scan starts discovery and then the scan.</div>{% endif %}
 <p class="text-secondary">{% if summary.not_scanned %}{{ summary.not_scanned|commas }} file{{ '' if summary.not_scanned == 1 else 's' }} not scanned yet. {% endif %}{% if summary.queued %}{{ summary.queued|commas }} chapter job{{ '' if summary.queued == 1 else 's' }} queued or running.{% endif %}{% if summary.failed %} {{ summary.failed|commas }} failed (shown below with the reason).{% endif %}{% if summary.subtitles_checked %} Subtitles: {{ summary.subtitles_generated|commas }} generated, {{ summary.subtitles_existing|commas }} already had English, of {{ summary.subtitles_checked|commas }} checked.{% endif %}</p>
