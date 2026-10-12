@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Chapter maintenance's Activity card updates itself every 5 seconds instead of needing a manual refresh, and no longer says "Nothing running right now" while it's actually racing through subtitle existence checks (each finishes in under a second, too fast for the old "running" indicator to catch) — it now shows the file just checked, and a "Last N subtitle checks" list.
+- Chapter maintenance's Activity card updates itself every 5 seconds instead of needing a manual refresh, and no longer says "Nothing running right now" while it's actually racing through subtitle existence checks (each finishes in under a second, too fast for the old "running" indicator to catch) — it now shows the file just checked, and a "Last N subtitle checks" list. Opening "Last N finished" or "Last N subtitle checks" stays open across refreshes instead of closing on the next update.
 
 - Large counts on Chapter maintenance (files needing chapters, queued jobs, and the rest) now show thousands separators (e.g. "2,857") instead of running digits together.
 

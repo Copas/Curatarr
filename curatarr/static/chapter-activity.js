@@ -15,6 +15,10 @@
         wrapper.innerHTML = html.trim();
         var next = wrapper.firstElementChild;
         if (!next) return;
+        el.querySelectorAll("details[open][id]").forEach(function (open) {
+          var match = next.querySelector("#" + open.id);
+          if (match) match.open = true;
+        });
         el.replaceWith(next);
         if (window.curatarrLocalTime) window.curatarrLocalTime(next);
       })
