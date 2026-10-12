@@ -2,7 +2,7 @@
 
 The child process keeps the model (and its GPU memory) out of the worker, and
 lets a crash or timeout fail one job instead of the worker. Transcripts are
-cached by file identity (path, size, modification time) and model, so an
+cached by the file's path, duration and audio tracks and the model, so an
 unchanged file is never transcribed twice.
 
 faster-whisper is an optional dependency: ``pip install curatarr[chapters]``.
@@ -16,23 +16,15 @@ import os
 import subprocess
 import sys
 import tempfile
-import threading
 from pathlib import Path
 
-from . import throttle
+from . import gpu, throttle
 from .chapters import Segment
 from .mediafile import MediaInfo, MediaToolError, extract_audio, speech_stream
 
 
 class TranscriptionUnavailable(RuntimeError):
     pass
-
-
-# One transcription on the GPU at a time. Concurrent chapter jobs, Ollama and
-# Jellyfin's transcoding share one card; several transcriptions at once ran
-# it out of memory and fell back to the CPU, about five times slower. Other
-# jobs keep reading files and asking Ollama while one transcribes.
-_one_at_a_time = threading.Lock()
 
 
 def available() -> bool:
@@ -82,11 +74,15 @@ def _cuda_library_path() -> str:
     return os.pathsep.join(directories + ([existing] if existing else []))
 
 
-def transcribe(info: MediaInfo, model: str, device: str, cache_dir: Path):
+def transcribe(
+    info: MediaInfo, model: str, device: str, cache_dir: Path, make_room=None
+):
     """Segments for a media file, from the cache or a fresh transcription.
 
     Returns (segments, details) where details records the device and whether
-    the cache was used.
+    the cache was used. One transcription runs at a time, never alongside a
+    language-model request (see gpu.py); ``make_room`` is called first to
+    free GPU memory, typically by unloading Ollama's model.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
     hit = cached(info, model, cache_dir)
@@ -107,7 +103,9 @@ def transcribe(info: MediaInfo, model: str, device: str, cache_dir: Path):
         env = os.environ | {"LD_LIBRARY_PATH": _cuda_library_path()}
         partial = target.with_suffix(".partial")
         try:
-            with _one_at_a_time:
+            with gpu.exclusive():
+                if make_room and device != "cpu":
+                    make_room()
                 result = _run_transcriber(audio, partial, model, device, env, info)
         except subprocess.TimeoutExpired as exc:
             raise MediaToolError("Transcription timed out") from exc
