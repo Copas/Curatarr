@@ -426,6 +426,15 @@ class UnsupportedWebhookEvent(ValueError):
     """A well-formed notification of a type Curatarr does not act on."""
 
 
+class RoutineWebhookEvent(UnsupportedWebhookEvent):
+    """An expected notification that carries nothing new, acknowledged quietly."""
+
+
+# Jellyfin saves user data every few seconds while something plays. Those saves
+# repeat the playback position only; favorites arrive as UpdateUserRating.
+PROGRESS_SAVE_REASONS = {"playbackprogress", "playbackstart"}
+
+
 def normalize_event(payload):
     """Accept the Jellyfin Webhook plugin's fields and Curatarr's canonical form.
 
@@ -462,6 +471,9 @@ def normalize_event(payload):
     reason = str(_first(payload, "save_reason", "SaveReason") or "").lower()
     if kind == "playback_stopped" and completed:
         kind = "item_played"
+    elif kind == "user_data_saved" and reason in PROGRESS_SAVE_REASONS:
+        # Stored, these were ~4,000 "favorite changed" events a day per viewer.
+        raise RoutineWebhookEvent("Playback progress saves carry no new decisions")
     elif kind == "user_data_saved":
         # Marking watched counts as completion; other saves carry favorite state.
         kind = (
