@@ -229,3 +229,21 @@ def test_unmatched_delivery_says_why(app, client):
     process_pending_events()
     page = client.get("/settings").text
     assert "not matched: the item is not in a TV or movie library" in page
+
+
+def test_playback_progress_saves_are_acknowledged_but_not_stored(series, client):
+    from curatarr.models import LifecycleEvent
+    from curatarr.services import RoutineWebhookEvent, set_setting, setting
+
+    for reason in ("PlaybackProgress", "PlaybackStart"):
+        with pytest.raises(RoutineWebhookEvent):
+            normalize_event(_template("UserDataSaved", SaveReason=reason))
+    set_setting("webhook_token", "secret")
+    response = client.post(
+        "/api/v1/webhook/jellyfin",
+        json=_template("UserDataSaved", SaveReason="PlaybackProgress"),
+        headers={"X-Curatarr-Token": "secret"},
+    )
+    assert response.status_code == 202
+    assert db.session.query(LifecycleEvent).count() == 0
+    assert setting("webhook_last_problem") is None  # not shown as a warning
