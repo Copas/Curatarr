@@ -697,9 +697,11 @@ def test_saving_a_page_without_the_pause_option_keeps_it(app, client):
         "maximum_spacing_minutes": "10",
         "whisper_model": "medium",
         "fallback_format": "Chapter {number}",
+        "fixed_intervals": "true",
         "concurrency": "2",
     }
     client.post("/chapters/settings", data=form)  # a page from before the option
+    assert options()["concurrency"] == 2  # the save went through
     assert options()["pause_during_playback"] is True
     client.post(
         "/chapters/settings", data=form | {"pause_during_playback_shown": "1"}
