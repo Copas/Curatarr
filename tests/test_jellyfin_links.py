@@ -36,9 +36,9 @@ def test_loopback_jellyfin_links_use_the_host_the_page_was_opened_on(app, client
     media, _part = _setup()
     set_setting("jellyfin_server_id", "srv1")
     page = client.get(
-        f"/titles/{media.id}", base_url="http://192.168.1.100:8787"
+        f"/titles/{media.id}", base_url="http://192.0.2.10:8787"
     ).get_data(as_text=True)
-    assert "http://192.168.1.100:8096/web/#/details?id=abc123&amp;serverId=srv1" in page
+    assert "http://192.0.2.10:8096/web/#/details?id=abc123&amp;serverId=srv1" in page
     assert "Open in Jellyfin" in page and "127.0.0.1:8096" not in page
 
 
