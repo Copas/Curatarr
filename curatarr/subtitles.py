@@ -4,7 +4,7 @@ Pure helpers: whether a file already has English subtitles, turning transcript
 segments into readable cues, and the SRT text. Writing the file and recording
 it happen in enrichment.py.
 
-A generated file is named ``<video name>.en.Generated.srt`` beside the video,
+A generated file is named ``<video name>.en.Curatarr.srt`` beside the video,
 so Jellyfin lists it as an English external subtitle and nobody mistakes it
 for a downloaded one. Curatarr never writes over a file it did not create.
 """
@@ -21,7 +21,7 @@ ENGLISH = {"en", "eng", "english"}
 # them as English avoids adding a second English track beside a real one.
 UNTAGGED = {"", "und", "unknown", None}
 TEXT_SUFFIXES = {".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx", ".sup", ".smi"}
-GENERATED_SUFFIX = ".en.Generated.srt"
+GENERATED_SUFFIX = ".en.Curatarr.srt"
 
 MAX_LINE = 42
 MAX_LINES = 2

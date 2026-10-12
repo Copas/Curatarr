@@ -58,12 +58,12 @@ def test_english_detection_in_the_file_and_beside_it(tmp_path):
     assert sidecar_english(str(video)) == []
     (tmp_path / "Show - S01E01.es.srt").touch()
     (tmp_path / "Show - S01E01.en.forced.srt").touch()
-    (tmp_path / "Show - S01E01.en.Generated.srt").touch()
+    (tmp_path / "Show - S01E01.en.Curatarr.srt").touch()
     (tmp_path / "Show - S01E011.en.srt").touch()  # another episode
     assert sidecar_english(str(video)) == []
     (tmp_path / "Show - S01E01.eng.sdh.srt").touch()
     assert sidecar_english(str(video)) == ["Show - S01E01.eng.sdh.srt"]
-    assert generated_path(str(video)).name == "Show - S01E01.en.Generated.srt"
+    assert generated_path(str(video)).name == "Show - S01E01.en.Curatarr.srt"
 
 
 @pytest.fixture
