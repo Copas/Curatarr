@@ -1,7 +1,7 @@
 # Curatarr Implementation Status
 
 ## Current Phase
-Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; live validation pending)
+Phase 8 — Media enrichment (chapters and subtitles) running live; preparing v0.2.0
 
 ## Completed
 - v0.2.0rc3 release candidate: Docker Desktop installation steps for Windows, LF shell entrypoints, and Windows Arr disk-path matching are included. The Docker image was built and served HTTP on Linux; a Windows host smoke test is still pending. The rc2 native upgrade is running on the owner's host. Live lifecycle validation remains pending before v0.2.0.
@@ -41,17 +41,22 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Section 94 observability: JSON operational logs limited to the specified fields, durable metric counters, `/api/v1/metrics`, and a dedicated Operations page. Tests use temporary data directories, so they no longer write posters into `instance/`.
 - Initial unit and integration tests, including stale/shared TV file guards, partial-deletion reconciliation, queued-delete playback rescue, playback after revalidation, and playback between TV file deletes.
 
-- Chapter generation (2026-10-11; docs/decisions/009-chapter-enrichment.md). It covers settings (global and per library), the job queue in the worker, the safety checks before writing, verification, the single-item Jellyfin refresh, maintenance and per-file preview pages, and the `chapters` CLI. Tested with fake media tools and integrations. First live test on the owner's server: a 58-minute MKV episode (The Morning Show S02E09) got 9 Smart Chapters written and verified, and Jellyfin showed them after an item refresh. The owner judged them very good. That run used the new code from a script against the checkout, not the installed worker.
+- Chapter generation (2026-10-11; docs/decisions/009-chapter-enrichment.md): settings (global and per library), worker jobs in background threads, the safety checks before writing (settling, Sonarr/Radarr queue and commands, playback of the file), verification after writing, the single-item Jellyfin refresh, maintenance and per-file preview pages, and the `chapters` CLI. Live on the owner's installed copy since 2026-10-11. A scan of 8,061 files found 3,200 with chapters, 918 non-MKV, 597 under 20 minutes, and about 3,000 to process. With Ollama on the GPU, Smart Chapters ran about 14× faster than real time with three jobs, roughly 6 days for the backlog.
+- Live fixes from the first night: Scan before the first discovery; SQLite lock contention with discovery (now WAL with a 30 s busy timeout, and jobs requeue instead of failing); a missing Ollama model not being flagged; an older settings page switching off pausing; transcripts lost when chapters changed the file; and several transcriptions at once running the GPU out of memory (now one at a time).
+- Ollama on the owner's host had been on the CPU since boot (GPU discovery timed out before the NVIDIA driver was ready). A systemd drop-in now waits for the GPU. That host change is outside this repository.
+- Pause during playback (server setting, on by default; the owner turned it off): chapter tools are suspended with SIGSTOP/SIGCONT, and suspended time is not counted toward time limits.
+- Generated English subtitles (`<video>.en.Curatarr.srt`) from the chapter transcript. Off by default and per library. Added only where no English subtitles exist, never over another file, and removable. Verified live on Cardinal S01E01: Jellyfin lists "Curatarr - English - SUBRIP - External".
+- Every title links to the same item in Jellyfin. Loopback integration addresses are rewritten to the host the page was opened on.
+- Webhook verified live: Jellyfin deliveries arrive and are processed. Playback-progress UserDataSaved deliveries (about 4,000 a day) are now acknowledged without being stored.
+- Cleanup is live on the owner's server. Every library has deletion on, and about 2 TB has been reclaimed.
+- Docker image: optional `EXTRAS=chapters` / `chapters-gpu` build argument adds FFmpeg, MKVToolNix, and faster-whisper.
 
 ## In Progress
-- Live validation on the owner's installed copy (since 2026-10-04). Verified live: Jellyfin administrator sign-in and session checks, the integration keys, discovery (about 440 titles, 6 libraries), reconciliation of watch history, acquisition (34 Sonarr requests, sent and grabbed), free-space measurement of the NAS, and the native installer including systemd.
+- Working through the chapter backlog on the installed copy (Smart Chapters, three concurrent jobs).
 
 ## Next
-- Chapters on the installed copy: install with `EXTRAS=chapters-gpu`, give the `curatarr` user write access to the NAS mount, then enable one library (dry run first) and work through the backlog from Chapter maintenance (about 3,200 MKV files, roughly 20 days of Smart Chapters at concurrency 1).
-- Chapter speed: Ollama requests averaged about 27 s with qwen3:14b while Jellyfin was transcoding on the same GPU; check whether the model was partly on the CPU.
-- Configure the Jellyfin Webhook plugin on the live server and confirm a real delivery is matched. So far every live event came from reconciliation, none from the webhook.
-- Exercise cleanup live under controlled conditions: Leaving Soon poster badge and restore on a real Jellyfin, then a Sonarr episode-file and a Radarr movie deletion, then played-state restoration when a trimmed episode returns. Suggested approach: one library in dry run, with a temporary low free-space threshold above current usage.
-- Tag v0.2.0 once the live checks above pass.
+- Compare chapter throughput at 2 and 3 concurrent jobs now that transcription is serialized; settle the default.
+- Confirm the cleanup checklist from the owner's side (Leaving Soon poster badge and restore, Sonarr and Radarr deletions, played-state restoration), then release v0.2.0.
 - Lower priority: validate leases across hosts on a shared PostgreSQL (not needed for single-host installs).
 
 ## Known Issues
@@ -60,6 +65,10 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - PostgreSQL lease renewal and same-host multi-process contention were validated locally; cross-host contention has not been validated.
 - An external delete already in flight cannot be cancelled by a later playback event; the next TV file request is stopped and partial cleanup requires manual review.
 - Sonarr and Radarr record when a file was added to them, not when it first appeared in Jellyfin; titles re-imported into Radarr (for example during a library move) count as newly acquired from that date.
+- Chapter concurrency is counted in the database before starting a job, not claimed atomically, so two worker processes could briefly exceed it. Each file is still protected by its own lease.
+- Non-MKV files (897 MP4 and 21 AVI on the owner's server) get no chapters, because that would need a remux. Generated subtitles do cover them.
+- Jellyfin's Roku app does not show chapter markers on its progress bar; phone and web clients do.
+- Transcripts made before the stable cache key (the first ~25 files) cannot be matched to their files, so those files are transcribed again if they need subtitles.
 
 ## Decisions Made
 - SQLite for local tests; PostgreSQL in container deployment.
@@ -71,6 +80,7 @@ Phase 7 — Automatic lifecycle (implemented against demo/mocked integrations; l
 - Authentication uses Jellyfin accounts behind an isolated adapter, rather than local accounts. Administrators have full access; enabled non-admin users require an explicit Curatarr allowlist entry and can make only non-destructive review decisions.
 - External side effects are represented by persisted actions.
 - Dry run is the default; each library can explicitly override it.
+- Chapter generation is post-import enrichment, never acquisition; existing chapters and subtitles that Curatarr did not write are never changed (docs/decisions/009).
 
 ## Blockers
 - None. Live validation runs against the owner's services, so destructive checks need the owner's go-ahead.
