@@ -949,3 +949,28 @@ def test_redo_takes_over_a_file_waiting_only_for_subtitles(media_env, monkeypatc
     db.session.expire_all()
     state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
     assert state.requested_action == "regenerate"
+
+
+def test_missing_faster_whisper_waits_instead_of_writing_navigation_chapters(
+    app, client, media_env, monkeypatch
+):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    set_setting("chapter_library_settings", {library.id: {"enabled": True, "mode": "smart"}})
+    monkeypatch.setattr("curatarr.transcribe.available", lambda: False)
+    monkeypatch.setattr("curatarr.transcribe.cached", lambda *_a, **_k: None)
+    state = _run(part, "generate")
+    assert state.job_state == "queued" and state.attempts == 0
+    assert "without faster-whisper" in state.chapter_error
+    assert not files.files[part.file_path]["chapters"]
+    assert enrichment.smart_chapters_blocked()
+    assert "Smart Chapters is stopped" in client.get("/chapters").get_data(as_text=True)
+
+    _navigation(library)  # Navigation libraries never needed transcription
+    state.next_attempt_at = None
+    db.session.commit()
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    assert db.session.get(ChapterState, state.id).chapter_status == "generated_scene_aligned"
+    assert not enrichment.smart_chapters_blocked()

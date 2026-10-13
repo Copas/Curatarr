@@ -9,6 +9,8 @@
 #   data    $DATA_DIR     (default /var/lib/curatarr; database and posters)
 # EXTRAS installs optional features, e.g. EXTRAS=chapters (Smart Chapters
 # transcription) or EXTRAS=chapters-gpu (the same, with CUDA libraries).
+# The choice is remembered in $PREFIX/extras, so later upgrades keep it without
+# repeating EXTRAS; pass EXTRAS= (empty) to drop them.
 # Re-running the script upgrades in place, backing up the SQLite database first.
 set -eu
 
@@ -19,7 +21,6 @@ DATA_DIR=${DATA_DIR:-/var/lib/curatarr}
 SYSTEMD_DIR=${SYSTEMD_DIR:-/etc/systemd/system}
 SERVICE_USER=${SERVICE_USER:-curatarr}
 PYTHON=${PYTHON:-python3}
-EXTRAS=${EXTRAS:-}
 NO_SYSTEMD=${NO_SYSTEMD:-0}
 ENV_FILE="$CONFIG_DIR/curatarr.env"
 
@@ -32,6 +33,20 @@ as_service_user() {
         runuser -u "$SERVICE_USER" -- "$@"
     fi
 }
+
+# Keep the optional features the running install has unless told otherwise:
+# upgrading without EXTRAS once silently dropped Smart Chapters transcription.
+if [ "${EXTRAS+set}" != set ]; then
+    if [ -f "$PREFIX/extras" ]; then
+        EXTRAS=$(cat "$PREFIX/extras")
+    elif "$PREFIX/current/bin/python" -c "import nvidia.cudnn, faster_whisper" 2>/dev/null; then
+        EXTRAS=chapters-gpu
+    elif "$PREFIX/current/bin/python" -c "import faster_whisper" 2>/dev/null; then
+        EXTRAS=chapters
+    else
+        EXTRAS=
+    fi
+fi
 
 [ -f "$SOURCE_DIR/pyproject.toml" ] && [ -d "$SOURCE_DIR/curatarr" ] \
     || fail "run this script from a Curatarr source checkout"
@@ -114,10 +129,13 @@ cp -R "$SOURCE_DIR/pyproject.toml" "$SOURCE_DIR/README.md" "$SOURCE_DIR/LICENSE"
     "$SOURCE_DIR/curatarr" "$staging/"
 find "$staging" -name __pycache__ -prune -exec rm -rf {} +
 if [ -n "$EXTRAS" ]; then
+    say "Installing with optional features: $EXTRAS"
     "$release/bin/python" -m pip install --quiet "$staging[$EXTRAS]"
 else
+    say "Installing without optional features (Smart Chapters can't transcribe)"
     "$release/bin/python" -m pip install --quiet "$staging"
 fi
+printf '%s\n' "$EXTRAS" > "$PREFIX/extras"
 
 if [ ! -f "$ENV_FILE" ]; then
     say "Writing new configuration to $ENV_FILE"

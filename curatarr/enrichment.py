@@ -682,6 +682,27 @@ def _finish(state, status, *, error=None, info=None, source=None, count=None):
     state.next_attempt_at = None
 
 
+TRANSCRIBER_MISSING = (
+    "Smart Chapters is installed without faster-whisper, so it can't transcribe. "
+    "Reinstall Curatarr with EXTRAS=chapters-gpu"
+)
+
+
+def smart_chapters_blocked() -> bool:
+    """True when some library uses Smart Chapters but this install can't transcribe."""
+    from .transcribe import available
+
+    return bool(_smart_library_ids()) and not available()
+
+
+def _transcriber_missing(info, config) -> bool:
+    from .transcribe import available, cached
+
+    if not (config["mode"] == "smart" and config["semantic"]["enabled"]) or available():
+        return False
+    return cached(info, config["semantic"]["model"], cache_dir() / "transcripts") is None
+
+
 def _defer(state, reason):
     state.job_state = "queued"
     state.next_attempt_at = utcnow() + timedelta(minutes=DEFER_MINUTES)
@@ -830,6 +851,14 @@ def run_job(state_id: str, *, llm=None) -> str:
             db.session.commit()
             _log("chapters_deferred", reason=busy, **fields)
             return "deferred"
+
+    if action in {"auto", "generate", "regenerate"} and _transcriber_missing(info, config):
+        # A setup problem, not a property of this file: waiting beats quietly
+        # writing Navigation chapters across the whole library.
+        _defer(state, TRANSCRIBER_MISSING)
+        db.session.commit()
+        _log("chapters_deferred", reason=state.chapter_error, **fields)
+        return "deferred"
 
     analysis = analyse(
         info,
