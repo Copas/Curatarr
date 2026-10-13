@@ -239,3 +239,47 @@ def test_semantic_plan_needs_speech_and_a_model_decision():
             lambda *_: None,
             lambda _e: [],
         )
+
+
+def test_semantic_plan_names_chapters_even_with_no_boundary_candidates():
+    from curatarr.chapters import DEFAULTS, Segment, semantic_plan
+
+    # Continuous speech (no 2-second pauses) and no scene changes: nothing to choose from.
+    segments = [Segment(t, t + 10, f"line {t}") for t in range(0, 1500, 10)]
+    asked = []
+    plan = semantic_plan(1500, [], segments, DEFAULTS,
+                         lambda window, candidates, excerpt: asked.append(1),
+                         lambda excerpts: [f"Part {i}" for i in range(len(excerpts))])
+    assert not asked and len(plan.chapters) > 1
+    assert [c.name for c in plan.chapters][:2] == ["Part 0", "Part 1"]
+    assert any("evenly spaced" in note for note in plan.notes)
+
+
+def test_semantic_plan_still_rejects_a_model_that_refuses_every_choice():
+    import pytest
+
+    from curatarr.chapters import DEFAULTS, InvalidChapters, Segment, semantic_plan
+
+    segments = [Segment(t, t + 5, f"line {t}") for t in range(0, 1500, 10)]  # 5-second pauses
+    with pytest.raises(InvalidChapters, match="did not choose"):
+        semantic_plan(1500, [], segments, DEFAULTS, lambda *_: None, lambda excerpts: [])
+
+
+def test_scene_detection_retries_without_hardware_decoding(monkeypatch):
+    from types import SimpleNamespace
+
+    from curatarr import mediafile
+
+    calls = []
+
+    def fake_run(command, timeout):
+        calls.append(command)
+        if "-hwaccel" in command:
+            return SimpleNamespace(returncode=1, stdout="", stderr="Conversion failed!")
+        return SimpleNamespace(returncode=0, stderr="",
+                               stdout="frame:3 pts:600 pts_time:120.4\nlavfi.scene_score=0.52\n")
+
+    monkeypatch.setattr(mediafile, "_run", fake_run)
+    monkeypatch.setattr(mediafile, "required_tool", lambda name: name)
+    assert mediafile.detect_scenes("/x.mkv", 0.3) == [(120.4, 0.52)]
+    assert "-hwaccel" in calls[0] and "-hwaccel" not in calls[1]

@@ -519,7 +519,7 @@ def semantic_plan(duration, scenes, segments, config, choose, name) -> Plan:
     if not segments:
         raise InvalidChapters("The transcript has no speech")
     spacing = Spacing.from_config(config)
-    starts, notes, chosen_by_model = [0.0], [], 0
+    starts, notes, chosen_by_model, asked = [0.0], [], 0, 0
     while window := next_window(starts[-1], duration, spacing):
         candidates = candidates_in(window, scenes, segments)
         pick = None
@@ -527,6 +527,7 @@ def semantic_plan(duration, scenes, segments, config, choose, name) -> Plan:
             excerpt = transcript_excerpt(
                 segments, window.earliest - 60, window.latest + 60
             )
+            asked += 1
             index = choose(window, candidates, excerpt)
             if index is not None and 0 <= index < len(candidates):
                 pick = candidates[index].time
@@ -541,9 +542,14 @@ def semantic_plan(duration, scenes, segments, config, choose, name) -> Plan:
         else:
             pick = window.target
         starts.append(pick)
-    if len(starts) > 1 and not chosen_by_model:
+    # Refusing every choice it was offered suggests the model isn't working. Having
+    # nothing to choose from (no scene changes or pauses, common in older shows
+    # with continuous music) isn't a model failure: keep even spacing, still name.
+    if asked and not chosen_by_model:
         raise InvalidChapters("The language model did not choose any boundary")
-    if chosen_by_model < len(starts) - 1:
+    if not asked and len(starts) > 1:
+        notes.append("No scene changes or pauses were found, so chapters are evenly spaced.")
+    elif chosen_by_model < len(starts) - 1:
         notes.append(
             f"{len(starts) - 1 - chosen_by_model} boundar"
             f"{'y' if len(starts) - 1 - chosen_by_model == 1 else 'ies'} used the "
