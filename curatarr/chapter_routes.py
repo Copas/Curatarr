@@ -32,6 +32,7 @@ from .enrichment import (
     queue_subtitles,
     request_scan_after_discovery,
     save_settings,
+    smart_chapters_blocked,
     state_for,
 )
 from .models import ChapterState, Library, MediaIdentity, MediaPart
@@ -119,6 +120,7 @@ def chapter_maintenance():
         libraries=_managed_libraries(),
         library_id=library_id,
         summary=maintenance_summary(library_id),
+        smart_blocked=smart_chapters_blocked(),
         activity=job_activity(),
         action_labels=ACTION_LABELS,
         file_label=file_label,
