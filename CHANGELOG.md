@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Smart Chapters no longer gives up on episodes with no scene changes or speech pauses to choose from (common in older shows with a continuous score). Those chapters are evenly spaced and still get real names from the transcript, instead of falling back to "Chapter 1, 2, 3". A model that refuses every boundary it's offered still falls back.
+
+- Scene detection retries with software decoding when hardware decoding fails, which happened when Ollama's model filled the GPU ("Scene detection failed: Conversion failed!").
+
 - Smart Chapters no longer falls back to Navigation chapters when faster-whisper isn't installed. That's a setup problem, not something about the file, so jobs in Smart libraries now wait, and Chapter maintenance says "Smart Chapters is stopped" with the reinstall command. (A redeploy without `EXTRAS` had quietly written Navigation chapters to hundreds of files.) Files with a saved transcript still get Smart Chapters.
 
 - `scripts/install.sh` remembers its optional features in `$PREFIX/extras` and, the first time, detects them from the running install, so upgrading without repeating `EXTRAS` keeps Smart Chapters transcription. It says which features it's installing. Pass `EXTRAS=` (empty) to drop them.

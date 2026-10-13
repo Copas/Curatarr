@@ -154,31 +154,23 @@ def detect_scenes(path: str, threshold: float, timeout: int = 4 * 3600):
     """Scene changes as (seconds, score), sampled at 5 frames per second.
 
     Frames are scaled down before comparison, which keeps a full-length film to
-    a few minutes; hardware decoding is used when FFmpeg can.
+    a few minutes. Hardware decoding is tried first; it fails when the GPU is
+    full (Ollama's model loaded), so a failure is retried with software decoding.
     """
-    result = _run(
-        [
-            required_tool("ffmpeg"),
-            "-hide_banner",
-            "-nostats",
-            "-nostdin",
-            "-hwaccel",
-            "auto",
-            "-i",
-            path,
-            "-map",
-            "0:v:0",
-            "-vf",
-            f"fps=5,scale=320:-2,select='gt(scene,{threshold})',metadata=print:file=-",
-            "-an",
-            "-sn",
-            "-dn",
-            "-f",
-            "null",
-            "-",
-        ],
-        timeout=timeout,
-    )
+
+    def run(hardware: bool):
+        return _run(
+            [required_tool("ffmpeg"), "-hide_banner", "-nostats", "-nostdin"]
+            + (["-hwaccel", "auto"] if hardware else [])
+            + ["-i", path, "-map", "0:v:0",
+               "-vf", f"fps=5,scale=320:-2,select='gt(scene,{threshold})',metadata=print:file=-",
+               "-an", "-sn", "-dn", "-f", "null", "-"],
+            timeout=timeout,
+        )
+
+    result = run(hardware=True)
+    if result.returncode != 0:
+        result = run(hardware=False)
     if result.returncode != 0:
         raise MediaToolError(
             "Scene detection failed: "
