@@ -1245,3 +1245,52 @@ def test_smart_generation_finds_the_recap_in_the_same_pass(media_env, monkeypatc
     assert chapters[1]["start"] == 82.0 and chapters[1]["name"].startswith("Scene ")
     assert state.recap_end == 82.0 and state.recap_segment_id == "ours"
     assert state.transcript_key  # so later episodes can learn from this one
+
+
+def test_recap_checks_use_one_slot_and_chapters_get_the_rest(media_env):
+    _files, _arr = media_env
+    _library, media, _part = _movie()
+    states = []
+    for n in range(6):
+        part = MediaPart(
+            media_identity_id=media.id,
+            kind="episode",
+            season_number=1,
+            episode_number=n,
+            has_file=True,
+            file_path=f"/tv/e{n}.mkv",
+        )
+        db.session.add(part)
+        db.session.flush()
+        state = enrichment.state_for(part)
+        state.job_state = "queued"
+        # Recap checks are queued first and have priority, but only one may run.
+        state.requested_action = "recap" if n < 4 else "generate"
+        state.requested_at = utcnow() - timedelta(minutes=10 - n)
+        states.append(state)
+    db.session.commit()
+    due = enrichment._due_jobs(4, scans=False, recaps=1)
+    assert [s.requested_action for s in due] == ["recap", "generate", "generate"]
+    assert [
+        s.requested_action for s in enrichment._due_jobs(4, scans=False, recaps=0)
+    ] == [
+        "generate",
+        "generate",
+    ]
+
+
+def test_worker_start_requeues_jobs_the_last_worker_left_running(media_env):
+    from curatarr import leases
+    from curatarr.models import JobLease
+
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.job_state, state.requested_action = "running", "generate"
+    db.session.commit()
+    assert leases.acquire(f"chapters:{state.id}", 600)
+    assert enrichment.release_abandoned_jobs() == 1
+    db.session.expire_all()
+    assert db.session.get(ChapterState, state.id).job_state == "queued"
+    assert (
+        db.session.query(JobLease).filter_by(scope=f"chapters:{state.id}").count() == 0
+    )

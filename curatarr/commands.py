@@ -171,6 +171,15 @@ def register_commands(app):
     @click.option("--once", is_flag=True, help="Run one worker cycle and exit")
     def worker_command(once):
         """Process durable events/actions; reconcile hourly by default."""
+        from .enrichment import release_abandoned_jobs
+
+        with current_app.app_context():
+            released = release_abandoned_jobs()
+            if released:
+                current_app.logger.info(
+                    "Requeued %s chapter jobs left running by the previous worker",
+                    released,
+                )
         announced = None
         while True:
             with current_app.app_context():
