@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Chapter maintenance's Activity card shows a progress bar and estimated finish for queued chapter jobs: how many are done since the oldest waiting job was queued, the recent pace (files an hour over the last 3 hours, or 24 when that's too few), and roughly when the queue will be empty. Quick subtitle checks and scans aren't counted. It updates live with the rest of the card.
+
 - Smart Chapters no longer gives up on episodes with no scene changes or speech pauses to choose from (common in older shows with a continuous score). Those chapters are evenly spaced and still get real names from the transcript, instead of falling back to "Chapter 1, 2, 3". A model that refuses every boundary it's offered still falls back.
 
 - Scene detection retries with software decoding when hardware decoding fails, which happened when Ollama's model filled the GPU ("Scene detection failed: Conversion failed!").
