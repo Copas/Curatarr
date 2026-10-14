@@ -1,0 +1,170 @@
+"""Find episodes by what's said in them, from Curatarr's saved transcripts.
+
+"Which episode had the line about the stapler?" Each transcript is searched in
+windows of a few consecutive lines; an exact phrase match ranks first, then the
+share of the query's words said in that window. Only the best moment of each
+episode is returned.
+"""
+
+import math
+import re
+import threading
+import time
+from collections.abc import Iterable
+from dataclasses import dataclass
+
+WINDOW = 3  # consecutive transcript lines searched together
+MIN_SHARE = 0.75  # of the query's words, when the exact phrase isn't said
+STOP = frozenset(
+    [
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "but",
+        "of",
+        "to",
+        "in",
+        "on",
+        "at",
+        "by",
+        "for",
+        "with",
+        "from",
+        "as",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "it",
+        "its",
+        "this",
+        "that",
+        "i",
+        "you",
+        "he",
+        "she",
+        "we",
+        "they",
+        "me",
+        "my",
+        "your",
+        "his",
+        "her",
+        "our",
+        "their",
+        "not",
+        "no",
+        "so",
+        "do",
+        "does",
+        "did",
+        "have",
+        "has",
+        "had",
+        "will",
+        "would",
+        "can",
+        "could",
+        "just",
+    ]
+)
+REFRESH_SECONDS = 300
+
+
+def words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9']+", (text or "").lower().replace("’", "'"))
+
+
+@dataclass
+class Entry:
+    key: str  # whatever identifies the episode to the caller
+    lines: list  # transcript segments (start, end, text)
+    normalized: list[str]  # each window's text, lower-case words joined by spaces
+    transcript: str = ""  # the transcript it was loaded from
+    vocabulary: frozenset = frozenset()  # every word said in the episode
+
+
+def _windows(lines) -> list[str]:
+    flat = [" ".join(words(s.text)) for s in lines]
+    return [" ".join(flat[i : i + WINDOW]) for i in range(len(flat))]
+
+
+class TranscriptIndex:
+    """Transcripts held in memory, reloaded when new ones appear."""
+
+    def __init__(self):
+        self._entries: dict[str, Entry] = {}
+        self._lock = threading.Lock()
+        self._checked = 0.0
+
+    def refresh(self, sources: Iterable[tuple[str, str]], load) -> None:
+        """``sources`` are (episode key, transcript key); ``load(transcript key)``
+        returns its segments or None."""
+        with self._lock:
+            if time.monotonic() - self._checked < REFRESH_SECONDS and self._entries:
+                return
+            wanted = dict(sources)
+            for key in list(self._entries):
+                if key not in wanted:
+                    del self._entries[key]
+            for key, transcript in wanted.items():
+                entry = self._entries.get(key)
+                if entry is not None and entry.transcript == transcript:
+                    continue
+                lines = load(transcript)
+                if lines:
+                    normalized = _windows(lines)
+                    vocabulary = frozenset(
+                        w for window in normalized for w in window.split()
+                    )
+                    self._entries[key] = Entry(
+                        key, lines, normalized, transcript, vocabulary
+                    )
+            self._checked = time.monotonic()
+
+    def __len__(self):
+        return len(self._entries)
+
+    def search(self, query: str, limit: int = 10) -> list[dict]:
+        phrase = " ".join(words(query))
+        wanted = [w for w in words(query) if w not in STOP] or words(query)
+        if not wanted:
+            return []
+        hits = []
+        need = max(1, math.ceil(MIN_SHARE * len(wanted)))
+        for entry in list(self._entries.values()):
+            # Skip episodes that never say enough of the words (most of them).
+            if sum(w in entry.vocabulary for w in wanted) < need:
+                continue
+            best = None
+            for index, window in enumerate(entry.normalized):
+                if phrase and phrase in window:
+                    score = 2.0
+                else:
+                    present = set(window.split())
+                    share = sum(w in present for w in wanted) / len(wanted)
+                    if share < MIN_SHARE:
+                        continue
+                    score = share
+                if best is None or score > best[0]:
+                    best = (score, index)
+            if best:
+                score, index = best
+                around = entry.lines[max(index - 1, 0) : index + WINDOW + 1]
+                hits.append(
+                    {
+                        "key": entry.key,
+                        "score": round(score, 2),
+                        "exact": score >= 2.0,
+                        "at": entry.lines[index].start,
+                        "lines": [s.text.strip() for s in around],
+                    }
+                )
+        hits.sort(key=lambda h: -h["score"])
+        return hits[:limit]
+
+
+index = TranscriptIndex()

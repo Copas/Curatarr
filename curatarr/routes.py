@@ -149,6 +149,7 @@ HOUSEHOLD_PAGES = {
     "main.shows",
     "main.titles",
     "main.title",
+    "main.transcript_search",
     "main.poster",
     "main.review_action",
     "main.theme_preference",
@@ -407,6 +408,21 @@ def health():
         "scheduler": worker,
     }
     return jsonify(result), 200 if database == "healthy" else 503
+
+
+@bp.get("/api/v1/transcripts/search")
+def api_transcript_search():
+    """Episodes by what's said in them (read-only): ?q=words&limit=10."""
+    from .enrichment import search_transcripts
+
+    query = (request.args.get("q") or "").strip()[:200]
+    try:
+        limit = max(1, min(int(request.args.get("limit", 10)), 50))
+    except ValueError:
+        limit = 10
+    return jsonify(
+        {"query": query, "results": search_transcripts(query, limit) if query else []}
+    )
 
 
 @bp.get("/api/v1/identity-flags")

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Search what was said** (Library → Search what was said, and `GET /api/v1/transcripts/search?q=…` with the read-only API key): find an episode or film by a line or what's talked about in it, across every transcript Smart Chapters has made. An exact phrase ranks first, then windows of three lines holding most of the words; each result shows the moment's lines and timestamp. Household accounts can use it too. Transcripts are held in memory and refreshed every five minutes; a search over 1,445 transcripts takes milliseconds for distinctive words.
+
 - Wrong-episode flags are found through the file's own part rather than the identity stored on its chapter state, which can point at one discovery has since replaced; such flags were missing from the list and the API.
 
 - Skip-marker checks no longer slow chapter jobs. Checking an episode with no saved transcript means transcribing its opening and ending, which takes the GPU; alongside a chapter backlog it had doubled the time per chapter job (about 5 to 10 minutes) and cut throughput from ~40 files an hour to ~12. While chapter jobs are waiting, only checks that need no transcription run (episodes Smart Chapters has transcribed, plus checks asked for from an episode's page); the rest wait until the backlog is done.
