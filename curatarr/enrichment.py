@@ -2141,20 +2141,16 @@ def _sibling_transcripts(state, part):
 def _recap_finder(state, part):
     """A find_recap callable for analyse(), reading the rest of the series."""
     from . import recaps
-    from .semantic import choose_recap_line, confirm_span
 
-    def find(segments, scenes, model):
+    def find(segments, scenes, _model):
+        # No model for recap ends: tested on The Last Man on Earth, it pushed
+        # every montage recap ~30 s into the new episode (and confirmed it),
+        # while the last quoted clip alone never ran long.
         openings, earlier = _sibling_transcripts(state, part)
         return recaps.find_recap(
             segments,
             series_openings=openings,
             earlier=recaps.earlier_grams(earlier),
-            choose_last_line=(
-                (lambda lines: choose_recap_line(model, lines)) if model else None
-            ),
-            confirm=(lambda lines: confirm_span(model, lines, "recap"))
-            if model
-            else None,
             scenes=scenes,
         )
 
