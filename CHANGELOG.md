@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Recap checks use at most one job slot. Queued ahead of chapter jobs, a "Find recaps" backlog took every slot and stopped chapter writing for hours, which also pushed the estimated finish further out. The Activity card shows the recap checks waiting on their own line.
+
+- Restarting the worker (every install) no longer stalls chapter jobs for up to ten minutes: jobs the previous worker left running are requeued at startup instead of waiting for their claims to expire.
+
 - **Recaps.** Smart Chapters finds an episode's "previously on" recap from its transcript and marks it twice: as a first chapter named "Previously On", and as a recap segment in Intro Skipper (when installed), so Jellyfin's Skip Recap button skips exactly the recap. A recap is only marked when the episode says "Previously on…" or "Last time on…" in its first minute, and its end must be clear:
   - Narrated recaps end with the same line every week ("…12 are left. Who will be voted out tonight?"). Curatarr learns that line from the series' other episodes (a whole sentence said once, early, at about the same point each week).
   - Otherwise the recap is anchored on the last clip quoted from the previous episodes (ignoring their "next time on" previews), and the local model picks the narrator's closing line among the few after it.

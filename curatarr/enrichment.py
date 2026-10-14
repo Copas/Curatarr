@@ -89,6 +89,7 @@ MAX_ATTEMPTS = 3
 RETRY_MINUTES = 30
 DEFER_MINUTES = 15
 LEASE_SECONDS = 600
+RECAP_SLOTS = 1  # recap checks share the job slots without crowding out chapters
 SCAN_BATCH = 200
 IMPORT_COMMANDS = {
     "DownloadedEpisodesScan",
@@ -1380,6 +1381,27 @@ def _alive():
         return dict(_threads)
 
 
+def release_abandoned_jobs() -> int:
+    """At worker start: requeue jobs the previous worker left running.
+
+    Only the worker runs chapter jobs, so a claim on a running job at startup
+    belongs to a process that has stopped. Waiting for it to expire held up
+    every slot for up to ten minutes after each restart.
+    """
+    from sqlalchemy import delete
+
+    from .models import JobLease
+
+    abandoned = db.session.query(ChapterState).filter_by(job_state="running").all()
+    for state in abandoned:
+        db.session.execute(
+            delete(JobLease).where(JobLease.scope == f"chapters:{state.id}")
+        )
+        state.job_state = "queued"
+    db.session.commit()
+    return len(abandoned)
+
+
 def recover_stale_jobs():
     """Requeue jobs left running by a worker that stopped mid-job."""
     from .models import JobLease
@@ -1396,7 +1418,8 @@ def recover_stale_jobs():
     db.session.commit()
 
 
-def _due_jobs(limit, *, scans):
+def _due_jobs(limit, *, scans, recaps=None):
+    """The next jobs to start; ``recaps`` caps how many of them are recap checks."""
     now = utcnow()
     query = db.session.query(ChapterState).filter(ChapterState.job_state == "queued")
     if scans:
@@ -1415,11 +1438,18 @@ def _due_jobs(limit, *, scans):
     rows = (
         query.order_by(priority, ChapterState.requested_at).limit(limit * 4 + 100).all()
     )
-    return [
-        row
-        for row in rows
-        if not row.next_attempt_at or _as_datetime(row.next_attempt_at) <= now
-    ][:limit]
+    due = []
+    for row in rows:
+        if row.next_attempt_at and _as_datetime(row.next_attempt_at) > now:
+            continue
+        if row.requested_action == "recap" and recaps is not None:
+            if recaps <= 0:
+                continue
+            recaps -= 1
+        due.append(row)
+        if len(due) == limit:
+            break
+    return due
 
 
 class DatabaseBusy(RuntimeError):
@@ -1560,7 +1590,15 @@ def dispatch(*, synchronous=False, llm=None) -> int:
     free = concurrency - max(busy, len([k for k in running if k != "scan"]))
     if free <= 0:
         return started
-    for row in _due_jobs(free, scans=False):
+    recaps_running = (
+        db.session.query(func.count(ChapterState.id))
+        .filter(
+            ChapterState.job_state == "running",
+            ChapterState.requested_action == "recap",
+        )
+        .scalar()
+    )
+    for row in _due_jobs(free, scans=False, recaps=RECAP_SLOTS - recaps_running):
         if row.id in running:
             continue
         started += 1
