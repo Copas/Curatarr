@@ -89,7 +89,7 @@ MAX_ATTEMPTS = 3
 RETRY_MINUTES = 30
 DEFER_MINUTES = 15
 LEASE_SECONDS = 600
-RECAP_SLOTS = 1  # recap checks share the job slots without crowding out chapters
+RECAP_BATCH = 100  # recap checks run back to back in one slot, like scans
 SCAN_BATCH = 200
 IMPORT_COMMANDS = {
     "DownloadedEpisodesScan",
@@ -1418,14 +1418,21 @@ def recover_stale_jobs():
     db.session.commit()
 
 
-def _due_jobs(limit, *, scans, recaps=None):
-    """The next jobs to start; ``recaps`` caps how many of them are recap checks."""
+def _due_jobs(limit, *, scans, recaps=False):
+    """The next jobs to start: scans, recap checks, or everything else."""
     now = utcnow()
     query = db.session.query(ChapterState).filter(ChapterState.job_state == "queued")
     if scans:
         query = query.filter(ChapterState.requested_action == "scan")
+    elif recaps:
+        query = query.filter(ChapterState.requested_action == "recap")
     else:
-        query = query.filter(ChapterState.requested_action != "scan")
+        query = query.filter(
+            or_(
+                ChapterState.requested_action.is_(None),
+                ChapterState.requested_action.notin_(("scan", "recap")),
+            )
+        )
     # Subtitles reuse a saved transcript and take seconds, and a redo reuses
     # its transcript too; neither should wait behind a backlog of thousands.
     priority = case(
@@ -1438,18 +1445,11 @@ def _due_jobs(limit, *, scans, recaps=None):
     rows = (
         query.order_by(priority, ChapterState.requested_at).limit(limit * 4 + 100).all()
     )
-    due = []
-    for row in rows:
-        if row.next_attempt_at and _as_datetime(row.next_attempt_at) > now:
-            continue
-        if row.requested_action == "recap" and recaps is not None:
-            if recaps <= 0:
-                continue
-            recaps -= 1
-        due.append(row)
-        if len(due) == limit:
-            break
-    return due
+    return [
+        row
+        for row in rows
+        if not row.next_attempt_at or _as_datetime(row.next_attempt_at) <= now
+    ][:limit]
 
 
 class DatabaseBusy(RuntimeError):
@@ -1590,15 +1590,21 @@ def dispatch(*, synchronous=False, llm=None) -> int:
     free = concurrency - max(busy, len([k for k in running if k != "scan"]))
     if free <= 0:
         return started
-    recaps_running = (
-        db.session.query(func.count(ChapterState.id))
-        .filter(
-            ChapterState.job_state == "running",
-            ChapterState.requested_action == "recap",
-        )
-        .scalar()
-    )
-    for row in _due_jobs(free, scans=False, recaps=RECAP_SLOTS - recaps_running):
+    if "recap" not in running:
+        # Recap checks often finish in milliseconds (a series without recaps is
+        # skipped), so one at a time per 15-second cycle would crawl. They run
+        # back to back in one slot, leaving the rest to chapter jobs.
+        recaps = [row.id for row in _due_jobs(RECAP_BATCH, scans=False, recaps=True)]
+        if recaps:
+            started += len(recaps)
+            free -= 1
+            if synchronous:
+                _run_leased(app, recaps, llm)
+            else:
+                _start("recap", app, recaps, llm)
+    if free <= 0:
+        return started
+    for row in _due_jobs(free, scans=False):
         if row.id in running:
             continue
         started += 1
@@ -1835,6 +1841,12 @@ def job_activity(recent=10) -> dict:
         .limit(recent)
         .all()
     )
+    last_recap = (
+        db.session.query(ChapterState)
+        .filter(ChapterState.recap_checked_at.isnot(None))
+        .order_by(ChapterState.recap_checked_at.desc())
+        .first()
+    )
     recent_cutoff = utcnow() - timedelta(seconds=20)
     recently_active = (
         bool(subtitles_finished)
@@ -1844,6 +1856,9 @@ def job_activity(recent=10) -> dict:
         "paused_since": _as_datetime(setting("chapters_paused_since")),
         "running": running,
         "recently_active": recently_active,
+        "recap_active": last_recap
+        if last_recap and _as_datetime(last_recap.recap_checked_at) >= recent_cutoff
+        else None,
         "subtitles_finished": subtitles_finished,
         "queued": {ACTION_LABELS.get(k, k): v for k, v in queued.items()},
         "queued_total": sum(queued.values()),
