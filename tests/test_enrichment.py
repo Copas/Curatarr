@@ -957,7 +957,9 @@ def test_missing_faster_whisper_waits_instead_of_writing_navigation_chapters(
     files, _arr = media_env
     library, _media, part = _movie()
     files.add(part.file_path)
-    set_setting("chapter_library_settings", {library.id: {"enabled": True, "mode": "smart"}})
+    set_setting(
+        "chapter_library_settings", {library.id: {"enabled": True, "mode": "smart"}}
+    )
     monkeypatch.setattr("curatarr.transcribe.available", lambda: False)
     monkeypatch.setattr("curatarr.transcribe.cached", lambda *_a, **_k: None)
     state = _run(part, "generate")
@@ -972,5 +974,64 @@ def test_missing_faster_whisper_waits_instead_of_writing_navigation_chapters(
     db.session.commit()
     enrichment.dispatch(synchronous=True)
     db.session.expire_all()
-    assert db.session.get(ChapterState, state.id).chapter_status == "generated_scene_aligned"
+    assert (
+        db.session.get(ChapterState, state.id).chapter_status
+        == "generated_scene_aligned"
+    )
     assert not enrichment.smart_chapters_blocked()
+
+
+def test_forecast_projects_the_finish_from_the_recent_pace(app, client, media_env):
+    _files, _arr = media_env
+    library, media, _part = _movie()
+    _navigation(library)
+    now = utcnow()
+    assert enrichment.job_forecast(now) is None
+    states = []
+    for n in range(10):
+        part = MediaPart(
+            media_identity_id=media.id,
+            kind="movie_file",
+            has_file=True,
+            file_path=f"/movies/Film (2020)/Film {n}.mkv",
+            acquired_at=now,
+        )
+        db.session.add(part)
+        db.session.flush()
+        states.append(enrichment.state_for(part))
+    for n, state in enumerate(states[:6]):  # six finished over the last three hours
+        state.requested_at = now - timedelta(hours=4)
+        state.chapter_processed_at = now - timedelta(minutes=30 * n)
+    for state in states[6:]:  # four still to do, one a fast subtitle check
+        state.job_state, state.requested_action = "queued", "generate"
+        state.requested_at = now - timedelta(hours=4)
+    states[-1].requested_action = "subtitles"
+    db.session.commit()
+    forecast = enrichment.job_forecast(now)
+    assert forecast["remaining"] == 3 and forecast["done"] == 6
+    assert forecast["per_hour"] == 2.0 and forecast["left"] == "1 h 30 min"
+    assert forecast["percent"] == round(100 * 6 / 9, 1)
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "6</strong> of 9 chapter jobs done" in page and "1 h 30 min" in page
+
+
+def test_forecast_waits_for_enough_finished_jobs(media_env):
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.job_state, state.requested_action, state.requested_at = (
+        "queued",
+        "generate",
+        utcnow(),
+    )
+    db.session.commit()
+    forecast = enrichment.job_forecast()
+    assert forecast["remaining"] == 1 and forecast["left"] is None
+
+
+def test_duration_words():
+    assert (
+        enrichment._duration_words(timedelta(days=5, hours=13, minutes=20))
+        == "5 days 13 h"
+    )
+    assert enrichment._duration_words(timedelta(minutes=50)) == "50 min"
+    assert enrichment._duration_words(timedelta(hours=4, minutes=10)) == "4 h"
