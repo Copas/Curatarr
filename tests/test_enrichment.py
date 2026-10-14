@@ -1264,6 +1264,7 @@ def test_recap_checks_run_as_one_batch_apart_from_chapter_jobs(app, client, medi
         state = enrichment.state_for(part)
         state.job_state = "queued"
         state.requested_action = "recap" if n < 4 else "generate"
+        state.transcript_key = "b" * 32 if n < 4 else None  # no GPU needed to check
         state.requested_at = utcnow() - timedelta(minutes=10 - n)
     db.session.commit()
     assert [s.requested_action for s in enrichment._due_jobs(10, scans=False)] == [
@@ -1711,3 +1712,35 @@ def test_identity_flags_api_reports_swaps_and_confirmed_targets(app, client, med
     db.session.commit()
     flags = client.get("/api/v1/identity-flags").get_json()["flags"]
     assert [f["filed_as"] for f in flags] == [2]
+
+
+def test_checks_needing_transcription_wait_for_the_chapter_backlog(media_env):
+    _files, _arr = media_env
+    _library, media, _part = _movie()
+    states = []
+    for n in range(4):
+        part = MediaPart(
+            media_identity_id=media.id,
+            kind="episode",
+            season_number=1,
+            episode_number=n,
+            has_file=True,
+            file_path=f"/tv/e{n}.mkv",
+        )
+        db.session.add(part)
+        db.session.flush()
+        states.append(enrichment.state_for(part))
+    chapter_job, transcribed, untranscribed, asked_for = states
+    chapter_job.job_state, chapter_job.requested_action = "queued", "generate"
+    for state in (transcribed, untranscribed, asked_for):
+        state.job_state, state.requested_action = "queued", "recap"
+        state.requested_at = utcnow()
+    transcribed.transcript_key = "a" * 32
+    asked_for.requested_at = utcnow() - timedelta(days=3650)  # from the episode's page
+    db.session.commit()
+    due = {s.id for s in enrichment._due_jobs(10, scans=False, recaps=True)}
+    assert due == {transcribed.id, asked_for.id}
+    chapter_job.job_state = "idle"
+    db.session.commit()
+    due = {s.id for s in enrichment._due_jobs(10, scans=False, recaps=True)}
+    assert untranscribed.id in due
