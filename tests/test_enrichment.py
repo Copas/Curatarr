@@ -1562,3 +1562,61 @@ def test_movies_keep_only_their_credits_marker(app, client, media_env):
     assert state.job_state == "queued" and state.requested_action == "generate"
     assert {h["id"] for h in state.markers_hidden} == {"rec", "int"}
     assert enrichment.check_movie_markers() == 0  # checked once
+
+
+def test_identity_check_flags_an_episode_that_fits_another_summary(
+    app, client, media_env, monkeypatch
+):
+    import json
+
+    from curatarr.chapters import Segment
+
+    files, arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    target = parts[-1]
+    show = target.media
+    show.sonarr_id = 42
+    words = "Homer license driving Marge drives car walk license driving car " * 20
+    full = [Segment(t, t + 5, words) for t in range(0, 3000, 30)]
+    key = "f" * 32
+    (enrichment.cache_dir() / "transcripts" / f"{key}.json").write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {"start": s.start, "end": s.end, "text": s.text} for s in full
+                ],
+                "details": {"language": "en"},
+            }
+        )
+    )
+    state = enrichment.state_for(target)
+    state.transcript_key = key
+    db.session.commit()
+    summaries = [
+        {"seasonNumber": 1, "episodeNumber": n, "title": t, "overview": o}
+        for n, t, o in [
+            (1, "Breakfast", "The castaways argue over rice and coconuts at sunrise."),
+            (2, "Storm", "A storm flattens the shelter and the tribe rebuilds it."),
+            (
+                3,
+                "License Lost",
+                "Homer loses his driving license and Marge drives the car.",
+            ),
+            (4, "Idol Hunt", "Lena searches the swamp for a hidden immunity idol."),
+            (5, "Merge", "The tribes merge and old alliances split apart."),
+        ]
+    ]
+    arr.episodes = lambda series_id: summaries
+    arr.request = lambda method, path, **kwargs: []
+    enrichment._summaries_cache.clear()
+    enrichment.request(target, "recap")
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert state.identity_issue["kind"] == "episode"
+    assert (state.identity_issue["filed_as"], state.identity_issue["fits"]) == (4, 3)
+    page = client.get("/chapters/identity").get_data(as_text=True)
+    assert "fits S01E03" in page
+    assert "Possible wrong episodes" in client.get("/chapters").get_data(as_text=True)
+    client.post(f"/chapters/identity/{state.id}/dismiss")
+    assert "Nothing flagged" in client.get("/chapters/identity").get_data(as_text=True)
