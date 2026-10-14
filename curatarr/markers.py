@@ -20,7 +20,15 @@ Every rule leaves a marker alone when in doubt.
 
 import re
 
-from .recaps import MAX_RECAP, SNAP_AFTER, SNAP_BEFORE, Recap, quoted
+from .recaps import (
+    MAX_RECAP,
+    SNAP_AFTER,
+    SNAP_BEFORE,
+    Recap,
+    last_of_run,
+    quoted,
+    spoken_end,
+)
 
 # Reliable in a sample of 1,095 transcripts; bare "next time", "next week" or
 # "coming up" are mostly dialogue ("Maybe next time") or sign-offs.
@@ -90,8 +98,7 @@ def _find_end(start, lines, duration, later, choose_last_line, scenes):
     """Where the preview stops: the model's pick (around the last clip quoted in
     the next episode, when known); without the model, that clip, or the end of
     the file when the preview runs into it."""
-    clips = [s for s in lines[1:] if quoted(s, later)] if later else []
-    anchor = clips[-1] if clips else None
+    anchor = last_of_run(lines[1:], later) if len(lines) > 1 else None
     candidates = (
         [s for s in lines if anchor.start <= s.start <= anchor.end + 30]
         if anchor
@@ -105,10 +112,10 @@ def _find_end(start, lines, duration, later, choose_last_line, scenes):
         except Exception:  # noqa: BLE001 - fall back to the evidence alone
             index = None
         if isinstance(index, int) and 0 <= index < len(candidates):
-            end = candidates[index].end
+            end = spoken_end(candidates[index])
     if end is None:
         if anchor is not None:
-            end = anchor.end
+            end = spoken_end(anchor)
         elif lines[-1].end >= duration - PREVIEW_TO_END:
             end = lines[-1].end
         else:

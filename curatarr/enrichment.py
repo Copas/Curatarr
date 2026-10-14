@@ -2308,11 +2308,13 @@ class _Episode:
         return [s for s in segments if start <= s.start < end]
 
     def scenes(self):
+        """Saved scene changes only: detecting them for a whole episode takes
+        minutes, far more than snapping a recap's end to a cut is worth."""
         if self._scenes is None:
+            path = _scene_cache_path(self.info, self.opts["scene_threshold"])
             try:
-                raw, _cached = scene_changes(self.info, self.opts["scene_threshold"])
-                self._scenes = [time_ for time_, _score in raw]
-            except MediaToolError:
+                self._scenes = [row[0] for row in json.loads(path.read_text())]
+            except (OSError, ValueError, IndexError, TypeError):
                 self._scenes = []
         return self._scenes
 

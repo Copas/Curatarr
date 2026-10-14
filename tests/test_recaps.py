@@ -143,7 +143,8 @@ def test_montage_ends_after_the_last_quoted_clip_and_the_model_refines_it():
         ]
     )
     anchor_only = recaps.find_recap(episode, earlier=earlier)
-    assert anchor_only.source == "earlier episodes" and anchor_only.end == 30.0
+    # 9 words from 0:23: the words stop at 0:28.5 even though the line runs on.
+    assert anchor_only.source == "earlier episodes" and anchor_only.end == 28.5
     asked = []
 
     def choose(candidates):
@@ -151,7 +152,7 @@ def test_montage_ends_after_the_last_quoted_clip_and_the_model_refines_it():
         return 1  # the narrator's line
 
     refined = recaps.find_recap(episode, earlier=earlier, choose_last_line=choose)
-    assert refined == recaps.Recap(0.0, 66.0, "model")
+    assert refined == recaps.Recap(0.0, 64.5, "model")  # 7 words from 1:00
     assert asked[0][0].startswith("I trusted you")
     # The preview at the end of the earlier episode quotes the new one; ignored.
     assert not any("coffee" in line for line in asked[0][:2])
@@ -178,3 +179,30 @@ def test_recap_becomes_the_first_chapter_and_planning_starts_after_it():
     assert plan.chapters[1].start == 95.0 and plan.chapters[1].name == "Part 1"
     assert plan.chapters[2].start >= 95.0 + 5 * 60
     assert any("Recap until" in note for note in plan.notes)
+
+
+def test_a_stray_match_after_the_recap_does_not_stretch_it():
+    """Battlestar Galactica S01E03: a common phrase two minutes in had matched an
+    earlier episode, and the recap was marked to 3:06 instead of about 1:05."""
+    earlier = recaps.earlier_grams(
+        [
+            lines(
+                (500, 506, "Tell the captain I expect daily reports on his prisoners."),
+                (900, 903, "So what do we have here then everybody?"),
+            )
+        ]
+    )
+    episode = lines(
+        (2.7, 5.0, "Previously on Battlestar Galactica."),
+        (41.2, 44.0, "Tell the captain I expect daily reports on his prisoners."),
+        (61.7, 64.0, "We'll run out of water in two days."),
+        (111.2, 113.0, "So what do we have here then everybody?"),  # new material
+        (113.2, 118.0, "We scouted the ice moon and found an ocean."),
+    )
+    found = recaps.find_recap(episode, earlier=earlier)
+    assert found is not None and found.end < 60
+
+
+def test_a_line_stretched_over_music_ends_when_its_words_do():
+    stretched = Segment(67.2, 186.1, "I'm fine. I'm just...")
+    assert recaps.spoken_end(stretched) < 72

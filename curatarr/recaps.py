@@ -34,7 +34,9 @@ MAX_RECAP = 300.0
 GRAM = 4
 QUOTED = 0.5  # share of a line's 4-word runs found in earlier episodes
 EARLIER_TAIL_SKIPPED = 150.0  # "next time on…" previews quote the new episode
-AFTER_ANCHOR = 75.0  # the closing narration follows the last quoted clip
+AFTER_ANCHOR = 30.0  # the closing narration follows the last quoted clip
+QUOTE_RUN_GAP = 30.0  # a recap's clips come one after another; a longer gap ends it
+MIN_QUOTE_WORDS = 5  # shorter lines ("So, what do we have?") match by chance
 SNAP_BEFORE, SNAP_AFTER = 1.5, 4.0
 FUZZY_GRAM, FUZZY_QUOTED = 3, 0.6
 CLOSER_WITHIN = 180.0  # seconds after the opener's next line
@@ -155,8 +157,11 @@ def quoted(line, other: set[tuple]) -> bool:
     """Whether a line was said in other episodes (``other`` from earlier_grams).
 
     Four-word runs, or three-word runs when speech recognition heard a word or
-    two differently in the two episodes.
+    two differently in the two episodes. Short lines never count: four common
+    words match some other episode by chance.
     """
+    if len(words(line.text)) < MIN_QUOTE_WORDS:
+        return False
     g = grams(line.text)
     if g and len(g & other) / len(g) >= QUOTED:
         return True
@@ -205,11 +210,10 @@ def _find_end(start, lines, series_openings, earlier, choose_last_line, scenes):
     if closing is not None:
         return _bounded(start, _closing_end(closing, closers), "closing line", scenes)
 
-    quoted = [s for s in lines if _quoted(s, earlier)] if earlier else []
-    if not quoted:
+    anchor = last_of_run(lines, earlier)
+    if anchor is None:
         return None
-    anchor = quoted[-1]
-    end, source = anchor.end, "earlier episodes"
+    end, source = spoken_end(anchor), "earlier episodes"
     if choose_last_line is not None:
         after = [
             s for s in lines if anchor.start <= s.start <= anchor.end + AFTER_ANCHOR
@@ -219,8 +223,35 @@ def _find_end(start, lines, series_openings, earlier, choose_last_line, scenes):
         except Exception:  # noqa: BLE001 - the anchor alone is still usable
             index = None
         if isinstance(index, int) and 0 <= index < len(after):
-            end, source = after[index].end, "model"
+            end, source = spoken_end(after[index]), "model"
     return _bounded(start, end, source, scenes)
+
+
+def spoken_end(line) -> float:
+    """When a line's words stop. Speech recognition sometimes stretches a short
+    line over the music after it ("I'm fine. I'm just..." from 1:07 to 3:06),
+    so a line ends about half a second per word after it starts, at most."""
+    return min(line.end, line.start + 1.0 + 0.5 * max(len(words(line.text)), 1))
+
+
+def last_of_run(lines, other) -> object | None:
+    """The last line of the run of quoted clips that starts the span.
+
+    A recap (or preview) is clip after clip; the run ends at the first gap of
+    over 30 seconds between quoted lines, so a stray match later on (a common
+    phrase in the new material) can't stretch it.
+    """
+    if not other:
+        return None
+    clips = [s for s in lines if quoted(s, other)]
+    if not clips or clips[0].start - lines[0].start > OPENER_WITHIN:
+        return None
+    last = clips[0]
+    for clip in clips[1:]:
+        if clip.start - last.end > QUOTE_RUN_GAP:
+            break
+        last = clip
+    return last
 
 
 def _closing_end(line, closers) -> float:
@@ -240,7 +271,7 @@ def _closing_end(line, closers) -> float:
         default=len(w),
     )
     if last >= len(w) - 1:
-        return line.end
+        return spoken_end(line)
     return line.start + (line.end - line.start) * last / len(w) + 1.0
 
 

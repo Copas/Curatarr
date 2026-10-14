@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed recap and preview ends running long (Battlestar Galactica S01E03 was marked to 3:06 instead of about 1:05): a line under five words no longer counts as quoted from another episode (common phrases match by chance), the quoted clips must form a run with no gap over 30 seconds, the model may only extend 30 seconds past the last clip, and a line's end is when its words stop (speech recognition had stretched "I'm fine. I'm just..." over two minutes of music).
+- Skip-marker checks use saved scene changes only; detecting them for a whole episode took several minutes per check.
+
 - **Skip markers.** The recap check is now a skip-marker check per episode (Chapter maintenance: **Check skip markers**; an episode's page shows what was found and has its own button, which goes ahead of any backlog):
   - **Previews.** A "next time on" preview is found like a recap: announced by "Stay tuned for scenes from our next episode", "Next time on…", "Next week on…", "On the next episode of…" or "Next episode:" in the last six minutes. It ends at the last clip quoted in the next episode, or where the local model says the preview stops (before a voted-out player's final words, say), or at the end of the file. It's marked as Intro Skipper's Preview segment.
   - **Intro Skipper's credits** are hidden (only hidden; Intro Skipper can restore them) when plainly wrong: under 45 s and over a minute before another credits marker (an 11-second music match under Silo's finale, real credits two minutes later); in the first quarter of the runtime; under a minute with minutes of dialogue after it; or mostly dialogue (not theme lyrics) with other credits after it. Each episode lists what was hidden and why.
