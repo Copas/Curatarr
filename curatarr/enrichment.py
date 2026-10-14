@@ -2179,11 +2179,12 @@ def _record_recap(state, part, media, recap: dict | None):
 SEGMENT_FIELDS = {"Recap": "recap", "Preview": "preview"}
 
 
-def _mark_segment(state, part, media, kind):
+def _mark_segment(state, part, media, kind, *, clear_guesses=False):
     """Make Intro Skipper's recap or preview for this episode match Curatarr's.
 
-    Ours replaces any the plugin guessed (its recaps are usually cold opens);
-    with nothing found, only a segment Curatarr added earlier is removed.
+    Ours replaces any the plugin guessed (its recaps are usually cold opens).
+    With nothing found, a segment Curatarr added earlier is removed, and the
+    plugin's guesses too when ``clear_guesses`` (the episode plainly has none).
     """
     from .integrations import IntroSkipper
 
@@ -2212,7 +2213,9 @@ def _mark_segment(state, part, media, kind):
         None,
     )
     for segment in current:
-        if segment is not keep and (found or segment.get("Id") == ours):
+        if segment is not keep and (
+            found or clear_guesses or segment.get("Id") == ours
+        ):
             plugin.hide(item_id, segment["Id"])
     if keep is not None:
         return
@@ -2383,17 +2386,17 @@ def _check_recap(ep: _Episode, fields) -> str:
     from . import recaps
 
     state = ep.state
-    if ep.full() is None and _series_without_recaps(state):
-        state.recap_checked_at = utcnow()
-        state.recap_source = "no opener"
-        return "recap: series has none"
-    segments = ep.span(0, recaps.OPENER_WITHIN + recaps.SEARCH_SECONDS)
-    if recaps.opener(segments) is None:
+    no_recap = ep.full() is None and _series_without_recaps(state)
+    if not no_recap:
+        segments = ep.span(0, recaps.OPENER_WITHIN + recaps.SEARCH_SECONDS)
+        no_recap = recaps.opener(segments) is None
+    if no_recap:
+        # No "previously on": a recap Intro Skipper guessed is a cold open.
         state.recap_checked_at = utcnow()
         state.recap_start = state.recap_end = None
         state.recap_source = "no opener"
         try:
-            _mark_segment(state, ep.part, ep.media, "Recap")
+            _mark_segment(state, ep.part, ep.media, "Recap", clear_guesses=True)
         except IntegrationError:
             pass
         return "recap: none"
