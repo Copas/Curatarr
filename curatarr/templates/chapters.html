@@ -2,7 +2,7 @@
 {% block title %}Chapter maintenance · Curatarr{% endblock %}
 {% block content %}
 <div class="eyebrow">Manage</div><h1>Chapter maintenance</h1>
-<p class="text-secondary">Find files in your existing library that have no chapters, preview what would be added, and process only what you choose. Scanning only reads files. <a href="{{ url_for('main.chapter_settings') }}">Chapter settings</a></p>
+<p class="text-secondary">Find files in your existing library that have no chapters, preview what would be added, and process only what you choose. Scanning only reads files. <a href="{{ url_for('main.chapter_settings') }}">Chapter settings</a> · <a href="{{ url_for('main.chapter_markers') }}">Review skip markers</a></p>
 {% if smart_blocked %}<div class="alert alert-danger"><strong>Smart Chapters is stopped.</strong> This install doesn't include faster-whisper, so it can't transcribe. Chapter jobs in Smart libraries are waiting instead of getting Navigation chapters. Reinstall with <code>sudo env EXTRAS=chapters-gpu ./scripts/install.sh</code>.</div>{% endif %}
 <div class="d-flex flex-wrap gap-2 mb-3" aria-label="Library">
   <a class="btn btn-sm {{ 'btn-primary' if not library_id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_maintenance') }}">All libraries</a>

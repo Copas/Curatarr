@@ -2213,6 +2213,21 @@ def _mark_segment(state, part, media, kind, *, clear_guesses=False):
             found or clear_guesses or segment.get("Id") == ours
         ):
             plugin.hide(item_id, segment["Id"])
+            if segment.get("Id") != ours:  # the plugin's guess: listed for review
+                state.markers_hidden = [
+                    *(state.markers_hidden or []),
+                    {
+                        "id": segment["Id"],
+                        "type": kind,
+                        "start": round(segment.get("Start", 0), 1),
+                        "end": round(segment.get("End", 0), 1),
+                        "source": segment.get("Source"),
+                        "reason": f"replaced by Curatarr's {kind.lower()}"
+                        if found
+                        else 'a guessed recap on an episode with no "previously on"',
+                        "at": utcnow().isoformat(),
+                    },
+                ]
     if keep is not None:
         return
     setattr(state, f"{field}_segment_id", None)
@@ -2685,3 +2700,137 @@ def recaps_found(library_id=None) -> int:
     if library_id:
         query = query.filter(MediaIdentity.library_id == library_id)
     return query.scalar()
+
+
+# --- Reviewing skip markers ----------------------------------------------------
+
+
+def marker_review(kind=None, limit=200) -> list[dict]:
+    """Recaps and previews Curatarr marked and markers it hid, newest first."""
+    query = (
+        db.session.query(ChapterState)
+        .filter(
+            or_(
+                ChapterState.recap_end.isnot(None),
+                ChapterState.preview_end.isnot(None),
+                ChapterState.markers_hidden.isnot(None),
+            )
+        )
+        .order_by(ChapterState.markers_checked_at.desc().nullslast())
+    )
+    rows = []
+    for state in query.limit(limit * 3):
+        when = state.markers_checked_at or state.recap_checked_at
+        if state.recap_end is not None and kind in (None, "recap"):
+            rows.append(
+                {
+                    "state": state,
+                    "kind": "recap",
+                    "when": when,
+                    "start": state.recap_start,
+                    "end": state.recap_end,
+                    "why": f"from the {state.recap_source}",
+                }
+            )
+        if state.preview_end is not None and kind in (None, "preview"):
+            rows.append(
+                {
+                    "state": state,
+                    "kind": "preview",
+                    "when": when,
+                    "start": state.preview_start,
+                    "end": state.preview_end,
+                    "why": state.preview_source,
+                }
+            )
+        if kind in (None, "hidden"):
+            for hidden in state.markers_hidden or []:
+                rows.append(
+                    {
+                        "state": state,
+                        "kind": "hidden",
+                        "when": when,
+                        "start": hidden["start"],
+                        "end": hidden["end"],
+                        "why": hidden["reason"],
+                        "segment": hidden,
+                    }
+                )
+    return rows[:limit]
+
+
+def undo_marker(state: ChapterState, kind: str, segment_id: str | None = None) -> str:
+    """Undo one skip-marker change: drop a recap or preview Curatarr marked (and
+    its "Previously On" chapter), or restore an Intro Skipper marker it hid.
+
+    An undone recap or preview isn't marked again unless the episode is checked
+    again from its page.
+    """
+    from .integrations import IntroSkipper
+
+    part, media = state.part, state.media
+    item_id = jellyfin_item_id(part, media)
+    plugin = IntroSkipper(client("jellyfin"))
+    if kind == "hidden":
+        hidden = [h for h in state.markers_hidden or [] if h["id"] == segment_id]
+        if not hidden:
+            raise ValueError("That marker isn't one Curatarr hid")
+        if item_id:
+            plugin.restore(item_id, segment_id)
+        state.markers_hidden = [
+            h for h in state.markers_hidden if h["id"] != segment_id
+        ] or None
+        message = f"Restored Intro Skipper's {hidden[0]['type'].lower()} marker."
+    elif kind in ("recap", "preview"):
+        field = kind
+        ours = getattr(state, f"{field}_segment_id")
+        if item_id and ours:
+            plugin.hide(item_id, ours)
+        setattr(state, f"{field}_start", None)
+        setattr(state, f"{field}_end", None)
+        setattr(state, f"{field}_segment_id", None)
+        setattr(state, f"{field}_source", "undone")
+        message = f"Removed the {kind}."
+        if kind == "recap":
+            message += _remove_recap_chapter(state, part, media)
+    else:
+        raise ValueError(f"Unknown marker kind: {kind}")
+    audit(
+        "skip_marker_undone",
+        media.id,
+        f"{message} ({_part_label(part)})",
+        f"skip-marker-undo:{state.id}:{kind}:{segment_id or ''}:{utcnow().isoformat()}",
+        payload={"kind": kind, "segment": segment_id},
+    )
+    db.session.commit()
+    return message
+
+
+def _remove_recap_chapter(state, part, media) -> str:
+    """Take "Previously On" back out of Curatarr's chapters, if it's there."""
+    from .chapters import RECAP_CHAPTER_NAME
+
+    path = local_path(part.file_path)
+    if not path or not file_exists(path):
+        return ""
+    try:
+        info = probe(path)
+    except (MediaToolError, OSError):
+        return " The chapters couldn't be read, so they're unchanged."
+    chapters = [Chapter(c["start"], c["name"]) for c in info.chapters]
+    if not chapters or chapters[0].name != RECAP_CHAPTER_NAME:
+        return ""
+    if not curatarr_wrote(state, info) or len(chapters) < 2:
+        return " The file's chapters changed since Curatarr wrote them, so they're left alone."
+    chapters = [Chapter(0.0, chapters[1].name), *chapters[2:]]
+    try:
+        write_chapters(info.path, chapters)
+        after = probe(info.path)
+    except (MediaToolError, OSError) as exc:
+        return f" Removing the chapter failed: {exc}"
+    state.written_fingerprint = fingerprint(after.chapters)
+    state.written_chapters_json = after.chapters
+    state.chapter_count = len(after.chapters)
+    state.chapter_file_size, state.chapter_file_mtime = after.size, after.mtime
+    _refresh_jellyfin(part, media)
+    return ' The "Previously On" chapter is gone too.'

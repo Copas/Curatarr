@@ -1451,3 +1451,65 @@ def test_lease_heartbeat_survives_a_busy_database(app, monkeypatch):
     with leases.keep_alive("chapters:busy-test", owner, seconds=0.3) as lost:
         time.sleep(0.5)
     assert len(calls) >= 2 and not lost.is_set()
+
+
+def test_review_page_lists_changes_and_undo_reverses_them(
+    app, client, media_env, monkeypatch
+):
+    from curatarr.chapters import Segment
+
+    files, arr = media_env
+    parts, rows = _series_with_recaps(files)
+    target = parts[-1]
+    monkeypatch.setattr(
+        "curatarr.transcribe.transcribe",
+        lambda *_a, **_k: (
+            [Segment(r["start"], r["end"], r["text"]) for r in rows],
+            {},
+        ),
+    )
+    segments = {
+        "jf-ep4": [
+            {
+                "Id": "guess",
+                "Type": "Recap",
+                "Start": 0,
+                "End": 40,
+                "Source": "Chapter",
+                "Suppressed": False,
+            }
+        ]
+    }
+    calls = []
+
+    def plugin(method, path, **kwargs):
+        calls.append((method, path))
+        if method == "GET":
+            return segments.get(path.split("/")[2], [])
+        if method == "POST" and path.endswith("/Segments"):
+            return {"Id": "ours"}
+        return None
+
+    arr.request = plugin
+    enrichment.request(target, "recap")
+    enrichment.dispatch(synchronous=True)
+    page = client.get("/chapters/markers").get_data(as_text=True)
+    assert "Recap marked" in page and "Intro Skipper marker hidden" in page
+    assert "replaced by Curatarr" in page
+    state = db.session.query(ChapterState).filter_by(media_part_id=target.id).one()
+
+    client.post(f"/chapters/markers/{state.id}/undo", data={"kind": "recap"})
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert state.recap_end is None and state.recap_source == "undone"
+    assert ("DELETE", "/Episode/jf-ep4/Segments/ours") in calls
+    chapters = files.files[target.file_path]["chapters"]
+    assert chapters[0] == {"start": 0.0, "name": "Breakfast Plans"}  # chapter gone too
+
+    client.post(
+        f"/chapters/markers/{state.id}/undo",
+        data={"kind": "hidden", "segment": "guess"},
+    )
+    db.session.expire_all()
+    assert ("POST", "/Episode/jf-ep4/Segments/guess/Restore") in calls
+    assert db.session.get(ChapterState, state.id).markers_hidden is None
