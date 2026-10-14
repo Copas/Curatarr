@@ -409,6 +409,14 @@ def health():
     return jsonify(result), 200 if database == "healthy" else 503
 
 
+@bp.get("/api/v1/identity-flags")
+def api_identity_flags():
+    """Episodes whose transcript fits another episode (read-only)."""
+    from .enrichment import identity_flags_api
+
+    return jsonify({"flags": identity_flags_api()})
+
+
 @bp.get("/api/v1/status")
 def api_status():
     return jsonify(_status())
