@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `GET /api/v1/identity-flags` (read-only, API key): wrong-episode flags with the Sonarr series, the episode the file is filed as and the one it fits, and whether that one's own file is confirmed (so the flagged file is a duplicate) or flagged the other way (the two were swapped). Keeper uses it to offer the fix in Sonarr. A flag on a file that has since moved or been replaced no longer shows.
+
 - **Make English the default**: an episode flagged because its default audio isn't English, but which has an English track, gets a button that makes that track the default in place (mkvpropedit, no re-encode) and checks it read back. Curatarr's chapters and subtitles from the foreign track are queued to be redone. Transcripts of a track other than the first now have their own cache key, so the new default track isn't served the old track's transcript.
 
 - **Possible wrong episodes.** The skip-marker check also checks that an episode with a full transcript is the episode it's filed as: its transcript is scored against every title and summary in its season from Sonarr (rare words count most), and it's flagged only when another episode fits at least 4x better than its own. It also flags a default audio track that isn't English (from the transcript's language), noting whether an English track exists. Flags show as "Possible wrong episodes" in Chapter maintenance's To do card, on the episode's page, and on a list with what was said beside both summaries, each with Dismiss. On 278 transcribed episodes this flagged 10, all real: 9 misfiled or mislabelled episodes (The Simpsons S14E21 is "Brake My Wife, Please"; Good Eats season 11 file names disagree with Sonarr) and one Japanese default audio track.
