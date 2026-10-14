@@ -78,6 +78,32 @@ def words(text: str) -> list[str]:
     return re.findall(r"[a-z0-9']+", (text or "").lower().replace("’", "'"))
 
 
+def stem(word: str) -> str:
+    """A rough stem, the same for "vote", "voted", "votes" and "voting"."""
+    word = _stem(word)
+    return word[:-1] if len(word) > 3 and word.endswith("e") else word
+
+
+def _stem(word: str) -> str:
+    """A rough stem, so "frying" finds "fry", "turkeys" "turkey", "tribes" "tribe"."""
+    if len(word) <= 3:
+        return word
+    for suffix, keep, shortest in (("ying", "y", 2), ("ies", "y", 2), ("ied", "y", 2)):
+        if word.endswith(suffix) and len(word) - len(suffix) >= shortest:
+            return word[: -len(suffix)] + keep
+    for suffix in ("ing", "ed"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            word = word[: -len(suffix)]
+            if word[-1] == word[-2] and word[-1] not in "aeiouls":
+                word = word[:-1]  # "stopped" -> "stopp" -> "stop"
+            return word
+    if word.endswith("es") and word[:-2].endswith(("s", "x", "z", "ch", "sh")):
+        return word[:-2]  # "glasses", "boxes", "watches"
+    if word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        return word[:-1]
+    return word
+
+
 @dataclass
 class Entry:
     key: str  # whatever identifies the episode to the caller
@@ -118,7 +144,7 @@ class TranscriptIndex:
                 if lines:
                     normalized = _windows(lines)
                     vocabulary = frozenset(
-                        w for window in normalized for w in window.split()
+                        stem(w) for window in normalized for w in window.split()
                     )
                     self._entries[key] = Entry(
                         key, lines, normalized, transcript, vocabulary
@@ -130,7 +156,9 @@ class TranscriptIndex:
 
     def search(self, query: str, limit: int = 10) -> list[dict]:
         phrase = " ".join(words(query))
-        wanted = [w for w in words(query) if w not in STOP] or words(query)
+        wanted = [stem(w) for w in words(query) if w not in STOP] or [
+            stem(w) for w in words(query)
+        ]
         if not wanted:
             return []
         hits = []
@@ -144,7 +172,7 @@ class TranscriptIndex:
                 if phrase and phrase in window:
                     score = 2.0
                 else:
-                    present = set(window.split())
+                    present = {stem(w) for w in window.split()}
                     share = sum(w in present for w in wanted) / len(wanted)
                     if share < MIN_SHARE:
                         continue
