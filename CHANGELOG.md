@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Movies keep only their credits marker** (Chapter settings, on by default). Intro Skipper had marked 978 movie "recaps" and a few "intros" from opening chapter names like "Chapter 1"; turning on Skip Recap made them show at the start of movies. The worker hides them (25 movies per cycle, outside the job queue so chapter jobs aren't held up), each listed on Review skip markers with Undo. Credits stay, for Skip Credits and Next.
+
 - **Review skip markers** (Manage → Chapter maintenance → Review skip markers): every recap and preview Curatarr marked and every Intro Skipper marker it hid, newest first, filterable, each linked to the episode in Jellyfin with the span and the reason. **Undo** removes a recap or preview (and its "Previously On" chapter) or restores a hidden marker in Intro Skipper; an undone recap or preview isn't marked again unless the episode is checked again from its page. Recaps and previews Intro Skipper had guessed and Curatarr replaced or removed are listed too.
 
 - A job's lease no longer stops renewing after one "database is locked" (SQLite has one writer; skip-marker checks added writes). It tries again on the next beat, logging a one-line warning instead of a traceback.

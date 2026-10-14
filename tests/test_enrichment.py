@@ -1513,3 +1513,52 @@ def test_review_page_lists_changes_and_undo_reverses_them(
     db.session.expire_all()
     assert ("POST", "/Episode/jf-ep4/Segments/guess/Restore") in calls
     assert db.session.get(ChapterState, state.id).markers_hidden is None
+
+
+def test_movies_keep_only_their_credits_marker(app, client, media_env):
+    files, arr = media_env
+    _library, _media, part = _movie()
+    files.add(part.file_path)
+    state = enrichment.request(part, "generate")  # a queued chapter job stays queued
+    calls = []
+    segments = [
+        {
+            "Id": "rec",
+            "Type": "Recap",
+            "Start": 0,
+            "End": 92,
+            "Source": "Chapter",
+            "Suppressed": False,
+        },
+        {
+            "Id": "int",
+            "Type": "Introduction",
+            "Start": 0,
+            "End": 60,
+            "Source": "Chapter",
+            "Suppressed": False,
+        },
+        {
+            "Id": "cred",
+            "Type": "Credits",
+            "Start": 6800,
+            "End": 7100,
+            "Source": "BlackFrame",
+            "Suppressed": False,
+        },
+    ]
+
+    def plugin(method, path, **kwargs):
+        calls.append((method, path))
+        return segments if method == "GET" else None
+
+    arr.request = plugin
+    assert enrichment.check_movie_markers() == 1
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert ("DELETE", "/Episode/jf-film/Segments/rec") in calls
+    assert ("DELETE", "/Episode/jf-film/Segments/int") in calls
+    assert ("DELETE", "/Episode/jf-film/Segments/cred") not in calls
+    assert state.job_state == "queued" and state.requested_action == "generate"
+    assert {h["id"] for h in state.markers_hidden} == {"rec", "int"}
+    assert enrichment.check_movie_markers() == 0  # checked once
