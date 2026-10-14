@@ -1927,6 +1927,7 @@ def maintenance_summary(library_id=None) -> dict:
         "transcription_estimate": needing_smart,
         "smart_upgradable": smart_upgrade_query(library_id).count(),
         "recaps_to_check": recaps_to_check(library_id),
+        "recaps_unqueued": recaps_to_check(library_id, unqueued=True),
         "recaps_found": recaps_found(library_id),
         "queued": queued,
     }
@@ -2381,7 +2382,8 @@ def queue_recaps(library_id=None) -> int:
     return count
 
 
-def recaps_to_check(library_id=None) -> int:
+def recaps_to_check(library_id=None, *, unqueued=False) -> int:
+    """Episodes not yet checked for a recap (``unqueued``: and not waiting to be)."""
     query = (
         db.session.query(func.count(ChapterState.id))
         .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
@@ -2393,6 +2395,8 @@ def recaps_to_check(library_id=None) -> int:
             MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
         )
     )
+    if unqueued:
+        query = query.filter(ChapterState.job_state == "idle")
     if library_id:
         query = query.filter(MediaIdentity.library_id == library_id)
     return query.scalar()
