@@ -309,6 +309,7 @@ def chapter_part_action(part_id, action):
         "remove",
         "subtitles",
         "remove_subtitles",
+        "recap",
     }:
         abort(404)
     state = state_for(part)
@@ -336,6 +337,7 @@ def chapter_part_action(part_id, action):
                 "remove": "Removal queued.",
                 "subtitles": "Subtitle generation queued.",
                 "remove_subtitles": "Subtitle removal queued.",
+                "recap": "Skip-marker check queued; it starts within 15 seconds.",
             }[action],
             "success",
         )

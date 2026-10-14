@@ -280,10 +280,11 @@ def speech_stream(info: MediaInfo) -> int | None:
 
 
 def extract_audio(
-    path: str, target: str, stream: int, timeout: int = 3600, seconds=None
+    path: str, target: str, stream: int, timeout: int = 3600, seconds=None, start=0
 ) -> None:
-    """16 kHz mono WAV of one audio stream (or its first ``seconds``), for transcription."""
+    """16 kHz mono WAV of one audio stream (or ``seconds`` of it from ``start``)."""
     limit = ["-t", str(seconds)] if seconds else []
+    seek = ["-ss", str(start)] if start else []
     result = _run(
         [
             required_tool("ffmpeg"),
@@ -291,6 +292,7 @@ def extract_audio(
             "-nostats",
             "-nostdin",
             "-y",
+            *seek,
             "-i",
             path,
             *limit,
