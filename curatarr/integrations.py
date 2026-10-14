@@ -270,11 +270,12 @@ class IntroSkipper:
             raise
         return response or []
 
-    def add_recap(self, item_id, start: float, end: float) -> str:
+    def add(self, item_id, kind: str, start: float, end: float) -> str:
+        """Add a user segment ("Recap", "Preview", …); returns its id."""
         created = self.jellyfin.request(
             "POST",
             f"/Episode/{item_id}/Segments",
-            json={"Type": "Recap", "Start": round(start, 3), "End": round(end, 3)},
+            json={"Type": kind, "Start": round(start, 3), "End": round(end, 3)},
         )
         return created["Id"]
 

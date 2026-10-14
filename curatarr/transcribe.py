@@ -34,7 +34,7 @@ def available() -> bool:
 OPENING_SECONDS = 300  # enough to find a "previously on" recap
 
 
-def cache_key(info: MediaInfo, model: str, opening=False) -> str:
+def cache_key(info: MediaInfo, model: str, opening=False, window=None) -> str:
     """Identifies the audio, not the file bytes.
 
     Adding chapters (or subtitles beside the file) changes the file's size and
@@ -49,20 +49,31 @@ def cache_key(info: MediaInfo, model: str, opening=False) -> str:
     identity = f"{info.path}|{round(info.duration, 1)}|{audio}|{model}"
     if opening:
         identity += f"|opening{OPENING_SECONDS}"
+    if window:
+        identity += f"|window{int(window[0])}-{int(window[1])}"
     return hashlib.sha256(identity.encode()).hexdigest()[:32]
 
 
-def cached(info: MediaInfo, model: str, cache_dir: Path, opening=False):
+def cached(info: MediaInfo, model: str, cache_dir: Path, opening=False, window=None):
     """(segments, details) from the cache, or None.
 
-    With ``opening`` a full transcript serves too, trimmed to the opening.
+    With ``opening`` or a ``window`` (start, end seconds) a full transcript
+    serves too, trimmed to that part.
     """
     if opening:
+        window = (0, OPENING_SECONDS)
+        own = load(cache_dir / f"{cache_key(info, model, opening=True)}.json")
+    else:
+        own = None
+    if window:
         full = cached(info, model, cache_dir)
         if full is not None:
             segments, details = full
-            return [s for s in segments if s.start < OPENING_SECONDS], details
-    return load(cache_dir / f"{cache_key(info, model, opening)}.json")
+            return [s for s in segments if window[0] <= s.start < window[1]], details
+        if own is not None:
+            return own
+        return load(cache_dir / f"{cache_key(info, model, window=window)}.json")
+    return load(cache_dir / f"{cache_key(info, model)}.json")
 
 
 def load(path: Path):
@@ -98,6 +109,7 @@ def transcribe(
     cache_dir: Path,
     make_room=None,
     opening=False,
+    window=None,
 ):
     """Segments for a media file, from the cache or a fresh transcription.
 
@@ -105,10 +117,11 @@ def transcribe(
     the cache was used. One transcription runs at a time, never alongside a
     language-model request (see gpu.py); ``make_room`` is called first to
     free GPU memory, typically by unloading Ollama's model. With ``opening``
-    only the first five minutes are transcribed (for finding a recap).
+    only the first five minutes are transcribed (for finding a recap); with a
+    ``window`` (start, end seconds) only that part, timed from the file's start.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    hit = cached(info, model, cache_dir, opening)
+    hit = cached(info, model, cache_dir, opening, window)
     if hit is not None:
         segments, details = hit
         return segments, {**details, "cached": True}
@@ -119,33 +132,37 @@ def transcribe(
     stream = speech_stream(info)
     if stream is None:
         raise TranscriptionUnavailable("The file has no audio track")
-    target = cache_dir / f"{cache_key(info, model, opening)}.json"
+    target = cache_dir / f"{cache_key(info, model, opening, window)}.json"
+    start = window[0] if window else 0
+    seconds = (
+        (window[1] - window[0]) if window else (OPENING_SECONDS if opening else None)
+    )
     with tempfile.TemporaryDirectory(prefix="curatarr-audio-") as directory:
         audio = str(Path(directory) / "audio.wav")
-        extract_audio(
-            info.path, audio, stream, seconds=OPENING_SECONDS if opening else None
-        )
+        extract_audio(info.path, audio, stream, seconds=seconds, start=start)
         env = os.environ | {"LD_LIBRARY_PATH": _cuda_library_path()}
         partial = target.with_suffix(".partial")
         try:
             with gpu.exclusive():
                 if make_room and device != "cpu":
                     make_room()
-                result = _run_transcriber(audio, partial, model, device, env, info)
+                result = _run_transcriber(
+                    audio, partial, model, device, env, info, offset=start
+                )
         except subprocess.TimeoutExpired as exc:
             raise MediaToolError("Transcription timed out") from exc
         if result.returncode != 0 or not partial.exists():
             message = (result.stderr.strip().splitlines() or ["unknown error"])[-1]
             raise MediaToolError(f"Transcription failed: {message[:200]}")
         partial.replace(target)
-    hit = cached(info, model, cache_dir, opening)
+    hit = cached(info, model, cache_dir, opening, window)
     if hit is None:
         raise MediaToolError("Transcription produced no readable output")
     segments, details = hit
     return segments, {**details, "cached": False}
 
 
-def _run_transcriber(audio, partial, model, device, env, info):
+def _run_transcriber(audio, partial, model, device, env, info, offset=0):
     return throttle.run(
         [
             sys.executable,
@@ -159,6 +176,8 @@ def _run_transcriber(audio, partial, model, device, env, info):
             model,
             "--device",
             device,
+            "--offset",
+            str(offset),
         ],
         env=env,
         timeout=max(1800, int(info.duration * 3)),
@@ -202,8 +221,17 @@ def main(argv=None):
     parser.add_argument("--out", required=True)
     parser.add_argument("--model", default="medium")
     parser.add_argument("--device", default="auto", choices=("auto", "cuda", "cpu"))
+    parser.add_argument(
+        "--offset",
+        type=float,
+        default=0.0,
+        help="seconds the audio starts into the file",
+    )
     args = parser.parse_args(argv)
     rows, details = _run_model(args.audio, args.model, args.device)
+    for row in rows:
+        row["start"] = round(row["start"] + args.offset, 2)
+        row["end"] = round(row["end"] + args.offset, 2)
     Path(args.out).write_text(
         json.dumps({"segments": rows, "details": details}), encoding="utf-8"
     )

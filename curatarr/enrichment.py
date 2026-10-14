@@ -603,6 +603,12 @@ def request(part: MediaPart, action: str) -> ChapterState:
     state.next_attempt_at = None
     if action != "auto":
         state.attempts = 0
+    if action == "recap":
+        # Asked for from the episode's page: redo everything, ahead of any
+        # library-wide backlog of checks.
+        state.recap_checked_at = state.preview_checked_at = None
+        state.markers_checked_at = None
+        state.requested_at = utcnow() - timedelta(days=3650)
     db.session.commit()
     return state
 
@@ -1192,11 +1198,10 @@ def _chain_recap(state_id):
     if (
         not state
         or state.job_state != "idle"
-        or state.recap_checked_at is not None
+        or state.markers_checked_at is not None
         or state.part is None
         or state.part.kind != "episode"
         or not _smart(state)
-        or _series_without_recaps(state)
     ):
         return
     state.job_state, state.requested_action = "queued", "recap"
@@ -1718,7 +1723,7 @@ ACTION_LABELS = {
     "preview": "Preview",
     "subtitles": "Subtitles",
     "remove_subtitles": "Remove subtitles",
-    "recap": "Find recap",
+    "recap": "Check skip markers",
 }
 
 
@@ -1843,8 +1848,8 @@ def job_activity(recent=10) -> dict:
     )
     last_recap = (
         db.session.query(ChapterState)
-        .filter(ChapterState.recap_checked_at.isnot(None))
-        .order_by(ChapterState.recap_checked_at.desc())
+        .filter(ChapterState.markers_checked_at.isnot(None))
+        .order_by(ChapterState.markers_checked_at.desc())
         .first()
     )
     recent_cutoff = utcnow() - timedelta(seconds=20)
@@ -1857,7 +1862,7 @@ def job_activity(recent=10) -> dict:
         "running": running,
         "recently_active": recently_active,
         "recap_active": last_recap
-        if last_recap and _as_datetime(last_recap.recap_checked_at) >= recent_cutoff
+        if last_recap and _as_datetime(last_recap.markers_checked_at) >= recent_cutoff
         else None,
         "subtitles_finished": subtitles_finished,
         "queued": {ACTION_LABELS.get(k, k): v for k, v in queued.items()},
@@ -1929,6 +1934,8 @@ def maintenance_summary(library_id=None) -> dict:
         "recaps_to_check": recaps_to_check(library_id),
         "recaps_unqueued": recaps_to_check(library_id, unqueued=True),
         "recaps_found": recaps_found(library_id),
+        "previews_found": previews_found(library_id),
+        "markers_hidden": markers_hidden(library_id),
         "queued": queued,
     }
 
@@ -2134,7 +2141,7 @@ def _sibling_transcripts(state, part):
 def _recap_finder(state, part):
     """A find_recap callable for analyse(), reading the rest of the series."""
     from . import recaps
-    from .semantic import choose_recap_line
+    from .semantic import choose_recap_line, confirm_span
 
     def find(segments, scenes, model):
         openings, earlier = _sibling_transcripts(state, part)
@@ -2145,6 +2152,9 @@ def _recap_finder(state, part):
             choose_last_line=(
                 (lambda lines: choose_recap_line(model, lines)) if model else None
             ),
+            confirm=(lambda lines: confirm_span(model, lines, "recap"))
+            if model
+            else None,
             scenes=scenes,
         )
 
@@ -2161,19 +2171,26 @@ def _record_recap(state, part, media, recap: dict | None):
         state.recap_start = state.recap_end = None
         state.recap_source = "none" if state.recap_source != "none" else "rechecked"
     try:
-        _mark_recap_segment(state, part, media)
+        _mark_segment(state, part, media, "Recap")
     except IntegrationError as exc:
         _log("recap_segment_failed", state_id=state.id, error=str(exc))
 
 
-def _mark_recap_segment(state, part, media):
-    """Make Intro Skipper's recap for this episode match what Curatarr found.
+SEGMENT_FIELDS = {"Recap": "recap", "Preview": "preview"}
 
-    Ours replaces any recap the plugin guessed (those are usually cold opens);
-    with no recap found, only a segment Curatarr added earlier is removed.
+
+def _mark_segment(state, part, media, kind):
+    """Make Intro Skipper's recap or preview for this episode match Curatarr's.
+
+    Ours replaces any the plugin guessed (its recaps are usually cold opens);
+    with nothing found, only a segment Curatarr added earlier is removed.
     """
     from .integrations import IntroSkipper
 
+    field = SEGMENT_FIELDS[kind]
+    start = getattr(state, f"{field}_start")
+    end = getattr(state, f"{field}_end")
+    ours = getattr(state, f"{field}_segment_id")
     item_id = jellyfin_item_id(part, media)
     if not item_id:
         return
@@ -2181,49 +2198,47 @@ def _mark_recap_segment(state, part, media):
     segments = plugin.segments(item_id)
     if segments is None:
         return  # Intro Skipper isn't installed
-    found = state.recap_end is not None
-    recaps_now = [
-        s for s in segments if s.get("Type") == "Recap" and not s.get("Suppressed")
-    ]
+    found = end is not None
+    current = [s for s in segments if s.get("Type") == kind and not s.get("Suppressed")]
     keep = next(
         (
             s
-            for s in recaps_now
+            for s in current
             if found
-            and s.get("Id") == state.recap_segment_id
-            and abs(s.get("Start", 0) - state.recap_start) < 0.5
-            and abs(s.get("End", 0) - state.recap_end) < 0.5
+            and s.get("Id") == ours
+            and abs(s.get("Start", 0) - start) < 0.5
+            and abs(s.get("End", 0) - end) < 0.5
         ),
         None,
     )
-    for segment in recaps_now:
-        if segment is not keep and (
-            found or segment.get("Id") == state.recap_segment_id
-        ):
+    for segment in current:
+        if segment is not keep and (found or segment.get("Id") == ours):
             plugin.hide(item_id, segment["Id"])
     if keep is not None:
         return
-    state.recap_segment_id = None
+    setattr(state, f"{field}_segment_id", None)
     if found:
-        state.recap_segment_id = plugin.add_recap(
-            item_id, state.recap_start, state.recap_end
-        )
+        setattr(state, f"{field}_segment_id", plugin.add(item_id, kind, start, end))
         _log(
-            "recap_marked",
+            f"{field}_marked",
             state_id=state.id,
-            start=state.recap_start,
-            end=state.recap_end,
-            source=state.recap_source,
+            start=start,
+            end=end,
+            source=getattr(state, f"{field}_source"),
         )
 
 
-def _series_without_recaps(state) -> bool:
-    """The series' first checked episodes never said "previously on"."""
+def _mark_recap_segment(state, part, media):
+    _mark_segment(state, part, media, "Recap")
+
+
+def _series_without(state, field) -> bool:
+    """The series' first checked episodes never announced a recap/preview."""
     rows = (
-        db.session.query(ChapterState.recap_source)
+        db.session.query(getattr(ChapterState, f"{field}_source"))
         .filter(
             ChapterState.media_identity_id == state.media_identity_id,
-            ChapterState.recap_checked_at.isnot(None),
+            getattr(ChapterState, f"{field}_checked_at").isnot(None),
         )
         .all()
     )
@@ -2232,78 +2247,313 @@ def _series_without_recaps(state) -> bool:
     )
 
 
-def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
-    """Find an episode's recap from its transcript (only the opening if needed).
+def _series_without_recaps(state) -> bool:
+    return _series_without(state, "recap")
 
-    Marks it in Intro Skipper and, when the chapters are Curatarr's own, adds a
-    "Previously On" chapter in front of them.
-    """
+
+class _Episode:
+    """What the skip-marker checks need, each fetched once and only if needed."""
+
+    def __init__(self, state, part, media, info, config, opts, llm):
+        self.state, self.part, self.media, self.info = state, part, media, info
+        self.config, self.opts = config, opts
+        self._llm, self._scenes, self._full = llm, None, False
+        self.model_name = config["semantic"]["model"]
+
+    def full(self):
+        """The whole transcript when it's saved, else None (never transcribes)."""
+        from .transcribe import cache_key
+
+        if self._full is False:
+            segments = _transcript(self.state.transcript_key)
+            if segments is None:
+                key = cache_key(self.info, self.model_name)
+                segments = _transcript(key)
+                if segments is not None:
+                    self.state.transcript_key = key
+            self._full = segments
+        return self._full
+
+    def span(self, start, end, *, transcribe_missing=True):
+        """Transcript lines in [start, end): from the saved transcript, the saved
+        opening, or by transcribing just that part."""
+        from .transcribe import OPENING_SECONDS, cache_key, transcribe
+
+        start, end = max(0.0, start), min(self.info.duration, end)
+        full = self.full()
+        if full is not None:
+            return [s for s in full if start <= s.start < end]
+        if end <= OPENING_SECONDS:
+            opening = _transcript(self.state.opening_key)
+            if opening is not None:
+                return [s for s in opening if start <= s.start < end]
+            window, opening_only = None, True
+        else:
+            window, opening_only = (int(start), int(end) + 1), False
+        if not transcribe_missing:
+            return None
+        segments, _details = transcribe(
+            self.info,
+            self.model_name,
+            self.opts["whisper_device"],
+            cache_dir() / "transcripts",
+            opening=opening_only,
+            window=window,
+        )
+        if opening_only:
+            self.state.opening_key = cache_key(self.info, self.model_name, opening=True)
+        return [s for s in segments if start <= s.start < end]
+
+    def scenes(self):
+        if self._scenes is None:
+            try:
+                raw, _cached = scene_changes(self.info, self.opts["scene_threshold"])
+                self._scenes = [time_ for time_, _score in raw]
+            except MediaToolError:
+                self._scenes = []
+        return self._scenes
+
+    def model(self):
+        from .semantic import LanguageModelError
+
+        if self._llm is None:
+            try:
+                self._llm = _language_model(self.config, self.opts)
+            except LanguageModelError:
+                self._llm = False  # the phrase and clip evidence don't need it
+        return self._llm or None
+
+    def neighbours(self, *, later: bool, count: int):
+        """Full transcripts of the nearest earlier (or later) episodes."""
+        here = _episode_order(self.part)
+        rows = (
+            db.session.query(ChapterState, MediaPart)
+            .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+            .filter(
+                ChapterState.media_identity_id == self.state.media_identity_id,
+                ChapterState.id != self.state.id,
+                ChapterState.transcript_key.isnot(None),
+            )
+            .all()
+        )
+        rows = [r for r in rows if (_episode_order(r[1]) > here) == later]
+        rows.sort(key=lambda r: _episode_order(r[1]), reverse=not later)
+        found = []
+        for sibling, _part in rows:
+            segments = _transcript(sibling.transcript_key)
+            if segments:
+                found.append(segments)
+            if len(found) == count:
+                break
+        return found
+
+    def others(self, limit=12):
+        """Other episodes' saved transcripts (whole or openings), nearest first."""
+        here = _episode_order(self.part)
+        rows = (
+            db.session.query(ChapterState, MediaPart)
+            .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+            .filter(
+                ChapterState.media_identity_id == self.state.media_identity_id,
+                ChapterState.id != self.state.id,
+                or_(
+                    ChapterState.transcript_key.isnot(None),
+                    ChapterState.opening_key.isnot(None),
+                ),
+            )
+            .all()
+        )
+        rows.sort(
+            key=lambda r: (
+                abs(_episode_order(r[1])[1] - here[1])
+                + 100 * abs(_episode_order(r[1])[0] - here[0])
+            )
+        )
+        found = []
+        for sibling, _part in rows[:limit]:
+            segments = _transcript(sibling.transcript_key) or _transcript(
+                sibling.opening_key
+            )
+            if segments:
+                found.append(segments)
+        return found
+
+
+def _check_recap(ep: _Episode, fields) -> str:
     from . import recaps
-    from .transcribe import cache_key, transcribe
 
-    def done(result):
-        state.job_state, state.requested_action = "idle", None
-        state.next_attempt_at = None
-        db.session.commit()
-        _log("recap_checked", result=result, **fields)
-        return state.chapter_status
-
-    if part.kind != "episode" or not _smart(state):
+    state = ep.state
+    if ep.full() is None and _series_without_recaps(state):
         state.recap_checked_at = utcnow()
         state.recap_source = "no opener"
-        return done("not applicable")
-    model_name = config["semantic"]["model"]
-    segments = _transcript(state.transcript_key)
-    if segments is None:
-        key = cache_key(info, model_name)
-        segments = _transcript(key)
-        if segments is not None:
-            state.transcript_key = key
-    if segments is None:
-        if _series_without_recaps(state):
-            state.recap_checked_at = utcnow()
-            state.recap_source = "no opener"
-            return done("series has no recaps")
-        try:
-            segments, _details = transcribe(
-                info,
-                model_name,
-                opts["whisper_device"],
-                cache_dir() / "transcripts",
-                opening=True,
-            )
-        except (MediaToolError, RuntimeError) as exc:
-            state.chapter_error = f"Recap check failed: {exc}"
-            return done("transcription failed")
-        state.opening_key = cache_key(info, model_name, opening=True)
+        return "recap: series has none"
+    segments = ep.span(0, recaps.OPENER_WITHIN + recaps.SEARCH_SECONDS)
     if recaps.opener(segments) is None:
         state.recap_checked_at = utcnow()
         state.recap_start = state.recap_end = None
         state.recap_source = "no opener"
         try:
-            _mark_recap_segment(state, part, media)
+            _mark_segment(state, ep.part, ep.media, "Recap")
         except IntegrationError:
             pass
-        return done("no opener")
-    try:
-        raw, _cached = scene_changes(info, opts["scene_threshold"])
-        scenes = [time_ for time_, _score in raw]
-    except MediaToolError:
-        scenes = []
-    from .semantic import LanguageModelError
-
-    try:
-        model = llm or _language_model(config, opts)
-    except LanguageModelError:
-        model = None  # the closing line doesn't need it
-    found = _recap_finder(state, part)(segments, scenes, model)
+        return "recap: none"
+    found = _recap_finder(state, ep.part)(segments, ep.scenes(), ep.model())
     previously = state.recap_source
-    _record_recap(state, part, media, found.as_dict() if found else None)
-    if found and curatarr_wrote(state, info):
-        _add_recap_chapter(state, part, media, info, found, fields)
+    _record_recap(state, ep.part, ep.media, found.as_dict() if found else None)
+    if found and curatarr_wrote(state, ep.info):
+        _add_recap_chapter(state, ep.part, ep.media, ep.info, found, fields)
     if found and found.source == "closing line" and previously is None:
         _recheck_siblings(state)
-    return done(f"recap until {found.end:.0f}s" if found else "none")
+    return f"recap until {found.end:.0f}s" if found else "recap: unclear"
+
+
+def _check_preview(ep: _Episode) -> str:
+    from . import markers, recaps
+    from .semantic import choose_preview_line, confirm_span
+
+    state = ep.state
+    state.preview_checked_at = utcnow()
+    if ep.full() is None and _series_without(state, "preview"):
+        state.preview_source = "no opener"
+        return "preview: series has none"
+    duration = ep.info.duration
+    tail = ep.span(duration - markers.PREVIEW_SEARCH, duration)
+    if markers.preview_opener(tail, duration) is None:
+        state.preview_start = state.preview_end = None
+        state.preview_source = "no opener"
+        return "preview: none"
+    model = ep.model()
+    found = markers.find_preview(
+        tail,
+        duration,
+        later=recaps.earlier_grams(ep.neighbours(later=True, count=1)),
+        choose_last_line=(lambda lines: choose_preview_line(model, lines))
+        if model
+        else None,
+        confirm=(lambda lines: confirm_span(model, lines, "preview"))
+        if model
+        else None,
+        scenes=ep.scenes(),
+    )
+    if found:
+        state.preview_start, state.preview_end = found.start, found.end
+        state.preview_source = found.source
+    else:
+        state.preview_start = state.preview_end = None
+        state.preview_source = "none"
+    try:
+        _mark_segment(state, ep.part, ep.media, "Preview")
+    except IntegrationError as exc:
+        _log("preview_segment_failed", state_id=state.id, error=str(exc))
+    return f"preview from {found.start:.0f}s" if found else "preview: unclear"
+
+
+def _check_markers(ep: _Episode) -> str:
+    """Hide Intro Skipper's credits and intros that are plainly wrong."""
+    from . import markers, recaps
+    from .integrations import IntroSkipper
+
+    state = ep.state
+    item_id = jellyfin_item_id(ep.part, ep.media)
+    if not item_id:
+        return "markers: no Jellyfin item"
+    plugin = IntroSkipper(client("jellyfin"))
+    try:
+        segments = plugin.segments(item_id)
+    except IntegrationError as exc:
+        return f"markers: {exc}"
+    if segments is None:
+        return "markers: Intro Skipper not installed"
+    live = [
+        s for s in segments if not s.get("Suppressed") and s.get("Source") != "User"
+    ]
+    credits = [s for s in live if s.get("Type") == "Credits"]
+    intros = [s for s in live if s.get("Type") == "Introduction"]
+    duration = ep.info.duration
+
+    def speech_after(start, end):
+        try:
+            return ep.span(start, end)
+        except (MediaToolError, RuntimeError):
+            return None
+
+    checked = [i for i in intros if i.get("Source") in markers.CHECKED_INTRO_SOURCES]
+    others = ep.others() if checked or len(credits) > 1 else []
+    other_grams = recaps.said_in(others) if others else None
+    bad = markers.bad_outros(credits, duration, speech_after, other_grams)
+    if checked and other_grams:
+        lines = []
+        for intro in checked:
+            try:
+                lines += ep.span(intro["Start"], intro["End"])
+            except (MediaToolError, RuntimeError):
+                pass
+        bad += markers.bad_intros(checked, lines, other_grams)
+    hidden = list(state.markers_hidden or [])
+    for segment, reason in bad:
+        try:
+            plugin.hide(item_id, segment["Id"])
+        except IntegrationError as exc:
+            _log("marker_hide_failed", state_id=state.id, error=str(exc))
+            continue
+        hidden.append(
+            {
+                "id": segment["Id"],
+                "type": segment.get("Type"),
+                "start": round(segment["Start"], 1),
+                "end": round(segment["End"], 1),
+                "source": segment.get("Source"),
+                "reason": reason,
+                "at": utcnow().isoformat(),
+            }
+        )
+        _log(
+            "marker_hidden",
+            state_id=state.id,
+            kind=segment.get("Type"),
+            start=segment["Start"],
+            end=segment["End"],
+            reason=reason,
+        )
+    state.markers_hidden = hidden or None
+    return f"markers: {len(bad)} hidden" if bad else "markers: ok"
+
+
+def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
+    """Check an episode's skip markers: its recap, its "next time on" preview,
+    and Intro Skipper's own intro and credits markers.
+
+    Transcribes only what's needed when there's no saved transcript (the
+    opening, the end, or a minute or two after a suspect credits marker).
+    """
+    results = []
+    if part.kind != "episode" or not _smart(state):
+        state.recap_checked_at = state.preview_checked_at = utcnow()
+        state.markers_checked_at = utcnow()
+        state.recap_source = state.preview_source = "no opener"
+        results.append("not applicable")
+    else:
+        ep = _Episode(state, part, media, info, config, opts, llm)
+        for check in (
+            (lambda: _check_recap(ep, fields))
+            if state.recap_checked_at is None
+            else None,
+            (lambda: _check_preview(ep)) if state.preview_checked_at is None else None,
+            lambda: _check_markers(ep),
+        ):
+            if check is None:
+                continue
+            try:
+                results.append(check())
+            except (MediaToolError, RuntimeError) as exc:
+                results.append(f"failed: {exc}")
+                state.chapter_error = f"Skip-marker check failed: {exc}"
+        state.markers_checked_at = utcnow()
+    state.job_state, state.requested_action = "idle", None
+    state.next_attempt_at = None
+    db.session.commit()
+    _log("recap_checked", result="; ".join(results), **fields)
+    return state.chapter_status
 
 
 def _recheck_siblings(state):
@@ -2315,6 +2565,7 @@ def _recheck_siblings(state):
     ):
         sibling.job_state, sibling.requested_action = "queued", "recap"
         sibling.requested_at = utcnow()
+        sibling.recap_checked_at = None  # only the recap is looked at again
 
 
 def _add_recap_chapter(state, part, media, info, recap, fields):
@@ -2362,7 +2613,7 @@ def queue_recaps(library_id=None) -> int:
         .filter(
             MediaPart.kind == "episode",
             MediaPart.has_file.is_(True),
-            ChapterState.recap_checked_at.is_(None),
+            ChapterState.markers_checked_at.is_(None),
             ChapterState.job_state == "idle",
             MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
         )
@@ -2391,7 +2642,7 @@ def recaps_to_check(library_id=None, *, unqueued=False) -> int:
         .filter(
             MediaPart.kind == "episode",
             MediaPart.has_file.is_(True),
-            ChapterState.recap_checked_at.is_(None),
+            ChapterState.markers_checked_at.is_(None),
             MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
         )
     )
@@ -2400,6 +2651,28 @@ def recaps_to_check(library_id=None, *, unqueued=False) -> int:
     if library_id:
         query = query.filter(MediaIdentity.library_id == library_id)
     return query.scalar()
+
+
+def previews_found(library_id=None) -> int:
+    query = (
+        db.session.query(func.count(ChapterState.id))
+        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .filter(ChapterState.preview_end.isnot(None))
+    )
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    return query.scalar()
+
+
+def markers_hidden(library_id=None) -> int:
+    query = (
+        db.session.query(ChapterState.markers_hidden)
+        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .filter(ChapterState.markers_hidden.isnot(None))
+    )
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    return sum(len(hidden or []) for (hidden,) in query)
 
 
 def recaps_found(library_id=None) -> int:

@@ -20,13 +20,13 @@
       {{ stat('Not scanned yet', summary.not_scanned, None, True) }}
       {{ stat('Redo with Smart Chapters', summary.smart_upgradable, 'got Navigation chapters' if summary.smart_upgradable else None, True) }}
       {{ stat('Failed', summary.failed, 'reasons listed below' if summary.failed else None, True) }}
-      {{ stat('Episodes to check for recaps', summary.recaps_to_check, ((summary.recaps_to_check - summary.recaps_unqueued)|commas ~ ' queued') if summary.recaps_to_check > summary.recaps_unqueued else None, True) }}
+      {{ stat('Episodes to check skip markers', summary.recaps_to_check, ((summary.recaps_to_check - summary.recaps_unqueued)|commas ~ ' queued') if summary.recaps_to_check > summary.recaps_unqueued else None, True) }}
     </div>
     <div class="d-flex flex-wrap gap-2 mt-3">
       <form method="post" action="{{ url_for('main.chapter_scan') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-sm btn-outline-light">Scan {{ 'this library' if library_id else 'every library' }}</button></form>
       <form method="post" action="{{ url_for('main.chapter_subtitles') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-sm btn-outline-light">Generate missing subtitles</button></form>
       {% if summary.smart_upgradable %}<form method="post" action="{{ url_for('main.chapter_upgrade') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-sm btn-outline-light" title="These got Navigation chapters because Ollama or transcription was unavailable at the time">Redo {{ summary.smart_upgradable|commas }} with Smart Chapters</button></form>{% endif %}
-      {% if summary.recaps_unqueued %}<form method="post" action="{{ url_for('main.chapter_recaps') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-sm btn-outline-light" title="Marks &quot;previously on&quot; recaps as a chapter and for Intro Skipper's Skip Recap button">Find recaps</button></form>{% endif %}
+      {% if summary.recaps_unqueued %}<form method="post" action="{{ url_for('main.chapter_recaps') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-sm btn-outline-light" title="Finds &quot;previously on&quot; recaps and &quot;next time on&quot; previews, and hides Intro Skipper markers that are plainly wrong">Check skip markers</button></form>{% endif %}
       {% if summary.needing %}<a class="btn btn-sm btn-outline-warning" href="{{ url_for('main.chapter_confirm_library', library_id=library_id or 'all') }}">{{ 'Process entire library…' if library_id else 'Process all libraries…' }}</a>{% endif %}
     </div>
   </div></section>
@@ -40,6 +40,8 @@
       {{ stat('Already had English subtitles', summary.subtitles_existing) }}
       {{ stat('Subtitles by Curatarr', summary.subtitles_generated) }}
       {{ stat('Recaps marked', summary.recaps_found) }}
+      {{ stat('Previews marked', summary.previews_found) }}
+      {{ stat('Bad skip markers hidden', summary.markers_hidden) }}
       {{ stat('Too short for chapters', summary.short) }}
       {{ stat('Not MKV (left alone)', summary.unsupported) }}
     </div>

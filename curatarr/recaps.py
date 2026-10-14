@@ -1,7 +1,11 @@
 """Find the "previously on" recap at the start of an episode, from its transcript.
 
-A recap is only marked when the episode says so ("Previously on…", "Last time
-on…") near the start. Where it ends is decided, in order of confidence, by:
+A recap is only marked when the episode announces it near the start with one
+of the phrases a sample of 1,095 transcripts showed to be reliable: "Previously
+on <show>", "Last time/week/season on <show>", "Here's what you missed on…",
+"In our last episode". Bare "previously", "last week" or "last time" turn up
+in ordinary dialogue too, so they don't count. Where it ends is decided, in
+order of confidence, by:
 
 1. The series' closing line. Narrated recaps end the same way every week
    ("…who will be voted out tonight?"), so a phrase that recurs across the
@@ -10,15 +14,18 @@ on…") near the start. Where it ends is decided, in order of confidence, by:
    the last quoted line anchors the end, and the model picks the recap's last
    line among the few after it (the narrator's closing words).
 
-Nothing is marked when neither applies: a wrong recap skips part of the episode,
-which is worse than having no skip button.
+Nothing is marked when neither applies, and an end the model chose is only
+used when the model also agrees the span is a recap: a wrong recap skips part of
+the episode, which is worse than having no skip button.
 """
 
 import re
 from dataclasses import dataclass
 
 OPENER = re.compile(
-    r"\b(previously on|last time on|last week on|previously)\b", re.IGNORECASE
+    r"\b(previously,?\s+on|last (time|week|season),?\s+on|"
+    r"here'?s what you missed|in our last episode)\b",
+    re.IGNORECASE,
 )
 OPENER_WITHIN = 60.0  # the opener must be spoken this early
 SEARCH_SECONDS = 240.0  # recaps are looked for this far after the opener
@@ -29,6 +36,7 @@ QUOTED = 0.5  # share of a line's 4-word runs found in earlier episodes
 EARLIER_TAIL_SKIPPED = 150.0  # "next time on…" previews quote the new episode
 AFTER_ANCHOR = 75.0  # the closing narration follows the last quoted clip
 SNAP_BEFORE, SNAP_AFTER = 1.5, 4.0
+FUZZY_GRAM, FUZZY_QUOTED = 3, 0.6
 CLOSER_WITHIN = 180.0  # seconds after the opener's next line
 CLOSER_SPREAD = 120.0  # a closing line lands at about the same point each week
 CLOSER_MIN_RUNS = 3  # shared 4-word runs in one line: a 6+ word shared sentence
@@ -48,9 +56,9 @@ def words(text: str) -> list[str]:
     return re.sub(r"[^a-z0-9 ]", " ", text.lower()).split()
 
 
-def grams(text: str) -> set[tuple]:
+def grams(text: str, n: int = GRAM) -> set[tuple]:
     w = words(text)
-    return {tuple(w[i : i + GRAM]) for i in range(len(w) - GRAM + 1)}
+    return {tuple(w[i : i + n]) for i in range(len(w) - n + 1)}
 
 
 def opener(segments):
@@ -130,13 +138,33 @@ def earlier_grams(transcripts: list[list]) -> set[tuple]:
         cutoff = segments[-1].end - EARLIER_TAIL_SKIPPED
         for s in segments:
             if s.start < cutoff:
-                found |= grams(s.text)
+                found |= grams(s.text) | grams(s.text, FUZZY_GRAM)
     return found
 
 
-def _quoted(line, earlier: set[tuple]) -> bool:
+def said_in(transcripts: list[list]) -> set[tuple]:
+    """Everything said in some transcripts, for telling repeats from new lines."""
+    found: set[tuple] = set()
+    for segments in transcripts:
+        for s in segments or []:
+            found |= grams(s.text) | grams(s.text, FUZZY_GRAM)
+    return found
+
+
+def quoted(line, other: set[tuple]) -> bool:
+    """Whether a line was said in other episodes (``other`` from earlier_grams).
+
+    Four-word runs, or three-word runs when speech recognition heard a word or
+    two differently in the two episodes.
+    """
     g = grams(line.text)
-    return bool(g) and len(g & earlier) / len(g) >= QUOTED
+    if g and len(g & other) / len(g) >= QUOTED:
+        return True
+    g3 = grams(line.text, FUZZY_GRAM)
+    return len(g3) >= 3 and len(g3 & other) / len(g3) >= FUZZY_QUOTED
+
+
+_quoted = quoted
 
 
 def find_recap(
@@ -145,20 +173,33 @@ def find_recap(
     series_openings=(),
     earlier=frozenset(),
     choose_last_line=None,
+    confirm=None,
     scenes=(),
 ) -> Recap | None:
     """The recap's span, or None when the episode has none or it's unclear.
 
     ``series_openings`` are other episodes' ``opening_lines``; ``earlier`` is
     ``earlier_grams`` of the episodes before this one; ``choose_last_line(lines)``
-    asks the model for the index of the recap's last line, or None.
+    asks the model for the index of the recap's last line, or None;
+    ``confirm(lines)`` asks it whether lines are a recap (True/False, or None
+    when it can't say).
     """
     lines = opening_lines(segments)
     if not lines:
         return None
     first = opener(segments)
     start = 0.0 if first.start <= 10 else max(first.start - 0.5, 0.0)
+    found = _find_end(start, lines, series_openings, earlier, choose_last_line, scenes)
+    if found is None or found.source != "model":
+        return found
+    # The model chose the end: only keep it if the model also agrees it's a recap.
+    if confirm is None:
+        return found
+    span = [s for s in segments if found.start <= s.start < found.end]
+    return found if confirm(span) is True else None
 
+
+def _find_end(start, lines, series_openings, earlier, choose_last_line, scenes):
     closers = closing_phrases(list(series_openings))
     closing = next((s for s in lines if grams(s.text) & closers), None)
     if closing is not None:
