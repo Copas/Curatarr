@@ -1431,3 +1431,23 @@ def test_guessed_recap_on_an_episode_without_previously_on_is_hidden(
     enrichment.request(parts[-1], "recap")
     enrichment.dispatch(synchronous=True)
     assert ("DELETE", "/Episode/jf-ep4/Segments/cold") in calls
+
+
+def test_lease_heartbeat_survives_a_busy_database(app, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    from curatarr import leases
+
+    owner = leases.acquire("chapters:busy-test", 600)
+    calls = []
+
+    def renew(scope, who, seconds):
+        calls.append(scope)
+        if len(calls) == 1:
+            raise OperationalError("UPDATE", {}, Exception("database is locked"))
+        return True
+
+    monkeypatch.setattr(leases, "renew", renew)
+    with leases.keep_alive("chapters:busy-test", owner, seconds=0.3) as lost:
+        time.sleep(0.5)
+    assert len(calls) >= 2 and not lost.is_set()

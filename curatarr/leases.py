@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from flask import current_app
 from sqlalchemy import delete, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from . import db
 from .models import JobLease, utcnow
@@ -66,8 +66,15 @@ def keep_alive(scope: str, owner: str, seconds=300):
             while not stop.wait(max(0.1, seconds / 3)):
                 try:
                     if not renew(scope, owner, seconds):
-                        lost.set()
+                        lost.set()  # someone else holds it now
                         return
+                except OperationalError:
+                    # SQLite allows one writer; a busy database is temporary.
+                    # The lease lasts three beats, so try again on the next one.
+                    db.session.rollback()
+                    app.logger.warning(
+                        "Lease renewal for %s waited on a busy database", scope
+                    )
                 except Exception:
                     db.session.rollback()
                     app.logger.exception("Database lease renewal failed for %s", scope)
