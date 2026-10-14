@@ -178,9 +178,7 @@ def test_requests_explain_who_watched_what_and_what_happens(app, client):
     )
     page = client.get("/").text
     assert "Downloads requested" in page
-    assert (
-        "Alex finished S01E01 of XYZ, so Curatarr is searching for Season 2." in page
-    )
+    assert "Alex finished S01E01 of XYZ, so Curatarr is searching for Season 2." in page
 
 
 def test_catch_up_and_always_keep_messages(app):

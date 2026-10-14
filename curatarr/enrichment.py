@@ -1428,6 +1428,17 @@ def _due_jobs(limit, *, scans, recaps=False):
         query = query.filter(ChapterState.requested_action == "scan")
     elif recaps:
         query = query.filter(ChapterState.requested_action == "recap")
+        if _chapter_backlog():
+            # Checking an episode with no saved transcript means transcribing its
+            # opening and ending, which takes the GPU from chapter jobs (it
+            # doubled their time). Until the backlog is done, only episodes that
+            # need none go ahead, plus checks asked for from an episode's page.
+            query = query.filter(
+                or_(
+                    ChapterState.transcript_key.isnot(None),
+                    ChapterState.requested_at < now - timedelta(days=365),
+                )
+            )
     else:
         query = query.filter(
             or_(
@@ -1452,6 +1463,22 @@ def _due_jobs(limit, *, scans, recaps=False):
         for row in rows
         if not row.next_attempt_at or _as_datetime(row.next_attempt_at) <= now
     ][:limit]
+
+
+def _chapter_backlog() -> bool:
+    """Chapter jobs (not checks or subtitles) are waiting or running."""
+    return (
+        db.session.query(ChapterState.id)
+        .filter(
+            ChapterState.job_state.in_(("queued", "running")),
+            or_(
+                ChapterState.requested_action.is_(None),
+                ChapterState.requested_action.in_(("auto", "generate", "regenerate")),
+            ),
+        )
+        .first()
+        is not None
+    )
 
 
 class DatabaseBusy(RuntimeError):
