@@ -8,20 +8,39 @@
   <a class="btn btn-sm {{ 'btn-primary' if not library_id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_maintenance') }}">All libraries</a>
   {% for other in libraries %}<a class="btn btn-sm {{ 'btn-primary' if other.id == library_id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_maintenance', library=other.id) }}">{{ other.name }}{% if other.id not in enabled_libraries %} (off){% endif %}</a>{% endfor %}
 </div>
-<div class="card p-3 mb-3">
-  <div class="stat-grid">
-  {% for label, value in [('Files', summary.files), ('Scanned', summary.scanned), ('With existing chapters', summary.existing), ('Chapters added by Curatarr', summary.generated), ('Needing chapters', summary.needing), ('Needing subtitles', summary.needing_subtitles), ('Below minimum length', summary.short), ('Unsupported (not MKV)', summary.unsupported), ('Would need transcription', summary.transcription_estimate)] %}
-  <div><h2 class="stat-label mb-0">{{ label }}</h2><p class="stat-value mb-0">{{ value|commas }}</p></div>
-  {% endfor %}
-  </div>
-</div>
+{% macro stat(label, value, hint=None, todo=False) %}<div class="{{ 'stat-todo' if todo else '' }}{{ ' stat-done' if todo and not value else '' }}"><h3 class="stat-label mb-0">{{ label }}</h3><p class="stat-value mb-0">{{ value|commas }}</p>{% if hint %}<p class="stat-hint mb-0">{{ hint }}</p>{% endif %}</div>{% endmacro %}
 {% if not summary.files %}<div class="alert alert-info">No file locations are recorded yet. Curatarr records them during discovery (hourly, or Discover on Overview); pressing Scan starts discovery and then the scan.</div>{% endif %}
-<p class="text-secondary">{% if summary.not_scanned %}{{ summary.not_scanned|commas }} file{{ '' if summary.not_scanned == 1 else 's' }} not scanned yet. {% endif %}{% if summary.queued %}{{ summary.queued|commas }} chapter job{{ '' if summary.queued == 1 else 's' }} queued or running.{% endif %}{% if summary.failed %} {{ summary.failed|commas }} failed (shown below with the reason).{% endif %}{% if summary.subtitles_checked %} Subtitles: {{ summary.subtitles_generated|commas }} generated, {{ summary.subtitles_existing|commas }} already had English, of {{ summary.subtitles_checked|commas }} checked.{% endif %}</p>
-<div class="d-flex flex-wrap gap-2 mb-4">
-  <form method="post" action="{{ url_for('main.chapter_scan') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-outline-light">Scan {{ 'this library' if library_id else 'every library' }}</button></form>
-  <form method="post" action="{{ url_for('main.chapter_subtitles') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-outline-light">Generate missing subtitles in {{ 'this library' if library_id else 'every library' }}</button></form>
-  {% if summary.smart_upgradable %}<form method="post" action="{{ url_for('main.chapter_upgrade') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-outline-light" title="These got Navigation chapters because Ollama or transcription was unavailable at the time">Redo {{ summary.smart_upgradable|commas }} with Smart Chapters</button></form>{% endif %}
-  {% if summary.needing %}<a class="btn btn-outline-warning" href="{{ url_for('main.chapter_confirm_library', library_id=library_id or 'all') }}">{{ 'Process entire library…' if library_id else 'Process all libraries…' }}</a>{% endif %}
+<div class="row g-3 mb-4">
+  <section class="col-lg-7" aria-labelledby="todo-heading"><div class="card p-3 h-100">
+    <h2 class="section-label" id="todo-heading">To do</h2>
+    <div class="stat-grid">
+      {{ stat('Needing chapters', summary.needing, (summary.transcription_estimate|commas ~ ' need transcription') if 0 < summary.transcription_estimate < summary.needing else None, True) }}
+      {{ stat('Needing subtitles', summary.needing_subtitles, None, True) }}
+      {{ stat('Queued or running', summary.queued, None, True) }}
+      {{ stat('Not scanned yet', summary.not_scanned, None, True) }}
+      {{ stat('Redo with Smart Chapters', summary.smart_upgradable, 'got Navigation chapters' if summary.smart_upgradable else None, True) }}
+      {{ stat('Failed', summary.failed, 'reasons listed below' if summary.failed else None, True) }}
+    </div>
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <form method="post" action="{{ url_for('main.chapter_scan') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-sm btn-outline-light">Scan {{ 'this library' if library_id else 'every library' }}</button></form>
+      <form method="post" action="{{ url_for('main.chapter_subtitles') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-sm btn-outline-light">Generate missing subtitles</button></form>
+      {% if summary.smart_upgradable %}<form method="post" action="{{ url_for('main.chapter_upgrade') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}"><button class="btn btn-sm btn-outline-light" title="These got Navigation chapters because Ollama or transcription was unavailable at the time">Redo {{ summary.smart_upgradable|commas }} with Smart Chapters</button></form>{% endif %}
+      {% if summary.needing %}<a class="btn btn-sm btn-outline-warning" href="{{ url_for('main.chapter_confirm_library', library_id=library_id or 'all') }}">{{ 'Process entire library…' if library_id else 'Process all libraries…' }}</a>{% endif %}
+    </div>
+  </div></section>
+  <section class="col-lg-5" aria-labelledby="library-heading"><div class="card p-3 h-100">
+    <h2 class="section-label" id="library-heading">Your library</h2>
+    <div class="stat-grid stat-grid-quiet">
+      {{ stat('Files', summary.files) }}
+      {{ stat('Scanned', summary.scanned) }}
+      {{ stat('Already had chapters', summary.existing) }}
+      {{ stat('Chapters by Curatarr', summary.generated) }}
+      {{ stat('Already had English subtitles', summary.subtitles_existing) }}
+      {{ stat('Subtitles by Curatarr', summary.subtitles_generated) }}
+      {{ stat('Too short for chapters', summary.short) }}
+      {{ stat('Not MKV (left alone)', summary.unsupported) }}
+    </div>
+  </div></section>
 </div>
 <h2 class="h4">Activity</h2>
 {% include "_chapter_activity.html" %}
