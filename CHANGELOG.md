@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed Chapter maintenance's Activity card failing (Internal Server Error) when a skip-marker check finished between two of its queries.
+- The transcript-linking pass no longer holds the database's write lock while it reads files on the network share, which made Jellyfin's webhook time out ("database is locked").
+
 - Search covers every Smart Chapters transcript, not just ones made since transcripts were linked to their files: a background pass (20 files per worker cycle) works out each older file's transcript and links it.
 - A wrong-episode flag is no longer dropped when the same file's path is written differently (discovery and Sonarr use different forms); it's compared by file name.
 
