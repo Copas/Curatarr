@@ -1013,6 +1013,9 @@ def test_forecast_projects_the_finish_from_the_recent_pace(app, client, media_en
     assert forecast["percent"] == round(100 * 6 / 9, 1)
     page = client.get("/chapters").get_data(as_text=True)
     assert "6</strong> of 9 chapter jobs done" in page and "1 h 30 min" in page
+    # A native <progress>: the page's CSP blocks inline style="width: …%".
+    assert '<progress class="w-100 d-block" value="6" max="9"' in page
+    assert 'style="width' not in page
 
 
 def test_forecast_waits_for_enough_finished_jobs(media_env):
@@ -1044,3 +1047,14 @@ def test_maintenance_page_separates_to_do_from_library_stats(app, client, media_
     assert "Files" not in todo
     assert "Already had chapters" in library and "Needing chapters" not in library
     assert "stat-done" in todo  # nothing to do yet shows as done
+
+
+def test_waiting_subtitle_jobs_show_their_reason(app, client, media_env):
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.job_state, state.requested_action = "queued", "subtitles"
+    state.next_attempt_at = utcnow() + timedelta(minutes=5)
+    state.subtitle_error = "Waiting: Sonarr is still importing this file"
+    db.session.commit()
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Film — Sonarr is still importing this file" in page
