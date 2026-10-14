@@ -2655,9 +2655,18 @@ def identity_issues(library_id=None):
         s
         for s in query
         if not (s.identity_issue or {}).get("dismissed")
-        # A flag on a file that's since been moved, renamed or replaced is stale.
-        and (s.identity_issue or {}).get("file", s.part.file_path) == s.part.file_path
+        # A flag on a file that's since been renamed or replaced is stale. Names,
+        # not paths: discovery and Sonarr write the same file's path differently.
+        and _same_file((s.identity_issue or {}).get("file"), s.part.file_path)
     ]
+
+
+def _same_file(flagged, current) -> bool:
+    if not flagged or not current:
+        return True
+    return os.path.basename(str(flagged).replace("\\", "/")) == os.path.basename(
+        str(current).replace("\\", "/")
+    )
 
 
 def identity_flags_api() -> list[dict]:
@@ -3237,3 +3246,49 @@ def transcripts_searchable() -> int:
         .filter(ChapterState.transcript_key.isnot(None))
         .scalar()
     )
+
+
+LINK_SWEEP = 20  # episodes looked at per worker cycle (one probe each)
+_link_tried: set[str] = set()
+
+
+def link_transcripts(limit=LINK_SWEEP) -> int:
+    """Link transcripts made before Curatarr recorded which file they belong to.
+
+    Search and the identity check find transcripts through transcript_key, which
+    only newer jobs record. Smart Chapters files have a transcript on disk under
+    a key worked out from the file itself, so probing the file finds it. Files
+    without one are only tried once per worker run.
+    """
+    from .transcribe import cache_key
+
+    rows = (
+        db.session.query(ChapterState)
+        .filter(
+            ChapterState.transcript_key.is_(None),
+            ChapterState.chapter_status == GENERATED_STATUSES["semantic"],
+            ChapterState.id.notin_(list(_link_tried) or [""]),
+        )
+        .limit(limit)
+        .all()
+    )
+    linked = 0
+    for state in rows:
+        _link_tried.add(state.id)
+        part = state.part
+        path = local_path(part.file_path) if part else None
+        if not path or not file_exists(path):
+            continue
+        try:
+            config = config_for(part.media.library_id)
+            info = probe(path)
+        except (ChapterConfigError, MediaToolError, OSError):
+            continue
+        key = cache_key(info, config["semantic"]["model"])
+        if (cache_dir() / "transcripts" / f"{key}.json").exists():
+            state.transcript_key = key
+            linked += 1
+    db.session.commit()
+    if linked:
+        _log("transcripts_linked", count=linked)
+    return linked

@@ -1802,3 +1802,53 @@ def test_search_what_was_said(app, client, media_env):
     )
     page = client.get("/transcripts?q=red+stapler").get_data(as_text=True)
     assert "Has anyone seen my red stapler?" in page
+
+
+def test_old_transcripts_get_linked_so_search_finds_them(app, client, media_env):
+    import json
+
+    from curatarr.transcribe import cache_key
+
+    files, _arr = media_env
+    _library, _media, part = _movie()
+    files.add(part.file_path)
+    state = enrichment.state_for(part)
+    state.chapter_status = "generated_semantic"
+    db.session.commit()
+    key = cache_key(
+        files.probe(part.file_path),
+        enrichment.config_for(part.media.library_id)["semantic"]["model"],
+    )
+    (enrichment.cache_dir() / "transcripts").mkdir(parents=True, exist_ok=True)
+    (enrichment.cache_dir() / "transcripts" / f"{key}.json").write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {"start": 5, "end": 9, "text": "Mind the flying skillets!"}
+                ],
+                "details": {},
+            }
+        )
+    )
+    enrichment._link_tried.clear()
+    assert enrichment.link_transcripts() == 1
+    assert db.session.get(ChapterState, state.id).transcript_key == key
+    assert enrichment.link_transcripts() == 0  # nothing left to try
+
+
+def test_a_flag_survives_the_path_being_written_differently(app, client, media_env):
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    state = enrichment.state_for(parts[1])
+    state.identity_issue = {
+        "kind": "episode",
+        "file": "/mnt/media/Island Life/S01E02.mkv",
+        "season": 1,
+        "filed_as": 2,
+        "fits": 3,
+        "margin": 5.0,
+    }
+    state.identity_checked_at = utcnow()
+    db.session.commit()
+    assert parts[1].file_path == "/tv/Island Life/S01E02.mkv"
+    assert len(client.get("/api/v1/identity-flags").get_json()["flags"]) == 1
