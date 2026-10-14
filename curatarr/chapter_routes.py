@@ -23,6 +23,7 @@ from .enrichment import (
     job_activity,
     library_layers,
     maintenance_summary,
+    marker_review,
     needs_chapters_query,
     options,
     queue_library,
@@ -35,7 +36,9 @@ from .enrichment import (
     save_settings,
     smart_chapters_blocked,
     state_for,
+    undo_marker,
 )
+from .integrations import IntegrationError
 from .models import ChapterState, Library, MediaIdentity, MediaPart
 from .routes import NAV_SECTIONS, bp
 from .services import request_reconciliation
@@ -46,6 +49,7 @@ NAV_SECTIONS.update(
         "main.chapter_maintenance": "manage",
         "main.chapter_confirm_library": "manage",
         "main.chapter_part": "library",
+        "main.chapter_markers": "manage",
     }
 )
 
@@ -342,3 +346,36 @@ def chapter_part_action(part_id, action):
             "success",
         )
     return redirect(url_for("main.chapter_part", part_id=part.id))
+
+
+@bp.get("/chapters/markers")
+def chapter_markers():
+    """Recent skip-marker changes to spot-check, each with an undo."""
+    kind = request.args.get("kind") or None
+    if kind not in (None, "recap", "preview", "hidden"):
+        abort(404)
+    return render_template(
+        "chapter_markers.html",
+        rows=marker_review(kind),
+        kind=kind,
+        file_label=file_label,
+    )
+
+
+@bp.post("/chapters/markers/<state_id>/undo")
+def chapter_marker_undo(state_id):
+    state = db.session.get(ChapterState, state_id)
+    if not state:
+        abort(404)
+    try:
+        message = undo_marker(
+            state, request.form.get("kind", ""), request.form.get("segment") or None
+        )
+    except ValueError as exc:
+        flash(str(exc), "warning")
+    except IntegrationError as exc:
+        db.session.rollback()
+        flash(f"Intro Skipper couldn't be reached: {exc}", "danger")
+    else:
+        flash(message, "success")
+    return redirect(request.form.get("next") or url_for("main.chapter_markers"))

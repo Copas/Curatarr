@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Review skip markers** (Manage → Chapter maintenance → Review skip markers): every recap and preview Curatarr marked and every Intro Skipper marker it hid, newest first, filterable, each linked to the episode in Jellyfin with the span and the reason. **Undo** removes a recap or preview (and its "Previously On" chapter) or restores a hidden marker in Intro Skipper; an undone recap or preview isn't marked again unless the episode is checked again from its page. Recaps and previews Intro Skipper had guessed and Curatarr replaced or removed are listed too.
+
 - A job's lease no longer stops renewing after one "database is locked" (SQLite has one writer; skip-marker checks added writes). It tries again on the next beat, logging a one-line warning instead of a traceback.
 
 - Recap ends no longer come from the local model. Tested on episodes not used to tune it (The Last Man on Earth), the model pushed every montage recap about 30 seconds into the new episode, and confirmed its own choice; ending at the last clip quoted from earlier episodes never ran long (13 recaps, 0 into the episode). Recaps with a series closing line are unchanged. A preview end the model picks is capped at 45 seconds after "next time on", so it can't run into a final scene.
