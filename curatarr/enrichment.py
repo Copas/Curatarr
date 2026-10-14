@@ -1877,16 +1877,23 @@ def job_activity(recent=10) -> dict:
         .first()
     )
     recent_cutoff = utcnow() - timedelta(seconds=20)
-    recently_active = (
-        bool(subtitles_finished)
-        and _as_datetime(subtitles_finished[0].subtitle_processed_at) >= recent_cutoff
+
+    def recent(value) -> bool:
+        # A row read earlier in this request (say, while still running) keeps its
+        # old values even when a later query returns it again, so a time can
+        # still be missing here.
+        moment = _as_datetime(value)
+        return moment is not None and moment >= recent_cutoff
+
+    recently_active = bool(subtitles_finished) and recent(
+        subtitles_finished[0].subtitle_processed_at
     )
     return {
         "paused_since": _as_datetime(setting("chapters_paused_since")),
         "running": running,
         "recently_active": recently_active,
         "recap_active": last_recap
-        if last_recap and _as_datetime(last_recap.markers_checked_at) >= recent_cutoff
+        if last_recap and recent(last_recap.markers_checked_at)
         else None,
         "subtitles_finished": subtitles_finished,
         "queued": {ACTION_LABELS.get(k, k): v for k, v in queued.items()},
@@ -3272,23 +3279,34 @@ def link_transcripts(limit=LINK_SWEEP) -> int:
         .limit(limit)
         .all()
     )
-    linked = 0
+    # Read everything first, then write once: holding SQLite's write lock while
+    # probing files on a network share made a Jellyfin webhook time out.
+    work = []
     for state in rows:
         _link_tried.add(state.id)
         part = state.part
         path = local_path(part.file_path) if part else None
-        if not path or not file_exists(path):
+        if path:
+            work.append((state.id, path, part.media.library_id))
+    db.session.rollback()  # end the read transaction before the slow part
+    found = {}
+    for state_id, path, library_id in work:
+        if not file_exists(path):
             continue
         try:
-            config = config_for(part.media.library_id)
+            config = config_for(library_id)
             info = probe(path)
         except (ChapterConfigError, MediaToolError, OSError):
             continue
         key = cache_key(info, config["semantic"]["model"])
         if (cache_dir() / "transcripts" / f"{key}.json").exists():
+            found[state_id] = key
+    for state_id, key in found.items():
+        state = db.session.get(ChapterState, state_id)
+        if state is not None and state.transcript_key is None:
             state.transcript_key = key
-            linked += 1
     db.session.commit()
+    linked = len(found)
     if linked:
         _log("transcripts_linked", count=linked)
     return linked
