@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Search what was said** (Library → Search what was said, and `GET /api/v1/transcripts/search?q=…` with the read-only API key): find an episode or film by a line or what's talked about in it, across every transcript Smart Chapters has made. An exact phrase ranks first, then windows of three lines holding most of the words; each result shows the moment's lines and timestamp. Household accounts can use it too. Transcripts are held in memory and refreshed every five minutes; a search over 1,445 transcripts takes milliseconds for distinctive words.
+- **Search what was said** (Library → Search what was said, and `GET /api/v1/transcripts/search?q=…` with the read-only API key): find an episode or film by a line or what's talked about in it, across every transcript Smart Chapters has made. An exact phrase ranks first, then windows of three lines holding most of the words; each result shows the moment's lines and timestamp. Household accounts can use it too. Words are matched by rough stem ("frying" finds "fry", "tribes" finds "tribe"). Transcripts are held in memory and refreshed every five minutes; a search over 1,445 transcripts takes milliseconds for distinctive words.
 
 - Wrong-episode flags are found through the file's own part rather than the identity stored on its chapter state, which can point at one discovery has since replaced; such flags were missing from the list and the API.
 
