@@ -74,7 +74,7 @@ log = logging.getLogger("curatarr.chapters")
 
 WRITE_ACTIONS = {"auto", "generate", "regenerate", "remove"}
 SUBTITLE_ACTIONS = {"subtitles", "remove_subtitles"}
-ACTIONS = WRITE_ACTIONS | SUBTITLE_ACTIONS | {"preview", "scan"}
+ACTIONS = WRITE_ACTIONS | SUBTITLE_ACTIONS | {"preview", "scan", "recap"}
 FINAL_STATUSES = {
     "existing",
     "generated_semantic",
@@ -441,8 +441,12 @@ def analyse(
     every_method=False,
     llm=None,
     context="",
+    find_recap=None,
 ):
     """Plan chapters, falling back Smart → scene-aligned → fixed intervals.
+
+    ``find_recap(segments, scenes, model)`` returns a recaps.Recap or None; a
+    recap becomes a "Previously On" first chapter in the Smart plan.
 
     With ``every_method`` all three are attempted for a preview. Returns a
     dict with the chosen plan, every attempt, and the scene/transcript data.
@@ -456,6 +460,7 @@ def analyse(
         "attempts": [],
         "plans": {},
         "chosen": None,
+        "recap": None,
     }
     smart = config["mode"] == "smart" and config["semantic"]["enabled"]
     scenes = None
@@ -503,12 +508,19 @@ def analyse(
                 cache_dir() / "transcripts",
                 make_room=getattr(model, "unload", None),
             )
+            from .transcribe import cache_key
+
             result["transcript"] = {
                 **details,
+                "key": cache_key(info, config["semantic"]["model"]),
                 "segments": len(segments),
                 "words": sum(len(s.text.split()) for s in segments),
                 "sample": [[round(s.start, 1), s.text.strip()] for s in segments[:12]],
             }
+            recap = None
+            if find_recap is not None:
+                recap = find_recap(segments, scenes or [], model)
+                result["recap"] = recap.as_dict() if recap else None
             plan = semantic_plan(
                 info.duration,
                 scenes or [],
@@ -518,6 +530,7 @@ def analyse(
                     model, window, candidates, excerpt
                 ),
                 lambda excerpts: name_chapters(model, excerpts, context),
+                recap=recap,
             )
             plan.notes.append(f"{model.calls} Ollama requests to {model.model}")
             return plan
@@ -784,6 +797,8 @@ def run_job(state_id: str, *, llm=None) -> str:
 
     if action == "scan":
         return _scan_result(state, info, config)
+    if action == "recap":
+        return run_recap(state, part, media, info, config, opts, fields, llm=llm)
 
     ours = curatarr_wrote(state, info)
     # Unchanged since Curatarr last handled it: nothing to do automatically.
@@ -871,7 +886,10 @@ def run_job(state_id: str, *, llm=None) -> str:
         every_method=action == "preview",
         llm=llm,
         context=_context(part, media),
+        find_recap=_recap_finder(state, part) if part.kind == "episode" else None,
     )
+    if (analysis.get("transcript") or {}).get("key"):
+        state.transcript_key = analysis["transcript"]["key"]
     fields |= {
         "attempts": analysis["attempts"],
         "fallback_used": analysis["chosen"],
@@ -1025,6 +1043,8 @@ def _write(state, part, media, info, plan, analysis, config, ours, fields, start
     state.written_fingerprint = fingerprint(after.chapters)
     state.written_chapters_json = after.chapters
     refresh_error = _refresh_jellyfin(part, media)
+    if analysis.get("transcript") and part.kind == "episode":
+        _record_recap(state, part, media, analysis.get("recap"))
     state.last_preview_json = {
         **_preview_record(info, analysis, config, ours),
         "written_at": utcnow().isoformat(),
@@ -1153,6 +1173,34 @@ def _chain_subtitles(state_id):
         state.requested_action = "subtitles"
         state.requested_at = utcnow()
         db.session.commit()
+
+
+def _smart(state) -> bool:
+    """Recaps are found from transcripts, which only Smart libraries make."""
+    try:
+        config = config_for(state.media.library_id)
+    except ChapterConfigError:
+        return False
+    return config["mode"] == "smart" and config["semantic"]["enabled"]
+
+
+def _chain_recap(state_id):
+    """After an episode's other jobs, check it for a recap (once)."""
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state_id)
+    if (
+        not state
+        or state.job_state != "idle"
+        or state.recap_checked_at is not None
+        or state.part is None
+        or state.part.kind != "episode"
+        or not _smart(state)
+        or _series_without_recaps(state)
+    ):
+        return
+    state.job_state, state.requested_action = "queued", "recap"
+    state.requested_at = utcnow()
+    db.session.commit()
 
 
 def _subtitles_done(state, status, *, error=None, fields=None):
@@ -1360,6 +1408,7 @@ def _due_jobs(limit, *, scans):
     priority = case(
         (ChapterState.requested_action == "subtitles", 0),
         (ChapterState.requested_action == "regenerate", 1),
+        (ChapterState.requested_action == "recap", 1),
         (ChapterState.requested_action == "auto", 2),
         else_=3,
     )
@@ -1397,6 +1446,8 @@ def _run_one(app, state_id, llm):
             run_job(state_id, llm=llm)
         if action in {"auto", "generate", "regenerate"}:
             _chain_subtitles(state_id)
+        if action in {"auto", "generate", "regenerate", "subtitles"}:
+            _chain_recap(state_id)
     except OperationalError as exc:
         # SQLite allows one writer; discovery holds a long write transaction.
         # Put the job back rather than failing it.
@@ -1623,11 +1674,12 @@ ACTION_LABELS = {
     "preview": "Preview",
     "subtitles": "Subtitles",
     "remove_subtitles": "Remove subtitles",
+    "recap": "Find recap",
 }
 
 
 # Fast jobs that never set chapter_processed_at; they don't count towards the forecast.
-FORECAST_EXCLUDED_ACTIONS = ("scan", "subtitles", "remove_subtitles")
+FORECAST_EXCLUDED_ACTIONS = ("scan", "subtitles", "remove_subtitles", "recap")
 FORECAST_WINDOW = timedelta(hours=3)
 FORECAST_LONG_WINDOW = timedelta(hours=24)
 FORECAST_MIN_SAMPLES = 3
@@ -1821,6 +1873,8 @@ def maintenance_summary(library_id=None) -> dict:
         "removed": by_status.get("removed", 0),
         "transcription_estimate": needing_smart,
         "smart_upgradable": smart_upgrade_query(library_id).count(),
+        "recaps_to_check": recaps_to_check(library_id),
+        "recaps_found": recaps_found(library_id),
         "queued": queued,
     }
 
@@ -1962,3 +2016,341 @@ def environment_status() -> dict:
     except (LanguageModelError, ChapterConfigError, ValueError):
         status["ollama"] = False
     return status
+
+
+# --- Recaps ------------------------------------------------------------------
+
+RECAP_SIBLINGS = 60  # other episodes read for the series' closing line
+RECAP_EARLIER = 3  # earlier episodes whose clips a recap may quote
+RECAP_SKIP_AFTER = 4  # a series whose first episodes never say "previously on"
+
+
+def _episode_order(part):
+    return (part.season_number or 0, part.episode_number or 0)
+
+
+def _transcript(key):
+    from .transcribe import load
+
+    if not key:
+        return None
+    hit = load(cache_dir() / "transcripts" / f"{key}.json")
+    return hit[0] if hit else None
+
+
+def _sibling_transcripts(state, part):
+    """(openings of other episodes, full transcripts of the nearest earlier ones)."""
+    from . import recaps
+
+    here = _episode_order(part)
+    rows = (
+        db.session.query(ChapterState, MediaPart)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .filter(
+            ChapterState.media_identity_id == state.media_identity_id,
+            ChapterState.id != state.id,
+            or_(
+                ChapterState.transcript_key.isnot(None),
+                ChapterState.opening_key.isnot(None),
+            ),
+        )
+        .all()
+    )
+
+    def distance(row):
+        season, episode = _episode_order(row[1])
+        return (abs(season - here[0]), abs(episode - here[1]))
+
+    rows.sort(key=distance)
+    openings, earlier = [], []
+    for sibling, sibling_part in rows[:RECAP_SIBLINGS]:
+        full = _transcript(sibling.transcript_key)
+        segments = full or _transcript(sibling.opening_key)
+        if segments:
+            openings.append(recaps.opening_lines(segments))
+        if (
+            full
+            and _episode_order(sibling_part) < here
+            and len(earlier) < RECAP_EARLIER
+        ):
+            earlier.append(full)
+    return openings, earlier
+
+
+def _recap_finder(state, part):
+    """A find_recap callable for analyse(), reading the rest of the series."""
+    from . import recaps
+    from .semantic import choose_recap_line
+
+    def find(segments, scenes, model):
+        openings, earlier = _sibling_transcripts(state, part)
+        return recaps.find_recap(
+            segments,
+            series_openings=openings,
+            earlier=recaps.earlier_grams(earlier),
+            choose_last_line=(
+                (lambda lines: choose_recap_line(model, lines)) if model else None
+            ),
+            scenes=scenes,
+        )
+
+    return find
+
+
+def _record_recap(state, part, media, recap: dict | None):
+    """Store what was found and mark it in Intro Skipper (best effort)."""
+    state.recap_checked_at = utcnow()
+    if recap:
+        state.recap_start, state.recap_end = recap["start"], recap["end"]
+        state.recap_source = recap["source"]
+    else:
+        state.recap_start = state.recap_end = None
+        state.recap_source = "none" if state.recap_source != "none" else "rechecked"
+    try:
+        _mark_recap_segment(state, part, media)
+    except IntegrationError as exc:
+        _log("recap_segment_failed", state_id=state.id, error=str(exc))
+
+
+def _mark_recap_segment(state, part, media):
+    """Make Intro Skipper's recap for this episode match what Curatarr found.
+
+    Ours replaces any recap the plugin guessed (those are usually cold opens);
+    with no recap found, only a segment Curatarr added earlier is removed.
+    """
+    from .integrations import IntroSkipper
+
+    item_id = jellyfin_item_id(part, media)
+    if not item_id:
+        return
+    plugin = IntroSkipper(client("jellyfin"))
+    segments = plugin.segments(item_id)
+    if segments is None:
+        return  # Intro Skipper isn't installed
+    found = state.recap_end is not None
+    recaps_now = [
+        s for s in segments if s.get("Type") == "Recap" and not s.get("Suppressed")
+    ]
+    keep = next(
+        (
+            s
+            for s in recaps_now
+            if found
+            and s.get("Id") == state.recap_segment_id
+            and abs(s.get("Start", 0) - state.recap_start) < 0.5
+            and abs(s.get("End", 0) - state.recap_end) < 0.5
+        ),
+        None,
+    )
+    for segment in recaps_now:
+        if segment is not keep and (
+            found or segment.get("Id") == state.recap_segment_id
+        ):
+            plugin.hide(item_id, segment["Id"])
+    if keep is not None:
+        return
+    state.recap_segment_id = None
+    if found:
+        state.recap_segment_id = plugin.add_recap(
+            item_id, state.recap_start, state.recap_end
+        )
+        _log(
+            "recap_marked",
+            state_id=state.id,
+            start=state.recap_start,
+            end=state.recap_end,
+            source=state.recap_source,
+        )
+
+
+def _series_without_recaps(state) -> bool:
+    """The series' first checked episodes never said "previously on"."""
+    rows = (
+        db.session.query(ChapterState.recap_source)
+        .filter(
+            ChapterState.media_identity_id == state.media_identity_id,
+            ChapterState.recap_checked_at.isnot(None),
+        )
+        .all()
+    )
+    return len(rows) >= RECAP_SKIP_AFTER and all(
+        source in {"none", "rechecked", "no opener"} for (source,) in rows
+    )
+
+
+def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
+    """Find an episode's recap from its transcript (only the opening if needed).
+
+    Marks it in Intro Skipper and, when the chapters are Curatarr's own, adds a
+    "Previously On" chapter in front of them.
+    """
+    from . import recaps
+    from .transcribe import cache_key, transcribe
+
+    def done(result):
+        state.job_state, state.requested_action = "idle", None
+        state.next_attempt_at = None
+        db.session.commit()
+        _log("recap_checked", result=result, **fields)
+        return state.chapter_status
+
+    if part.kind != "episode" or not _smart(state):
+        state.recap_checked_at = utcnow()
+        state.recap_source = "no opener"
+        return done("not applicable")
+    model_name = config["semantic"]["model"]
+    segments = _transcript(state.transcript_key)
+    if segments is None:
+        key = cache_key(info, model_name)
+        segments = _transcript(key)
+        if segments is not None:
+            state.transcript_key = key
+    if segments is None:
+        if _series_without_recaps(state):
+            state.recap_checked_at = utcnow()
+            state.recap_source = "no opener"
+            return done("series has no recaps")
+        try:
+            segments, _details = transcribe(
+                info,
+                model_name,
+                opts["whisper_device"],
+                cache_dir() / "transcripts",
+                opening=True,
+            )
+        except (MediaToolError, RuntimeError) as exc:
+            state.chapter_error = f"Recap check failed: {exc}"
+            return done("transcription failed")
+        state.opening_key = cache_key(info, model_name, opening=True)
+    if recaps.opener(segments) is None:
+        state.recap_checked_at = utcnow()
+        state.recap_start = state.recap_end = None
+        state.recap_source = "no opener"
+        try:
+            _mark_recap_segment(state, part, media)
+        except IntegrationError:
+            pass
+        return done("no opener")
+    try:
+        raw, _cached = scene_changes(info, opts["scene_threshold"])
+        scenes = [time_ for time_, _score in raw]
+    except MediaToolError:
+        scenes = []
+    from .semantic import LanguageModelError
+
+    try:
+        model = llm or _language_model(config, opts)
+    except LanguageModelError:
+        model = None  # the closing line doesn't need it
+    found = _recap_finder(state, part)(segments, scenes, model)
+    previously = state.recap_source
+    _record_recap(state, part, media, found.as_dict() if found else None)
+    if found and curatarr_wrote(state, info):
+        _add_recap_chapter(state, part, media, info, found, fields)
+    if found and found.source == "closing line" and previously is None:
+        _recheck_siblings(state)
+    return done(f"recap until {found.end:.0f}s" if found else "none")
+
+
+def _recheck_siblings(state):
+    """Once a series' closing line is known, recheck episodes that missed it."""
+    for sibling in db.session.query(ChapterState).filter(
+        ChapterState.media_identity_id == state.media_identity_id,
+        ChapterState.recap_source == "none",
+        ChapterState.job_state == "idle",
+    ):
+        sibling.job_state, sibling.requested_action = "queued", "recap"
+        sibling.requested_at = utcnow()
+
+
+def _add_recap_chapter(state, part, media, info, recap, fields):
+    """Put "Previously On" in front of Curatarr's chapters, or move its end."""
+    from .chapters import RECAP_CHAPTER_NAME
+
+    current = [Chapter(c["start"], c["name"]) for c in info.chapters]
+    if not current:
+        return
+    if current[0].name == RECAP_CHAPTER_NAME:
+        rest = current[1:]
+    else:
+        rest = [Chapter(recap.end, current[0].name), *current[1:]]
+    rest = [rest[0], *(c for c in rest[1:] if c.start > recap.end + 30)]
+    rest[0] = Chapter(recap.end, rest[0].name)
+    chapters = [Chapter(0.0, RECAP_CHAPTER_NAME), *rest]
+    if fingerprint([c.as_dict() for c in chapters]) == fingerprint(info.chapters):
+        return
+    try:
+        validate_chapters(chapters, info.duration)
+        write_chapters(info.path, chapters)
+        after = probe(info.path)
+    except (MediaToolError, InvalidChapters, OSError) as exc:
+        state.chapter_error = f"Adding the recap chapter failed: {exc}"
+        return
+    if fingerprint(after.chapters) != fingerprint([c.as_dict() for c in chapters]):
+        state.chapter_error = (
+            "Adding the recap chapter failed: it read back differently"
+        )
+        return
+    state.written_fingerprint = fingerprint(after.chapters)
+    state.written_chapters_json = after.chapters
+    state.chapter_count = len(chapters)
+    state.chapter_file_size, state.chapter_file_mtime = after.size, after.mtime
+    _refresh_jellyfin(part, media)
+    _log("recap_chapter_written", end=recap.end, **fields)
+
+
+def queue_recaps(library_id=None) -> int:
+    """Check every episode not yet checked for a recap, in episode order."""
+    query = (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaPart.kind == "episode",
+            MediaPart.has_file.is_(True),
+            ChapterState.recap_checked_at.is_(None),
+            ChapterState.job_state == "idle",
+            MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
+        )
+        .order_by(
+            MediaIdentity.title, MediaPart.season_number, MediaPart.episode_number
+        )
+    )
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    now = utcnow()
+    count = 0
+    for count, state in enumerate(query.all(), start=1):
+        state.job_state, state.requested_action = "queued", "recap"
+        # Episode order: earlier episodes teach later ones the closing line.
+        state.requested_at = now + timedelta(milliseconds=count)
+    db.session.commit()
+    return count
+
+
+def recaps_to_check(library_id=None) -> int:
+    query = (
+        db.session.query(func.count(ChapterState.id))
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaPart.kind == "episode",
+            MediaPart.has_file.is_(True),
+            ChapterState.recap_checked_at.is_(None),
+            MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
+        )
+    )
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    return query.scalar()
+
+
+def recaps_found(library_id=None) -> int:
+    query = (
+        db.session.query(func.count(ChapterState.id))
+        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .filter(ChapterState.recap_end.isnot(None))
+    )
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    return query.scalar()

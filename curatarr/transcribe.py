@@ -31,7 +31,10 @@ def available() -> bool:
     return importlib.util.find_spec("faster_whisper") is not None
 
 
-def cache_key(info: MediaInfo, model: str) -> str:
+OPENING_SECONDS = 300  # enough to find a "previously on" recap
+
+
+def cache_key(info: MediaInfo, model: str, opening=False) -> str:
     """Identifies the audio, not the file bytes.
 
     Adding chapters (or subtitles beside the file) changes the file's size and
@@ -44,12 +47,26 @@ def cache_key(info: MediaInfo, model: str) -> str:
         if s.get("codec_type") == "audio"
     ]
     identity = f"{info.path}|{round(info.duration, 1)}|{audio}|{model}"
+    if opening:
+        identity += f"|opening{OPENING_SECONDS}"
     return hashlib.sha256(identity.encode()).hexdigest()[:32]
 
 
-def cached(info: MediaInfo, model: str, cache_dir: Path):
-    """(segments, details) from the cache, or None."""
-    path = cache_dir / f"{cache_key(info, model)}.json"
+def cached(info: MediaInfo, model: str, cache_dir: Path, opening=False):
+    """(segments, details) from the cache, or None.
+
+    With ``opening`` a full transcript serves too, trimmed to the opening.
+    """
+    if opening:
+        full = cached(info, model, cache_dir)
+        if full is not None:
+            segments, details = full
+            return [s for s in segments if s.start < OPENING_SECONDS], details
+    return load(cache_dir / f"{cache_key(info, model, opening)}.json")
+
+
+def load(path: Path):
+    """(segments, details) from one transcript file, or None."""
     if not path.exists():
         return None
     try:
@@ -75,17 +92,23 @@ def _cuda_library_path() -> str:
 
 
 def transcribe(
-    info: MediaInfo, model: str, device: str, cache_dir: Path, make_room=None
+    info: MediaInfo,
+    model: str,
+    device: str,
+    cache_dir: Path,
+    make_room=None,
+    opening=False,
 ):
     """Segments for a media file, from the cache or a fresh transcription.
 
     Returns (segments, details) where details records the device and whether
     the cache was used. One transcription runs at a time, never alongside a
     language-model request (see gpu.py); ``make_room`` is called first to
-    free GPU memory, typically by unloading Ollama's model.
+    free GPU memory, typically by unloading Ollama's model. With ``opening``
+    only the first five minutes are transcribed (for finding a recap).
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    hit = cached(info, model, cache_dir)
+    hit = cached(info, model, cache_dir, opening)
     if hit is not None:
         segments, details = hit
         return segments, {**details, "cached": True}
@@ -96,10 +119,12 @@ def transcribe(
     stream = speech_stream(info)
     if stream is None:
         raise TranscriptionUnavailable("The file has no audio track")
-    target = cache_dir / f"{cache_key(info, model)}.json"
+    target = cache_dir / f"{cache_key(info, model, opening)}.json"
     with tempfile.TemporaryDirectory(prefix="curatarr-audio-") as directory:
         audio = str(Path(directory) / "audio.wav")
-        extract_audio(info.path, audio, stream)
+        extract_audio(
+            info.path, audio, stream, seconds=OPENING_SECONDS if opening else None
+        )
         env = os.environ | {"LD_LIBRARY_PATH": _cuda_library_path()}
         partial = target.with_suffix(".partial")
         try:
@@ -113,7 +138,7 @@ def transcribe(
             message = (result.stderr.strip().splitlines() or ["unknown error"])[-1]
             raise MediaToolError(f"Transcription failed: {message[:200]}")
         partial.replace(target)
-    hit = cached(info, model, cache_dir)
+    hit = cached(info, model, cache_dir, opening)
     if hit is None:
         raise MediaToolError("Transcription produced no readable output")
     segments, details = hit

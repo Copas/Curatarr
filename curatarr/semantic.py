@@ -193,3 +193,33 @@ def name_chapters(
         except LanguageModelError:
             names.append("")  # this chapter falls back to its numbered name
     return names
+
+
+RECAP_LINE_SCHEMA = {
+    "type": "object",
+    "properties": {"last_recap_line": {"type": "integer"}},
+    "required": ["last_recap_line"],
+}
+
+
+def choose_recap_line(llm: Ollama, lines) -> int | None:
+    """Index of the recap's last line among lines that may run into the episode.
+
+    The first line is the last clip the recap quotes from an earlier episode, so
+    it's always part of the recap; the narrator's closing words usually follow.
+    """
+    numbered = "\n".join(
+        f"{i}. [{timestamp(s.start)[3:8]}] {s.text.strip()}"
+        for i, s in enumerate(lines)
+    )
+    prompt = (
+        'These lines come from the end of a TV episode\'s "previously on" recap and '
+        "may continue into the new episode. The first line is still part of the "
+        "recap. The recap ends with the narrator's closing words; after that, people "
+        "talk in a new scene with no narrator summarizing. Give the number of the "
+        f"LAST line that is part of the recap.\n\n{numbered}\n\n"
+        'Reply as {"last_recap_line": <number>}.'
+    )
+    answer = llm.ask(prompt, RECAP_LINE_SCHEMA)
+    index = answer.get("last_recap_line")
+    return index if isinstance(index, int) and 0 <= index < len(lines) else None

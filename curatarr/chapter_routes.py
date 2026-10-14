@@ -26,6 +26,7 @@ from .enrichment import (
     needs_chapters_query,
     options,
     queue_library,
+    queue_recaps,
     queue_scan,
     queue_selected,
     queue_smart_upgrade,
@@ -205,6 +206,21 @@ def chapter_queue():
             ),
             "success",
         )
+    return redirect(url_for("main.chapter_maintenance", library=library_id))
+
+
+@bp.post("/chapters/recaps")
+def chapter_recaps():
+    """Look for "previously on" recaps in episodes not checked yet."""
+    library_id = request.form.get("library") or None
+    count = queue_recaps(library_id)
+    flash(
+        f"Queued {count:,} episode{'s' if count != 1 else ''} to check for a "
+        '"previously on" recap. Episodes without a saved transcript get their '
+        "first five minutes transcribed; series that never open with a recap are "
+        "skipped after a few episodes.",
+        "success",
+    )
     return redirect(url_for("main.chapter_maintenance", library=library_id))
 
 
