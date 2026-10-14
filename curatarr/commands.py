@@ -117,6 +117,13 @@ def _dispatch_chapters():
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Movie skip-marker check failed")
+    try:
+        from .enrichment import link_transcripts
+
+        link_transcripts()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Linking transcripts failed")
 
 
 def register_commands(app):
