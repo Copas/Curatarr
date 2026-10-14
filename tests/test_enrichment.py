@@ -1105,7 +1105,7 @@ def _series_with_recaps(files):
                 "text": f"On day {40 - left} storm number {left} hit.",
             },
             {
-                "start": 75.0,
+                "start": 77.5,
                 "end": 82.0,
                 "text": f"{left} are left, who will be voted out tonight?",
             },
