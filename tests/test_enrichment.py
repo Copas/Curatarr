@@ -1247,10 +1247,9 @@ def test_smart_generation_finds_the_recap_in_the_same_pass(media_env, monkeypatc
     assert state.transcript_key  # so later episodes can learn from this one
 
 
-def test_recap_checks_use_one_slot_and_chapters_get_the_rest(media_env):
+def test_recap_checks_run_as_one_batch_apart_from_chapter_jobs(app, client, media_env):
     _files, _arr = media_env
     _library, media, _part = _movie()
-    states = []
     for n in range(6):
         part = MediaPart(
             media_identity_id=media.id,
@@ -1264,19 +1263,19 @@ def test_recap_checks_use_one_slot_and_chapters_get_the_rest(media_env):
         db.session.flush()
         state = enrichment.state_for(part)
         state.job_state = "queued"
-        # Recap checks are queued first and have priority, but only one may run.
         state.requested_action = "recap" if n < 4 else "generate"
         state.requested_at = utcnow() - timedelta(minutes=10 - n)
-        states.append(state)
     db.session.commit()
-    due = enrichment._due_jobs(4, scans=False, recaps=1)
-    assert [s.requested_action for s in due] == ["recap", "generate", "generate"]
-    assert [
-        s.requested_action for s in enrichment._due_jobs(4, scans=False, recaps=0)
-    ] == [
+    assert [s.requested_action for s in enrichment._due_jobs(10, scans=False)] == [
         "generate",
         "generate",
     ]
+    batch = enrichment._due_jobs(100, scans=False, recaps=True)
+    assert len(batch) == 4 and {s.requested_action for s in batch} == {"recap"}
+    batch[0].recap_checked_at = utcnow()
+    db.session.commit()
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Find recap</strong>" in page and "Nothing running right now" not in page
 
 
 def test_worker_start_requeues_jobs_the_last_worker_left_running(media_env):
