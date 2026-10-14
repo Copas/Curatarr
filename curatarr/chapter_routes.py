@@ -18,6 +18,7 @@ from .enrichment import (
     environment_status,
     file_label,
     file_locations_known,
+    fix_default_audio,
     flatten,
     form_values,
     global_layer,
@@ -41,6 +42,7 @@ from .enrichment import (
     undo_marker,
 )
 from .integrations import IntegrationError
+from .mediafile import MediaToolError
 from .models import ChapterState, Library, MediaIdentity, MediaPart
 from .routes import NAV_SECTIONS, bp
 from .services import request_reconciliation
@@ -399,4 +401,19 @@ def chapter_identity_dismiss(state_id):
         abort(404)
     dismiss_identity(state)
     flash("Dismissed. This episode won't be flagged again.", "success")
+    return redirect(url_for("main.chapter_identity"))
+
+
+@bp.post("/chapters/identity/<state_id>/fix-audio")
+def chapter_identity_fix_audio(state_id):
+    state = db.session.get(ChapterState, state_id)
+    if not state or (state.identity_issue or {}).get("kind") != "audio":
+        abort(404)
+    try:
+        message = fix_default_audio(state)
+    except (ValueError, MediaToolError, OSError) as exc:
+        db.session.rollback()
+        flash(f"Couldn't change the default audio: {exc}", "danger")
+    else:
+        flash(message, "success")
     return redirect(url_for("main.chapter_identity"))

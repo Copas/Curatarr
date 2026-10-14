@@ -242,6 +242,34 @@ def write_chapters(path: str, chapters: list[Chapter]) -> None:
         os.unlink(chapter_file)
 
 
+ENGLISH = {"eng", "en", "english"}
+
+
+def english_audio(info: MediaInfo) -> int | None:
+    """Stream index of the first English audio track, or None."""
+    return next(
+        (
+            s["index"]
+            for s in info.streams
+            if s.get("codec_type") == "audio"
+            and str(s.get("language") or "").lower() in ENGLISH
+        ),
+        None,
+    )
+
+
+def set_default_audio(path: str, info: MediaInfo, stream_index: int) -> None:
+    """Make one audio track the default (and no other), in place, no re-encode."""
+    audio = [s for s in info.streams if s.get("codec_type") == "audio"]
+    if stream_index not in {s["index"] for s in audio}:
+        raise MediaToolError("That isn't an audio track in this file")
+    args = [required_tool("mkvpropedit"), path]
+    for number, stream in enumerate(audio, start=1):
+        flag = "1" if stream["index"] == stream_index else "0"
+        args += ["--edit", f"track:a{number}", "--set", f"flag-default={flag}"]
+    _mkvpropedit(args)
+
+
 def remove_chapters(path: str) -> None:
     _mkvpropedit(remove_command(path))
 
