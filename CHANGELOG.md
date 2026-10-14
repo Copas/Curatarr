@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `GET /api/v1/identity-flags` (read-only, API key): wrong-episode flags with the Sonarr series, the episode the file is filed as and the one it fits, and whether that one's own file is confirmed (so the flagged file is a duplicate) or flagged the other way (the two were swapped). Keeper uses it to offer the fix in Sonarr. A flag on a file that has since moved or been replaced no longer shows.
+- `GET /api/v1/identity-flags` (read-only, API key): wrong-episode flags with the Sonarr series, the episode the file is filed as and the one it fits, and whether that one's own file is confirmed (so the flagged file is a duplicate) or flagged the other way (the two were swapped). A companion tool can use it to offer the fix in Sonarr. A flag on a file that has since moved or been replaced no longer shows.
 
 - **Make English the default**: an episode flagged because its default audio isn't English, but which has an English track, gets a button that makes that track the default in place (mkvpropedit, no re-encode) and checks it read back. Curatarr's chapters and subtitles from the foreign track are queued to be redone. Transcripts of a track other than the first now have their own cache key, so the new default track isn't served the old track's transcript.
 

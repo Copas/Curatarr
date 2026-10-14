@@ -2631,7 +2631,7 @@ def identity_issues(library_id=None):
 
 
 def identity_flags_api() -> list[dict]:
-    """Wrong-episode flags for other tools (Keeper offers the fix in Sonarr).
+    """Wrong-episode flags for other tools (e.g. one that offers the fix in Sonarr).
 
     Says whether Curatarr has checked the episode the file fits: if that one's
     own file is confirmed, the flagged file is a duplicate; if it's flagged as

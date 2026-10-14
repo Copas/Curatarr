@@ -8,7 +8,7 @@ A quota run starts when stored bytes exceed the high-water mark and continues un
 
 ## Disks Sonarr and Radarr do not report
 
-Sonarr and Radarr leave network mounts out of their disk-space reports. On the owner's host, the CIFS mount holding every library (`/mnt/media`) is missing, and only `/` and `/mnt/replaceable` are listed. Prefix matching then picked `/`, the local drive, for NAS library paths. Now the `/` record matches only a configured path of `/`. If no other record matches and the configured path is visible on Curatarr's own host (same-machine installs), free space is measured directly with `statvfs`. Otherwise selection is suppressed, as before.
+Sonarr and Radarr leave network mounts out of their disk-space reports. On a typical host, a CIFS mount holding every library (say `/mnt/media`) is missing, and only `/` and another local drive are listed. Prefix matching then picked `/`, the local drive, for NAS library paths. Now the `/` record matches only a configured path of `/`. If no other record matches and the configured path is visible on Curatarr's own host (same-machine installs), free space is measured directly with `statvfs`. Otherwise selection is suppressed, as before.
 
 ## One selection per disk
 
