@@ -1618,6 +1618,8 @@ def test_identity_check_flags_an_episode_that_fits_another_summary(
     assert (state.identity_issue["filed_as"], state.identity_issue["fits"]) == (4, 3)
     page = client.get("/chapters/identity").get_data(as_text=True)
     assert "fits S01E03" in page
+    api = client.get("/api/v1/identity-flags").get_json()["flags"]
+    assert [(f["filed_as"], f["fits"]) for f in api] == [(4, 3)]
     assert "Possible wrong episodes" in client.get("/chapters").get_data(as_text=True)
     client.post(f"/chapters/identity/{state.id}/dismiss")
     assert "Nothing flagged" in client.get("/chapters/identity").get_data(as_text=True)
@@ -1744,3 +1746,24 @@ def test_checks_needing_transcription_wait_for_the_chapter_backlog(media_env):
     db.session.commit()
     due = {s.id for s in enrichment._due_jobs(10, scans=False, recaps=True)}
     assert untranscribed.id in due
+
+
+def test_identity_flags_follow_the_file_not_a_stale_identity(app, client, media_env):
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    state = enrichment.state_for(parts[1])
+    state.identity_issue = {
+        "kind": "episode",
+        "file": parts[1].file_path,
+        "season": 1,
+        "filed_as": 2,
+        "fits": 3,
+        "margin": 5.0,
+    }
+    state.identity_checked_at = utcnow()
+    state.media_identity_id = "gone-since-discovery"
+    db.session.commit()
+    flags = client.get("/api/v1/identity-flags").get_json()["flags"]
+    assert [(f["filed_as"], f["fits"], f["series_title"]) for f in flags] == [
+        (2, 3, "Island Life")
+    ]

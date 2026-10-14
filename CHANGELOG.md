@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Wrong-episode flags are found through the file's own part rather than the identity stored on its chapter state, which can point at one discovery has since replaced; such flags were missing from the list and the API.
+
 - Skip-marker checks no longer slow chapter jobs. Checking an episode with no saved transcript means transcribing its opening and ending, which takes the GPU; alongside a chapter backlog it had doubled the time per chapter job (about 5 to 10 minutes) and cut throughput from ~40 files an hour to ~12. While chapter jobs are waiting, only checks that need no transcription run (episodes Smart Chapters has transcribed, plus checks asked for from an episode's page); the rest wait until the backlog is done.
 
 - `GET /api/v1/identity-flags` (read-only, API key): wrong-episode flags with the Sonarr series, the episode the file is filed as and the one it fits, and whether that one's own file is confirmed (so the flagged file is a duplicate) or flagged the other way (the two were swapped). A companion tool can use it to offer the fix in Sonarr. A flag on a file that has since moved or been replaced no longer shows.
