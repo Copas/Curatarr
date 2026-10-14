@@ -1035,3 +1035,12 @@ def test_duration_words():
     )
     assert enrichment._duration_words(timedelta(minutes=50)) == "50 min"
     assert enrichment._duration_words(timedelta(hours=4, minutes=10)) == "4 h"
+
+
+def test_maintenance_page_separates_to_do_from_library_stats(app, client, media_env):
+    page = client.get("/chapters").get_data(as_text=True)
+    todo, library = page.split('id="todo-heading"')[1].split('id="library-heading"')
+    assert "Needing chapters" in todo and "Queued or running" in todo
+    assert "Files" not in todo
+    assert "Already had chapters" in library and "Needing chapters" not in library
+    assert "stat-done" in todo  # nothing to do yet shows as done
