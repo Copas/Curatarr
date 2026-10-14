@@ -1620,3 +1620,57 @@ def test_identity_check_flags_an_episode_that_fits_another_summary(
     assert "Possible wrong episodes" in client.get("/chapters").get_data(as_text=True)
     client.post(f"/chapters/identity/{state.id}/dismiss")
     assert "Nothing flagged" in client.get("/chapters/identity").get_data(as_text=True)
+
+
+def test_make_english_the_default_from_the_flag(app, client, media_env, monkeypatch):
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    target = parts[-1]
+    streams = [
+        {"index": 0, "codec_type": "video", "codec_name": "h264"},
+        {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "eac3",
+            "language": "jpn",
+            "default": True,
+        },
+        {
+            "index": 2,
+            "codec_type": "audio",
+            "codec_name": "eac3",
+            "language": "eng",
+            "default": False,
+        },
+    ]
+    original_probe = files.probe
+
+    def probe(path):
+        info = original_probe(path)
+        info.streams = [dict(s) for s in streams]
+        return info
+
+    def set_default(path, info, index):
+        for s in streams:
+            if s["codec_type"] == "audio":
+                s["default"] = s["index"] == index
+
+    monkeypatch.setattr(enrichment, "probe", probe)
+    monkeypatch.setattr("curatarr.mediafile.set_default_audio", set_default)
+    state = enrichment.state_for(target)
+    state.identity_issue = {
+        "kind": "audio",
+        "language": "ja",
+        "english_track": True,
+        "sample": "…",
+    }
+    db.session.commit()
+    assert "Make English the default" in client.get("/chapters/identity").get_data(
+        as_text=True
+    )
+    client.post(f"/chapters/identity/{state.id}/fix-audio")
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert streams[2]["default"] and not streams[1]["default"]
+    assert state.identity_issue["fixed"] and state.identity_checked_at is None
+    assert state.job_state == "queued" and state.requested_action == "regenerate"

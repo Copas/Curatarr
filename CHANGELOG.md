@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Make English the default**: an episode flagged because its default audio isn't English, but which has an English track, gets a button that makes that track the default in place (mkvpropedit, no re-encode) and checks it read back. Curatarr's chapters and subtitles from the foreign track are queued to be redone. Transcripts of a track other than the first now have their own cache key, so the new default track isn't served the old track's transcript.
+
 - **Possible wrong episodes.** The skip-marker check also checks that an episode with a full transcript is the episode it's filed as: its transcript is scored against every title and summary in its season from Sonarr (rare words count most), and it's flagged only when another episode fits at least 4x better than its own. It also flags a default audio track that isn't English (from the transcript's language), noting whether an English track exists. Flags show as "Possible wrong episodes" in Chapter maintenance's To do card, on the episode's page, and on a list with what was said beside both summaries, each with Dismiss. On 278 transcribed episodes this flagged 10, all real: 9 misfiled or mislabelled episodes (The Simpsons S14E21 is "Brake My Wife, Please"; Good Eats season 11 file names disagree with Sonarr) and one Japanese default audio track.
 
 - **Movies keep only their credits marker** (Chapter settings, on by default). Intro Skipper had marked 978 movie "recaps" and a few "intros" from opening chapter names like "Chapter 1"; turning on Skip Recap made them show at the start of movies. The worker hides them (25 movies per cycle, outside the job queue so chapter jobs aren't held up), each listed on Review skip markers with Undo. Credits stay, for Skip Credits and Next.

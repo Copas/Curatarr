@@ -3047,3 +3047,62 @@ def check_movie_markers(limit=MOVIE_SWEEP) -> int:
         if checked == limit:
             break
     return checked
+
+
+def fix_default_audio(state) -> str:
+    """Make the file's English audio track the default, in place.
+
+    Chapters and subtitles Curatarr made came from the foreign track, so
+    they're queued to be redone from the English one.
+    """
+    from .mediafile import english_audio, set_default_audio
+
+    part, media = state.part, state.media
+    path = local_path(part.file_path)
+    if not path or not file_exists(path):
+        raise ValueError("The file wasn't found")
+    info = probe(path)
+    writable, reason = can_write(info)
+    if not writable:
+        raise ValueError(reason)
+    english = english_audio(info)
+    if english is None:
+        raise ValueError("This file has no English audio track")
+    set_default_audio(path, info, english)
+    after = probe(path)
+    default = [
+        s["index"]
+        for s in after.streams
+        if s.get("codec_type") == "audio" and s.get("default")
+    ]
+    if default != [english]:
+        raise ValueError(
+            "The change didn't read back as expected; the file may need checking"
+        )
+    ours = curatarr_wrote(state, after)
+    state.chapter_file_size, state.chapter_file_mtime = after.size, after.mtime
+    state.identity_issue = {
+        **(state.identity_issue or {}),
+        "fixed": True,
+        "dismissed": True,
+    }
+    state.identity_checked_at = None  # checked again with the English transcript
+    _refresh_jellyfin(part, media)
+    audit(
+        "default_audio_fixed",
+        media.id,
+        f"Made the English audio track the default on {_part_label(part)}.",
+        f"default-audio:{state.id}:{utcnow().isoformat()}",
+        payload={"file": path, "stream": english},
+    )
+    message = "English is now the default audio track."
+    if ours and state.job_state == "idle":
+        if state.subtitle_fingerprint:
+            state.subtitle_status = None  # redone after the chapters
+        db.session.commit()
+        request(part, "regenerate")
+        message += (
+            " Curatarr's chapters (and subtitles) are queued to be redone from it."
+        )
+    db.session.commit()
+    return message

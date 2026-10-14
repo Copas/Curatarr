@@ -9,7 +9,10 @@
   <div class="d-flex flex-wrap justify-content-between gap-2">
     <div><a class="h5" href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}
       <div class="small text-secondary text-break">{{ state.part.file_path }}</div></div>
-    <form method="post" action="{{ url_for('main.chapter_identity_dismiss', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light">Dismiss</button></form>
+    <div class="d-flex gap-2">
+      {% if i.kind == 'audio' and i.english_track %}<form method="post" action="{{ url_for('main.chapter_identity_fix_audio', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-primary">Make English the default</button></form>{% endif %}
+      <form method="post" action="{{ url_for('main.chapter_identity_dismiss', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light">Dismiss</button></form>
+    </div>
   </div>
   {% if i.kind == 'audio' %}
   <p class="mt-2 mb-1"><strong>The default audio is in “{{ i.language }}”, not English.</strong> {{ 'The file also has an English track, so it can be fixed by making that the default.' if i.english_track else 'The file has no English audio track, so it would need replacing.' }}</p>
