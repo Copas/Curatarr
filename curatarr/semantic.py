@@ -223,3 +223,66 @@ def choose_recap_line(llm: Ollama, lines) -> int | None:
     answer = llm.ask(prompt, RECAP_LINE_SCHEMA)
     index = answer.get("last_recap_line")
     return index if isinstance(index, int) and 0 <= index < len(lines) else None
+
+
+CONFIRM_SCHEMA = {
+    "type": "object",
+    "properties": {"answer": {"type": "string", "enum": ["yes", "no"]}},
+    "required": ["answer"],
+}
+CONFIRM_QUESTIONS = {
+    "recap": (
+        'Is this a "previously on" recap: narration and/or clips summarizing '
+        "what happened in EARLIER episodes, rather than the episode's own new "
+        "story beginning?"
+    ),
+    "preview": (
+        'Is this a preview of the NEXT episode ("next time on", scenes from '
+        "the next episode), rather than the end of this episode's own story or "
+        "its credits?"
+    ),
+}
+
+
+def confirm_span(llm, lines, kind: str) -> bool | None:
+    """The model's yes/no on whether lines are a recap or a preview.
+
+    None when it can't be asked (an outage) or gives no clear answer.
+    """
+    numbered = "\n".join(f"[{timestamp(s.start)[3:8]}] {s.text.strip()}" for s in lines)
+    prompt = (
+        f"These are transcript lines from a TV episode.\n\n{numbered}\n\n"
+        f"{CONFIRM_QUESTIONS[kind]} Answer no if unsure.\n\n"
+        'Reply as {"answer": "yes"} or {"answer": "no"}.'
+    )
+    try:
+        answer = str(llm.ask(prompt, CONFIRM_SCHEMA).get("answer", "")).strip().lower()
+    except LanguageModelError:
+        return None
+    return {"yes": True, "no": False}.get(answer)
+
+
+PREVIEW_LINE_SCHEMA = RECAP_LINE_SCHEMA
+
+
+def choose_preview_line(llm: Ollama, lines) -> int | None:
+    """Index of a "next time on" preview's last line among lines that may run on.
+
+    After a preview an episode may continue (a final interview, a last scene)
+    or go to the credits.
+    """
+    numbered = "\n".join(
+        f"{i}. [{timestamp(s.start)[3:8]}] {s.text.strip()}"
+        for i, s in enumerate(lines)
+    )
+    prompt = (
+        "These lines come from the end of a TV episode, starting with a preview of "
+        "the next episode (quick clips and narration about what's coming). After "
+        "the preview the episode may continue, for example with a final interview "
+        "or scene, or end. Give the number of the LAST line that is part of the "
+        f"preview.\n\n{numbered}\n\n"
+        'Reply as {"last_recap_line": <number>}.'
+    )
+    answer = llm.ask(prompt, PREVIEW_LINE_SCHEMA)
+    index = answer.get("last_recap_line")
+    return index if isinstance(index, int) and 0 <= index < len(lines) else None

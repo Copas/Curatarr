@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Skip markers.** The recap check is now a skip-marker check per episode (Chapter maintenance: **Check skip markers**; an episode's page shows what was found and has its own button, which goes ahead of any backlog):
+  - **Previews.** A "next time on" preview is found like a recap: announced by "Stay tuned for scenes from our next episode", "Next time on…", "Next week on…", "On the next episode of…" or "Next episode:" in the last six minutes. It ends at the last clip quoted in the next episode, or where the local model says the preview stops (before a voted-out player's final words, say), or at the end of the file. It's marked as Intro Skipper's Preview segment.
+  - **Intro Skipper's credits** are hidden (only hidden; Intro Skipper can restore them) when plainly wrong: under 45 s and over a minute before another credits marker (an 11-second music match under Silo's finale, real credits two minutes later); in the first quarter of the runtime; under a minute with minutes of dialogue after it; or mostly dialogue (not theme lyrics) with other credits after it. Each episode lists what was hidden and why.
+  - **Intro Skipper's intros** taken from chapter names or an old analysis are hidden when they're mostly dialogue no other episode has (theme lyrics repeat every week; dialogue doesn't), like IT: Welcome to Derry S01E02's intro, 90 seconds late because the release's "Intro" chapter was.
+  - Recap and preview detection use only phrases a sample of 1,095 transcripts showed to be reliable ("Previously on…", "Last week on…", "Next time on…"); bare "previously", "next week" or "last time" turn up in ordinary dialogue. An end the local model picks is only used if the model also agrees the span is a recap or preview.
+  - Transcription stays minimal: saved transcripts are reused, otherwise only the opening, the last six minutes, or the minute or two around a suspect marker are transcribed.
+
 - **Find recaps** only shows when some unchecked episodes aren't already queued; it stayed up the whole time a check was running, as if something needed attention. The "Episodes to check for recaps" count says how many are queued.
 
 - Recap checks run back to back in a single job slot, like scans. Queued ahead of chapter jobs, a "Find recaps" backlog had taken every slot and stopped chapter writing, which also pushed the estimated finish further out; and since most checks finish in milliseconds (a series without recaps is skipped), one-per-cycle scheduling left the slots idle and the card saying "Nothing running right now". The Activity card now shows the latest recap check and how many are left.

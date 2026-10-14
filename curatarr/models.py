@@ -345,5 +345,13 @@ class ChapterState(db.Model, Timed):
     recap_end = db.Column(db.Float)
     recap_source = db.Column(db.String(30))
     recap_segment_id = db.Column(db.String(40))  # Intro Skipper's id for ours
+    preview_checked_at = db.Column(db.DateTime(timezone=True))
+    preview_start = db.Column(db.Float)
+    preview_end = db.Column(db.Float)
+    preview_source = db.Column(db.String(30))
+    preview_segment_id = db.Column(db.String(40))
+    # Intro Skipper markers Curatarr hid as plainly wrong, with the reasons.
+    markers_checked_at = db.Column(db.DateTime(timezone=True))
+    markers_hidden = db.Column(db.JSON)
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")

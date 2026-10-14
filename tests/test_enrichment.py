@@ -1272,10 +1272,13 @@ def test_recap_checks_run_as_one_batch_apart_from_chapter_jobs(app, client, medi
     ]
     batch = enrichment._due_jobs(100, scans=False, recaps=True)
     assert len(batch) == 4 and {s.requested_action for s in batch} == {"recap"}
-    batch[0].recap_checked_at = utcnow()
+    batch[0].markers_checked_at = utcnow()
     db.session.commit()
     page = client.get("/chapters").get_data(as_text=True)
-    assert "Find recap</strong>" in page and "Nothing running right now" not in page
+    assert (
+        "Check skip markers</strong>" in page
+        and "Nothing running right now" not in page
+    )
 
 
 def test_worker_start_requeues_jobs_the_last_worker_left_running(media_env):
@@ -1299,8 +1302,95 @@ def test_find_recaps_button_hides_while_everything_is_queued(app, client, media_
     files, _arr = media_env
     _series_with_recaps(files)
     page = client.get("/chapters").get_data(as_text=True)
-    assert "Find recaps</button>" in page
+    assert "Check skip markers</button>" in page
     assert enrichment.queue_recaps() == 4
     page = client.get("/chapters").get_data(as_text=True)
-    assert "Find recaps</button>" not in page
+    assert "Check skip markers</button>" not in page
     assert "4 queued" in page
+
+
+def test_skip_marker_check_marks_the_preview_and_hides_a_false_outro(
+    media_env, monkeypatch
+):
+    from curatarr.chapters import Segment
+
+    files, arr = media_env
+    parts, rows = _series_with_recaps(files)
+    target = parts[-1]
+    ending = [
+        Segment(3560.0, 3563.0, "Stay tuned for scenes from our next episode."),
+        Segment(3564.0, 3566.0, "Next time on Island Life,"),
+        Segment(3566.0, 3590.0, "the merge changes everything."),
+    ]
+    first_minutes = [Segment(r["start"], r["end"], r["text"]) for r in rows]
+
+    def fake_transcribe(
+        _info, _model, _device, _dir, make_room=None, opening=False, window=None
+    ):
+        return (first_minutes if opening else ending), {}
+
+    monkeypatch.setattr("curatarr.transcribe.transcribe", fake_transcribe)
+    segments = {
+        "jf-ep4": [
+            {
+                "Id": "music",
+                "Type": "Credits",
+                "Start": 3300.0,
+                "End": 3311.0,
+                "Source": "Chromaprint",
+                "Suppressed": False,
+            },
+            {
+                "Id": "real",
+                "Type": "Credits",
+                "Start": 3530.0,
+                "End": 3590.0,
+                "Source": "BlackFrame",
+                "Suppressed": False,
+            },
+        ]
+    }
+    calls = []
+
+    def plugin(method, path, **kwargs):
+        calls.append((method, path, kwargs.get("json")))
+        if method == "GET":
+            return segments.get(path.split("/")[2], [])
+        if method == "POST":
+            return {"Id": f"ours-{kwargs['json']['Type']}"}
+        return None
+
+    arr.request = plugin
+    enrichment.request(target, "recap")
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=target.id).one()
+    assert (state.preview_start, state.preview_end) == (3559.5, 3600.0)
+    assert state.preview_source == "runs to the end"
+    assert (
+        "POST",
+        "/Episode/jf-ep4/Segments",
+        {"Type": "Preview", "Start": 3559.5, "End": 3600.0},
+    ) in calls
+    assert ("DELETE", "/Episode/jf-ep4/Segments/music", None) in calls
+    assert ("DELETE", "/Episode/jf-ep4/Segments/real", None) not in calls
+    assert [h["id"] for h in state.markers_hidden] == ["music"]
+    assert state.markers_checked_at is not None and state.recap_end == 82.0
+
+
+def test_episode_page_shows_skip_markers_and_queues_a_check_first(
+    app, client, media_env
+):
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    enrichment.queue_recaps()
+    target = parts[-1]
+    page = client.get(f"/chapters/parts/{target.id}").get_data(as_text=True)
+    assert "Skip markers:" in page and "not checked yet" in page
+    state = db.session.query(ChapterState).filter_by(media_part_id=target.id).one()
+    state.job_state = "idle"
+    db.session.commit()
+    client.post(f"/chapters/parts/{target.id}/recap")
+    db.session.expire_all()
+    first = enrichment._due_jobs(1, scans=False, recaps=True)[0]
+    assert first.media_part_id == target.id
