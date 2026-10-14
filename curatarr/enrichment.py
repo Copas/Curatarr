@@ -700,7 +700,9 @@ def _transcriber_missing(info, config) -> bool:
 
     if not (config["mode"] == "smart" and config["semantic"]["enabled"]) or available():
         return False
-    return cached(info, config["semantic"]["model"], cache_dir() / "transcripts") is None
+    return (
+        cached(info, config["semantic"]["model"], cache_dir() / "transcripts") is None
+    )
 
 
 def _defer(state, reason):
@@ -852,7 +854,9 @@ def run_job(state_id: str, *, llm=None) -> str:
             _log("chapters_deferred", reason=busy, **fields)
             return "deferred"
 
-    if action in {"auto", "generate", "regenerate"} and _transcriber_missing(info, config):
+    if action in {"auto", "generate", "regenerate"} and _transcriber_missing(
+        info, config
+    ):
         # A setup problem, not a property of this file: waiting beats quietly
         # writing Navigation chapters across the whole library.
         _defer(state, TRANSCRIBER_MISSING)
@@ -1622,6 +1626,78 @@ ACTION_LABELS = {
 }
 
 
+# Fast jobs that never set chapter_processed_at; they don't count towards the forecast.
+FORECAST_EXCLUDED_ACTIONS = ("scan", "subtitles", "remove_subtitles")
+FORECAST_WINDOW = timedelta(hours=3)
+FORECAST_LONG_WINDOW = timedelta(hours=24)
+FORECAST_MIN_SAMPLES = 3
+
+
+def job_forecast(now=None) -> dict | None:
+    """Progress and estimated finish for the queued chapter jobs, from the recent pace.
+
+    The batch is everything queued since the oldest job still waiting; the pace is
+    jobs finished per hour over the last 3 hours (24 when that's too few to tell).
+    """
+    now = now or utcnow()
+    pending = db.session.query(ChapterState).filter(
+        ChapterState.job_state.in_(("queued", "running")),
+        or_(
+            ChapterState.requested_action.is_(None),
+            ChapterState.requested_action.notin_(FORECAST_EXCLUDED_ACTIONS),
+        ),
+    )
+    remaining = pending.count()
+    if not remaining:
+        return None
+    started = (
+        _as_datetime(
+            pending.with_entities(func.min(ChapterState.requested_at)).scalar()
+        )
+        or now
+    )
+
+    def finished_since(moment):
+        return (
+            db.session.query(func.count(ChapterState.id))
+            .filter(ChapterState.chapter_processed_at >= moment)
+            .scalar()
+        )
+
+    done = finished_since(started)
+    rate = None
+    for window in (FORECAST_WINDOW, FORECAST_LONG_WINDOW):
+        since = max(now - window, started)
+        hours = (now - since).total_seconds() / 3600
+        count = finished_since(since)
+        if count >= FORECAST_MIN_SAMPLES and hours > 0:
+            rate = count / hours
+            break
+    eta = now + timedelta(hours=remaining / rate) if rate else None
+    return {
+        "remaining": remaining,
+        "done": done,
+        "percent": round(100 * done / (done + remaining), 1),
+        "per_hour": rate,
+        "finishes_at": eta,
+        "left": _duration_words(eta - now) if eta else None,
+        "started": started,
+    }
+
+
+def _duration_words(delta: timedelta) -> str:
+    minutes = max(int(delta.total_seconds() // 60), 1)
+    days, rest = divmod(minutes, 24 * 60)
+    hours, minutes = divmod(rest, 60)
+    if days:
+        return f"{days} day{'s' if days != 1 else ''}" + (
+            f" {hours} h" if hours else ""
+        )
+    if hours:
+        return f"{hours} h" + (f" {minutes} min" if minutes and hours < 3 else "")
+    return f"{minutes} min"
+
+
 def job_activity(recent=10) -> dict:
     """What the chapter jobs are doing now, for the maintenance page."""
     running = (
@@ -1670,9 +1746,10 @@ def job_activity(recent=10) -> dict:
         .all()
     )
     recent_cutoff = utcnow() - timedelta(seconds=20)
-    recently_active = bool(subtitles_finished) and _as_datetime(
-        subtitles_finished[0].subtitle_processed_at
-    ) >= recent_cutoff
+    recently_active = (
+        bool(subtitles_finished)
+        and _as_datetime(subtitles_finished[0].subtitle_processed_at) >= recent_cutoff
+    )
     return {
         "paused_since": _as_datetime(setting("chapters_paused_since")),
         "running": running,
@@ -1682,6 +1759,7 @@ def job_activity(recent=10) -> dict:
         "queued_total": sum(queued.values()),
         "waiting": waiting,
         "finished": finished,
+        "forecast": job_forecast(),
     }
 
 
