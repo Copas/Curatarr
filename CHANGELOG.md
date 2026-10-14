@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed: the chapter-jobs progress bar stayed empty. Its width was an inline style, which the page's Content-Security-Policy blocks; it's now a native `<progress>` styled for the theme.
+
+- Fixed: queued subtitle jobs waiting on an import showed "Waiting until …: Show · S01E01 —" with no reason; the card read the chapter error instead of the subtitle one. Retries after a failure now say "Retrying".
+
 - Chapter maintenance splits its numbers into **To do** (needing chapters or subtitles, queued, not scanned, redo with Smart Chapters, failed — highlighted, with a check mark at zero, and the action buttons alongside) and **Your library** (files, scanned, already had chapters or subtitles, added by Curatarr, too short, not MKV). The sentence repeating some of those counts is gone.
 
 - Chapter maintenance's Activity card shows a progress bar and estimated finish for queued chapter jobs: how many are done since the oldest waiting job was queued, the recent pace (files an hour over the last 3 hours, or 24 when that's too few), and roughly when the queue will be empty. Quick subtitle checks and scans aren't counted. It updates live with the rest of the card.

@@ -53,6 +53,10 @@ a { text-underline-offset: .18em; }
 .empty-state { padding: 2rem; border: 1px dashed var(--app-border); border-radius: .85rem; color: var(--app-muted); }
 details > summary { cursor: pointer; }
 progress { height: .75rem; accent-color: var(--app-accent); }
+#chapter-forecast progress { appearance: none; -webkit-appearance: none; border: 0; border-radius: 999px; overflow: hidden; background: rgba(127, 127, 127, .25); color: var(--app-accent); }
+#chapter-forecast progress::-webkit-progress-bar { background: rgba(127, 127, 127, .25); border-radius: 999px; }
+#chapter-forecast progress::-webkit-progress-value { background: var(--app-accent); border-radius: 999px; }
+#chapter-forecast progress::-moz-progress-bar { background: var(--app-accent); border-radius: 999px; }
 .review-card { padding: 1.25rem; }
 .review-meta { display: flex; flex-wrap: wrap; gap: .4rem 1rem; color: var(--app-muted); font-size: .875rem; }
 .poster { width: 48px; height: 72px; object-fit: cover; border-radius: .35rem; background: var(--app-bg); }
