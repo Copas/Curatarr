@@ -1394,3 +1394,40 @@ def test_episode_page_shows_skip_markers_and_queues_a_check_first(
     db.session.expire_all()
     first = enrichment._due_jobs(1, scans=False, recaps=True)[0]
     assert first.media_part_id == target.id
+
+
+def test_guessed_recap_on_an_episode_without_previously_on_is_hidden(
+    media_env, monkeypatch
+):
+    from curatarr.chapters import Segment
+
+    files, arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    cold_open = [
+        Segment(0, 5, "Okay, who took the last donut?"),
+        Segment(5, 9, "Not me."),
+    ]
+    monkeypatch.setattr(
+        "curatarr.transcribe.transcribe", lambda *_a, **_k: (cold_open, {})
+    )
+    calls = []
+
+    def plugin(method, path, **kwargs):
+        calls.append((method, path))
+        if method == "GET":
+            return [
+                {
+                    "Id": "cold",
+                    "Type": "Recap",
+                    "Start": 0,
+                    "End": 92,
+                    "Source": "Chapter",
+                    "Suppressed": False,
+                }
+            ]
+        return None
+
+    arr.request = plugin
+    enrichment.request(parts[-1], "recap")
+    enrichment.dispatch(synchronous=True)
+    assert ("DELETE", "/Episode/jf-ep4/Segments/cold") in calls
