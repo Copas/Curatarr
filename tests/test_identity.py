@@ -40,3 +40,69 @@ def test_foreign_default_audio():
     assert identity.foreign_audio("ja", streams) == ("ja", True)
     assert identity.foreign_audio("en", streams) is None
     assert identity.foreign_audio("ja", streams[:1]) == ("ja", False)
+
+
+def test_set_default_audio_flags_only_the_english_track(monkeypatch):
+    from curatarr import mediafile
+
+    info = mediafile.MediaInfo(
+        path="/tv/x.mkv",
+        size=1,
+        mtime=1,
+        duration=60,
+        format_name="matroska,webm",
+        streams=[
+            {"index": 0, "codec_type": "video"},
+            {"index": 1, "codec_type": "audio", "language": "jpn", "default": True},
+            {"index": 2, "codec_type": "audio", "language": "eng", "default": False},
+        ],
+    )
+    sent = []
+    monkeypatch.setattr(mediafile, "required_tool", lambda name: name)
+    monkeypatch.setattr(mediafile, "_mkvpropedit", sent.append)
+    assert mediafile.english_audio(info) == 2
+    mediafile.set_default_audio("/tv/x.mkv", info, 2)
+    assert sent == [
+        [
+            "mkvpropedit",
+            "/tv/x.mkv",
+            "--edit",
+            "track:a1",
+            "--set",
+            "flag-default=0",
+            "--edit",
+            "track:a2",
+            "--set",
+            "flag-default=1",
+        ]
+    ]
+
+
+def test_transcript_key_follows_which_track_is_transcribed():
+    from curatarr.mediafile import MediaInfo
+    from curatarr.transcribe import cache_key
+
+    def info(default_index):
+        return MediaInfo(
+            path="/tv/x.mkv",
+            size=1,
+            mtime=1,
+            duration=60,
+            format_name="matroska",
+            streams=[
+                {
+                    "index": 1,
+                    "codec_type": "audio",
+                    "language": "jpn",
+                    "default": default_index == 1,
+                },
+                {
+                    "index": 2,
+                    "codec_type": "audio",
+                    "language": "eng",
+                    "default": default_index == 2,
+                },
+            ],
+        )
+
+    assert cache_key(info(1), "medium") != cache_key(info(2), "medium")

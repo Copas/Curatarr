@@ -47,6 +47,14 @@ def cache_key(info: MediaInfo, model: str, opening=False, window=None) -> str:
         if s.get("codec_type") == "audio"
     ]
     identity = f"{info.path}|{round(info.duration, 1)}|{audio}|{model}"
+    first = next(
+        (s["index"] for s in info.streams if s.get("codec_type") == "audio"), None
+    )
+    spoken = speech_stream(info)
+    if spoken is not None and spoken != first:
+        # Transcribing a track other than the first (it's the default) gets its
+        # own key, so changing which track is default isn't served the old one.
+        identity += f"|stream{spoken}"
     if opening:
         identity += f"|opening{OPENING_SECONDS}"
     if window:
