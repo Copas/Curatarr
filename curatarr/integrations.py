@@ -279,6 +279,12 @@ class IntroSkipper:
         )
         return created["Id"]
 
+    def restore(self, item_id, segment_id):
+        """Bring back a segment that was hidden."""
+        self.jellyfin.request(
+            "POST", f"/Episode/{item_id}/Segments/{segment_id}/Restore"
+        )
+
     def hide(self, item_id, segment_id):
         self.jellyfin.request(
             "DELETE", f"/Episode/{item_id}/Segments/{segment_id}", destructive=True

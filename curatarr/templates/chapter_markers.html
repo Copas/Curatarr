@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Skip markers · Curatarr{% endblock %}
+{% set kinds = {'recap': 'Recap marked', 'preview': 'Preview marked', 'hidden': 'Intro Skipper marker hidden'} %}
+{% block content %}
+<div class="eyebrow">Manage · <a href="{{ url_for('main.chapter_maintenance') }}">Chapter maintenance</a></div><h1>Skip markers</h1>
+<p class="text-secondary">Recaps and previews Curatarr marked, and Intro Skipper markers it hid as wrong, newest first. Open an episode in Jellyfin and jump to the time shown to check it; <strong>Undo</strong> reverses one if it's wrong.</p>
+<div class="d-flex flex-wrap gap-2 mb-3" aria-label="Show">
+  <a class="btn btn-sm {{ 'btn-primary' if not kind else 'btn-outline-light' }}" href="{{ url_for('main.chapter_markers') }}">Everything</a>
+  {% for key, label in [('recap', 'Recaps'), ('preview', 'Previews'), ('hidden', 'Hidden markers')] %}<a class="btn btn-sm {{ 'btn-primary' if kind == key else 'btn-outline-light' }}" href="{{ url_for('main.chapter_markers', kind=key) }}">{{ label }}</a>{% endfor %}
+</div>
+{% if rows %}
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th scope="col">Episode</th><th scope="col">Change</th><th scope="col">Span</th><th scope="col">Why</th><th scope="col"><span class="visually-hidden">Undo</span></th></tr></thead><tbody>
+{% for row in rows %}{% set state = row.state %}<tr>
+  <td><a href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}<br><small class="text-secondary">{{ row.when|when('datetime') if row.when else '' }}</small></td>
+  <td>{{ kinds[row.kind] }}{% if row.kind == 'hidden' %}<br><small class="text-secondary">{{ 'credits' if row.segment.type == 'Credits' else row.segment.type|lower }} · {{ row.segment.source }}</small>{% endif %}</td>
+  <td class="text-nowrap">{{ row.start|chapter_time }} – {{ row.end|chapter_time }}<br><small class="text-secondary">{{ ((row.end - row.start)|round|int) }} s</small></td>
+  <td><small>{{ row.why }}</small></td>
+  <td><form method="post" action="{{ url_for('main.chapter_marker_undo', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="{{ row.kind }}"><input type="hidden" name="segment" value="{{ row.segment.id if row.segment else '' }}"><input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn btn-sm btn-outline-warning">Undo</button></form></td>
+</tr>{% endfor %}
+</tbody></table></div>
+{% else %}<div class="empty-state"><h2 class="h5">Nothing yet</h2><p class="mb-0">Skip-marker checks haven't marked or hidden anything{{ ' of this kind' if kind else '' }} yet.</p></div>{% endif %}
+{% endblock %}
