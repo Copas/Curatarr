@@ -336,5 +336,14 @@ class ChapterState(db.Model, Timed):
     subtitle_fingerprint = db.Column(db.String(64))
     subtitle_processed_at = db.Column(db.DateTime(timezone=True))
     subtitle_error = db.Column(db.Text)
+    # Transcript cache keys, so other episodes of the series can be read back
+    # when looking for a recap (see recaps.py).
+    transcript_key = db.Column(db.String(32))
+    opening_key = db.Column(db.String(32))
+    recap_checked_at = db.Column(db.DateTime(timezone=True))
+    recap_start = db.Column(db.Float)
+    recap_end = db.Column(db.Float)
+    recap_source = db.Column(db.String(30))
+    recap_segment_id = db.Column(db.String(40))  # Intro Skipper's id for ours
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")

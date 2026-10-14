@@ -1058,3 +1058,190 @@ def test_waiting_subtitle_jobs_show_their_reason(app, client, media_env):
     db.session.commit()
     page = client.get("/chapters").get_data(as_text=True)
     assert "Film — Sonarr is still importing this file" in page
+
+
+def _series_with_recaps(files):
+    """A Smart TV series: three episodes already transcribed, one to check."""
+    import json
+
+    from curatarr.chapters import fingerprint
+
+    library = Library(jellyfin_library_id="lib-tv", name="TV", media_type="tvshows")
+    db.session.add(library)
+    db.session.flush()
+    show = MediaIdentity(
+        library_id=library.id,
+        media_type="series",
+        title="Island Life",
+        jellyfin_id="jf-show",
+    )
+    db.session.add(show)
+    db.session.flush()
+    set_setting(
+        "chapter_library_settings", {library.id: {"enabled": True, "mode": "smart"}}
+    )
+    transcripts = enrichment.cache_dir() / "transcripts"
+    transcripts.mkdir(parents=True, exist_ok=True)
+    parts = []
+    for number, left in enumerate((18, 17, 16, 15), start=1):
+        part = MediaPart(
+            media_identity_id=show.id,
+            kind="episode",
+            season_number=1,
+            episode_number=number,
+            has_file=True,
+            file_path=f"/tv/Island Life/S01E0{number}.mkv",
+            jellyfin_id=f"jf-ep{number}",
+            acquired_at=utcnow() - timedelta(days=30),
+        )
+        db.session.add(part)
+        db.session.flush()
+        state = enrichment.state_for(part)
+        rows = [
+            {"start": 0.5, "end": 3.0, "text": "Previously on Island Life."},
+            {
+                "start": 3.0,
+                "end": 30.0,
+                "text": f"On day {40 - left} storm number {left} hit.",
+            },
+            {
+                "start": 75.0,
+                "end": 82.0,
+                "text": f"{left} are left, who will be voted out tonight?",
+            },
+            {
+                "start": 90.0,
+                "end": 99.0,
+                "text": f"Episode {number} begins with breakfast {left}.",
+            },
+        ]
+        if number < 4:
+            key = f"{number:032d}"
+            (transcripts / f"{key}.json").write_text(
+                json.dumps({"segments": rows, "details": {}})
+            )
+            state.transcript_key = key
+        else:
+            target_rows = rows
+        chapters = [Chapter(0.0, "Breakfast Plans"), Chapter(900.0, "The Challenge")]
+        files.add(part.file_path, chapters=[c.as_dict() for c in chapters])
+        state.written_fingerprint = fingerprint([c.as_dict() for c in chapters])
+        state.chapter_status = "generated_semantic"
+        parts.append(part)
+    db.session.commit()
+    return parts, target_rows
+
+
+def test_recap_job_adds_previously_on_and_marks_intro_skipper(media_env, monkeypatch):
+    from curatarr.chapters import Segment
+
+    files, arr = media_env
+    parts, rows = _series_with_recaps(files)
+    target = parts[-1]
+    monkeypatch.setattr(
+        "curatarr.transcribe.transcribe",
+        lambda *_a, **_k: (
+            [Segment(r["start"], r["end"], r["text"]) for r in rows],
+            {},
+        ),
+    )
+    segments = {"jf-ep4": [{"Id": "guess", "Type": "Recap", "Start": 0, "End": 40}]}
+    calls = []
+
+    def plugin(method, path, **kwargs):
+        calls.append((method, path, kwargs.get("json")))
+        item = path.split("/")[2]
+        if method == "GET":
+            return segments.get(item, [])
+        if method == "POST":
+            return {"Id": "ours", **kwargs["json"]}
+        return None
+
+    arr.request = plugin
+    enrichment.request(target, "recap")
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=target.id).one()
+    assert (state.recap_start, state.recap_end, state.recap_source) == (
+        0.0,
+        82.0,
+        "closing line",
+    )
+    assert state.recap_segment_id == "ours" and state.job_state == "idle"
+    assert ("DELETE", "/Episode/jf-ep4/Segments/guess", None) in calls
+    assert (
+        "POST",
+        "/Episode/jf-ep4/Segments",
+        {"Type": "Recap", "Start": 0.0, "End": 82.0},
+    ) in calls
+    chapters = files.files[target.file_path]["chapters"]
+    assert chapters[:2] == [
+        {"start": 0.0, "name": "Previously On"},
+        {"start": 82.0, "name": "Breakfast Plans"},
+    ]
+    assert (
+        state.chapter_status == "generated_semantic"
+    )  # a recap check isn't a chapter job
+    assert enrichment.curatarr_wrote(state, files.probe(target.file_path))
+
+
+def test_episodes_without_recaps_get_nothing_and_series_are_skipped(
+    media_env, monkeypatch
+):
+    from curatarr.chapters import Segment
+
+    files, arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    plain = [
+        Segment(0, 5, "Okay team, first day on the job."),
+        Segment(5, 9, "Coffee?"),
+    ]
+    monkeypatch.setattr("curatarr.transcribe.transcribe", lambda *_a, **_k: (plain, {}))
+    arr.request = lambda method, path, **kwargs: []
+    enrichment.request(parts[-1], "recap")
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=parts[-1].id).one()
+    assert state.recap_end is None and state.recap_source == "no opener"
+    assert files.files[parts[-1].file_path]["chapters"][0]["name"] == "Breakfast Plans"
+    assert enrichment.recaps_to_check() == 3
+    assert enrichment.queue_recaps() == 3
+
+
+def test_smart_generation_finds_the_recap_in_the_same_pass(media_env, monkeypatch):
+    from curatarr.chapters import Segment
+
+    files, arr = media_env
+    parts, rows = _series_with_recaps(files)
+    target = parts[-1]
+    files.files[target.file_path]["chapters"] = []
+    segments = [Segment(r["start"], r["end"], r["text"]) for r in rows] + [
+        Segment(t, t + 15, f"line {t}") for t in range(120, 3600, 20)
+    ]
+    monkeypatch.setattr(
+        "curatarr.transcribe.transcribe",
+        lambda *_a, **_k: (segments, {"cached": False, "device": "cpu"}),
+    )
+    arr.request = lambda method, path, **kwargs: (
+        {"Id": "ours"} if method == "POST" else []
+    )
+
+    class FakeModel:
+        model = "fake"
+        calls = 0
+
+        def ask(self, prompt, schema):
+            self.calls += 1
+            if "choice" in schema["properties"]:
+                return {"choice": "A"}
+            return {"summary": "Something happens.", "name": f"Scene {self.calls}"}
+
+    enrichment.request(target, "generate")
+    enrichment.dispatch(synchronous=True, llm=FakeModel())
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=target.id).one()
+    chapters = files.files[target.file_path]["chapters"]
+    assert chapters[0] == {"start": 0.0, "name": "Previously On"}
+    assert chapters[1]["start"] == 82.0 and chapters[1]["name"].startswith("Scene ")
+    assert state.recap_end == 82.0 and state.recap_segment_id == "ours"
+    assert state.transcript_key  # so later episodes can learn from this one

@@ -250,6 +250,40 @@ class JellyfinClient(Client):
         )
 
 
+class IntroSkipper:
+    """The Intro Skipper plugin's segment API, reached through Jellyfin.
+
+    Recaps Curatarr finds are added as user segments, which the plugin's own
+    analysis leaves alone; removing one only hides it (it can be restored).
+    """
+
+    def __init__(self, jellyfin: "JellyfinClient"):
+        self.jellyfin = jellyfin
+
+    def segments(self, item_id) -> list[dict] | None:
+        """The item's segments, or None when the plugin isn't installed."""
+        try:
+            response = self.jellyfin.request("GET", f"/Episode/{item_id}/Segments")
+        except IntegrationError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return response or []
+
+    def add_recap(self, item_id, start: float, end: float) -> str:
+        created = self.jellyfin.request(
+            "POST",
+            f"/Episode/{item_id}/Segments",
+            json={"Type": "Recap", "Start": round(start, 3), "End": round(end, 3)},
+        )
+        return created["Id"]
+
+    def hide(self, item_id, segment_id):
+        self.jellyfin.request(
+            "DELETE", f"/Episode/{item_id}/Segments/{segment_id}", destructive=True
+        )
+
+
 class SonarrClient(Client):
     status_path = "/api/v3/system/status"
 

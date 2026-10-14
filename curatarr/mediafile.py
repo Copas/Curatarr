@@ -162,9 +162,20 @@ def detect_scenes(path: str, threshold: float, timeout: int = 4 * 3600):
         return _run(
             [required_tool("ffmpeg"), "-hide_banner", "-nostats", "-nostdin"]
             + (["-hwaccel", "auto"] if hardware else [])
-            + ["-i", path, "-map", "0:v:0",
-               "-vf", f"fps=5,scale=320:-2,select='gt(scene,{threshold})',metadata=print:file=-",
-               "-an", "-sn", "-dn", "-f", "null", "-"],
+            + [
+                "-i",
+                path,
+                "-map",
+                "0:v:0",
+                "-vf",
+                f"fps=5,scale=320:-2,select='gt(scene,{threshold})',metadata=print:file=-",
+                "-an",
+                "-sn",
+                "-dn",
+                "-f",
+                "null",
+                "-",
+            ],
             timeout=timeout,
         )
 
@@ -268,8 +279,11 @@ def speech_stream(info: MediaInfo) -> int | None:
     return next((s for s in audio if s.get("default")), audio[0])["index"]
 
 
-def extract_audio(path: str, target: str, stream: int, timeout: int = 3600) -> None:
-    """16 kHz mono WAV of one audio stream, for transcription."""
+def extract_audio(
+    path: str, target: str, stream: int, timeout: int = 3600, seconds=None
+) -> None:
+    """16 kHz mono WAV of one audio stream (or its first ``seconds``), for transcription."""
+    limit = ["-t", str(seconds)] if seconds else []
     result = _run(
         [
             required_tool("ffmpeg"),
@@ -279,6 +293,7 @@ def extract_audio(path: str, target: str, stream: int, timeout: int = 3600) -> N
             "-y",
             "-i",
             path,
+            *limit,
             "-map",
             f"0:{stream}",
             "-vn",

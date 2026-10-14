@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Recaps.** Smart Chapters finds an episode's "previously on" recap from its transcript and marks it twice: as a first chapter named "Previously On", and as a recap segment in Intro Skipper (when installed), so Jellyfin's Skip Recap button skips exactly the recap. A recap is only marked when the episode says "Previously on…" or "Last time on…" in its first minute, and its end must be clear:
+  - Narrated recaps end with the same line every week ("…12 are left. Who will be voted out tonight?"). Curatarr learns that line from the series' other episodes (a whole sentence said once, early, at about the same point each week).
+  - Otherwise the recap is anchored on the last clip quoted from the previous episodes (ignoring their "next time on" previews), and the local model picks the narrator's closing line among the few after it.
+  - When neither applies nothing is marked, since a wrong recap skips part of the episode.
+
+  Curatarr's recap replaces any recap Intro Skipper guessed for that episode (usually a cold open); it's added as a user segment, which Intro Skipper's analysis leaves alone. Chapter maintenance has **Find recaps** for episodes not yet checked: saved transcripts are reused, and episodes without one (for example ones that came with their own chapters) get only their first five minutes transcribed. A series whose first four checked episodes never open with a recap is skipped. New episodes are checked automatically after their other jobs, and once a series' closing line is learned, episodes that missed it are checked again. Episodes with their own chapters keep them; only Curatarr's chapters get "Previously On" added.
+
 - Fixed: the chapter-jobs progress bar stayed empty. Its width was an inline style, which the page's Content-Security-Policy blocks; it's now a native `<progress>` styled for the theme.
 
 - Fixed: queued subtitle jobs waiting on an import showed "Waiting until …: Show · S01E01 —" with no reason; the card read the chapter error instead of the subtitle one. Retries after a failure now say "Retrying".

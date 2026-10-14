@@ -509,17 +509,27 @@ def clean_name(value, fallback: str) -> str:
     return name
 
 
-def semantic_plan(duration, scenes, segments, config, choose, name) -> Plan:
+RECAP_CHAPTER_NAME = "Previously On"
+
+
+def semantic_plan(duration, scenes, segments, config, choose, name, recap=None) -> Plan:
     """Boundaries chosen by the language model from scene/pause candidates.
 
     ``choose(window, candidates, excerpt)`` returns an index into ``candidates``
     or None; ``name(chapters_with_excerpts)`` returns one name per chapter.
     Both are injected so the planning rules are testable without Ollama.
+    A ``recap`` (see recaps.py) becomes a first chapter named "Previously On";
+    the episode's own chapters are planned from where it ends.
     """
     if not segments:
         raise InvalidChapters("The transcript has no speech")
     spacing = Spacing.from_config(config)
     starts, notes, chosen_by_model, asked = [0.0], [], 0, 0
+    if recap is not None:
+        starts.append(recap.end)
+        notes.append(
+            f"Recap until {timestamp(recap.end)[:8]} (found from the {recap.source})."
+        )
     while window := next_window(starts[-1], duration, spacing):
         candidates = candidates_in(window, scenes, segments)
         pick = None
@@ -545,33 +555,40 @@ def semantic_plan(duration, scenes, segments, config, choose, name) -> Plan:
     # Refusing every choice it was offered suggests the model isn't working. Having
     # nothing to choose from (no scene changes or pauses, common in older shows
     # with continuous music) isn't a model failure: keep even spacing, still name.
+    fixed = 1 if recap is not None else 0  # the recap boundary wasn't chosen
+    boundaries = len(starts) - 1 - fixed
     if asked and not chosen_by_model:
         raise InvalidChapters("The language model did not choose any boundary")
-    if not asked and len(starts) > 1:
-        notes.append("No scene changes or pauses were found, so chapters are evenly spaced.")
-    elif chosen_by_model < len(starts) - 1:
+    if not asked and boundaries > 0:
         notes.append(
-            f"{len(starts) - 1 - chosen_by_model} boundar"
-            f"{'y' if len(starts) - 1 - chosen_by_model == 1 else 'ies'} used the "
+            "No scene changes or pauses were found, so chapters are evenly spaced."
+        )
+    elif chosen_by_model < boundaries:
+        notes.append(
+            f"{boundaries - chosen_by_model} boundar"
+            f"{'y' if boundaries - chosen_by_model == 1 else 'ies'} used the "
             "nearest candidate because the model gave no usable choice."
         )
     chapters = [Chapter(start) for start in starts]
+    own = chapters[fixed:]
     if config["naming"]["semantic_names"]:
         excerpts = []
-        for index, chapter in enumerate(chapters):
-            end = chapters[index + 1].start if index + 1 < len(chapters) else duration
+        for index, chapter in enumerate(own):
+            end = own[index + 1].start if index + 1 < len(own) else duration
             excerpts.append(
                 (chapter.start, transcript_excerpt(segments, chapter.start, end, 3000))
             )
         names = name(excerpts) or []
-        for index, chapter in enumerate(chapters):
+        for index, chapter in enumerate(own):
             fallback = fallback_name(config, index + 1)
             chapter.name = clean_name(
                 names[index] if index < len(names) else None, fallback
             )
-        if len({c.name for c in chapters}) < len(chapters):
+        if len({c.name for c in own}) < len(own):
             notes.append("Some generated names repeat.")
     else:
-        for index, chapter in enumerate(chapters):
+        for index, chapter in enumerate(own):
             chapter.name = fallback_name(config, index + 1)
+    if fixed:
+        chapters[0].name = RECAP_CHAPTER_NAME
     return Plan("semantic", chapters, notes)
