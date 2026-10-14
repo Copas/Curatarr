@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Find recaps** only shows when some unchecked episodes aren't already queued; it stayed up the whole time a check was running, as if something needed attention. The "Episodes to check for recaps" count says how many are queued.
+
 - Recap checks run back to back in a single job slot, like scans. Queued ahead of chapter jobs, a "Find recaps" backlog had taken every slot and stopped chapter writing, which also pushed the estimated finish further out; and since most checks finish in milliseconds (a series without recaps is skipped), one-per-cycle scheduling left the slots idle and the card saying "Nothing running right now". The Activity card now shows the latest recap check and how many are left.
 
 - Restarting the worker (every install) no longer stalls chapter jobs for up to ten minutes: jobs the previous worker left running are requeued at startup instead of waiting for their claims to expire.

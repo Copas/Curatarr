@@ -1293,3 +1293,14 @@ def test_worker_start_requeues_jobs_the_last_worker_left_running(media_env):
     assert (
         db.session.query(JobLease).filter_by(scope=f"chapters:{state.id}").count() == 0
     )
+
+
+def test_find_recaps_button_hides_while_everything_is_queued(app, client, media_env):
+    files, _arr = media_env
+    _series_with_recaps(files)
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Find recaps</button>" in page
+    assert enrichment.queue_recaps() == 4
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "Find recaps</button>" not in page
+    assert "4 queued" in page
