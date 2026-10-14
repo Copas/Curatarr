@@ -1674,3 +1674,40 @@ def test_make_english_the_default_from_the_flag(app, client, media_env, monkeypa
     assert streams[2]["default"] and not streams[1]["default"]
     assert state.identity_issue["fixed"] and state.identity_checked_at is None
     assert state.job_state == "queued" and state.requested_action == "regenerate"
+
+
+def test_identity_flags_api_reports_swaps_and_confirmed_targets(app, client, media_env):
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    show = parts[0].media
+    show.sonarr_id = 42
+    first, second, third = (enrichment.state_for(p) for p in parts[:3])
+    first.identity_issue = {
+        "kind": "episode",
+        "file": parts[0].file_path,
+        "season": 1,
+        "filed_as": 1,
+        "fits": 2,
+        "margin": 6.0,
+    }
+    second.identity_issue = {
+        "kind": "episode",
+        "file": parts[1].file_path,
+        "season": 1,
+        "filed_as": 2,
+        "fits": 1,
+        "margin": 5.0,
+    }
+    third.identity_checked_at = utcnow()
+    db.session.commit()
+    flags = {
+        f["filed_as"]: f
+        for f in client.get("/api/v1/identity-flags").get_json()["flags"]
+    }
+    assert flags[1]["swapped"] and flags[2]["swapped"]
+    assert flags[1]["sonarr_series_id"] == 42 and flags[1]["fits"] == 2
+    # Once the file is moved or replaced, the flag is stale and disappears.
+    parts[0].file_path = "/tv/Island Life/S01E02.mkv"
+    db.session.commit()
+    flags = client.get("/api/v1/identity-flags").get_json()["flags"]
+    assert [f["filed_as"] for f in flags] == [2]

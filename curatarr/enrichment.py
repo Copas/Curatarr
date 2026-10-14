@@ -2590,6 +2590,7 @@ def _check_identity(ep) -> str:
                 middle = len(full) // 2
                 issue = {
                     "kind": "episode",
+                    "file": part.file_path,
                     "season": part.season_number,
                     "filed_as": part.episode_number,
                     "fits": other,
@@ -2620,7 +2621,61 @@ def identity_issues(library_id=None):
     )
     if library_id:
         query = query.filter(MediaIdentity.library_id == library_id)
-    return [s for s in query if not (s.identity_issue or {}).get("dismissed")]
+    return [
+        s
+        for s in query
+        if not (s.identity_issue or {}).get("dismissed")
+        # A flag on a file that's since been moved, renamed or replaced is stale.
+        and (s.identity_issue or {}).get("file", s.part.file_path) == s.part.file_path
+    ]
+
+
+def identity_flags_api() -> list[dict]:
+    """Wrong-episode flags for other tools (Keeper offers the fix in Sonarr).
+
+    Says whether Curatarr has checked the episode the file fits: if that one's
+    own file is confirmed, the flagged file is a duplicate; if it's flagged as
+    fitting this one, the two were swapped.
+    """
+    flags = []
+    for state in identity_issues():
+        issue = state.identity_issue
+        if issue.get("kind") != "episode":
+            continue
+        part, media = state.part, state.media
+        target = (
+            db.session.query(ChapterState)
+            .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+            .filter(
+                MediaPart.media_identity_id == media.id,
+                MediaPart.season_number == issue["season"],
+                MediaPart.episode_number == issue["fits"],
+                MediaPart.has_file.is_(True),
+            )
+            .first()
+        )
+        target_issue = (target.identity_issue or {}) if target else {}
+        flags.append(
+            {
+                "series_title": media.title,
+                "sonarr_series_id": media.sonarr_id,
+                "season": issue["season"],
+                "filed_as": issue["filed_as"],
+                "fits": issue["fits"],
+                "margin": issue["margin"],
+                "file": part.file_path,
+                "sample": issue.get("sample"),
+                "own_summary": issue.get("own_summary"),
+                "other_summary": issue.get("other_summary"),
+                "target_confirmed": bool(
+                    target and target.identity_checked_at and not target.identity_issue
+                ),
+                "swapped": target_issue.get("kind") == "episode"
+                and target_issue.get("fits") == issue["filed_as"]
+                and not target_issue.get("dismissed"),
+            }
+        )
+    return flags
 
 
 def dismiss_identity(state):
