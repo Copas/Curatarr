@@ -3192,3 +3192,48 @@ def fix_default_audio(state) -> str:
         )
     db.session.commit()
     return message
+
+
+# --- Searching what was said ----------------------------------------------------
+
+
+def search_transcripts(query: str, limit: int = 10) -> list[dict]:
+    """Episodes and films whose transcript has the words, best match first."""
+    from .search import index
+
+    rows = (
+        db.session.query(ChapterState.id, ChapterState.transcript_key)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .filter(ChapterState.transcript_key.isnot(None), MediaPart.has_file.is_(True))
+        .all()
+    )
+    index.refresh(rows, _transcript)
+    results = []
+    for hit in index.search(query, limit):
+        state = db.session.get(ChapterState, hit["key"])
+        if state is None or state.part is None:
+            continue
+        part, media = state.part, state.part.media
+        results.append(
+            {
+                "title": media.title,
+                "season": part.season_number if part.kind == "episode" else None,
+                "episode": part.episode_number if part.kind == "episode" else None,
+                "label": file_label(state),
+                "at": round(hit["at"], 1),
+                "timestamp": timestamp(hit["at"])[:8],
+                "exact": hit["exact"],
+                "lines": hit["lines"],
+                "part_id": part.id,
+                "jellyfin_id": jellyfin_item_id(part, media),
+            }
+        )
+    return results
+
+
+def transcripts_searchable() -> int:
+    return (
+        db.session.query(func.count(ChapterState.id))
+        .filter(ChapterState.transcript_key.isnot(None))
+        .scalar()
+    )

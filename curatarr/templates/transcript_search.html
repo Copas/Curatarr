@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}Search what was said · Curatarr{% endblock %}
+{% block content %}
+<div class="eyebrow">Library</div><h1>Search what was said</h1>
+<p class="text-secondary">Find an episode or film by a line or what's talked about in it, from the transcripts Smart Chapters made ({{ searchable|commas }} so far).</p>
+<form class="d-flex gap-2 mb-4" method="get" role="search"><label class="visually-hidden" for="q">Words or a line</label><input class="form-control" id="q" name="q" value="{{ query }}" placeholder="e.g. the line about the stapler" autofocus><button class="btn btn-primary">Search</button></form>
+{% if query %}
+{% if results %}
+<ul class="list-unstyled">
+{% for r in results %}<li class="card p-3 mb-2">
+  <div class="d-flex flex-wrap justify-content-between gap-2"><a class="h6 mb-1" href="{{ url_for('main.chapter_part', part_id=r.part_id) }}">{{ r.label }}</a><span class="text-secondary small">at {{ r.timestamp }}{% if r.exact %} · exact line{% endif %}</span></div>
+  <div class="small">{% for line in r.lines %}<div>{{ line }}</div>{% endfor %}</div>
+</li>{% endfor %}
+</ul>
+{% else %}<div class="empty-state"><h2 class="h5">No matches</h2><p class="mb-0">Nothing transcribed so far says that. Try fewer or different words.</p></div>{% endif %}
+{% endif %}
+{% endblock %}

@@ -1767,3 +1767,38 @@ def test_identity_flags_follow_the_file_not_a_stale_identity(app, client, media_
     assert [(f["filed_as"], f["fits"], f["series_title"]) for f in flags] == [
         (2, 3, "Island Life")
     ]
+
+
+def test_search_what_was_said(app, client, media_env):
+    import json
+
+    from curatarr import search
+
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    lines = [
+        {"start": 10.0, "end": 14.0, "text": "Has anyone seen my red stapler?"},
+        {"start": 14.0, "end": 18.0, "text": "I was told I could keep it."},
+        {"start": 300.0, "end": 305.0, "text": "Morning meeting starts at nine."},
+    ]
+    (enrichment.cache_dir() / "transcripts" / f"{'d' * 32}.json").write_text(
+        json.dumps({"segments": lines, "details": {}})
+    )
+    state = enrichment.state_for(parts[-1])
+    state.transcript_key = "d" * 32
+    db.session.commit()
+    search.index._checked = 0  # fresh index for the test
+    results = client.get("/api/v1/transcripts/search?q=red stapler").get_json()[
+        "results"
+    ]
+    assert results[0]["label"] == "Island Life · S01E04" and results[0]["exact"]
+    assert results[0]["timestamp"] == "00:00:10"
+    loose = client.get("/api/v1/transcripts/search?q=stapler+keep+told").get_json()[
+        "results"
+    ]
+    assert loose and not loose[0]["exact"]
+    assert (
+        client.get("/api/v1/transcripts/search?q=spaceship").get_json()["results"] == []
+    )
+    page = client.get("/transcripts?q=red+stapler").get_data(as_text=True)
+    assert "Has anyone seen my red stapler?" in page

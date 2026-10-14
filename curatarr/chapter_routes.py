@@ -37,8 +37,10 @@ from .enrichment import (
     queue_subtitles,
     request_scan_after_discovery,
     save_settings,
+    search_transcripts,
     smart_chapters_blocked,
     state_for,
+    transcripts_searchable,
     undo_marker,
 )
 from .integrations import IntegrationError
@@ -55,6 +57,7 @@ NAV_SECTIONS.update(
         "main.chapter_part": "library",
         "main.chapter_markers": "manage",
         "main.chapter_identity": "manage",
+        "main.transcript_search": "library",
     }
 )
 
@@ -417,3 +420,15 @@ def chapter_identity_fix_audio(state_id):
     else:
         flash(message, "success")
     return redirect(url_for("main.chapter_identity"))
+
+
+@bp.get("/transcripts")
+def transcript_search():
+    """Find an episode by something said in it."""
+    query = (request.args.get("q") or "").strip()[:200]
+    return render_template(
+        "transcript_search.html",
+        query=query,
+        results=search_transcripts(query, 25) if query else [],
+        searchable=transcripts_searchable(),
+    )
