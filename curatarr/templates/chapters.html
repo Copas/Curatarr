@@ -20,6 +20,7 @@
       {{ stat('Not scanned yet', summary.not_scanned, None, True) }}
       {{ stat('Redo with Smart Chapters', summary.smart_upgradable, 'got Navigation chapters' if summary.smart_upgradable else None, True) }}
       {{ stat('Failed', summary.failed, 'reasons listed below' if summary.failed else None, True) }}
+      {% if summary.identity_issues %}<div class="stat-todo"><h3 class="stat-label mb-0"><a href="{{ url_for('main.chapter_identity') }}">Possible wrong episodes</a></h3><p class="stat-value mb-0">{{ summary.identity_issues|commas }}</p><p class="stat-hint mb-0">transcript fits another episode, or isn't English</p></div>{% endif %}
       {{ stat('Episodes to check skip markers', summary.recaps_to_check, ((summary.recaps_to_check - summary.recaps_unqueued)|commas ~ ' queued') if summary.recaps_to_check > summary.recaps_unqueued else None, True) }}
     </div>
     <div class="d-flex flex-wrap gap-2 mt-3">

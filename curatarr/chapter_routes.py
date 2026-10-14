@@ -14,12 +14,14 @@ from .chapters import (
 from .enrichment import (
     ACTION_LABELS,
     describe,
+    dismiss_identity,
     environment_status,
     file_label,
     file_locations_known,
     flatten,
     form_values,
     global_layer,
+    identity_issues,
     job_activity,
     library_layers,
     maintenance_summary,
@@ -50,6 +52,7 @@ NAV_SECTIONS.update(
         "main.chapter_confirm_library": "manage",
         "main.chapter_part": "library",
         "main.chapter_markers": "manage",
+        "main.chapter_identity": "manage",
     }
 )
 
@@ -379,3 +382,21 @@ def chapter_marker_undo(state_id):
     else:
         flash(message, "success")
     return redirect(request.form.get("next") or url_for("main.chapter_markers"))
+
+
+@bp.get("/chapters/identity")
+def chapter_identity():
+    """Episodes whose transcript fits another episode, or isn't in English."""
+    return render_template(
+        "chapter_identity.html", states=identity_issues(), file_label=file_label
+    )
+
+
+@bp.post("/chapters/identity/<state_id>/dismiss")
+def chapter_identity_dismiss(state_id):
+    state = db.session.get(ChapterState, state_id)
+    if not state or not state.identity_issue:
+        abort(404)
+    dismiss_identity(state)
+    flash("Dismissed. This episode won't be flagged again.", "success")
+    return redirect(url_for("main.chapter_identity"))

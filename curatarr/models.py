@@ -353,5 +353,8 @@ class ChapterState(db.Model, Timed):
     # Intro Skipper markers Curatarr hid as plainly wrong, with the reasons.
     markers_checked_at = db.Column(db.DateTime(timezone=True))
     markers_hidden = db.Column(db.JSON)
+    # Whether the transcript fits this episode (see identity.py).
+    identity_checked_at = db.Column(db.DateTime(timezone=True))
+    identity_issue = db.Column(db.JSON)
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")
