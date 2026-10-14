@@ -11,12 +11,13 @@ order of confidence, by:
    ("…who will be voted out tonight?"), so a phrase that recurs across the
    series' recaps and is always the last recurring phrase marks the end.
 2. Lines quoted from earlier episodes. Recaps are cut from earlier episodes;
-   the last quoted line anchors the end, and the model picks the recap's last
-   line among the few after it (the narrator's closing words).
+   the recap ends with the last clip of the run of quoted clips it opens with.
+   (Curatarr doesn't let the local model move that end: on The Last Man on
+   Earth it pushed every montage recap about 30 seconds into the new episode.
+   Ending at the last clip is sometimes a few seconds early, never late.)
 
-Nothing is marked when neither applies, and an end the model chose is only
-used when the model also agrees the span is a recap: a wrong recap skips part of
-the episode, which is worse than having no skip button.
+Nothing is marked when neither applies: a wrong recap skips part of the
+episode, which is worse than having no skip button.
 """
 
 import re

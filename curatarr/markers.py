@@ -40,6 +40,7 @@ PREVIEW_OPENER = re.compile(
 PREVIEW_SEARCH = 360.0  # the opener must be this close to the end
 PREVIEW_LENGTH = 120.0  # previews are looked for this far after the opener
 PREVIEW_TO_END = 20.0  # a preview within this of the end runs to the end
+MODEL_PREVIEW_MAX = 45.0  # an end the model picks is at most this far from the start
 MIN_PREVIEW = 8.0
 
 SHORT_CREDITS = 45.0  # a duplicate this short before the real credits is a false match
@@ -120,6 +121,8 @@ def _find_end(start, lines, duration, later, choose_last_line, scenes):
             end = lines[-1].end
         else:
             return None
+    if source == "model":
+        end = min(end, start + MODEL_PREVIEW_MAX)  # don't run into a final scene
     if end >= duration - PREVIEW_TO_END and end >= lines[-1].end:
         return _span(start, duration, "runs to the end", scenes=())
     return _span(start, end, source, scenes)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recap ends no longer come from the local model. Tested on episodes not used to tune it (The Last Man on Earth), the model pushed every montage recap about 30 seconds into the new episode, and confirmed its own choice; ending at the last clip quoted from earlier episodes never ran long (13 recaps, 0 into the episode). Recaps with a series closing line are unchanged. A preview end the model picks is capped at 45 seconds after "next time on", so it can't run into a final scene.
+
 - Fixed recap and preview ends running long (Battlestar Galactica S01E03 was marked to 3:06 instead of about 1:05): a line under five words no longer counts as quoted from another episode (common phrases match by chance), the quoted clips must form a run with no gap over 30 seconds, the model may only extend 30 seconds past the last clip, and a line's end is when its words stop (speech recognition had stretched "I'm fine. I'm just..." over two minutes of music).
 - Skip-marker checks use saved scene changes only; detecting them for a whole episode took several minutes per check.
 
