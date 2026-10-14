@@ -245,14 +245,11 @@ def parse_options(form) -> dict:
     # A checkbox sends nothing when unticked, so only a form that showed it
     # (marked by the hidden field) may turn it off. A page loaded before the
     # option existed would otherwise switch it off when saved.
-    if "pause_during_playback_shown" in form:
-        values["pause_during_playback"] = form.get("pause_during_playback") in {
-            "true",
-            "on",
-            "1",
-        }
-    else:
-        values["pause_during_playback"] = options()["pause_during_playback"]
+    for key in ("pause_during_playback", "movie_credits_only"):
+        if f"{key}_shown" in form:
+            values[key] = form.get(key) in {"true", "on", "1"}
+        else:
+            values[key] = options()[key]
     mappings = []
     for line in (form.get("path_mappings") or "").splitlines():
         if not line.strip():
@@ -2535,6 +2532,47 @@ def _check_markers(ep: _Episode) -> str:
     return f"markers: {len(bad)} hidden" if bad else "markers: ok"
 
 
+MOVIE_HIDDEN_TYPES = ("Introduction", "Recap", "Preview")
+
+
+def _check_movie(state, part, media) -> str:
+    """Movies keep only their credits marker: Intro Skipper's movie "recaps" and
+    "intros" come from chapter names like "Chapter 1" or "Opening Credits"."""
+    from .integrations import IntroSkipper
+
+    item_id = jellyfin_item_id(part, media)
+    if not item_id:
+        return "movie: no Jellyfin item"
+    plugin = IntroSkipper(client("jellyfin"))
+    segments = plugin.segments(item_id)
+    if segments is None:
+        return "movie: Intro Skipper not installed"
+    hidden = list(state.markers_hidden or [])
+    count = 0
+    for segment in segments:
+        if (
+            segment.get("Type") not in MOVIE_HIDDEN_TYPES
+            or segment.get("Suppressed")
+            or segment.get("Source") == "User"
+        ):
+            continue
+        plugin.hide(item_id, segment["Id"])
+        count += 1
+        hidden.append(
+            {
+                "id": segment["Id"],
+                "type": segment["Type"],
+                "start": round(segment.get("Start", 0), 1),
+                "end": round(segment.get("End", 0), 1),
+                "source": segment.get("Source"),
+                "reason": "movies keep only their credits marker",
+                "at": utcnow().isoformat(),
+            }
+        )
+    state.markers_hidden = hidden or None
+    return f"movie: {count} hidden" if count else "movie: ok"
+
+
 def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
     """Check an episode's skip markers: its recap, its "next time on" preview,
     and Intro Skipper's own intro and credits markers.
@@ -2543,7 +2581,18 @@ def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
     opening, the end, or a minute or two after a suspect credits marker).
     """
     results = []
-    if part.kind != "episode" or not _smart(state):
+    if part.kind != "episode":
+        state.recap_checked_at = state.preview_checked_at = utcnow()
+        state.recap_source = state.preview_source = "no opener"
+        state.markers_checked_at = utcnow()
+        if opts["movie_credits_only"]:
+            try:
+                results.append(_check_movie(state, part, media))
+            except IntegrationError as exc:
+                results.append(f"failed: {exc}")
+        else:
+            results.append("movie: left alone")
+    elif not _smart(state):
         state.recap_checked_at = state.preview_checked_at = utcnow()
         state.markers_checked_at = utcnow()
         state.recap_source = state.preview_source = "no opener"
@@ -2834,3 +2883,50 @@ def _remove_recap_chapter(state, part, media) -> str:
     state.chapter_file_size, state.chapter_file_mtime = after.size, after.mtime
     _refresh_jellyfin(part, media)
     return ' The "Previously On" chapter is gone too.'
+
+
+MOVIE_SWEEP = 25  # movies checked per worker cycle (a few API calls each)
+
+
+def check_movie_markers(limit=MOVIE_SWEEP) -> int:
+    """Hide Intro Skipper's recaps, previews and intros on movies not yet checked.
+
+    Runs from the worker cycle, outside the job queue: it needs no transcript
+    and must not hold up a movie's chapter job.
+    """
+    try:
+        if not options()["movie_credits_only"]:
+            return 0
+    except ChapterConfigError:
+        return 0
+    parts = (
+        db.session.query(MediaPart)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .join(Library, MediaIdentity.library_id == Library.id)
+        .outerjoin(ChapterState, ChapterState.media_part_id == MediaPart.id)
+        .filter(
+            MediaPart.kind == "movie_file",
+            MediaPart.has_file.is_(True),
+            ChapterState.markers_checked_at.is_(None),
+        )
+        .limit(limit * 2)
+        .all()
+    )
+    checked = 0
+    for part in parts:
+        if not part.media.library or not part.media.library.managed:
+            continue
+        state = state_for(part)
+        try:
+            result = _check_movie(state, part, part.media)
+        except IntegrationError as exc:
+            _log("movie_markers_failed", state_id=state.id, error=str(exc))
+            break  # Jellyfin is unreachable; try again next cycle
+        state.markers_checked_at = utcnow()
+        db.session.commit()
+        if result.endswith("hidden"):
+            _log("movie_markers_checked", state_id=state.id, result=result)
+        checked += 1
+        if checked == limit:
+            break
+    return checked
