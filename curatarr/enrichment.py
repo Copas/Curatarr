@@ -2640,9 +2640,12 @@ def _check_identity(ep) -> str:
 
 
 def identity_issues(library_id=None):
+    # Through the file's own part: a long-lived state's media_identity_id can
+    # point at an identity discovery has since replaced.
     query = (
         db.session.query(ChapterState)
-        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
         .filter(ChapterState.identity_issue.isnot(None))
         .order_by(ChapterState.identity_checked_at.desc())
     )
@@ -2669,7 +2672,8 @@ def identity_flags_api() -> list[dict]:
         issue = state.identity_issue
         if issue.get("kind") != "episode":
             continue
-        part, media = state.part, state.media
+        part = state.part
+        media = part.media
         target = (
             db.session.query(ChapterState)
             .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
