@@ -110,6 +110,13 @@ def _dispatch_chapters():
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Chapter job dispatch failed")
+    try:
+        from .enrichment import check_movie_markers
+
+        check_movie_markers()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Movie skip-marker check failed")
 
 
 def register_commands(app):

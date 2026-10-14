@@ -58,6 +58,7 @@ DEFAULTS: dict[str, Any] = {
 GLOBAL_DEFAULTS: dict[str, Any] = {
     "concurrency": 1,
     "pause_during_playback": True,
+    "movie_credits_only": True,
     "settle_minutes": 10,
     "scene_threshold": 0.3,
     "ollama_url": "http://127.0.0.1:11434",
@@ -214,6 +215,8 @@ def validate_global_options(values: dict) -> dict:
         raise ChapterConfigError("Scene threshold must be between 0.05 and 0.95")
     if type(merged["pause_during_playback"]) is not bool:
         raise ChapterConfigError("Invalid pause during playback")
+    if type(merged["movie_credits_only"]) is not bool:
+        raise ChapterConfigError("Invalid movie skip-marker setting")
     if merged["whisper_device"] not in WHISPER_DEVICES:
         raise ChapterConfigError("Transcription device must be auto, cuda, or cpu")
     if not str(merged["ollama_url"]).startswith(("http://", "https://")):
