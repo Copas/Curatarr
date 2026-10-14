@@ -1933,6 +1933,7 @@ def maintenance_summary(library_id=None) -> dict:
         "recaps_found": recaps_found(library_id),
         "previews_found": previews_found(library_id),
         "markers_hidden": markers_hidden(library_id),
+        "identity_issues": len(identity_issues(library_id)),
         "queued": queued,
     }
 
@@ -2532,6 +2533,107 @@ def _check_markers(ep: _Episode) -> str:
     return f"markers: {len(bad)} hidden" if bad else "markers: ok"
 
 
+_summaries_cache: dict = {}
+SUMMARIES_TTL = 1800
+
+
+def _season_summaries(media, season) -> dict | None:
+    """{episode number: "title. overview"} for one season, from Sonarr."""
+    if not media.sonarr_id:
+        return None
+    cached = _summaries_cache.get(media.sonarr_id)
+    if cached is None or time.monotonic() - cached[0] > SUMMARIES_TTL:
+        episodes = client("sonarr").episodes(media.sonarr_id) or []
+        cached = (time.monotonic(), episodes)
+        _summaries_cache[media.sonarr_id] = cached
+    return {
+        e["episodeNumber"]: f"{e.get('title') or ''}. {e.get('overview') or ''}"
+        for e in cached[1]
+        if e.get("seasonNumber") == season
+    }
+
+
+def _check_identity(ep) -> str:
+    """Flag an episode whose transcript fits another episode's summary much
+    better than its own, or whose default audio isn't English."""
+    from . import identity
+    from .transcribe import load
+
+    state, part = ep.state, ep.part
+    full = ep.full()
+    if full is None:
+        return "identity: no full transcript"
+    state.identity_checked_at = utcnow()
+    issue = None
+    hit = load(cache_dir() / "transcripts" / f"{state.transcript_key}.json")
+    language = (hit[1] if hit else {}).get("language")
+    foreign = identity.foreign_audio(language, ep.info.streams)
+    if foreign:
+        spoken, english = foreign
+        issue = {
+            "kind": "audio",
+            "language": spoken,
+            "english_track": english,
+            "sample": " ".join(s.text.strip() for s in full[10:14])[:200],
+        }
+    else:
+        try:
+            summaries = _season_summaries(ep.media, part.season_number)
+        except IntegrationError as exc:
+            state.identity_checked_at = None  # try again next time
+            return f"identity: Sonarr unavailable ({exc})"
+        if summaries:
+            text = " ".join(s.text for s in full)
+            match = identity.better_match(part.episode_number, text, summaries)
+            if match:
+                other, margin = match
+                middle = len(full) // 2
+                issue = {
+                    "kind": "episode",
+                    "season": part.season_number,
+                    "filed_as": part.episode_number,
+                    "fits": other,
+                    "margin": margin,
+                    "own_summary": summaries.get(part.episode_number, "")[:400],
+                    "other_summary": summaries.get(other, "")[:400],
+                    "sample": " ".join(
+                        s.text.strip() for s in full[middle : middle + 6]
+                    )[:300],
+                }
+    state.identity_issue = issue
+    if issue:
+        _log(
+            "identity_flagged",
+            state_id=state.id,
+            kind=issue["kind"],
+            detail=issue.get("language") or issue.get("fits"),
+        )
+    return f"identity: {issue['kind']} flagged" if issue else "identity: ok"
+
+
+def identity_issues(library_id=None):
+    query = (
+        db.session.query(ChapterState)
+        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .filter(ChapterState.identity_issue.isnot(None))
+        .order_by(ChapterState.identity_checked_at.desc())
+    )
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    return [s for s in query if not (s.identity_issue or {}).get("dismissed")]
+
+
+def dismiss_identity(state):
+    state.identity_issue = {**(state.identity_issue or {}), "dismissed": True}
+    audit(
+        "identity_dismissed",
+        state.media_identity_id,
+        f"Dismissed a possible wrong-episode flag on {_part_label(state.part)}.",
+        f"identity-dismiss:{state.id}:{utcnow().isoformat()}",
+    )
+    db.session.commit()
+
+
 MOVIE_HIDDEN_TYPES = ("Introduction", "Recap", "Preview")
 
 
@@ -2604,7 +2706,10 @@ def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
             if state.recap_checked_at is None
             else None,
             (lambda: _check_preview(ep)) if state.preview_checked_at is None else None,
-            lambda: _check_markers(ep),
+            (lambda: _check_markers(ep)) if state.markers_checked_at is None else None,
+            (lambda: _check_identity(ep))
+            if state.identity_checked_at is None
+            else None,
         ):
             if check is None:
                 continue
@@ -2678,7 +2783,13 @@ def queue_recaps(library_id=None) -> int:
         .filter(
             MediaPart.kind == "episode",
             MediaPart.has_file.is_(True),
-            ChapterState.markers_checked_at.is_(None),
+            or_(
+                ChapterState.markers_checked_at.is_(None),
+                and_(
+                    ChapterState.identity_checked_at.is_(None),
+                    ChapterState.transcript_key.isnot(None),
+                ),
+            ),
             ChapterState.job_state == "idle",
             MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
         )
@@ -2707,7 +2818,13 @@ def recaps_to_check(library_id=None, *, unqueued=False) -> int:
         .filter(
             MediaPart.kind == "episode",
             MediaPart.has_file.is_(True),
-            ChapterState.markers_checked_at.is_(None),
+            or_(
+                ChapterState.markers_checked_at.is_(None),
+                and_(
+                    ChapterState.identity_checked_at.is_(None),
+                    ChapterState.transcript_key.isnot(None),
+                ),
+            ),
             MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
         )
     )
