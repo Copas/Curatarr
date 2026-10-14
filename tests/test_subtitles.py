@@ -175,7 +175,9 @@ def test_bulk_queue_and_pages(app, client, subtitle_env):
     page = client.get(f"/chapters/parts/{part.id}").get_data(as_text=True)
     assert "Generated subtitles:</span> Generated" in page
     assert "Remove generated subtitles" in page
-    assert "1 generated" in client.get("/chapters").get_data(as_text=True)
+    assert 'Subtitles by Curatarr</h3><p class="stat-value mb-0">1<' in client.get(
+        "/chapters"
+    ).get_data(as_text=True)
     assert "Generated subtitles" in client.get(f"/titles/{media.id}").get_data(
         as_text=True
     )
