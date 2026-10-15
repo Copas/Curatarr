@@ -1981,24 +1981,36 @@ def maintenance_summary(library_id=None) -> dict:
     if library_id:
         subtitle_rows = subtitle_rows.filter(MediaIdentity.library_id == library_id)
     subtitles = dict(subtitle_rows.group_by(ChapterState.subtitle_status).all())
+    needing_subtitles = needs_subtitles_query(library_id).count()
+    to_check = recaps_to_check(library_id)
+    checked = markers_checked(library_id)
+    existing = by_status.get("existing", 0)
+    with_subtitles = subtitles.get("existing", 0) + subtitles.get("generated", 0)
     return {
+        # Coverage: how much of what can have each thing now has it.
+        "chapters_have": existing + generated,
+        "chapters_possible": existing + generated + needing,
+        "subtitles_have": with_subtitles,
+        "subtitles_possible": with_subtitles + needing_subtitles,
+        "markers_checked": checked,
+        "markers_possible": checked + to_check,
         "subtitles_generated": subtitles.get("generated", 0),
         "subtitles_existing": subtitles.get("existing", 0),
         "subtitles_checked": sum(subtitles.values()),
         "files": parts,
         "scanned": scanned,
         "not_scanned": max(parts - scanned, 0),
-        "existing": by_status.get("existing", 0),
+        "existing": existing,
         "generated": generated,
         "needing": needing,
-        "needing_subtitles": needs_subtitles_query(library_id).count(),
+        "needing_subtitles": needing_subtitles,
         "short": by_status.get("skipped_short", 0),
         "unsupported": by_status.get("unsupported_container", 0),
         "failed": by_status.get("failed", 0),
         "removed": by_status.get("removed", 0),
         "transcription_estimate": needing_smart,
         "smart_upgradable": smart_upgrade_query(library_id).count(),
-        "recaps_to_check": recaps_to_check(library_id),
+        "recaps_to_check": to_check,
         "recaps_unqueued": recaps_to_check(library_id, unqueued=True),
         "recaps_found": recaps_found(library_id),
         "previews_found": previews_found(library_id),
@@ -3034,6 +3046,24 @@ def recaps_to_check(library_id=None, *, unqueued=False) -> int:
     )
     if unqueued:
         query = query.filter(ChapterState.job_state == "idle")
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    return query.scalar()
+
+
+def markers_checked(library_id=None) -> int:
+    """Episodes a skip-marker check has finished (the other half of recaps_to_check)."""
+    query = (
+        db.session.query(func.count(ChapterState.id))
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaPart.kind == "episode",
+            MediaPart.has_file.is_(True),
+            ChapterState.markers_checked_at.isnot(None),
+            MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
+        )
+    )
     if library_id:
         query = query.filter(MediaIdentity.library_id == library_id)
     return query.scalar()
