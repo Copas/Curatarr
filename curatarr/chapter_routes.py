@@ -22,6 +22,7 @@ from .enrichment import (
     flatten,
     form_values,
     global_layer,
+    identity_check_enabled,
     identity_issues,
     job_activity,
     library_layers,
@@ -306,6 +307,7 @@ def chapter_part(part_id):
         state=state,
         info=describe(state),
         preview=state.last_preview_json if state else None,
+        identity_on=identity_check_enabled(),
         generation_version=GENERATION_VERSION,
     )
 
@@ -394,7 +396,10 @@ def chapter_marker_undo(state_id):
 def chapter_identity():
     """Episodes whose transcript fits another episode, or isn't in English."""
     return render_template(
-        "chapter_identity.html", states=identity_issues(), file_label=file_label
+        "chapter_identity.html",
+        states=identity_issues(),
+        file_label=file_label,
+        enabled=identity_check_enabled(),
     )
 
 

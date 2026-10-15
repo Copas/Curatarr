@@ -245,7 +245,11 @@ def parse_options(form) -> dict:
     # A checkbox sends nothing when unticked, so only a form that showed it
     # (marked by the hidden field) may turn it off. A page loaded before the
     # option existed would otherwise switch it off when saved.
-    for key in ("pause_during_playback", "movie_credits_only"):
+    for key in (
+        "pause_during_playback",
+        "movie_credits_only",
+        "episode_identity_check",
+    ):
         if f"{key}_shown" in form:
             values[key] = form.get(key) in {"true", "on", "1"}
         else:
@@ -2671,7 +2675,30 @@ def _check_identity(ep) -> str:
     return f"identity: {issue['kind']} flagged" if issue else "identity: ok"
 
 
+def identity_check_enabled() -> bool:
+    """Whether episodes are checked against their summaries (off by default)."""
+    try:
+        return bool(options()["episode_identity_check"])
+    except ChapterConfigError:
+        return False
+
+
+def _needs_marker_check():
+    """Episodes a skip-marker check still has work for."""
+    if not identity_check_enabled():
+        return ChapterState.markers_checked_at.is_(None)
+    return or_(
+        ChapterState.markers_checked_at.is_(None),
+        and_(
+            ChapterState.identity_checked_at.is_(None),
+            ChapterState.transcript_key.isnot(None),
+        ),
+    )
+
+
 def identity_issues(library_id=None):
+    if not identity_check_enabled():
+        return []
     # Through the file's own part: a long-lived state's media_identity_id can
     # point at an identity discovery has since replaced.
     query = (
@@ -2840,7 +2867,7 @@ def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
             (lambda: _check_preview(ep)) if state.preview_checked_at is None else None,
             (lambda: _check_markers(ep)) if state.markers_checked_at is None else None,
             (lambda: _check_identity(ep))
-            if state.identity_checked_at is None
+            if state.identity_checked_at is None and identity_check_enabled()
             else None,
         ):
             if check is None:
@@ -2915,13 +2942,7 @@ def queue_recaps(library_id=None) -> int:
         .filter(
             MediaPart.kind == "episode",
             MediaPart.has_file.is_(True),
-            or_(
-                ChapterState.markers_checked_at.is_(None),
-                and_(
-                    ChapterState.identity_checked_at.is_(None),
-                    ChapterState.transcript_key.isnot(None),
-                ),
-            ),
+            _needs_marker_check(),
             ChapterState.job_state == "idle",
             MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
         )
@@ -2982,13 +3003,7 @@ def recaps_to_check(library_id=None, *, unqueued=False) -> int:
         .filter(
             MediaPart.kind == "episode",
             MediaPart.has_file.is_(True),
-            or_(
-                ChapterState.markers_checked_at.is_(None),
-                and_(
-                    ChapterState.identity_checked_at.is_(None),
-                    ChapterState.transcript_key.isnot(None),
-                ),
-            ),
+            _needs_marker_check(),
             MediaIdentity.library_id.in_(_smart_library_ids() or {""}),
         )
     )

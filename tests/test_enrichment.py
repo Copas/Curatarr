@@ -125,6 +125,15 @@ def media_env(app, monkeypatch, tmp_path):
     return files, arr
 
 
+@pytest.fixture
+def identity_on(monkeypatch):
+    """The episode check is off by default; these tests switch it on."""
+    from curatarr import chapter_routes
+
+    monkeypatch.setattr(enrichment, "identity_check_enabled", lambda: True)
+    monkeypatch.setattr(chapter_routes, "identity_check_enabled", lambda: True)
+
+
 def _movie(path="/movies/Film (2020)/Film.mkv", library_type="movies"):
     library = Library(
         jellyfin_library_id=f"lib-{library_type}",
@@ -1566,7 +1575,7 @@ def test_movies_keep_only_their_credits_marker(app, client, media_env):
 
 
 def test_identity_check_flags_an_episode_that_fits_another_summary(
-    app, client, media_env, monkeypatch
+    app, client, media_env, monkeypatch, identity_on
 ):
     import json
 
@@ -1625,7 +1634,9 @@ def test_identity_check_flags_an_episode_that_fits_another_summary(
     assert "Nothing flagged" in client.get("/chapters/identity").get_data(as_text=True)
 
 
-def test_make_english_the_default_from_the_flag(app, client, media_env, monkeypatch):
+def test_make_english_the_default_from_the_flag(
+    app, client, media_env, monkeypatch, identity_on
+):
     files, _arr = media_env
     parts, _rows = _series_with_recaps(files)
     target = parts[-1]
@@ -1679,7 +1690,9 @@ def test_make_english_the_default_from_the_flag(app, client, media_env, monkeypa
     assert state.job_state == "queued" and state.requested_action == "regenerate"
 
 
-def test_identity_flags_api_reports_swaps_and_confirmed_targets(app, client, media_env):
+def test_identity_flags_api_reports_swaps_and_confirmed_targets(
+    app, client, media_env, identity_on
+):
     files, _arr = media_env
     parts, _rows = _series_with_recaps(files)
     show = parts[0].media
@@ -1748,7 +1761,9 @@ def test_checks_needing_transcription_wait_for_the_chapter_backlog(media_env):
     assert untranscribed.id in due
 
 
-def test_identity_flags_follow_the_file_not_a_stale_identity(app, client, media_env):
+def test_identity_flags_follow_the_file_not_a_stale_identity(
+    app, client, media_env, identity_on
+):
     files, _arr = media_env
     parts, _rows = _series_with_recaps(files)
     state = enrichment.state_for(parts[1])
@@ -1836,7 +1851,9 @@ def test_old_transcripts_get_linked_so_search_finds_them(app, client, media_env)
     assert enrichment.link_transcripts() == 0  # nothing left to try
 
 
-def test_a_flag_survives_the_path_being_written_differently(app, client, media_env):
+def test_a_flag_survives_the_path_being_written_differently(
+    app, client, media_env, identity_on
+):
     files, _arr = media_env
     parts, _rows = _series_with_recaps(files)
     state = enrichment.state_for(parts[1])
@@ -1872,7 +1889,7 @@ def test_check_skip_markers_button_hands_the_queueing_to_the_worker(
     assert enrichment.run_requested_skip_marker_check() == 0  # the request was used up
 
 
-def test_a_cleared_flag_does_not_break_the_list(app, client, media_env):
+def test_a_cleared_flag_does_not_break_the_list(app, client, media_env, identity_on):
     files, _arr = media_env
     parts, _rows = _series_with_recaps(files)
     state = enrichment.state_for(parts[0])
@@ -1888,3 +1905,25 @@ def test_a_cleared_flag_does_not_break_the_list(app, client, media_env):
     db.session.commit()
     assert client.get("/chapters/identity").status_code == 200
     assert client.get("/api/v1/identity-flags").get_json()["flags"] == []
+
+
+def test_the_episode_check_is_off_by_default(app, client, media_env):
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    state = enrichment.state_for(parts[0])
+    state.identity_issue = {
+        "kind": "episode",
+        "season": 1,
+        "filed_as": 1,
+        "fits": 2,
+        "margin": 5.0,
+    }
+    db.session.commit()
+    assert not enrichment.identity_check_enabled()
+    assert client.get("/api/v1/identity-flags").get_json()["flags"] == []
+    assert "This check is off" in client.get("/chapters/identity").get_data(
+        as_text=True
+    )
+    assert "Possible wrong episodes" not in client.get("/chapters").get_data(
+        as_text=True
+    )

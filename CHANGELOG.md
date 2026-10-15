@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The episode check (does the transcript fit the episode's own summary; is the default audio English) is now **off by default**: Chapter settings → "Check episodes against their summaries". It found real mix-ups, but with vague summaries it also flagged episodes that were fine, and speech recognition mislabelled the language of music-heavy audio. While off, skip-marker checks don't run it, and the list, the To do count, the episode notice and `/api/v1/identity-flags` stay empty.
+
 - Fixed Possible wrong episodes failing (Internal Server Error) after a flag was cleared: a cleared flag can be stored as JSON null, which still passed the "has a flag" filter.
 - Chapter maintenance's "Queued or running" counts chapter jobs only (now "Chapter jobs queued or running"); skip-marker checks, subtitle checks and scans aren't included, matching the estimated finish.
 
