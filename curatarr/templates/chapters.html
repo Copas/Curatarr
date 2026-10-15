@@ -10,6 +10,25 @@
 </div>
 {% macro stat(label, value, hint=None, todo=False) %}<div class="{{ 'stat-todo' if todo else '' }}{{ ' stat-done' if todo and not value else '' }}"><h3 class="stat-label mb-0">{{ label }}</h3><p class="stat-value mb-0">{{ value|commas }}</p>{% if hint %}<p class="stat-hint mb-0">{{ hint }}</p>{% endif %}</div>{% endmacro %}
 {% if not summary.files %}<div class="alert alert-info">No file locations are recorded yet. Curatarr records them during discovery (hourly, or Discover on Overview); pressing Scan starts discovery and then the scan.</div>{% endif %}
+{% macro coverage(label, before, added, possible, noun, before_text, added_text) %}{% if possible %}
+<div class="coverage">
+  <div class="d-flex flex-wrap justify-content-between gap-2"><h3 class="coverage-label mb-0">{{ label }}</h3><p class="mb-0 coverage-total"><strong>{{ (before + added)|commas }}</strong> of {{ possible|commas }} {{ noun }} · {{ ((before + added) * 100 / possible)|round|int }}%</p></div>
+  <svg class="coverage-bar" width="100%" height="12" role="img" aria-label="{{ (before + added)|commas }} of {{ possible|commas }} {{ noun }}"><rect class="coverage-track" width="100%" height="12" rx="6"/>{% if before %}<rect class="coverage-before" width="{{ (before * 100 / possible)|round(2) }}%" height="12"/>{% endif %}{% if added %}<rect class="coverage-added" x="{{ (before * 100 / possible)|round(2) }}%" width="{{ (added * 100 / possible)|round(2) }}%" height="12"/>{% endif %}</svg>
+  <p class="coverage-hint mb-0">{% if before_text %}<span class="swatch swatch-before"></span>{{ before|commas }} {{ before_text }} · {% endif %}<span class="swatch swatch-added"></span>{{ added|commas }} {{ added_text }}{% if possible > before + added %} · {{ (possible - before - added)|commas }} to go{% else %} · all done{% endif %}</p>
+</div>{% endif %}{% endmacro %}
+<section class="card p-3 mb-3" aria-labelledby="done-heading">
+  <h2 class="section-label" id="done-heading">What Curatarr has done</h2>
+  <div class="stat-grid stat-grid-done mb-3">
+    {{ stat('Chapters added', summary.generated, 'files that had none') }}
+    {{ stat('Subtitles added', summary.subtitles_generated, 'files with no English ones') }}
+    {{ stat('Recaps marked', summary.recaps_found, '"previously on", skippable') }}
+    {{ stat('Previews marked', summary.previews_found, '"next time on", skippable') }}
+    {{ stat('Bad skip markers hidden', summary.markers_hidden, 'Intro Skipper guesses that were wrong') }}
+  </div>
+  {{ coverage('Files with chapters', summary.existing, summary.generated, summary.chapters_possible, 'files', 'already had them', 'added by Curatarr') }}
+  {{ coverage('Files with English subtitles', summary.subtitles_existing, summary.subtitles_generated, summary.subtitles_possible, 'files', 'already had them', 'added by Curatarr') }}
+  {{ coverage('Episodes checked for skip markers', 0, summary.markers_checked, summary.markers_possible, 'episodes', None, 'checked') }}
+</section>
 <div class="row g-3 mb-4">
   <section class="col-lg-7" aria-labelledby="todo-heading"><div class="card p-3 h-100">
     <h2 class="section-label" id="todo-heading">To do</h2>
@@ -36,16 +55,10 @@
     <div class="stat-grid stat-grid-quiet">
       {{ stat('Files', summary.files) }}
       {{ stat('Scanned', summary.scanned) }}
-      {{ stat('Already had chapters', summary.existing) }}
-      {{ stat('Chapters by Curatarr', summary.generated) }}
-      {{ stat('Already had English subtitles', summary.subtitles_existing) }}
-      {{ stat('Subtitles by Curatarr', summary.subtitles_generated) }}
-      {{ stat('Recaps marked', summary.recaps_found) }}
-      {{ stat('Previews marked', summary.previews_found) }}
-      {{ stat('Bad skip markers hidden', summary.markers_hidden) }}
       {{ stat('Too short for chapters', summary.short) }}
       {{ stat('Not MKV (left alone)', summary.unsupported) }}
     </div>
+    <p class="coverage-hint mt-3 mb-0">Short and non-MKV files are skipped, so they aren't counted in the totals above.</p>
   </div></section>
 </div>
 <h2 class="h4">Activity</h2>
