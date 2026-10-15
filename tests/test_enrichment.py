@@ -729,26 +729,53 @@ def test_settings_warn_when_smart_chapters_has_no_model(app, client):
     )
 
 
-def test_chapter_work_pauses_while_someone_watches(app, client, media_env):
-    from curatarr import throttle
+def test_chapter_work_makes_room_for_someone_watching(
+    app, client, media_env, monkeypatch
+):
+    from curatarr import adaptive, throttle
 
     files, arr = media_env
     library, _media, part = _movie()
     files.add(part.file_path)
     _navigation(library)
     enrichment.request(part, "generate")
+    # Someone is watching and the machine is already busy: nothing new starts.
     arr.sessions_list = [{"NowPlayingItem": {"Id": "something-else"}}]
-    assert enrichment.dispatch(synchronous=True) == 0
-    assert throttle.paused() and files.writes == []
-    assert "because someone is watching" in client.get("/chapters").get_data(
-        as_text=True
-    )
-    arr.sessions_list = [{"DeviceName": "idle client"}]
+    monkeypatch.setattr(adaptive, "cpu_use", lambda: 0.9)
+    assert enrichment.dispatch(synchronous=True) == 0 and files.writes == []
+    assert "Up to 0 chapter jobs" in client.get("/chapters").get_data(as_text=True)
+    # Still watching, but the machine has room: work carries on.
+    monkeypatch.setattr(adaptive, "cpu_use", lambda: 0.1)
     assert enrichment.dispatch(synchronous=True) == 1
     assert not throttle.paused() and len(files.writes) == 1
-    assert "because someone is watching" not in client.get("/chapters").get_data(
-        as_text=True
-    )
+
+
+def test_running_jobs_pause_when_playback_needs_the_room(app, media_env, monkeypatch):
+    from curatarr import adaptive, throttle
+
+    files, arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path)
+    _navigation(library)
+    from curatarr import leases
+
+    state = enrichment.request(part, "generate")
+    state.job_state = "running"
+    db.session.commit()
+    assert leases.acquire(f"chapters:{state.id}", 600)  # a live job, not a stale one
+    arr.sessions_list = [
+        {"NowPlayingItem": {"Id": "x"}, "PlayState": {"PlayMethod": "Transcode"}}
+    ]
+    monkeypatch.setattr(adaptive, "cpu_use", lambda: 0.98)
+    monkeypatch.setattr(adaptive.time, "monotonic", lambda: 1000.0)
+    enrichment.dispatch(synchronous=True)  # the overload starts
+    monkeypatch.setattr(adaptive.time, "monotonic", lambda: 1040.0)
+    assert enrichment.dispatch(synchronous=True) == 0  # and has lasted 40 s
+    assert throttle.paused()
+    arr.sessions_list = []
+    monkeypatch.setattr(adaptive, "cpu_use", lambda: 0.1)
+    enrichment.dispatch(synchronous=True)
+    assert not throttle.paused()
 
 
 def test_paused_processes_are_suspended_and_their_time_not_counted():
