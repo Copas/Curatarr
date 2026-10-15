@@ -30,12 +30,12 @@ from .enrichment import (
     needs_chapters_query,
     options,
     queue_library,
-    queue_recaps,
     queue_scan,
     queue_selected,
     queue_smart_upgrade,
     queue_subtitles,
     request_scan_after_discovery,
+    request_skip_marker_check,
     save_settings,
     search_transcripts,
     smart_chapters_blocked,
@@ -223,14 +223,15 @@ def chapter_queue():
 
 @bp.post("/chapters/recaps")
 def chapter_recaps():
-    """Look for "previously on" recaps in episodes not checked yet."""
+    """Ask the worker to check skip markers on episodes not yet checked."""
     library_id = request.form.get("library") or None
-    count = queue_recaps(library_id)
+    request_skip_marker_check(library_id)
     flash(
-        f"Queued {count:,} episode{'s' if count != 1 else ''} to check for a "
-        '"previously on" recap. Episodes without a saved transcript get their '
-        "first five minutes transcribed; series that never open with a recap are "
-        "skipped after a few episodes.",
+        'Skip-marker checks will be queued within a minute: a "previously on" '
+        'recap, a "next time on" preview, Intro Skipper\'s own markers, and '
+        "whether each episode is the one it's filed as. Episodes without a saved "
+        "transcript get only the parts that matter transcribed, once the chapter "
+        "backlog is done.",
         "success",
     )
     return redirect(url_for("main.chapter_maintenance", library=library_id))
