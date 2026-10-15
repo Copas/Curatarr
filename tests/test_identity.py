@@ -18,8 +18,26 @@ DRIVING = (
 
 
 def test_a_misfiled_episode_fits_another_summary_by_a_wide_margin():
-    other, margin = identity.better_match(21, DRIVING, SEASON)
-    assert other == 20 and margin >= identity.WIN_MARGIN
+    other, margin, certain = identity.better_match(21, DRIVING, SEASON)
+    assert other == 20 and margin >= identity.WIN_MARGIN and certain
+
+
+def test_which_episode_is_uncertain_when_two_others_fit_alike():
+    season = {
+        **SEASON,
+        23: "Road Rage. Homer loses his license and Marge drives.",
+    }
+    other, _margin, certain = identity.better_match(21, DRIVING, season)
+    assert other in (20, 23) and not certain
+
+
+def test_only_a_clear_own_match_confirms_a_file():
+    assert identity.fits_own(20, DRIVING, SEASON)
+    shifted = {
+        **SEASON,
+        23: "Road Rage. Homer loses his license and Marge drives.",
+    }
+    assert not identity.fits_own(20, DRIVING, shifted)  # a near-tie isn't confirmation
 
 
 def test_a_correctly_filed_episode_is_not_flagged():

@@ -18,7 +18,7 @@
   <p class="mt-2 mb-1"><strong>The default audio is in “{{ i.language }}”, not English.</strong> {{ 'The file also has an English track, so it can be fixed by making that the default.' if i.english_track else 'The file has no English audio track, so it would need replacing.' }}</p>
   <p class="small text-secondary mb-0">Heard: “{{ i.sample }}”</p>
   {% else %}
-  <p class="mt-2 mb-2"><strong>Filed as S{{ '%02d'|format(i.season) }}E{{ '%02d'|format(i.filed_as) }}, but what's said fits S{{ '%02d'|format(i.season) }}E{{ '%02d'|format(i.fits) }} {{ i.margin }}× better.</strong></p>
+  <p class="mt-2 mb-2"><strong>Filed as S{{ '%02d'|format(i.season) }}E{{ '%02d'|format(i.filed_as) }}, but what's said fits S{{ '%02d'|format(i.season) }}E{{ '%02d'|format(i.fits) }} {{ i.margin }}× better.</strong>{% if not i.certain %} <span class="text-secondary">It doesn't sound like E{{ '%02d'|format(i.filed_as) }}, but other episodes fit nearly as well as E{{ '%02d'|format(i.fits) }}, so which one it is isn't certain.</span>{% endif %}</p>
   <div class="row g-3 small">
     <div class="col-md-4"><div class="text-secondary">Said in this file</div>“{{ i.sample }}”</div>
     <div class="col-md-4"><div class="text-secondary">Its summary (E{{ '%02d'|format(i.filed_as) }})</div>{{ i.own_summary }}</div>
