@@ -106,6 +106,13 @@ def worker_cycle():
 def _dispatch_chapters():
     """Start chapter jobs in background threads; never blocks the cycle."""
     try:
+        from .enrichment import run_requested_skip_marker_check
+
+        run_requested_skip_marker_check()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Queueing skip-marker checks failed")
+    try:
         dispatch()
     except Exception:
         db.session.rollback()
