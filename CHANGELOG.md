@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed Possible wrong episodes failing (Internal Server Error) after a flag was cleared: a cleared flag can be stored as JSON null, which still passed the "has a flag" filter.
+- Chapter maintenance's "Queued or running" counts chapter jobs only (now "Chapter jobs queued or running"); skip-marker checks, subtitle checks and scans aren't included, matching the estimated finish.
+
 - **Check skip markers** no longer hangs and fails with "database is locked". The page used to mark thousands of episodes queued in one long write while the worker was writing too; now it just leaves a request, and the worker queues them on its next cycle in batches of 500, each committed at once.
 
 - Stricter wrong-episode checks. A flag still means the transcript fits another episode's summary 4x better than its own (reliable: the file isn't that episode), but it now records whether *which* episode is certain (the best match well clear of the runner-up); uncertain ones say so. A file only counts as positively confirmed as its own episode when its own summary is the clear best match, not merely when it isn't flagged: Wonder Woman season 1 turned out shifted by one, with each file nearly fitting. Recaps and previews are left out of the scoring, since they're clips of other episodes. Earlier checks are redone (dismissed and audio flags are kept); press Check skip markers to queue them.

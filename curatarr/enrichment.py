@@ -1933,7 +1933,14 @@ def maintenance_summary(library_id=None) -> dict:
     )
     queued = (
         db.session.query(func.count(ChapterState.id))
-        .filter(ChapterState.job_state.in_(("queued", "running")))
+        .filter(
+            ChapterState.job_state.in_(("queued", "running")),
+            # Chapter jobs only: skip-marker checks have their own count.
+            or_(
+                ChapterState.requested_action.is_(None),
+                ChapterState.requested_action.notin_(FORECAST_EXCLUDED_ACTIONS),
+            ),
+        )
         .scalar()
     )
     subtitle_rows = (
@@ -2679,7 +2686,9 @@ def identity_issues(library_id=None):
     return [
         s
         for s in query
-        if not (s.identity_issue or {}).get("dismissed")
+        # A cleared flag can be stored as JSON null, which passes "IS NOT NULL".
+        if s.identity_issue
+        and not s.identity_issue.get("dismissed")
         and (s.identity_issue or {}).get("kind") != "confirmed"
         # A flag on a file that's since been renamed or replaced is stale. Names,
         # not paths: discovery and Sonarr write the same file's path differently.
