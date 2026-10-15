@@ -1082,11 +1082,32 @@ def test_duration_words():
 
 def test_maintenance_page_separates_to_do_from_library_stats(app, client, media_env):
     page = client.get("/chapters").get_data(as_text=True)
+    done = page.split('id="done-heading"')[1].split('id="todo-heading"')[0]
     todo, library = page.split('id="todo-heading"')[1].split('id="library-heading"')
+    assert "Chapters added" in done and "Bad skip markers hidden" in done
     assert "Needing chapters" in todo and "Chapter jobs queued or running" in todo
     assert "Files" not in todo
-    assert "Already had chapters" in library and "Needing chapters" not in library
+    assert "Too short for chapters" in library and "Needing chapters" not in library
     assert "stat-done" in todo  # nothing to do yet shows as done
+
+
+def test_maintenance_page_shows_how_much_curatarr_has_covered(app, client, media_env):
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.duration_seconds, state.chapter_status = 5400, "generated_semantic"
+    state.subtitle_status = "existing"
+    _library2, _media2, part2 = _movie("/movies/Other (2021)/Other.mkv", "homevideos")
+    other = enrichment.state_for(part2)
+    other.duration_seconds, other.chapter_status = 5400, "existing"
+    db.session.commit()
+    summary = enrichment.maintenance_summary()
+    assert (summary["chapters_have"], summary["chapters_possible"]) == (2, 2)
+    page = client.get("/chapters").get_data(as_text=True)
+    done = page.split('id="done-heading"')[1].split('id="todo-heading"')[0]
+    assert "Files with chapters" in done and "<strong>2</strong> of 2 files" in done
+    assert "1 already had them" in done and "1 added by Curatarr" in done
+    assert "all done" in done
+    assert 'style="' not in done  # the page's CSP blocks inline styles
 
 
 def test_waiting_subtitle_jobs_show_their_reason(app, client, media_env):
