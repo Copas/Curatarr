@@ -2617,10 +2617,25 @@ def _check_identity(ep) -> str:
             state.identity_checked_at = None  # try again next time
             return f"identity: Sonarr unavailable ({exc})"
         if summaries:
-            text = " ".join(s.text for s in full)
+            # Recaps and previews are clips of other episodes; leave them out.
+            spans = [
+                (start, end)
+                for start, end in (
+                    (state.recap_start, state.recap_end),
+                    (state.preview_start, state.preview_end),
+                )
+                if end is not None
+            ]
+            text = " ".join(
+                s.text for s in full if not any(a <= s.start < b for a, b in spans)
+            )
             match = identity.better_match(part.episode_number, text, summaries)
+            if match is None and identity.fits_own(
+                part.episode_number, text, summaries
+            ):
+                issue = {"kind": "confirmed"}
             if match:
-                other, margin = match
+                other, margin, certain = match
                 middle = len(full) // 2
                 issue = {
                     "kind": "episode",
@@ -2629,6 +2644,7 @@ def _check_identity(ep) -> str:
                     "filed_as": part.episode_number,
                     "fits": other,
                     "margin": margin,
+                    "certain": certain,
                     "own_summary": summaries.get(part.episode_number, "")[:400],
                     "other_summary": summaries.get(other, "")[:400],
                     "sample": " ".join(
@@ -2636,13 +2652,15 @@ def _check_identity(ep) -> str:
                     )[:300],
                 }
     state.identity_issue = issue
-    if issue:
+    if issue and issue["kind"] != "confirmed":
         _log(
             "identity_flagged",
             state_id=state.id,
             kind=issue["kind"],
             detail=issue.get("language") or issue.get("fits"),
         )
+    if issue and issue["kind"] == "confirmed":
+        return "identity: confirmed"
     return f"identity: {issue['kind']} flagged" if issue else "identity: ok"
 
 
@@ -2662,6 +2680,7 @@ def identity_issues(library_id=None):
         s
         for s in query
         if not (s.identity_issue or {}).get("dismissed")
+        and (s.identity_issue or {}).get("kind") != "confirmed"
         # A flag on a file that's since been renamed or replaced is stale. Names,
         # not paths: discovery and Sonarr write the same file's path differently.
         and _same_file((s.identity_issue or {}).get("file"), s.part.file_path)
@@ -2710,13 +2729,15 @@ def identity_flags_api() -> list[dict]:
                 "filed_as": issue["filed_as"],
                 "fits": issue["fits"],
                 "margin": issue["margin"],
+                # Flags from before this was recorded count as uncertain.
+                "certain": bool(issue.get("certain")),
                 "file": part.file_path,
                 "sample": issue.get("sample"),
                 "own_summary": issue.get("own_summary"),
                 "other_summary": issue.get("other_summary"),
-                "target_confirmed": bool(
-                    target and target.identity_checked_at and not target.identity_issue
-                ),
+                # Only a positive match counts: "not flagged" isn't proof (Wonder
+                # Woman S1 is shifted by one, and each file only nearly fits).
+                "target_confirmed": target_issue.get("kind") == "confirmed",
                 "swapped": target_issue.get("kind") == "episode"
                 and target_issue.get("fits") == issue["filed_as"]
                 and not target_issue.get("dismissed"),

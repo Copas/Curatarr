@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stricter wrong-episode checks. A flag still means the transcript fits another episode's summary 4x better than its own (reliable: the file isn't that episode), but it now records whether *which* episode is certain (the best match well clear of the runner-up); uncertain ones say so. A file only counts as positively confirmed as its own episode when its own summary is the clear best match, not merely when it isn't flagged: Wonder Woman season 1 turned out shifted by one, with each file nearly fitting. Recaps and previews are left out of the scoring, since they're clips of other episodes. Earlier checks are redone (dismissed and audio flags are kept); press Check skip markers to queue them.
+
 - Fixed Chapter maintenance's Activity card failing (Internal Server Error) when a skip-marker check finished between two of its queries.
 - The transcript-linking pass no longer holds the database's write lock while it reads files on the network share, which made Jellyfin's webhook time out ("database is locked").
 
