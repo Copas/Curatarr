@@ -1568,23 +1568,24 @@ def playback_active() -> bool:
     return any(session.get("NowPlayingItem") for session in sessions)
 
 
-def _pause_for_playback() -> bool:
-    """Suspend chapter work while someone watches; resume when they stop."""
-    try:
-        enabled = options()["pause_during_playback"]
-    except ChapterConfigError:
-        enabled = True
-    has_work = (
-        db.session.query(ChapterState.id)
-        .filter(ChapterState.job_state.in_(("queued", "running")))
-        .first()
-        is not None
-    )
-    pause = bool(enabled and has_work and playback_active())
+def _set_paused(pause: bool):
     if throttle.set_paused(pause):
         set_setting("chapters_paused_since", utcnow().isoformat() if pause else None)
         _log("chapters_paused" if pause else "chapters_resumed")
-    return pause
+
+
+def playback_sessions() -> list[dict]:
+    try:
+        return client("jellyfin").sessions() or []
+    except IntegrationError:
+        return []  # cannot tell; don't hold work back indefinitely
+
+
+def _record_limit(limit: int, reason: str):
+    """Keep the current job limit for the Activity card (written only on change)."""
+    current = {"limit": limit, "reason": reason}
+    if setting("chapter_job_limit") != current:
+        set_setting("chapter_job_limit", current)
 
 
 def dispatch(*, synchronous=False, llm=None) -> int:
@@ -1593,8 +1594,42 @@ def dispatch(*, synchronous=False, llm=None) -> int:
     Scans (ffprobe only) run in one batch thread of their own so a library scan
     does not wait behind, or crowd out, transcription jobs.
     """
+    from . import adaptive
+
     recover_stale_jobs()
-    if _pause_for_playback():
+    try:
+        opts = options()
+    except ChapterConfigError:
+        opts = GLOBAL_DEFAULTS
+    has_work = (
+        db.session.query(ChapterState.id)
+        .filter(ChapterState.job_state.in_(("queued", "running")))
+        .first()
+        is not None
+    )
+    if not has_work:
+        _set_paused(False)
+        return 0
+    playing, transcoding = adaptive.viewers(playback_sessions())
+    if not opts["pause_during_playback"]:
+        playing = transcoding = 0  # "make room for people watching" is off
+    reading = adaptive.Reading(
+        adaptive.cpu_use(), adaptive.gpu_use(), playing, transcoding
+    )
+    busy = (
+        db.session.query(func.count(ChapterState.id))
+        .filter(
+            ChapterState.job_state == "running",
+            ChapterState.requested_action != "scan",
+        )
+        .scalar()
+    )
+    decision = adaptive.controller.decide(
+        reading, most=opts["concurrency"], running=busy, waiting=True
+    )
+    _record_limit(decision.limit, decision.reason)
+    _set_paused(decision.suspend)
+    if decision.suspend:
         return 0
     app = current_app._get_current_object()
     started = 0
@@ -1607,20 +1642,9 @@ def dispatch(*, synchronous=False, llm=None) -> int:
                 _run_leased(app, scans, llm)
             else:
                 _start("scan", app, scans, llm)
-    try:
-        concurrency = options()["concurrency"]
-    except ChapterConfigError:
-        concurrency = GLOBAL_DEFAULTS["concurrency"]
     # Counted in the database, so the limit holds across worker processes.
-    busy = (
-        db.session.query(func.count(ChapterState.id))
-        .filter(
-            ChapterState.job_state == "running",
-            ChapterState.requested_action != "scan",
-        )
-        .scalar()
-    )
-    free = concurrency - max(busy, len([k for k in running if k != "scan"]))
+    busy = max(busy, len([k for k in running if k != "scan"]))
+    free = decision.limit - busy
     if free <= 0:
         return started
     if "recap" not in running:
@@ -1894,6 +1918,7 @@ def job_activity(recent=10) -> dict:
     )
     return {
         "paused_since": _as_datetime(setting("chapters_paused_since")),
+        "job_limit": setting("chapter_job_limit"),
         "running": running,
         "recently_active": recently_active,
         "recap_active": last_recap

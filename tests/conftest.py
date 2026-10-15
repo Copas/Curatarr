@@ -32,3 +32,14 @@ def app(tmp_path, monkeypatch):
 @pytest.fixture
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def quiet_machine(monkeypatch):
+    """Job dispatch reads the real CPU and GPU; tests get an idle machine and a
+    fresh controller so they don't depend on what this computer is doing."""
+    from curatarr import adaptive
+
+    monkeypatch.setattr(adaptive, "cpu_use", lambda: 0.05)
+    monkeypatch.setattr(adaptive, "gpu_use", lambda: None)
+    monkeypatch.setattr(adaptive, "controller", adaptive.Controller(limit=4))
