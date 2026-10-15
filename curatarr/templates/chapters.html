@@ -16,7 +16,7 @@
     <div class="stat-grid">
       {{ stat('Needing chapters', summary.needing, (summary.transcription_estimate|commas ~ ' need transcription') if 0 < summary.transcription_estimate < summary.needing else None, True) }}
       {{ stat('Needing subtitles', summary.needing_subtitles, None, True) }}
-      {{ stat('Queued or running', summary.queued, None, True) }}
+      {{ stat('Chapter jobs queued or running', summary.queued, None, True) }}
       {{ stat('Not scanned yet', summary.not_scanned, None, True) }}
       {{ stat('Redo with Smart Chapters', summary.smart_upgradable, 'got Navigation chapters' if summary.smart_upgradable else None, True) }}
       {{ stat('Failed', summary.failed, 'reasons listed below' if summary.failed else None, True) }}
