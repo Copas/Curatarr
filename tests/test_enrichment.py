@@ -1043,7 +1043,7 @@ def test_duration_words():
 def test_maintenance_page_separates_to_do_from_library_stats(app, client, media_env):
     page = client.get("/chapters").get_data(as_text=True)
     todo, library = page.split('id="todo-heading"')[1].split('id="library-heading"')
-    assert "Needing chapters" in todo and "Queued or running" in todo
+    assert "Needing chapters" in todo and "Chapter jobs queued or running" in todo
     assert "Files" not in todo
     assert "Already had chapters" in library and "Needing chapters" not in library
     assert "stat-done" in todo  # nothing to do yet shows as done
@@ -1870,3 +1870,21 @@ def test_check_skip_markers_button_hands_the_queueing_to_the_worker(
         == 4
     )
     assert enrichment.run_requested_skip_marker_check() == 0  # the request was used up
+
+
+def test_a_cleared_flag_does_not_break_the_list(app, client, media_env):
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    state = enrichment.state_for(parts[0])
+    state.identity_issue = {
+        "kind": "episode",
+        "season": 1,
+        "filed_as": 1,
+        "fits": 2,
+        "margin": 5.0,
+    }
+    db.session.commit()
+    state.identity_issue = None  # an update to None stores JSON null, not SQL NULL
+    db.session.commit()
+    assert client.get("/chapters/identity").status_code == 200
+    assert client.get("/api/v1/identity-flags").get_json()["flags"] == []
