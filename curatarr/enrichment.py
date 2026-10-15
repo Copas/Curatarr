@@ -20,7 +20,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from flask import current_app
-from sqlalchemy import and_, case, func, or_
+from sqlalchemy import and_, case, func, or_, update
 from sqlalchemy.exc import OperationalError
 
 from . import db, leases, throttle
@@ -2922,13 +2922,45 @@ def queue_recaps(library_id=None) -> int:
     )
     if library_id:
         query = query.filter(MediaIdentity.library_id == library_id)
+    ids = [row.id for row in query.with_entities(ChapterState.id)]
+    db.session.rollback()  # end the read before writing
     now = utcnow()
-    count = 0
-    for count, state in enumerate(query.all(), start=1):
-        state.job_state, state.requested_action = "queued", "recap"
-        # Episode order: earlier episodes teach later ones the closing line.
-        state.requested_at = now + timedelta(milliseconds=count)
-    db.session.commit()
+    queued = 0
+    # In batches, each committed at once: one long write of thousands of rows
+    # held SQLite's lock until other writers gave up ("database is locked").
+    for offset in range(0, len(ids), QUEUE_BATCH):
+        for position, state_id in enumerate(
+            ids[offset : offset + QUEUE_BATCH], start=offset
+        ):
+            queued += db.session.execute(
+                update(ChapterState)
+                .where(ChapterState.id == state_id, ChapterState.job_state == "idle")
+                .values(
+                    job_state="queued",
+                    requested_action="recap",
+                    # Episode order: earlier episodes teach later ones the closing line.
+                    requested_at=now + timedelta(milliseconds=position),
+                )
+            ).rowcount
+        db.session.commit()
+    return queued
+
+
+QUEUE_BATCH = 500
+
+
+def request_skip_marker_check(library_id=None):
+    """Ask the worker to queue skip-marker checks (the page doesn't wait for it)."""
+    set_setting("skip_markers_requested", {"library_id": library_id})
+
+
+def run_requested_skip_marker_check() -> int:
+    requested = setting("skip_markers_requested")
+    if not requested:
+        return 0
+    set_setting("skip_markers_requested", None)
+    count = queue_recaps(requested.get("library_id"))
+    _log("skip_marker_checks_queued", count=count)
     return count
 
 

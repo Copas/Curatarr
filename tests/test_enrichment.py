@@ -1852,3 +1852,21 @@ def test_a_flag_survives_the_path_being_written_differently(app, client, media_e
     db.session.commit()
     assert parts[1].file_path == "/tv/Island Life/S01E02.mkv"
     assert len(client.get("/api/v1/identity-flags").get_json()["flags"]) == 1
+
+
+def test_check_skip_markers_button_hands_the_queueing_to_the_worker(
+    app, client, media_env, monkeypatch
+):
+    files, _arr = media_env
+    _series_with_recaps(files)
+    monkeypatch.setattr(enrichment, "QUEUE_BATCH", 2)  # several small commits
+    client.post("/chapters/recaps")
+    assert db.session.query(ChapterState).filter_by(job_state="queued").count() == 0
+    assert enrichment.run_requested_skip_marker_check() == 4
+    assert (
+        db.session.query(ChapterState)
+        .filter_by(job_state="queued", requested_action="recap")
+        .count()
+        == 4
+    )
+    assert enrichment.run_requested_skip_marker_check() == 0  # the request was used up
