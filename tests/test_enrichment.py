@@ -1039,20 +1039,20 @@ def test_forecast_projects_the_finish_from_the_recent_pace(app, client, media_en
         db.session.add(part)
         db.session.flush()
         states.append(enrichment.state_for(part))
-    for n, state in enumerate(states[:6]):  # six finished over the last three hours
-        state.requested_at = now - timedelta(hours=4)
+    for n, state in enumerate(states[:6]):  # six finished in a day-old batch
+        state.requested_at = now - timedelta(hours=30)
         state.chapter_processed_at = now - timedelta(minutes=30 * n)
     for state in states[6:]:  # four still to do, one a fast subtitle check
         state.job_state, state.requested_action = "queued", "generate"
-        state.requested_at = now - timedelta(hours=4)
+        state.requested_at = now - timedelta(hours=30)
     states[-1].requested_action = "subtitles"
     db.session.commit()
     forecast = enrichment.job_forecast(now)
     assert forecast["remaining"] == 3 and forecast["done"] == 6
-    assert forecast["per_hour"] == 2.0 and forecast["left"] == "1 h 30 min"
+    assert forecast["per_hour"] == 0.25 and forecast["left"] == "12 h"
     assert forecast["percent"] == round(100 * 6 / 9, 1)
     page = client.get("/chapters").get_data(as_text=True)
-    assert "6</strong> of 9 chapter jobs done" in page and "1 h 30 min" in page
+    assert "6</strong> of 9 chapter jobs done" in page and "12 h" in page
     # A native <progress>: the page's CSP blocks inline style="width: …%".
     assert '<progress class="w-100 d-block" value="6" max="9"' in page
     assert 'style="width' not in page

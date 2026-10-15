@@ -1781,8 +1781,9 @@ ACTION_LABELS = {
 
 # Fast jobs that never set chapter_processed_at; they don't count towards the forecast.
 FORECAST_EXCLUDED_ACTIONS = ("scan", "subtitles", "remove_subtitles", "recap")
-FORECAST_WINDOW = timedelta(hours=3)
-FORECAST_LONG_WINDOW = timedelta(hours=24)
+# A day evens out evenings when jobs pause for viewers and long films transcribing.
+FORECAST_WINDOW = timedelta(hours=24)
+FORECAST_LONG_WINDOW = timedelta(hours=72)
 FORECAST_MIN_SAMPLES = 3
 
 
@@ -1790,7 +1791,7 @@ def job_forecast(now=None) -> dict | None:
     """Progress and estimated finish for the queued chapter jobs, from the recent pace.
 
     The batch is everything queued since the oldest job still waiting; the pace is
-    jobs finished per hour over the last 3 hours (24 when that's too few to tell).
+    jobs finished per hour over the last 24 hours (72 when that's too few to tell).
     """
     now = now or utcnow()
     pending = db.session.query(ChapterState).filter(
