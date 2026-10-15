@@ -1954,3 +1954,23 @@ def test_the_episode_check_is_off_by_default(app, client, media_env):
     assert "Possible wrong episodes" not in client.get("/chapters").get_data(
         as_text=True
     )
+
+
+def test_chapter_jobs_ceiling_shows_its_range_and_accepts_up_to_eight(app, client):
+    page = client.get("/chapters/settings").get_data(as_text=True)
+    assert "Chapter jobs at once (most, 1–8)" in page and 'max="8"' in page
+    form = {
+        "chapter_mode": "smart",
+        "minimum_duration_minutes": "20",
+        "target_spacing_minutes": "7",
+        "minimum_spacing_minutes": "4",
+        "maximum_spacing_minutes": "10",
+        "whisper_model": "medium",
+        "fallback_format": "Chapter {number}",
+        "fixed_intervals": "true",
+        "concurrency": "6",
+    }
+    client.post("/chapters/settings", data=form)
+    assert enrichment.options()["concurrency"] == 6
+    client.post("/chapters/settings", data={**form, "concurrency": "9"})
+    assert enrichment.options()["concurrency"] == 6  # over the ceiling: refused
