@@ -743,14 +743,16 @@ def test_chapter_work_makes_room_for_someone_watching(
     arr.sessions_list = [{"NowPlayingItem": {"Id": "something-else"}}]
     monkeypatch.setattr(adaptive, "cpu_use", lambda: 0.9)
     assert enrichment.dispatch(synchronous=True) == 0 and files.writes == []
-    assert "Up to 0 chapter jobs" in client.get("/chapters").get_data(as_text=True)
+    assert "No new chapter jobs" in client.get("/chapters").get_data(as_text=True)
     # Still watching, but the machine has room: work carries on.
     monkeypatch.setattr(adaptive, "cpu_use", lambda: 0.1)
     assert enrichment.dispatch(synchronous=True) == 1
     assert not throttle.paused() and len(files.writes) == 1
 
 
-def test_running_jobs_pause_when_playback_needs_the_room(app, media_env, monkeypatch):
+def test_running_jobs_pause_when_playback_needs_the_room(
+    app, client, media_env, monkeypatch
+):
     from curatarr import adaptive, throttle
 
     files, arr = media_env
@@ -772,6 +774,8 @@ def test_running_jobs_pause_when_playback_needs_the_room(app, media_env, monkeyp
     monkeypatch.setattr(adaptive.time, "monotonic", lambda: 1040.0)
     assert enrichment.dispatch(synchronous=True) == 0  # and has lasted 40 s
     assert throttle.paused()
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "to keep playback smooth: CPU 98%" in page and "1 transcoding" in page
     arr.sessions_list = []
     monkeypatch.setattr(adaptive, "cpu_use", lambda: 0.1)
     enrichment.dispatch(synchronous=True)
