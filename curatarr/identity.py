@@ -24,7 +24,8 @@ when where why how there here"""
 STOP = frozenset(STOP_WORDS.split())
 MIN_SUMMARIES = 4  # episodes in the season with a usable summary
 MIN_SUMMARY_WORDS = 4
-WIN_MARGIN = 4.0  # another episode must fit this many times better
+WIN_MARGIN = 4.0  # another episode must fit this many times better than its own
+RUNNER_UP_MARGIN = 1.5  # which episode it is: clear of the runner-up
 MIN_SCORE = 2.0  # …and fit at all
 
 
@@ -59,17 +60,43 @@ def scores(transcript_text: str, summaries: dict) -> dict:
     return result
 
 
+def _ranked(fit: dict):
+    order = sorted(fit, key=fit.get, reverse=True)
+    best = order[0]
+    second = fit[order[1]] if len(order) > 1 else 0.0
+    return best, fit[best], second
+
+
 def better_match(own, transcript_text: str, summaries: dict):
-    """(other key, how many times better) when another episode clearly fits
-    the transcript better than its own; otherwise None."""
+    """(other key, how many times better, certain) when the transcript fits
+    another episode's summary far better than its own; otherwise None.
+
+    Fitting its own summary 4x worse reliably means the file isn't that
+    episode. *Which* episode it is is only certain when the best match is
+    also well clear of the runner-up (The Simpsons S14E21 isn't "The Bart of
+    War", but two other summaries fit it almost equally).
+    """
     fit = scores(transcript_text, summaries)
     if own not in fit:
         return None
-    best = max(fit, key=fit.get)
-    if best == own or fit[best] < MIN_SCORE:
+    best, top, second = _ranked(fit)
+    if best == own or top < MIN_SCORE:
         return None
-    margin = fit[best] / max(fit[own], 0.01)
-    return (best, round(margin, 1)) if margin >= WIN_MARGIN else None
+    margin = top / max(fit[own], 0.01)
+    if margin < WIN_MARGIN:
+        return None
+    return best, round(margin, 1), top >= RUNNER_UP_MARGIN * second
+
+
+def fits_own(own, transcript_text: str, summaries: dict) -> bool:
+    """Whether the transcript positively fits its own summary: the best match,
+    clearly ahead of every other. Only then is it safe to treat this file as
+    that episode (say, to remove another copy filed under it)."""
+    fit = scores(transcript_text, summaries)
+    if own not in fit:
+        return False
+    best, top, second = _ranked(fit)
+    return best == own and top >= MIN_SCORE and top >= RUNNER_UP_MARGIN * second
 
 
 def foreign_audio(language: str | None, streams: list[dict], expected="en"):
