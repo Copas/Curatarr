@@ -55,6 +55,11 @@ DEFAULTS: dict[str, Any] = {
 }
 
 # Values that only make sense once per installation, not per library.
+# A ceiling only: the adaptive limit (adaptive.py) decides how many actually run.
+# Transcription takes the GPU one at a time, but scene detection (~1.5 cores
+# each), reading files and waiting on the language model overlap.
+MAX_CONCURRENCY = 8
+
 GLOBAL_DEFAULTS: dict[str, Any] = {
     "concurrency": 1,
     "pause_during_playback": True,
@@ -204,8 +209,11 @@ def validate_global_options(values: dict) -> dict:
     unknown = set(values or {}) - set(GLOBAL_DEFAULTS)
     if unknown:
         raise ChapterConfigError(f"Unknown setting: {min(unknown)}")
-    if type(merged["concurrency"]) is not int or not 1 <= merged["concurrency"] <= 4:
-        raise ChapterConfigError("Concurrent chapter jobs must be 1-4")
+    if (
+        type(merged["concurrency"]) is not int
+        or not 1 <= merged["concurrency"] <= MAX_CONCURRENCY
+    ):
+        raise ChapterConfigError(f"Chapter jobs at once must be 1-{MAX_CONCURRENCY}")
     if (
         type(merged["settle_minutes"]) is not int
         or not 1 <= merged["settle_minutes"] <= 1440

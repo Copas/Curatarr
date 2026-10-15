@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- "Chapter jobs at once" goes up to 8 (was 4) and the field shows its range. With the adaptive limit it's only a ceiling; 4 had been a guard from when the number was fixed and every job meant GPU transcription.
+
 - **Adaptive chapter jobs.** Instead of a fixed number, Curatarr adjusts how many chapter jobs run every worker cycle from what it measures: CPU use, GPU use (only while Jellyfin is transcoding, since direct play doesn't use it and otherwise it's Curatarr's own transcription), how many people are watching, and how many of those streams are transcoded. With nobody watching it aims to keep the machine under 85%, each viewer lowers that by 15 points and each transcode by another 15 (never below 35%). Below the target it adds a job, one a minute; above it, nothing new starts and running jobs finish; if someone is watching and the machine stays well over the target for 30 seconds, running jobs are suspended for at least two minutes and resume once there's room. "Chapter jobs at once" is now the ceiling, and "Make room for people watching" (formerly "Pause chapter work while someone is watching") turns the playback part on or off. The Activity card says what it measured and decided.
 
 - The episode check (does the transcript fit the episode's own summary; is the default audio English) is now **off by default**: Chapter settings → "Check episodes against their summaries". It found real mix-ups, but with vague summaries it also flagged episodes that were fine, and speech recognition mislabelled the language of music-heavy audio. While off, skip-marker checks don't run it, and the list, the To do count, the episode notice and `/api/v1/identity-flags` stay empty.

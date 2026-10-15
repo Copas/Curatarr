@@ -6,6 +6,7 @@ from . import db
 from .chapters import (
     DEFAULTS,
     GENERATION_VERSION,
+    MAX_CONCURRENCY,
     WHISPER_MODELS,
     ChapterConfigError,
     effective_config,
@@ -111,6 +112,7 @@ def chapter_settings():
         effective=effective,
         opts=opts,
         whisper_models=sorted(WHISPER_MODELS),
+        max_concurrency=MAX_CONCURRENCY,
         environment=environment_status(),
     )
 
