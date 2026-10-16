@@ -434,7 +434,7 @@ def test_unwatched_plan_picks_never_started_shows_and_explains_skips(app):
         assert reasons["Nightly"].startswith("Daily show")
         assert reasons["Guarded"] == "Never Purge is on"
         # The worker won't reset below the minimum, so it isn't offered.
-        assert reasons["Gappy"] == "Some of its always-keep episodes aren't downloaded yet"
+        assert reasons["Gappy"].startswith("Missing always-keep episodes (S01E01)")
         assert "Reset Show" not in reasons  # watched shows are not listed at all
         assert plan[0]["frees"] == 200 and plan[0]["reset_files"] == 2
         plan, _ = unwatched_reset_plan(0)  # no recent-add exemption

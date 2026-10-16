@@ -1381,6 +1381,26 @@ def shows_by_size(library_id=None):
     return rows
 
 
+def _missing_minimum_reason(media):
+    """Which always-keep episodes are missing, and whether anything will fetch them."""
+    from .policy import retained
+
+    policy, _ = resolved_policy(media)
+    missing = sorted(
+        (p.season_number, p.episode_number)
+        for p in media.parts
+        if p.kind == "episode"
+        and p.season_number == 1
+        and not p.has_file
+        and retained(p, policy)
+    )
+    what = ", ".join(f"S{s:02}E{e:02}" for s, e in missing) or "Season 1"
+    reason = f"Missing always-keep episodes ({what})"
+    if media.arr_monitored is False:
+        reason += "; Sonarr has the show unmonitored, so nothing will fetch them"
+    return reason
+
+
 def unwatched_reset_plan(skip_recent_days=30, library_id=None):
     """Which shows "Reset all unwatched shows" would reset, and which it skips and why.
 
@@ -1420,7 +1440,7 @@ def unwatched_reset_plan(skip_recent_days=30, library_id=None):
         elif not minimum_satisfied(media.parts, resolved_policy(media)[0]):
             # The worker refuses these (the reset would leave less than the
             # minimum), so listing them only made them vanish after confirming.
-            reason = "Some of its always-keep episodes aren't downloaded yet"
+            reason = _missing_minimum_reason(media)
         elif added and added > cutoff:
             reason = f"Added {added.strftime('%Y-%m-%d')}, within the last {skip_recent_days} days"
         else:
