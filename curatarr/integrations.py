@@ -291,6 +291,37 @@ class IntroSkipper:
         )
 
 
+def _ignore_releases(client, item_path, label, pattern, name):
+    """Ignore releases matching `pattern` for one series or film only: a release
+    profile limited to a tag that only that item gets."""
+    tags = client.request("GET", "/api/v3/tag")
+    tag = next((t for t in tags if t.get("label") == label), None) or client.request(
+        "POST", "/api/v3/tag", json={"label": label}
+    )
+    profiles = client.request("GET", "/api/v3/releaseprofile")
+    profile = next((p for p in profiles if tag["id"] in (p.get("tags") or [])), None)
+    if profile is None:
+        client.request(
+            "POST",
+            "/api/v3/releaseprofile",
+            json={
+                "name": name,
+                "enabled": True,
+                "required": [],
+                "ignored": [pattern],
+                "indexerId": 0,
+                "tags": [tag["id"]],
+            },
+        )
+    elif pattern not in (profile.get("ignored") or []):
+        profile["ignored"] = [*(profile.get("ignored") or []), pattern]
+        client.request("PUT", f"/api/v3/releaseprofile/{profile['id']}", json=profile)
+    item = client.request("GET", item_path)
+    if tag["id"] not in (item.get("tags") or []):
+        item["tags"] = [*(item.get("tags") or []), tag["id"]]
+        client.request("PUT", item_path, json=item)
+
+
 class SonarrClient(Client):
     status_path = "/api/v3/system/status"
 
@@ -352,36 +383,8 @@ class SonarrClient(Client):
         )
 
     def ignore_for_series(self, series_id, label, pattern, name):
-        """Make Sonarr ignore releases matching `pattern` for this series only:
-        a release profile limited to a tag that only this series has."""
-        tags = self.request("GET", "/api/v3/tag")
-        tag = next((t for t in tags if t.get("label") == label), None) or self.request(
-            "POST", "/api/v3/tag", json={"label": label}
-        )
-        profiles = self.request("GET", "/api/v3/releaseprofile")
-        profile = next(
-            (p for p in profiles if tag["id"] in (p.get("tags") or [])), None
-        )
-        if profile is None:
-            self.request(
-                "POST",
-                "/api/v3/releaseprofile",
-                json={
-                    "name": name,
-                    "enabled": True,
-                    "required": [],
-                    "ignored": [pattern],
-                    "indexerId": 0,
-                    "tags": [tag["id"]],
-                },
-            )
-        elif pattern not in (profile.get("ignored") or []):
-            profile["ignored"] = [*(profile.get("ignored") or []), pattern]
-            self.request("PUT", f"/api/v3/releaseprofile/{profile['id']}", json=profile)
-        series = self.request("GET", f"/api/v3/series/{series_id}")
-        if tag["id"] not in (series.get("tags") or []):
-            series["tags"] = [*(series.get("tags") or []), tag["id"]]
-            self.request("PUT", f"/api/v3/series/{series_id}", json=series)
+        """Make Sonarr ignore releases matching `pattern` for this series only."""
+        _ignore_releases(self, f"/api/v3/series/{series_id}", label, pattern, name)
 
     def series_monitored(self, series_id):
         series = self.request("GET", f"/api/v3/series/{series_id}")
@@ -477,6 +480,10 @@ class SonarrClient(Client):
 
 class RadarrClient(Client):
     status_path = "/api/v3/system/status"
+
+    def ignore_for_movie(self, movie_id, label, pattern, name):
+        """Make Radarr ignore releases matching `pattern` for this film only."""
+        _ignore_releases(self, f"/api/v3/movie/{movie_id}", label, pattern, name)
 
     def movies(self):
         return self.request("GET", "/api/v3/movie")

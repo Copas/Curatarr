@@ -113,6 +113,12 @@ class FakeArr:
     def episode_grabs(self, episode_id):
         return [{"id": 400, "sourceTitle": "Show.S01E01.HDTV"}]
 
+    def ignore_for_movie(self, movie_id, label, pattern, name):
+        self.calls.append(("ignore", movie_id, label, name))
+
+    def ignore_for_series(self, series_id, label, pattern, name):
+        self.calls.append(("ignore", series_id, label, name))
+
     def mark_failed(self, history_id):
         self.calls.append(("failed", history_id))
 
@@ -303,3 +309,62 @@ def test_a_short_file_named_as_one_part_says_so(monkeypatch):
     assert "part 2 of a release split into parts" in issue["text"]
     other = filecheck.health("/films/Partisan.1080p.mkv", 93 * 60, 129, [], film=True)
     assert "different version" in other[0]["text"]
+
+
+def test_replacing_one_part_of_a_split_film_ignores_split_releases(client, check_env):
+    """The Millennium films' extended cuts come in two parts: blocklisting one
+    part only made Radarr grab the other part next."""
+    arr, found = check_env
+    found["subtitles"] = "clean"
+    found["issues"] = [
+        {
+            "kind": "short",
+            "text": "Runs 93 min, but it's listed as 147 min: the file name says "
+            "it's part 1 of a release split into parts, so the rest of the film "
+            "is missing",
+        }
+    ]
+    _library, media, _part = _movie(PATH)
+    media.title = "The Girl Who Kicked the Hornet's Nest"
+    db.session.commit()
+    filecheck_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+    page = client.post(
+        f"/chapters/problems/{state.id}/replace", follow_redirects=True
+    ).text
+    assert arr.calls[0] == (
+        "ignore",
+        7,
+        "curatarr-split-7",
+        "Curatarr: whole The Girl Who Kicked the Hornet's Nest, not one part",
+    )
+    assert "now ignores releases split into parts for this title" in page
+
+
+def test_a_film_with_a_part_in_its_title_is_never_ignored(client, check_env):
+    arr, found = check_env
+    found["subtitles"] = "clean"
+    found["issues"] = [
+        {
+            "kind": "short",
+            "text": "Runs 60 min: it's part 2 of a release split into parts",
+        }
+    ]
+    _library, media, _part = _movie(PATH)
+    media.title = "Harry Potter and the Deathly Hallows: Part 2"
+    db.session.commit()
+    filecheck_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+    client.post(f"/chapters/problems/{state.id}/replace")
+    assert not any(call[0] == "ignore" for call in arr.calls)
+
+
+def test_split_release_pattern():
+    import re
+
+    pattern = re.compile(filecheck_jobs.SPLIT_RELEASE[1:-2], re.IGNORECASE)
+    assert pattern.search("The.Girl.Who.Kicked.the.Hornets.Nest.2009.Part.1.EXTENDED")
+    assert pattern.search("Film.2009.CD2.avi")
+    assert not pattern.search("Party.Down.2009") and not pattern.search(
+        "Part.Time.2010"
+    )
