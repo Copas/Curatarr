@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Process library · Curatarr{% endblock %}
 {% block content %}
-<div class="eyebrow">Manage · Chapter maintenance</div><h1>Add chapters to {{ name }}</h1>
+<div class="eyebrow">Enhance</div><h1>Add chapters to {{ name }}</h1>
 <div class="card p-4"><p>This queues <strong>{{ count }}</strong> file{{ '' if count == 1 else 's' }} without chapters in {{ name }}. Each is processed in the background, one or a few at a time, using <strong>{{ ('Smart Chapters' if config.mode == 'smart' else 'Navigation Chapters') }}</strong>{% if not library %} (or each library's own setting){% endif %}{% if config.processing.dry_run %} in <strong>dry run</strong> (nothing is modified){% endif %}.</p>
 <ul><li>Files scanned: {{ summary.scanned }} of {{ summary.files }}</li><li>Already have chapters (left alone): {{ summary.existing }}</li><li>Below the minimum length: {{ summary.short }}</li><li>Unsupported containers: {{ summary.unsupported }}</li>{% if config.mode == 'smart' and config.semantic.enabled %}<li>Would need transcription: {{ summary.transcription_estimate }} (each takes a few minutes of GPU time)</li>{% endif %}</ul>
 <p class="text-secondary">Chapters are written into each MKV file in place without re-encoding. Curatarr can remove the chapters it adds later, one file at a time.</p>

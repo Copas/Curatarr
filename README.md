@@ -42,7 +42,7 @@ Curatarr sits beside **Jellyfin**, **Sonarr** and **Radarr**. It learns from wha
 
 All of it writes only into MKV files, in place, without re-encoding, and only when you switch it on.
 
-![Chapter maintenance](docs/images/chapters.png)
+![Enhance progress](docs/images/chapters.png)
 
 ### Stays out of the way
 - **Adaptive workload**: measures CPU, GPU and who's watching, and runs as much work as the machine has room for. When someone starts a stream it backs off, and it resumes when they stop.

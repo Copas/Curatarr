@@ -282,3 +282,23 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
   .table-stack td[data-label]::before { content: attr(data-label) " · "; color: var(--app-muted); font-size: .8rem; }
   .table-stack td[colspan] { padding: .5rem 0; }
 }
+
+/* --- Title page: Enhancements panel ---------------------------------------------------- */
+#enhance-heading { display: flex; align-items: center; gap: .45rem; }
+#enhance-heading .icon { color: var(--app-accent); }
+.enh-season { border: 1px solid var(--app-border); border-radius: .7rem; background: var(--app-bg); }
+.enh-season + .enh-season { margin-top: .5rem; }
+.enh-season > summary { list-style: none; display: flex; align-items: center; gap: .7rem; padding: .65rem .9rem; }
+.enh-season > summary::-webkit-details-marker { display: none; }
+.enh-season > summary .icon { margin-left: auto; color: var(--app-muted); transition: transform .15s; }
+.enh-season[open] > summary .icon { transform: rotate(90deg); }
+.enh-season[open] > summary { border-bottom: 1px solid var(--app-border); }
+.enh-list { display: grid; }
+.enh-row { display: grid; grid-template-columns: minmax(4rem, auto) 1fr auto; align-items: center; gap: .4rem .9rem; padding: .55rem .9rem; }
+.enh-row + .enh-row { border-top: 1px solid var(--app-border); }
+.enh-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.enh-go { font-size: .8rem; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: .1rem; }
+@media (max-width: 575.98px) {
+  .enh-row { grid-template-columns: 1fr auto; }
+  .enh-chips { grid-column: 1 / -1; grid-row: 2; }
+}

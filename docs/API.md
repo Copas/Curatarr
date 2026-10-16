@@ -23,7 +23,7 @@ Another tool, such as a home dashboard, can read the `/api/v1/` endpoints withou
 curl -H "X-Api-Key: $CURATARR_API_KEY" http://127.0.0.1:8787/api/v1/history?limit=5
 ```
 
-Generate the key under **Manage → Integrations → API key**. It's shown once, stored only as a hash, and grants nothing but these GET requests.
+Generate the key under **Settings → Integrations → API key**. It's shown once, stored only as a hash, and grants nothing but these GET requests.
 
 ## Adding Curatarr to a dashboard
 
@@ -41,7 +41,7 @@ On a native install: `journalctl -u curatarr-worker -f` (or `curatarr-web`). In 
 
 ## Metrics
 
-`/api/v1/metrics` and Manage → Operations report:
+`/api/v1/metrics` and Settings → Operations report:
 
 - events processed, and duplicate events ignored;
 - acquisition actions, purge candidates created, and rescues;

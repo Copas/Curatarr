@@ -2059,3 +2059,22 @@ def test_credits_people_talk_through_are_trimmed_and_can_be_undone(
     enrichment.undo_marker(state, "hidden", "long")
     assert ("DELETE", "/Episode/jf-ep4/Segments/ours-Credits", None) in calls
     assert ("POST", "/Episode/jf-ep4/Segments/long/Restore", None) in calls
+
+
+def test_title_page_shows_what_curatarr_did_to_each_file(app, client, media_env):
+    _library, media, part = _movie()
+    state = enrichment.state_for(part)
+    state.duration_seconds, state.chapter_status, state.chapter_count = (
+        5400,
+        "generated_semantic",
+        9,
+    )
+    state.recap_start, state.recap_end = 0.0, 82.0
+    state.markers_hidden = [{"id": "x", "type": "Credits", "reason": "test"}]
+    state.dub_result = {"original": "fr", "verdict": "no_english"}
+    db.session.commit()
+    page = client.get(f"/titles/{media.id}").get_data(as_text=True)
+    panel = page.split('id="enhance-heading"')[1].split("</section>")[0]
+    assert "9 chapters" in panel and "Recap 0:00–1:22" in panel
+    assert "1 marker fixed" in panel and "No English audio" in panel
+    assert f"/chapters/parts/{part.id}" in panel

@@ -92,7 +92,7 @@ def chapter_settings():
             db.session.rollback()
             flash(str(exc), "danger")
         else:
-            flash("Chapter settings saved", "success")
+            flash("Enhance settings saved", "success")
         return redirect(request.full_path.rstrip("?"))
     inherited = effective_config(global_layer()) if library else DEFAULTS
     effective = (
