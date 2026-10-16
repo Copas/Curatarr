@@ -58,8 +58,11 @@ def test_overview_lists_scheduled_and_recent_cleanup(app, client):
     db.session.commit()
     assert expire_notices() == 1
     page = client.get("/")
-    assert b"Dry run (not deleted)" in page.data
-    assert b"No deletions are scheduled." in page.data
+    # A series is never deleted: cleanup removes its later episodes.
+    assert candidate.media.media_type == "series"
+    assert b"Dry run: would reset" in page.data
+    assert b"Deleted" not in page.data
+    assert b"No cleanup is scheduled." in page.data
 
 
 def test_unmanaged_libraries_are_named_not_shown_as_empty(app, client):
