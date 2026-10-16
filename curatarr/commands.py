@@ -157,6 +157,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Counting transcripts failed")
     try:
+        from . import catchphrases
+
+        catchphrases.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Finding catchphrases failed")
+    try:
         from .enrichment import link_transcripts
 
         link_transcripts()

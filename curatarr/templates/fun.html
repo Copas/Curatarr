@@ -23,7 +23,7 @@
   {% if c.shows %}<h3 class="fun-kind">{{ 'Episodes' if c.episodes else 'Shows' }}</h3>{{ ranking(c.shows, c.value, c.unit) }}{% endif %}
 </section>{% endfor %}
 </div>
-{% if facts.catchphrases %}<section class="card p-3 mt-4" id="catchphrases"><h2 class="h5 mb-0">Catchphrases</h2><p class="small text-secondary">The phrase each show says in more of its episodes than other shows do.</p>
+{% if facts.catchphrases %}<section class="card p-3 mt-4" id="catchphrases"><h2 class="h5 mb-0">Catchphrases</h2><p class="small text-secondary">The longest phrase each show says across its episodes, leaving out theme songs, the show's own name and everyday English. Shows you watch most come first.</p>
 <ul class="fun-list fun-phrases">{% for c in facts.catchphrases %}<li><a href="{{ url_for('main.title', media_id=c.media.id) }}">{{ c.media.title }}</a><span class="fun-value">“{{ c.phrase }}” <small>in {{ c.episodes }} of {{ c.of }} episodes</small></span></li>{% endfor %}</ul></section>{% endif %}
 {% endif %}
 {% endblock %}
