@@ -499,6 +499,8 @@ def chapter_dub_action(state_id, action):
     except (IntegrationError, ValueError) as exc:
         db.session.rollback()
         flash(f"Couldn't do that: {exc}", "danger")
+    if request.form.get("back") == "overview":
+        return redirect(url_for("main.overview"))
     return redirect(url_for("main.chapter_dubs"))
 
 

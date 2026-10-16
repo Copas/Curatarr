@@ -84,3 +84,20 @@ def test_search_finds_titles_and_says_when_nothing_matches(app, client):
     page = client.get("/search?q=Demo+Movie+07").text
     assert "Demo Movie 07" in page and ">Titles<" in page
     assert "No matches" in client.get("/search?q=zzzz-nothing").text
+
+
+def test_overview_lists_what_needs_someone(app, client):
+    app.config["DEMO_MODE"] = True
+    seed_demo()
+    client.post("/reconcile")
+    from curatarr.models import PurgeCandidate
+
+    leaving = db.session.query(PurgeCandidate).filter_by(state="LEAVING_SOON").first()
+    waiting = db.session.query(PurgeCandidate).filter_by(state="REVIEW").count()
+    assert leaving and waiting  # the demo library has both
+    needs = client.get("/").text.split('id="needs-heading"')[1].split("</section>")[0]
+    assert leaving.media.title in needs
+    assert f"/review/{leaving.id}/keep" in needs and 'value="overview"' in needs
+    assert f"{waiting} titles waiting for a decision" in needs
+    response = client.post(f"/review/{leaving.id}/keep", data={"back": "overview"})
+    assert response.headers["Location"] == "/"
