@@ -2293,7 +2293,7 @@ def test_try_all_again_includes_failed_files_queued_for_other_work(client, media
 
 def test_an_unreachable_file_waits_without_counting_as_failed(media_env):
     """An old "not found" failure on a share that's still offline waits."""
-    files, arr = media_env
+    _files, arr = media_env
     _library, _media, part = _movie()
     arr.movie_record = None  # Radarr can't be asked either
     state = enrichment.state_for(part)
