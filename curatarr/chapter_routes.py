@@ -17,7 +17,7 @@ from .enrichment import (
     describe,
     dismiss_identity,
     environment_status,
-    failed_query,
+    failed_groups,
     file_label,
     file_locations_known,
     fix_default_audio,
@@ -169,10 +169,7 @@ def chapter_maintenance():
         "chapters.html",
         libraries=_managed_libraries(),
         library_id=library_id,
-        failed=failed_query(library_id)
-        .order_by(ChapterState.updated_at.desc())
-        .limit(25)
-        .all(),
+        failed_groups=failed_groups(library_id),
         backlog=_backlog(library_id),
         summary=maintenance_summary(library_id),
         smart_blocked=smart_chapters_blocked(),
@@ -548,6 +545,28 @@ def chapter_failed_retry_all():
         "success",
     )
     return redirect(url_for("main.chapter_maintenance"))
+
+
+@bp.post("/chapters/failed/retry-kind/<kind>")
+def chapter_failed_retry_kind(kind):
+    from sqlalchemy.exc import OperationalError
+
+    from .enrichment import retry_failed_kind
+
+    try:
+        count = retry_failed_kind(kind, request.form.get("library") or None)
+    except OperationalError:
+        db.session.rollback()
+        flash(
+            "Curatarr's database is busy right now; nothing was changed. "
+            "Try again in a minute.",
+            "warning",
+        )
+        return redirect(url_for("main.chapter_maintenance"))
+    flash(f"Queued {count} failed job{'s' if count != 1 else ''} again.", "success")
+    return redirect(
+        url_for("main.chapter_maintenance", library=request.form.get("library") or None)
+    )
 
 
 @bp.post("/chapters/failed/<state_id>/<action>")

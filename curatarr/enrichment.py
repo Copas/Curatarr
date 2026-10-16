@@ -2190,6 +2190,95 @@ def file_label(state: ChapterState) -> str:
     return media.title
 
 
+# Why chapter jobs fail, in the order they're checked, so Progress can group
+# them and say what to do about each kind.
+FAILURE_KINDS = (
+    (
+        "missing",
+        "Couldn't find the file",
+        (
+            "Usually the network share was offline or the file was replaced. These are "
+            "retried by themselves once the file can be read again."
+        ),
+        ("not found", "no longer exists", "can't be reached") + UNREACHABLE_ERRORS,
+    ),
+    (
+        "unreadable",
+        "File unreadable or damaged",
+        (
+            "Curatarr couldn't read the file, or it changed while being written. "
+            "Another copy usually fixes it."
+        ),
+        ("Verification", "Invalid data", "moov atom", "End of file", "corrupt"),
+    ),
+    (
+        "write",
+        "Couldn't write to the file",
+        "Often the share is read-only or Curatarr's account can't change the file.",
+        ("Writing chapters failed", "Removing chapters failed", "Permission denied"),
+    ),
+    (
+        "nothing",
+        "Nothing produced chapters",
+        "No scene changes or speech to work from (very short, silent or blank files).",
+        ("No chapter method succeeded",),
+    ),
+    (
+        "settings",
+        "Settings problem",
+        "Fix the chapter settings in Settings → Enhance, then try again.",
+        ("Invalid chapter settings",),
+    ),
+    (
+        "crash",
+        "Curatarr hit an error",
+        "Something unexpected; the worker log has the details. Trying again often works.",
+        ("Unexpected error",),
+    ),
+)
+
+
+def failure_kind(state) -> str:
+    error = state.chapter_error or ""
+    for kind, _title, _advice, patterns in FAILURE_KINDS:
+        if any(p.lower() in error.lower() for p in patterns):
+            return kind
+    return "other"
+
+
+def failed_groups(library_id=None, shown=10) -> list[dict]:
+    """Failed chapter jobs grouped by why, the biggest group first."""
+    groups = {}
+    for state in failed_query(library_id).order_by(ChapterState.updated_at.desc()):
+        groups.setdefault(failure_kind(state), []).append(state)
+    known = {kind: (title, advice) for kind, title, advice, _ in FAILURE_KINDS}
+    known["other"] = ("Other", "Each one says why below.")
+    return sorted(
+        (
+            {
+                "kind": kind,
+                "title": known[kind][0],
+                "advice": known[kind][1],
+                "count": len(states),
+                "states": states[:shown],
+            }
+            for kind, states in groups.items()
+        ),
+        key=lambda g: -g["count"],
+    )
+
+
+def retry_failed_kind(kind, library_id=None) -> int:
+    """Try the failed jobs of one kind again."""
+    states = [s for s in failed_query(library_id).all() if failure_kind(s) == kind]
+    for start in range(0, len(states), 50):  # short writes, so nothing waits long
+        for state in states[start : start + 50]:
+            if state.job_state != "running":
+                _retry_failed(state)
+        db.session.commit()
+    return len(states)
+
+
 def failed_query(library_id=None):
     """Files whose chapter job failed, including ones that couldn't be read at
     all (no length): the tab badge, Overview and the Progress list all use it."""
