@@ -526,11 +526,23 @@ def chapter_dub_action(state_id, action):
     return redirect(url_for("main.chapter_dubs"))
 
 
+@bp.post("/chapters/failed/retry-all")
+def chapter_failed_retry_all():
+    from .enrichment import retry_all_failed
+
+    count = retry_all_failed()
+    flash(
+        f"Queued {count} failed job{'s' if count != 1 else ''} again. Files that "
+        "still can't be reached wait and retry every ten minutes instead of failing.",
+        "success",
+    )
+    return redirect(url_for("main.chapter_maintenance"))
+
+
 @bp.post("/chapters/failed/<state_id>/<action>")
 def chapter_failed_action(state_id, action):
     """Controls for a failed chapter job: try again, find another copy, ignore."""
     from . import enrichment
-    from .enrichment import request as request_action
 
     client = enrichment.client
     state = db.session.get(ChapterState, state_id)
@@ -548,7 +560,8 @@ def chapter_failed_action(state_id, action):
     part, media = state.part, state.media
     try:
         if action == "retry":
-            request_action(part, "generate")
+            enrichment._retry_failed(state)
+            db.session.commit()
             flash(
                 f"Trying {file_label(state)} again. If the file has gone, Curatarr "
                 "checks with Radarr or Sonarr and waits for the next copy.",
