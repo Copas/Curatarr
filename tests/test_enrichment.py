@@ -857,12 +857,18 @@ def test_process_all_libraries_queues_only_enabled_ones(app, client, media_env):
     assert "Process all libraries" in page
     confirm = client.get("/chapters/libraries/all/process").get_data(as_text=True)
     assert (
-        "every library with chapters enabled" in confirm and "Queue 1 files" in confirm
+        "every library with chapters enabled" in confirm and "Queue 1 file<" in confirm
     )
+    assert "Adds 1 file without chapters" in client.get("/chapters/files").text
     client.post("/chapters/libraries/all/process", data={"confirm": "1"})
     db.session.expire_all()
     queued = db.session.query(ChapterState).filter_by(job_state="queued").all()
     assert [state.media_part_id for state in queued] == [part.id]
+    # Everything is queued now: nothing to add, so no button, just a note.
+    files_page = client.get("/chapters/files").text
+    assert "Process all…" not in files_page and "All 1 already queued" in files_page
+    confirm = client.get("/chapters/libraries/all/process").text
+    assert "Queue 0 files" in confirm and "1 more is already queued" in confirm
 
 
 class _UnavailableModel:
