@@ -124,15 +124,21 @@ def _segments(part, info):
 
 
 def sweep(limit=PER_RUN) -> int:
-    parts = _due().limit(limit).all()
+    # Look further than `limit`: files that can't be reached are skipped.
+    parts = _due().limit(limit * 10).all()
     if not parts:
         return 0
     runtimes = _runtimes()
     e = _enrichment()
     checked = 0
     for part in parts:
+        if checked >= limit:
+            break
         if setting("chapters_paused_since") or throttle.stopping():
             break  # someone started watching, or all work is paused
+        path = e.local_path(part.file_path)
+        if not path or not e.file_exists(path):
+            continue  # unreachable for now (a share offline?): check it later
         state = e.state_for(part)
         # Save a new record now: the check reads frames for up to a minute, and
         # holding SQLite's write lock that long stalls the web app and webhooks.

@@ -756,57 +756,134 @@ def _arr_file(part, media):
     return None
 
 
-def _resolve_missing(state, part, media) -> bool:
-    """A job's file isn't there. Not a failure if Radarr or Sonarr agree it's
-    gone (replaced, deleted) or know where it went (renamed, upgraded).
+MISSING_RETRY_MINUTES = 10
+MISSING_PATIENCE = 144  # tries (a day at 10 minutes) before an unreachable file fails
+UNREACHABLE = (
+    "Waiting: the file can't be reached right now (is the network share connected?)"
+)
 
-    Gone: the file is marked as having no copy and the job closes quietly; the
-    next import is processed as new. Moved: the new path is recorded and the
-    job runs again. Returns False when nothing explains it (a real failure).
+
+def _resolve_missing(state, part, media) -> bool:
+    """A job's file isn't there. Usually not a failure:
+
+    - Radarr or Sonarr have no file either (replaced, deleted): the file is
+      marked as having no copy and the job closes quietly; the next import is
+      processed as new.
+    - They know a new path that exists (renamed, upgraded): it's followed.
+    - They still have it here, or can't be asked: the storage is probably
+      offline (a network share that dropped). The job waits and tries again
+      every ten minutes, and fails only after a day.
+
+    Returns False when the job should fail.
     """
     known = _arr_file(part, media)
-    if known is None:
+    if known is not None:
+        has_file, arr_path = known
+        if not has_file:
+            part.has_file = False
+            _finish(state, "not_processed")
+            state.chapter_processed_at = None  # the next copy is new to Curatarr
+            state.attempts = 0
+            return True
+        moved = local_path(arr_path) if arr_path else None
+        if moved and moved != local_path(part.file_path) and file_exists(moved):
+            part.file_path = arr_path
+            state.job_state, state.next_attempt_at = "queued", None
+            state.chapter_error = None
+            return True
+    if state.attempts >= MISSING_PATIENCE:
         return False
-    has_file, arr_path = known
-    if has_file and arr_path:
-        moved = local_path(arr_path)
-        if not moved or moved == local_path(part.file_path) or not file_exists(moved):
-            return False
-        part.file_path = arr_path
-        state.job_state, state.next_attempt_at = "queued", None
-        state.chapter_error = None
-        return True
-    part.has_file = False
-    _finish(state, "not_processed")
-    state.chapter_processed_at = None  # the next copy is new to Curatarr
-    state.attempts = 0
+    state.attempts += 1
+    state.job_state = "queued"
+    state.next_attempt_at = utcnow() + timedelta(minutes=MISSING_RETRY_MINUTES)
+    state.chapter_error = UNREACHABLE
     return True
 
 
-def resolve_missing_failures(limit=20) -> int:
-    """Failures recorded before Curatarr checked with Radarr and Sonarr."""
+NOT_FOUND = "The media file was not found%"
+MISSING_RECHECK = timedelta(minutes=30)
+
+
+def resolve_missing_failures(limit=50) -> int:
+    """Retry jobs that failed because their file couldn't be found, once it can
+    be (a network share back after an outage), or explain why it can't."""
+    now = utcnow()
     rows = (
-        failed_query()
-        .filter(ChapterState.chapter_error.like("The media file was not found%"))
-        .filter(ChapterState.id.notin_(list(_missing_tried) or [""]))
-        .limit(limit)
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .filter(
+            MediaPart.has_file.is_(True),
+            ChapterState.job_state == "idle",
+            or_(
+                and_(
+                    ChapterState.chapter_status == "failed",
+                    ChapterState.chapter_error.like(NOT_FOUND),
+                ),
+                and_(
+                    ChapterState.subtitle_status == "failed",
+                    ChapterState.subtitle_error.like(NOT_FOUND),
+                ),
+            ),
+        )
+        .limit(limit * 4)
+        .populate_existing()  # job threads change these rows behind this session
         .all()
     )
+    rows = [
+        r
+        for r in rows
+        if now - _missing_tried.get(r.id, now - MISSING_RECHECK) >= MISSING_RECHECK
+    ][:limit]
     resolved = 0
     for state in rows:
-        _missing_tried.add(state.id)
+        _missing_tried[state.id] = now
         part, media = state.part, state.media
         path = local_path(part.file_path)
         if path and file_exists(path):
-            continue
-        if _resolve_missing(state, part, media):
+            _retry_failed(state)
+            resolved += 1
+        elif state.chapter_status == "failed" and _resolve_missing(state, part, media):
             resolved += 1
     if rows:
         db.session.commit()
     return resolved
 
 
-_missing_tried: set = set()
+_missing_tried: dict = {}
+
+
+def _retry_failed(state) -> None:
+    """Queue a failed file's work again from the start (Try again / Try all again)."""
+    if state.subtitle_status == "failed":
+        state.subtitle_status, state.subtitle_error = None, None
+    if state.chapter_status == "failed":
+        state.chapter_status, state.chapter_error = "not_processed", None
+        state.job_state, state.requested_action = "queued", "auto"
+    elif state.subtitle_status is None and state.job_state == "idle":
+        state.job_state, state.requested_action = "queued", "subtitles"
+    state.requested_at = utcnow()
+    state.attempts, state.next_attempt_at = 0, None
+
+
+def retry_all_failed() -> int:
+    """Try every failed chapter and subtitle job again."""
+    rows = (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .filter(
+            MediaPart.has_file.is_(True),
+            ChapterState.job_state == "idle",
+            or_(
+                ChapterState.chapter_status == "failed",
+                ChapterState.subtitle_status == "failed",
+            ),
+        )
+        .all()
+    )
+    for state in rows:
+        _retry_failed(state)
+    db.session.commit()
+    return len(rows)
 
 
 def _defer(state, reason):
@@ -870,7 +947,11 @@ def run_job(state_id: str, *, llm=None) -> str:
         return state.chapter_status
     if (not path or not file_exists(path)) and _resolve_missing(state, part, media):
         db.session.commit()
-        _log("file_gone", **fields)
+        _log(
+            "file_missing",
+            resolution=state.chapter_error or state.chapter_status,
+            **fields,
+        )
         return state.chapter_status
     if action in SUBTITLE_ACTIONS:
         return run_subtitles(state, action, part, media, path, config, opts)
