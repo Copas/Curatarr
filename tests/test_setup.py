@@ -78,6 +78,6 @@ def test_unmanaged_libraries_are_named_not_shown_as_empty(app, client):
     assert '<h3 class="h5">Shows</h3>' in page
     rules = client.get("/rules/retention").text
     assert ">Shows</a>" in rules and ">Curated Adult</a>" not in rules
-    assert "Dry run is on for every library." in page
+    assert 'title="Nothing is deleted in: Shows"' in page  # the header's dry-run pill
     status = client.get("/api/v1/status").get_json()
     assert status["dry_run_libraries"] == ["Shows"]

@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}More · Curatarr{% endblock %}
+{% macro row(href, icon_name, label, hint) %}<a class="more-row" href="{{ href }}">{{ icon(icon_name) }}<span><strong>{{ label }}</strong><small>{{ hint }}</small></span>{{ icon('chevron', 18) }}</a>{% endmacro %}
+{% block content %}
+<header class="page-heading"><div><h1>More</h1></div></header>
+<div class="more-list mb-4">
+  {{ row(url_for('main.search'), 'search', 'Search', 'Titles, and what was said in them') }}
+  {% if is_admin %}
+  {{ row(url_for('main.history'), 'activity', 'Activity', 'Everything Curatarr has done') }}
+  {% endif %}
+</div>
+{% if is_admin %}<h2 class="section-label">Settings</h2>
+<div class="more-list mb-4">
+  {{ row(url_for('main.settings'), 'settings', 'Integrations', 'Jellyfin, Sonarr, Radarr, household access') }}
+  {{ row(url_for('main.rules', section='acquisition'), 'library', 'Acquisition', 'What gets downloaded next') }}
+  {{ row(url_for('main.rules', section='retention'), 'shield', 'Retention', 'Cleanup rules and dry run') }}
+  {{ row(url_for('main.chapter_settings'), 'enhance', 'Enhance', 'Chapters, subtitles, skip markers, dubs') }}
+  {{ row(url_for('main.operations'), 'gauge', 'Operations', 'Health, jobs and metrics') }}
+  {{ row(url_for('main.setup'), 'tools', 'Setup', 'First-run checklist') }}
+</div>{% endif %}
+{% if signed_in_user %}<form method="post" action="{{ url_for('main.sign_out_page') }}" class="more-list"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="more-row">{{ icon('signout') }}<span><strong>Sign out</strong><small>{{ signed_in_user.name }}</small></span></button></form>{% endif %}
+{% endblock %}

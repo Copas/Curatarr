@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Files · Enhance · Curatarr{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow">Enhance</div><h1>Files without chapters</h1><p class="text-secondary mb-0">Preview what would be added to a file, or process the ones you pick. Scanning only reads files.</p></div>{% if summary.needing %}<a class="btn btn-sm btn-outline-warning" href="{{ url_for('main.chapter_confirm_library', library_id=library_id or 'all') }}">{{ 'Process this library…' if library_id else 'Process all…' }}</a>{% endif %}</header>
+{% set endpoint = 'main.chapter_files' %}{% include '_library_filter.html' %}
+{% if candidates %}
+<form method="post" action="{{ url_for('main.chapter_queue') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}">
+<p class="text-secondary small mb-2">{{ summary.needing|commas }} file{{ '' if summary.needing == 1 else 's' }} need chapters{% if summary.needing > candidates|length %}; the first {{ candidates|length }} are listed{% endif %}.</p>
+<ul class="file-list list-unstyled mb-3">
+{% for state in candidates %}<li class="file-row">
+  <input class="form-check-input" type="checkbox" name="state_id" value="{{ state.id }}" id="f-{{ state.id }}" aria-label="Select {{ file_label(state) }}">
+  <div class="file-main"><a href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}<div class="small text-secondary">{{ state.media.library.name }} · {{ ((state.duration_seconds or 0) / 60)|round|int }} min</div>{% if state.chapter_error %}<div class="small text-warning">{{ state.chapter_error }}</div>{% endif %}</div>
+  <span class="chip{% if state.chapter_status == 'failed' %} chip-danger{% elif state.job_state != 'idle' %} chip-accent{% endif %}">{{ state.job_state|capitalize if state.job_state != 'idle' else state.chapter_status.replace('_', ' ')|capitalize }}</span>
+</li>{% endfor %}
+</ul>
+<div class="sticky-actions"><span class="small text-secondary">Selected files</span><button class="btn btn-outline-secondary" name="action" value="preview">Dry run</button><button class="btn btn-primary" name="action" value="generate">Process</button></div>
+</form>
+{% else %}<div class="empty-state"><h2 class="h5">Nothing to show yet</h2><p class="mb-0">{{ 'Scan a library to find files without chapters.' if not summary.scanned else 'Every scanned file already has chapters, is too short, or is not MKV.' }}</p></div>{% endif %}
+{% endblock %}

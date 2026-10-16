@@ -1983,7 +1983,7 @@ def test_the_episode_check_is_off_by_default(app, client, media_env):
 
 def test_chapter_jobs_ceiling_shows_its_range_and_accepts_up_to_eight(app, client):
     page = client.get("/chapters/settings").get_data(as_text=True)
-    assert "Chapter jobs at once (most, 1–8)" in page and 'max="8"' in page
+    assert "Jobs at once, at most (1–8)" in page and 'max="8"' in page
     form = {
         "chapter_mode": "smart",
         "minimum_duration_minutes": "20",
