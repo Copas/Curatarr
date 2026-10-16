@@ -558,15 +558,131 @@ def overview():
     setup_incomplete = not current_app.config["DEMO_MODE"] and any(
         not step["done"] and not step.get("optional") for step in setup_progress()
     )
+    status = _status()
+    data = overview_data()
+    admin = current_app.config["ALLOW_UNAUTHENTICATED"] or (
+        (session.get("user") or {}).get("role", "admin") == "admin"
+    )
     return render_template(
         "overview.html",
-        status=_status(),
+        status=status,
         metrics=metrics_summary(),
         reconciliation=reconciliation_state(),
         setup_incomplete=setup_incomplete,
         demo_mode=current_app.config["DEMO_MODE"],
-        **overview_data(),
+        needs=_needs_you(status, data["scheduled"], setup_incomplete, admin),
+        care=_library_care() if admin else None,
+        **data,
     )
+
+
+NEEDS_SHOWN = 4  # titles leaving soon listed individually on Overview
+
+
+def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
+    """Everything waiting on someone, newest decisions first, for Overview."""
+    needs = []
+    leaving = [c for c in scheduled if c.state == "LEAVING_SOON"]
+    for candidate in leaving[:NEEDS_SHOWN]:
+        needs.append(
+            {
+                "icon": "review",
+                "tone": "warning",
+                "title": candidate.media.title,
+                "media_id": candidate.media_identity_id,
+                "leaving": candidate.scheduled_delete_at,
+                "detail": candidate.reason_text,
+                "keep": candidate.id,
+            }
+        )
+    if len(leaving) > NEEDS_SHOWN:
+        needs.append(
+            {
+                "icon": "review",
+                "title": f"{len(leaving) - NEEDS_SHOWN} more leaving soon",
+                "href": url_for("main.review"),
+            }
+        )
+    if status["review_count"]:
+        needs.append(
+            {
+                "icon": "review",
+                "title": f"{status['review_count']} title"
+                + ("s" if status["review_count"] != 1 else "")
+                + " waiting for a decision",
+                "detail": "Keep, snooze or approve cleanup",
+                "href": url_for("main.review"),
+            }
+        )
+    if not admin:
+        return needs
+    if setup_incomplete:
+        needs.insert(
+            0,
+            {
+                "icon": "tools",
+                "tone": "accent",
+                "title": "Continue setup",
+                "detail": "Connect Jellyfin, Sonarr and Radarr, then discover",
+                "href": url_for("main.setup"),
+            },
+        )
+    unhealthy = [k for k, v in status["integrations"].items() if v != "healthy"]
+    if unhealthy:
+        needs.insert(
+            0,
+            {
+                "icon": "settings",
+                "tone": "danger",
+                "title": ", ".join(k.title() for k in unhealthy)
+                + (" isn't" if len(unhealthy) == 1 else " aren't")
+                + " responding",
+                "detail": " · ".join(
+                    f"{k.title()}: {status['integrations'][k]}" for k in unhealthy
+                )
+                + ". Check the connection in Settings → Integrations",
+                "href": url_for("main.settings"),
+            },
+        )
+    from . import dub_jobs
+    from .enrichment import file_label, maintenance_failed_count
+
+    for state in dub_jobs.review()["to_act"][:NEEDS_SHOWN]:
+        needs.append(
+            {
+                "icon": "audio",
+                "tone": "warning",
+                "title": file_label(state),
+                "detail": "No English audio: replace it with another release?",
+                "dub": state.id,
+                "href": url_for("main.chapter_dubs"),
+            }
+        )
+    failed = maintenance_failed_count()
+    if failed:
+        needs.append(
+            {
+                "icon": "chapters",
+                "tone": "danger",
+                "title": f"{failed} chapter job"
+                + ("s" if failed != 1 else "")
+                + " failed",
+                "detail": "See why on Enhance → Files",
+                "href": url_for("main.chapter_files"),
+            }
+        )
+    return needs
+
+
+def _library_care() -> dict | None:
+    """Coverage and what's running, for Overview's Library care card."""
+    from .enrichment import job_activity, maintenance_summary
+
+    summary = maintenance_summary()
+    if not summary["scanned"]:
+        return None
+    activity = job_activity()
+    return {"summary": summary, "activity": activity}
 
 
 @bp.get("/operations")
@@ -898,6 +1014,8 @@ def review_action(candidate_id, choice):
         candidate = db.session.get(PurgeCandidate, candidate_id)
         if candidate:
             return redirect(url_for("main.title", media_id=candidate.media_identity_id))
+    if request.form.get("back") == "overview":
+        return redirect(url_for("main.overview"))
     return redirect(url_for("main.review"))
 
 

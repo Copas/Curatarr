@@ -1,34 +1,53 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="page-heading">
-  <div><div class="eyebrow">Home</div><h1>Overview</h1><p class="text-secondary mb-0">What needs attention across your managed libraries.</p></div>
+  <div><div class="eyebrow">Home</div><h1>Overview</h1></div>
   {% if is_admin %}
   <div class="d-flex gap-2">
-    <form method="post" action="{{ url_for('main.discover_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-outline-light">Discover</button></form>
-    <form method="post" action="{{ url_for('main.reconcile_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-primary">Reconcile</button></form>
+    <form method="post" action="{{ url_for('main.discover_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary">Discover</button></form>
+    <form method="post" action="{{ url_for('main.reconcile_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-primary">Reconcile</button></form>
   </div>
   {% endif %}
 </div>
 {% if is_admin %}
 {% set r = reconciliation %}
 {% if r.state in ('queued', 'running') %}<meta http-equiv="refresh" content="15">{% endif %}
-<div class="alert {{ {'queued': 'alert-info', 'running': 'alert-info', 'failed': 'alert-danger', 'interrupted': 'alert-warning'}.get(r.state, 'alert-secondary') }}" id="reconcile-status">
-{% if r.state == 'queued' %}<strong>Discovery queued</strong> at {{ r.requested_at|when('seconds') }}; the worker picks it up within 15 seconds. Queued work appears here until it starts. This page refreshes automatically.
-{% elif r.state == 'running' %}<strong>Discovery and reconciliation running</strong> since {{ r.started_at|when('seconds') }} ({{ r.elapsed_seconds // 60 }} min {{ r.elapsed_seconds % 60 }} s). A large library takes a few minutes. This page refreshes automatically.
+<div class="status-line status-{{ r.state or 'idle' }}" id="reconcile-status">
+{% if r.state == 'queued' %}<strong>Discovery queued</strong> at {{ r.requested_at|when('seconds') }}; the worker picks it up within 15 seconds. Queued work appears here until it starts, and this page refreshes on its own.
+{% elif r.state == 'running' %}<strong>Discovery and reconciliation running</strong> since {{ r.started_at|when('seconds') }} ({{ r.elapsed_seconds // 60 }} min {{ r.elapsed_seconds % 60 }} s). This page refreshes on its own.
 {% elif r.state == 'failed' %}<strong>Last reconciliation failed:</strong> {{ r.error }}. It retries automatically in about 5 minutes; check integration status in Settings.
 {% elif r.state == 'interrupted' %}<strong>Last reconciliation did not finish.</strong> It started at {{ r.started_at|when('time') }}; the worker may have restarted. Click Discover to run it again.
 {% elif r.last_finished %}Last reconciliation finished {{ r.last_finished|when }}{% if r.last_duration_ms %} in {{ (r.last_duration_ms / 1000)|round(0)|int }} s{% endif %}: {{ r.titles }} titles across {{ r.libraries }} libraries.
 {% else %}No reconciliation has run yet. Click Discover after adding API keys.{% endif %}
 </div>
 {% endif %}
-{% if is_admin and setup_incomplete %}<div class="alert alert-info">Setup is not finished. <a href="{{ url_for('main.setup') }}">Continue setup</a> to connect integrations and discover libraries.</div>{% endif %}
 <div class="row g-3 mb-4">
-  <div class="col-md-4"><a class="card p-3 stat-card text-decoration-none" href="{{ url_for('main.review') }}"><h2 class="h6">Review queue</h2><p class="display-6 mb-0">{{ status.review_count }}</p><span class="small">Open decisions →</span></a></div>
-  <div class="col-md-4"><a class="card p-3 stat-card text-decoration-none" href="{{ url_for('main.review') }}"><h2 class="h6">Leaving soon</h2><p class="display-6 mb-0">{{ status.leaving_soon_count }}</p><span class="small">See affected titles →</span></a></div>
-  <div class="col-md-4"><div class="card p-3 stat-card"><h2 class="h6">Managed libraries</h2><p class="display-6 mb-0">{{ library_reports|length }}</p><a class="small" href="{{ url_for('main.titles') }}">Browse titles →</a></div></div>
+  <section class="{{ 'col-lg-7' if care else 'col-12' }}" aria-labelledby="needs-heading"><div class="card p-3 h-100">
+    <div class="d-flex justify-content-between align-items-baseline mb-2"><h2 class="section-label mb-0" id="needs-heading">Needs you</h2>{% if needs %}<span class="chip chip-accent">{{ needs|length }}</span>{% endif %}</div>
+    {% if needs %}<ul class="needs-list list-unstyled mb-0">
+    {% for n in needs %}<li class="needs-item{{ ' tone-' ~ n.tone if n.tone }}">
+      <span class="needs-icon">{{ icon(n.icon) }}</span>
+      <div class="needs-text">{% if n.media_id %}<a href="{{ url_for('main.title', media_id=n.media_id) }}">{{ n.title }}</a>{% elif n.href %}<a href="{{ n.href }}">{{ n.title }}</a>{% else %}{{ n.title }}{% endif %}{% if n.detail or n.leaving %}<small>{% if n.leaving %}Leaving {{ n.leaving|when('date') }} · {% endif %}{{ n.detail }}</small>{% endif %}</div>
+      <div class="needs-actions">
+        {% if n.keep %}<form method="post" action="{{ url_for('main.review_action', candidate_id=n.keep, choice='keep') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="overview"><button class="btn btn-sm btn-outline-secondary">Keep</button></form>{% endif %}
+        {% if n.dub %}<form method="post" action="{{ url_for('main.chapter_dub_action', state_id=n.dub, action='replace') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="overview"><button class="btn btn-sm btn-primary">Replace</button></form><form method="post" action="{{ url_for('main.chapter_dub_action', state_id=n.dub, action='dismiss') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="overview"><button class="btn btn-sm btn-outline-secondary">Keep</button></form>
+        {% elif n.href and not n.keep %}<a class="needs-go" href="{{ n.href }}" aria-label="Open">{{ icon('chevron', 18) }}</a>{% endif %}
+      </div>
+    </li>{% endfor %}
+    </ul>
+    {% else %}<div class="needs-empty">{{ icon('review', 28) }}<div><strong>Nothing needs you.</strong><br><span class="text-secondary small">Decisions, replacements and problems show up here.</span></div></div>{% endif %}
+  </div></section>
+  {% if care %}{% set c = care.summary %}{% set a = care.activity %}
+  <section class="col-lg-5" aria-labelledby="care-heading"><a class="card p-3 h-100 care-card text-reset text-decoration-none" href="{{ url_for('main.chapter_maintenance') }}">
+    <div class="d-flex justify-content-between align-items-baseline mb-3"><h2 class="section-label mb-0" id="care-heading">Library care</h2><span class="small text-secondary">Enhance {{ icon('chevron', 14) }}</span></div>
+    {% for label, have, total in [('Chapters', c.chapters_have, c.chapters_possible), ('English subtitles', c.subtitles_have, c.subtitles_possible), ('Skip markers checked', c.markers_checked, c.markers_possible)] %}{% if total %}
+    <div class="care-row"><div class="d-flex justify-content-between small"><span>{{ label }}</span><span class="text-secondary">{{ (have * 100 / total)|round|int }}%</span></div><progress class="care-bar" value="{{ have }}" max="{{ total }}">{{ (have * 100 / total)|round|int }}%</progress></div>
+    {% endif %}{% endfor %}
+    <p class="care-now small mb-0">{% if a.paused_since %}<span class="chip">Paused</span> making room for people watching{% elif a.running %}<span class="chip chip-on">{{ a.running|length }} running</span>{% if a.forecast and a.forecast.left %} · about {{ a.forecast.left }} to go{% endif %}{% elif a.queued_total %}<span class="chip">{{ a.queued_total|commas }} queued</span>{% else %}<span class="chip">Idle</span>{% endif %}{% if c.generated %} · {{ c.generated|commas }} chapters added so far{% endif %}</p>
+  </a></section>
+  {% endif %}
 </div>
-{% if is_admin %}<div class="card p-3 mb-4"><div class="d-flex justify-content-between gap-3 flex-wrap"><div><strong>System status</strong><p class="small text-secondary mb-0">{% for kind, state in status.integrations.items() %}{{ kind|title }}: {{ state }}{% if not loop.last %} · {% endif %}{% endfor %} · {{ status.pending_actions }} pending actions</p></div><a href="{{ url_for('main.operations') }}">View operations →</a></div></div>{% endif %}
-<h2 class="h4">Libraries</h2>
+<h2 class="section-title">Libraries</h2>
 <div class="row g-3 mb-4">
 {% for report in library_reports %}
   <div class="col-md-6"><div class="card p-3 h-100"><h3 class="h5">{{ report.library.name }}</h3>
@@ -37,17 +56,17 @@
     {% else %}<p class="mb-1 text-secondary">No library-size quota configured</p>{% endif %}{% endif %}
     {% if is_admin and report.free_space_enabled %}<p class="mb-1 text-secondary">Disk-space pressure is checked during reconciliation.</p>{% endif %}
     {% if is_admin %}<a href="{{ url_for('main.library_policy', library_id=report.library.id) }}">Policy and effective values</a>{% endif %}</div></div>
-{% else %}<p>No libraries discovered yet.{% if is_admin %} Add integrations in Manage, then discover.{% endif %}</p>{% endfor %}
+{% else %}<p>No libraries discovered yet.{% if is_admin %} Add integrations in Settings, then discover.{% endif %}</p>{% endfor %}
 </div>
 {% if is_admin and unmanaged_libraries %}<p class="text-secondary small" id="unmanaged-libraries">Not managed: {{ unmanaged_libraries|join(', ') }}. Curatarr only tracks Jellyfin TV and movie libraries, which Sonarr and Radarr manage; other library types are left untouched and their size is not counted.</p>{% endif %}
 {% if is_admin %}
-<h2 class="h4">Scheduled deletions</h2>
-<div class="table-responsive mb-4"><table class="table"><thead><tr><th>Date</th><th>Title</th><th>State</th><th>Size</th><th>Reason</th></tr></thead><tbody>
-{% for candidate in scheduled %}<tr><td>{{ candidate.scheduled_delete_at|when('date') }}</td><td><a href="{{ url_for('main.title', media_id=candidate.media_identity_id) }}">{{ media_titles.get(candidate.media_identity_id, 'Unknown title') }}</a>{{ jellyfin_link_for(candidate.media_identity_id) }}</td><td>{{ candidate.state.replace('_',' ')|title }}</td><td>{{ candidate.reclaimable_bytes|size }}</td><td>{{ candidate.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No deletions are scheduled.</td></tr>{% endfor %}
+<h2 class="section-title">Scheduled deletions</h2>
+<div class="table-responsive mb-4"><table class="table table-stack"><thead><tr><th>Date</th><th>Title</th><th>State</th><th>Size</th><th>Reason</th></tr></thead><tbody>
+{% for candidate in scheduled %}<tr><td data-label="Date">{{ candidate.scheduled_delete_at|when('date') }}</td><td data-label="Title"><a href="{{ url_for('main.title', media_id=candidate.media_identity_id) }}">{{ media_titles.get(candidate.media_identity_id, 'Unknown title') }}</a>{{ jellyfin_link_for(candidate.media_identity_id) }}</td><td data-label="State">{{ candidate.state.replace('_',' ')|title }}</td><td data-label="Size">{{ candidate.reclaimable_bytes|size }}</td><td data-label="Reason">{{ candidate.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No deletions are scheduled.</td></tr>{% endfor %}
 </tbody></table></div>
-<h2 class="h4">Recent cleanup</h2>
-<div class="table-responsive mb-4"><table class="table"><thead><tr><th>When</th><th>Title</th><th>Outcome</th><th>Size</th></tr></thead><tbody>
-{% for action, candidate in cleanup %}<tr><td>{{ action.completed_at|when if action.completed_at else '—' }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ media_titles.get(candidate.media_identity_id, 'Unknown title') }}</a>{{ jellyfin_link_for(candidate.media_identity_id) }}</td><td>{{ 'Dry run (not deleted)' if action.action_type == 'would_delete' else 'Deleted' }}</td><td>{{ candidate.reclaimable_bytes|size }}</td></tr>{% else %}<tr><td colspan="4">No cleanup has run yet.</td></tr>{% endfor %}
+<h2 class="section-title">Recent cleanup</h2>
+<div class="table-responsive mb-4"><table class="table table-stack"><thead><tr><th>When</th><th>Title</th><th>Outcome</th><th>Size</th></tr></thead><tbody>
+{% for action, candidate in cleanup %}<tr><td data-label="When">{{ action.completed_at|when if action.completed_at else '—' }}</td><td data-label="Title"><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ media_titles.get(candidate.media_identity_id, 'Unknown title') }}</a>{{ jellyfin_link_for(candidate.media_identity_id) }}</td><td data-label="Outcome">{{ 'Dry run (not deleted)' if action.action_type == 'would_delete' else 'Deleted' }}</td><td data-label="Size">{{ candidate.reclaimable_bytes|size }}</td></tr>{% else %}<tr><td colspan="4">No cleanup has run yet.</td></tr>{% endfor %}
 </tbody></table></div>
 <details class="mb-4"><summary class="h4">Recent activity</summary><div class="pt-3"><h3 class="h5">Downloads requested</h3>
 <div class="table-responsive mb-4"><table class="table"><thead><tr><th>When</th><th>What happened</th><th>Status</th></tr></thead><tbody>
