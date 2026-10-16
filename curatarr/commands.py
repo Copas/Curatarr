@@ -171,6 +171,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Checking shows for the wrong version failed")
     try:
+        from . import better_copy
+
+        better_copy.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Looking for better copies failed")
+    try:
         from .enrichment import link_transcripts
 
         link_transcripts()

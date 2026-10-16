@@ -497,7 +497,7 @@ def _language_name(value):
 
 @bp.post("/chapters/dubs/<state_id>/<action>")
 def chapter_dub_action(state_id, action):
-    from . import dub_jobs
+    from . import better_copy, dub_jobs
 
     state = db.session.get(ChapterState, state_id)
     if (
@@ -508,7 +508,7 @@ def chapter_dub_action(state_id, action):
         abort(404)
     try:
         if action == "replace":
-            flash(dub_jobs.replace(state), "success")
+            flash(better_copy.request(state, "dub"), "success")
         elif action == "dismiss":
             dub_jobs.dismiss(state)
             flash("Dismissed. This film won't be listed again.", "success")
@@ -697,7 +697,7 @@ def missing_keep_action(media_id, action):
 
 @bp.post("/chapters/problems/<state_id>/<action>")
 def chapter_problem_action(state_id, action):
-    from . import filecheck_jobs
+    from . import better_copy, filecheck_jobs
 
     state = db.session.get(ChapterState, state_id)
     if (
@@ -708,7 +708,7 @@ def chapter_problem_action(state_id, action):
         abort(404)
     try:
         if action == "replace":
-            flash(filecheck_jobs.replace(state), "success")
+            flash(better_copy.request(state, "file"), "success")
         elif action == "dismiss":
             filecheck_jobs.dismiss(state)
             flash("Kept. This file won't be listed again.", "success")

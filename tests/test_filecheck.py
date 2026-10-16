@@ -1,12 +1,13 @@
 import subprocess
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 from conftest import database_free
 from PIL import Image, ImageDraw, ImageFont
 from test_enrichment import _movie
 
-from curatarr import db, enrichment, filecheck, filecheck_jobs
+from curatarr import better_copy, db, enrichment, filecheck, filecheck_jobs
 from curatarr.mediafile import MediaInfo, tool
 from curatarr.models import ChapterState, MediaIdentity, MediaPart
 from curatarr.services import set_setting
@@ -113,6 +114,14 @@ class FakeArr:
     def episode_grabs(self, episode_id):
         return [{"id": 400, "sourceTitle": "Show.S01E01.HDTV"}]
 
+    # What the indexers have: one whole, acceptable copy unless a test says otherwise.
+    available: ClassVar[list] = [
+        {"title": "Film.2020.1080p.BluRay-GOOD", "rejections": []}
+    ]
+
+    def releases(self, _item_id):
+        return self.available
+
     def ignore_for_movie(self, movie_id, label, pattern, name):
         self.calls.append(("ignore", movie_id, label, name))
 
@@ -140,6 +149,7 @@ def check_env(app, monkeypatch):
     arr = FakeArr()
     found = {"subtitles": "burned", "issues": []}
     monkeypatch.setattr(filecheck_jobs, "client", lambda _kind: arr)
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: arr)
     monkeypatch.setattr(filecheck_jobs, "_dry_run", lambda media: False)
     monkeypatch.setattr(
         filecheck_jobs,
@@ -177,6 +187,8 @@ def test_burned_in_subtitles_are_listed_and_replaced(client, check_env):
     assert "burned into the picture" in client.get("/").text  # Overview: needs you
     assert arr.calls == []  # replacing waits for approval by default
     client.post(f"/chapters/problems/{state.id}/replace")
+    assert arr.calls == []  # it looks for a better copy first, in the worker
+    assert better_copy.sweep() == 1
     assert arr.calls == [("failed", 300), ("delete", 55), ("search", 7)]
     assert filecheck_jobs.counts() == {"problems_to_act": 0, "files_checked": 1}
     assert filecheck_jobs.sweep() == 0  # not checked again until it's replaced
@@ -247,7 +259,38 @@ def test_problems_are_replaced_automatically_when_switched_on(check_env):
         "chapter_options", {**enrichment.options(), "file_replace_automatically": True}
     )
     filecheck_jobs.sweep()
+    assert arr.calls == []  # only once a better copy is confirmed
+    better_copy.sweep()
     assert ("search", 7) in arr.calls
+
+
+def test_nothing_is_deleted_when_no_better_copy_exists(client, check_env):
+    """The Millennium films: every whole English copy was rejected, so Replace
+    would have left no copy at all."""
+    arr, _found = check_env
+    arr.available = [
+        {"title": "Film.2020.Swedish.1080p", "rejections": ["Language: Not English"]},
+        {"title": "Film.2020.1080p.REMUX", "rejections": ["Remux is not wanted"]},
+        {
+            "title": "Film.2020.480p",
+            "rejections": [
+                "Existing file meets cutoff",
+                "SDTV is not wanted in profile",
+            ],
+        },
+    ]
+    _movie(PATH)
+    filecheck_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+    client.post(f"/chapters/problems/{state.id}/replace")
+    better_copy.sweep()
+    assert arr.calls[:1] == []  # nothing blocklisted, deleted or searched
+    assert not [c for c in arr.calls if c[0] in ("failed", "delete")]
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert state.file_check["no_better"]["checked"] == 3
+    page = client.get("/chapters/problems").text
+    assert "No better copy was available" in page
 
 
 def test_the_sweep_stands_aside_for_playback(check_env):
@@ -332,13 +375,20 @@ def test_replacing_one_part_of_a_split_film_ignores_split_releases(client, check
     page = client.post(
         f"/chapters/problems/{state.id}/replace", follow_redirects=True
     ).text
+    assert "Looking for a better copy first" in page
+    # The other part of the same release isn't a better copy.
+    arr.available = [
+        {"title": "Hornets.Nest.2009.Part.2.EXTENDED.1080p", "rejections": []},
+        {"title": "Hornets.Nest.2009.EXTENDED.1080p.BluRay", "rejections": []},
+    ]
+    better_copy.sweep()
+    page = client.get("/chapters/problems").text
     assert arr.calls[0] == (
         "ignore",
         7,
         "curatarr-split-7",
         "Curatarr: whole The Girl Who Kicked the Hornet's Nest, not one part",
     )
-    assert "now ignores releases split into parts for this title" in page
 
 
 def test_a_film_with_a_part_in_its_title_is_never_ignored(client, check_env):
@@ -356,6 +406,8 @@ def test_a_film_with_a_part_in_its_title_is_never_ignored(client, check_env):
     filecheck_jobs.sweep()
     state = db.session.query(ChapterState).one()
     client.post(f"/chapters/problems/{state.id}/replace")
+    better_copy.sweep()
+    assert ("delete", 55) in arr.calls  # replaced, without ignoring "Part 2"
     assert not any(call[0] == "ignore" for call in arr.calls)
 
 
