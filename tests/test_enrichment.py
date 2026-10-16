@@ -2139,6 +2139,50 @@ def test_failed_files_are_counted_and_listed_alike(client, media_env):
     assert 'id="failed"' in page and "The media file was not found" in page
 
 
+def test_failures_are_grouped_by_why(client, media_env):
+    """So permanent failures aren't lost among the share being offline."""
+    reasons = [
+        "The media file was not found at its expected path",
+        "The media file was not found at its expected path",
+        "Writing chapters failed: [Errno 13] Permission denied",
+        "Something nobody planned for",
+    ]
+    states = []
+    _library, media, first = _movie()
+    for i, reason in enumerate(reasons):
+        part = first
+        if i:
+            part = MediaPart(
+                media_identity_id=media.id,
+                kind="movie_file",
+                has_file=True,
+                file_path=f"/movies/Film (2020)/Film {i}.mkv",
+            )
+            db.session.add(part)
+            db.session.flush()
+        state = enrichment.state_for(part)
+        state.chapter_status, state.chapter_error = "failed", reason
+        states.append(state)
+    db.session.commit()
+    groups = enrichment.failed_groups()
+    assert (groups[0]["kind"], groups[0]["count"]) == ("missing", 2)  # biggest first
+    assert {(g["kind"], g["count"]) for g in groups[1:]} == {("write", 1), ("other", 1)}
+    page = client.get("/chapters").text
+    assert (
+        "Couldn&#39;t find the file" in page
+        and "Couldn&#39;t write to the file" in page
+    )
+    assert "Try these 2 again" in page
+    client.post("/chapters/failed/retry-kind/write")
+    db.session.expire_all()
+    assert [db.session.get(ChapterState, s.id).job_state for s in states] == [
+        "idle",
+        "idle",
+        "queued",
+        "idle",
+    ]
+
+
 def _queued_missing(arr, files, movie_record):
     _library, _media, part = _movie()
     _navigation(_library)
