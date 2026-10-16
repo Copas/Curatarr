@@ -198,6 +198,55 @@ def bad_outros(
     return bad
 
 
+TALK_SECONDS = 20.0  # this much unique dialogue inside a credits marker…
+CREDITS_LEFT = 10.0  # …moves its start past the talking, unless less than this is left
+TRIM_MIN = 15.0  # (and only when that moves it by at least this much)
+TALK_PAD = 1.0
+
+
+def talk_in_credits(
+    credits: list[dict], speech_after, other_grams=None, ignore=()
+) -> list[tuple]:
+    """(segment, new_start, reason) for credits markers people are still talking in.
+
+    Credits start once the dialogue stops. A fingerprint match can run minutes
+    into the episode (a recurring music cue); its credits really begin after the
+    last line spoken inside it, or not at all when the talking runs to the end
+    (``new_start`` None). Lines quoted from other episodes (theme lyrics) and
+    lines inside ``ignore`` spans (a marked preview) don't count.
+    """
+    if speech_after is None:
+        return []
+    found = []
+    for c in credits:
+        start, end = c["Start"], c["End"]
+        inside = speech_after(start, end)
+        if not inside:
+            continue
+        spoken = [
+            s
+            for s in inside
+            if not (other_grams and quoted(s, other_grams))
+            and not any(a <= s.start < b for a, b in ignore)
+        ]
+        seconds = sum(max(0.0, min(s.end, end) - max(s.start, start)) for s in spoken)
+        if len(spoken) < DIALOGUE_LINES or seconds < TALK_SECONDS:
+            continue
+        talk_ends = max(min(s.end, end) for s in spoken) + TALK_PAD
+        if end - talk_ends < CREDITS_LEFT:
+            found.append((c, None, "dialogue runs to the end, so there are no credits"))
+        elif talk_ends - start >= TRIM_MIN:
+            found.append(
+                (c, talk_ends, f"dialogue continues to {_clock(talk_ends - TALK_PAD)}")
+            )
+    return found
+
+
+def _clock(seconds: float) -> str:
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes}:{rest:02d}"
+
+
 def bad_intros(intros: list[dict], segments, other_grams: set | None) -> list[tuple]:
     """(segment, reason) for intros that are mostly dialogue no other episode has.
 

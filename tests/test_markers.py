@@ -195,3 +195,61 @@ def test_credits_full_of_dialogue_before_the_real_ones_are_hidden():
     assert [c["Id"] for c, _ in bad] == [dark_scene["Id"]]
     lyrics_only = markers.bad_outros([dark_scene, real], 3392.0, lambda a, b: [], other)
     assert lyrics_only == []
+
+
+def _credits(start, end, id_="c"):
+    return {"Id": id_, "Type": "Credits", "Start": start, "End": end}
+
+
+def _talk(start, end, every=6.0):
+    rows, t = [], start
+    while t < end:
+        rows.append((t, min(t + 4.5, end), f"something said at {int(t)} seconds"))
+        t += every
+    return lines(*rows)
+
+
+def test_credits_people_keep_talking_in_start_after_the_talking():
+    # A fingerprint match 7.5 minutes long; the talking stops at 20:00 and
+    # the real credits follow.
+    credits = _credits(842.0, 1289.0)
+    speech = _talk(842.0, 1200.0)
+    found = markers.talk_in_credits([credits], lambda a, b: speech)
+    assert len(found) == 1
+    segment, new_start, reason = found[0]
+    assert segment is credits and 1199.0 < new_start < 1202.0
+    assert reason == "dialogue continues to 20:00"
+
+
+def test_credits_with_talking_to_the_end_are_not_credits():
+    found = markers.talk_in_credits(
+        [_credits(842.0, 1289.0)], lambda a, b: _talk(842.0, 1283.0)
+    )
+    assert found[0][1] is None and "no credits" in found[0][2]
+
+
+def test_a_line_or_two_over_real_credits_moves_nothing():
+    speech = lines((1240.0, 1243.0, "See you next week."), (1250.0, 1252.0, "Bye!"))
+    assert (
+        markers.talk_in_credits([_credits(1230.0, 1289.0)], lambda a, b: speech) == []
+    )
+
+
+def test_theme_lyrics_and_a_marked_preview_dont_count_as_talking():
+    speech = _talk(1230.0, 1280.0)
+    sung = {g for s in speech for g in recaps.grams(s.text)}
+    assert (
+        markers.talk_in_credits([_credits(1230.0, 1289.0)], lambda a, b: speech, sung)
+        == []
+    )
+    assert (
+        markers.talk_in_credits(
+            [_credits(1230.0, 1289.0)], lambda a, b: speech, ignore=[(1225.0, 1289.0)]
+        )
+        == []
+    )
+
+
+def test_without_a_transcript_nothing_is_judged():
+    assert markers.talk_in_credits([_credits(842.0, 1289.0)], None) == []
+    assert markers.talk_in_credits([_credits(842.0, 1289.0)], lambda a, b: None) == []
