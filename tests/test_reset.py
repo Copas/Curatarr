@@ -424,6 +424,8 @@ def test_unwatched_plan_picks_never_started_shows_and_explains_skips(app):
                 media_identity_id=guarded.id, override_json={"never_purge": True}
             )
         )
+        gappy = _unwatched_show("Gappy", library_id=lib)
+        next(p for p in gappy.parts if (p.season_number, p.episode_number) == (1, 1)).has_file = False
         db.session.commit()
         plan, skipped = unwatched_reset_plan(30)
         assert [r["media"].title for r in plan] == ["Old Unwatched"]
@@ -431,6 +433,8 @@ def test_unwatched_plan_picks_never_started_shows_and_explains_skips(app):
         assert reasons["Brand New"].startswith("Added ")
         assert reasons["Nightly"].startswith("Daily show")
         assert reasons["Guarded"] == "Never Purge is on"
+        # The worker won't reset below the minimum, so it isn't offered.
+        assert reasons["Gappy"] == "Some of its always-keep episodes aren't downloaded yet"
         assert "Reset Show" not in reasons  # watched shows are not listed at all
         assert plan[0]["frees"] == 200 and plan[0]["reset_files"] == 2
         plan, _ = unwatched_reset_plan(0)  # no recent-add exemption

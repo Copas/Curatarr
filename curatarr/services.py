@@ -1392,6 +1392,8 @@ def unwatched_reset_plan(skip_recent_days=30, library_id=None):
     """
     from datetime import timedelta
 
+    from .policy import minimum_satisfied
+
     cutoff = utcnow() - timedelta(days=skip_recent_days)
     plan, skipped = [], []
     for row in shows_by_size(library_id):
@@ -1415,6 +1417,10 @@ def unwatched_reset_plan(skip_recent_days=30, library_id=None):
             reason = "A cleanup is already running"
         elif not row["frees"]:
             reason = "Already at its minimum"
+        elif not minimum_satisfied(media.parts, resolved_policy(media)[0]):
+            # The worker refuses these (the reset would leave less than the
+            # minimum), so listing them only made them vanish after confirming.
+            reason = "Some of its always-keep episodes aren't downloaded yet"
         elif added and added > cutoff:
             reason = f"Added {added.strftime('%Y-%m-%d')}, within the last {skip_recent_days} days"
         else:
