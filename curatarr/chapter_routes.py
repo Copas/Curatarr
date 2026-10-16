@@ -528,9 +528,20 @@ def chapter_dub_action(state_id, action):
 
 @bp.post("/chapters/failed/retry-all")
 def chapter_failed_retry_all():
+    from sqlalchemy.exc import OperationalError
+
     from .enrichment import retry_all_failed
 
-    count = retry_all_failed()
+    try:
+        count = retry_all_failed()
+    except OperationalError:
+        db.session.rollback()
+        flash(
+            "Curatarr's database is busy right now; nothing was changed. "
+            "Try again in a minute.",
+            "warning",
+        )
+        return redirect(url_for("main.chapter_maintenance"))
     flash(
         f"Queued {count} failed job{'s' if count != 1 else ''} again. Files that "
         "still can't be reached wait and retry every ten minutes instead of failing.",

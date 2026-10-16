@@ -2286,7 +2286,41 @@ def test_checks_that_hit_an_offline_share_are_redone(media_env):
     }
     state.file_check = {"issues": [], "error": "The file wasn't found"}
     db.session.commit()
+    enrichment._last_recheck[0] = utcnow() - timedelta(days=1)
     enrichment.resolve_missing_failures()
     db.session.expire_all()
     state = db.session.get(ChapterState, state.id)
     assert state.dub_checked_at is None and state.file_checked_at is None
+
+
+def test_radarr_is_never_asked_while_changes_are_unsaved(media_env, monkeypatch):
+    """Unsaved changes hold SQLite's write lock; the web app would wait on it."""
+    _files, arr = media_env
+    seen = []
+    _library, media, first = _movie()
+    for n in range(3):
+        part = first
+        if n:
+            part = MediaPart(
+                media_identity_id=media.id,
+                kind="movie_file",
+                has_file=True,
+                file_path=f"/movies/Film (2020)/Film.{n}.mkv",
+            )
+            db.session.add(part)
+            db.session.flush()
+        state = enrichment.state_for(part)
+        state.chapter_status = "failed"
+        state.chapter_error = "The media file was not found at its expected path"
+    db.session.commit()
+    real = enrichment._arr_file
+
+    def watched(part, media):
+        seen.append(bool(db.session.new or db.session.dirty))
+        return real(part, media)
+
+    monkeypatch.setattr(enrichment, "_arr_file", watched)
+    arr.movie_record = {"id": 7, "hasFile": False}
+    enrichment._missing_tried.clear()
+    assert enrichment.resolve_missing_failures() == 3
+    assert seen == [False, False, False]
