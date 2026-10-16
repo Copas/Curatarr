@@ -278,3 +278,17 @@ def test_a_real_cut_off_download_is_found(tmp_path):
     assert filecheck.health(str(whole), 120, None, [], film=True) == []
     kinds = [i["kind"] for i in filecheck.health(str(cut), 120, None, [], film=True)]
     assert kinds == ["truncated"]
+
+
+def test_nothing_is_left_unsaved_while_frames_are_read(check_env, monkeypatch):
+    """Unsaved changes hold SQLite's write lock; the web app would wait on it."""
+    seen = []
+
+    def health(*args, **kwargs):
+        seen.append(bool(db.session.new or db.session.dirty))
+        return []
+
+    monkeypatch.setattr(filecheck, "health", health)
+    _movie(PATH)
+    filecheck_jobs.sweep()
+    assert seen == [False]
