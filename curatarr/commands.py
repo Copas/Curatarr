@@ -139,6 +139,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Starting the file check failed")
     try:
+        from .enrichment import resolve_missing_failures
+
+        resolve_missing_failures()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Checking missing files failed")
+    try:
         from . import trivia
 
         trivia.sweep()
