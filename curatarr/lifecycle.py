@@ -1179,10 +1179,23 @@ def _execute_action(action_id):
                 from .services import _as_datetime
 
                 action_created = _as_datetime(action.created_at)
+                # A partial fill (the first episodes of Season 1) searches for
+                # just those episodes: a season search grabs whole-season packs.
+                whole = action.payload_json.get("whole_season", True)
                 command_exists = any(
-                    command.get("name") == "SeasonSearch"
-                    and (command.get("body") or command).get("seriesId") == series_id
-                    and (command.get("body") or command).get("seasonNumber") == season
+                    (
+                        command.get("name") == "SeasonSearch"
+                        and (command.get("body") or command).get("seriesId")
+                        == series_id
+                        and (command.get("body") or command).get("seasonNumber")
+                        == season
+                        if whole
+                        else command.get("name") == "EpisodeSearch"
+                        and set(
+                            (command.get("body") or command).get("episodeIds") or []
+                        )
+                        >= episode_ids
+                    )
                     and command.get("status") != "failed"
                     and (
                         queued_at := _as_datetime(
@@ -1194,7 +1207,10 @@ def _execute_action(action_id):
                     for command in commands
                 )
                 if not already_queued and not command_exists:
-                    arr.season_search(series_id, season)
+                    if whole:
+                        arr.season_search(series_id, season)
+                    else:
+                        arr.episode_search(sorted(episode_ids))
         except IntegrationError:
             action.state = "FAILED_RETRYABLE"
             action.attempts += 1

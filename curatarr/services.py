@@ -715,6 +715,7 @@ def _request_season(
     current_season=None,
     episode_filter=None,
     allow_search=True,
+    attempt=None,
 ):
     """reason is the cause, e.g. "Alex finished S01E01 of XYZ"; the helper
     adds what Curatarr is doing about it, which depends on air dates."""
@@ -763,7 +764,11 @@ def _request_season(
     reason = f"{reason}, so Curatarr is {outcome}."
     signature = hashlib.sha256(
         json.dumps(
-            {"episode_ids": episode_ids, "search_now": search_now}, sort_keys=True
+            # attempt makes a repeat request (a person pressing "Search once"
+            # again) a new action instead of the earlier one.
+            {"episode_ids": episode_ids, "search_now": search_now}
+            | ({"attempt": attempt} if attempt else {}),
+            sort_keys=True,
         ).encode()
     ).hexdigest()[:12]
     return audit(
