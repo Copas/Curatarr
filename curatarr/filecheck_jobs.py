@@ -13,7 +13,7 @@ import threading
 from flask import current_app
 from sqlalchemy import case, func, or_
 
-from . import db, filecheck
+from . import db, filecheck, throttle
 from .chapters import ChapterConfigError
 from .integrations import IntegrationError
 from .mediafile import MediaToolError, probe
@@ -85,6 +85,8 @@ def _run(app):
     with app.app_context():
         try:
             sweep()
+        except throttle.Interrupted:
+            db.session.rollback()  # all work paused; it carries on after resuming
         except Exception:
             db.session.rollback()
             app.logger.exception("File check failed")
@@ -129,8 +131,8 @@ def sweep(limit=PER_RUN) -> int:
     e = _enrichment()
     checked = 0
     for part in parts:
-        if setting("chapters_paused_since"):
-            break  # someone started watching: their stream comes first
+        if setting("chapters_paused_since") or throttle.stopping():
+            break  # someone started watching, or all work is paused
         state = e.state_for(part)
         # Save a new record now: the check reads frames for up to a minute, and
         # holding SQLite's write lock that long stalls the web app and webhooks.

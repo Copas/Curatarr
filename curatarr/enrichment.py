@@ -1605,6 +1605,10 @@ def _run_one(app, state_id, llm):
             _chain_subtitles(state_id)
         if action in {"auto", "generate", "regenerate", "subtitles"}:
             _chain_recap(state_id)
+    except throttle.Interrupted:
+        # All work was paused on request: start this job again on resume.
+        db.session.rollback()
+        _best_effort(lambda: _requeue(state_id))
     except OperationalError as exc:
         # SQLite allows one writer; discovery holds a long write transaction.
         # Put the job back rather than failing it.
