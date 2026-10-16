@@ -351,6 +351,10 @@ class SonarrClient(Client):
             json={"episodeIds": sorted(episode_ids), "monitored": monitored},
         )
 
+    def series_monitored(self, series_id):
+        series = self.request("GET", f"/api/v3/series/{series_id}")
+        return bool(series.get("monitored"))
+
     def monitor_series(self, series_id):
         """Monitor the series itself (not its seasons); True if it was unmonitored.
 

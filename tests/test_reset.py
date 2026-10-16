@@ -271,6 +271,15 @@ def test_a_reset_unmonitored_show_is_refilled_and_remonitored_when_watched(
         assert action.payload_json["monitor_series"] is True
 
         class RefillSonarr(FakeSonarr):
+            def series_monitored(self, _series_id):
+                return False
+
+            def episodes(self, _series_id):
+                return [{"id": 1, "monitored": True}]
+
+            def set_episodes_monitored(self, episode_ids, monitored):
+                self.calls.append(("set_monitored", list(episode_ids), monitored))
+
             def monitor_series(self, series_id):
                 self.calls.append(("monitor_series", series_id))
                 return True
@@ -291,6 +300,10 @@ def test_a_reset_unmonitored_show_is_refilled_and_remonitored_when_watched(
         monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: refill)
         assert execute_action(action.id) == "succeeded"
         assert ("monitor_series", 77) in refill.calls
+        # Leftover monitored episodes are quieted before the show is monitored.
+        assert refill.calls.index(("set_monitored", [1], False)) < refill.calls.index(
+            ("monitor_series", 77)
+        )
         assert media.arr_monitored is True
 
 
@@ -425,7 +438,9 @@ def test_unwatched_plan_picks_never_started_shows_and_explains_skips(app):
             )
         )
         gappy = _unwatched_show("Gappy", library_id=lib)
-        next(p for p in gappy.parts if (p.season_number, p.episode_number) == (1, 1)).has_file = False
+        next(
+            p for p in gappy.parts if (p.season_number, p.episode_number) == (1, 1)
+        ).has_file = False
         db.session.commit()
         plan, skipped = unwatched_reset_plan(30)
         assert [r["media"].title for r in plan] == ["Old Unwatched"]
