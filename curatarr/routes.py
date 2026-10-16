@@ -380,6 +380,22 @@ def resume_work():
     return redirect(_safe_next(request.form.get("next")))
 
 
+def action_name(action):
+    """What a history entry did, in words. Cleanup of a series never deletes
+    the show: it removes the later episodes and keeps the first ones."""
+    if action.action_type in {"delete_media", "would_delete"}:
+        media = (
+            db.session.get(MediaIdentity, action.media_identity_id)
+            if action.media_identity_id
+            else None
+        )
+        series = media is not None and media.media_type == "series"
+        if action.action_type == "would_delete":
+            return "Dry run: would reset" if series else "Dry run: would delete"
+        return "Reset to first episodes" if series else "Deleted"
+    return action.action_type.replace("_", " ").title()
+
+
 def _nav_section():
     """Which top-level navigation entry the current page belongs to."""
     if request.endpoint == "main.rules":
@@ -404,6 +420,7 @@ def template_values():
         "icon": icons.icon,
         "jellyfin_link": jellyfin_links.link,
         "jellyfin_link_for": jellyfin_links.link_for,
+        "action_name": action_name,
         "jellyfin_part_link": jellyfin_links.part_link,
         "jellyfin_url": jellyfin_links.item_url,
         "work_paused": _work_paused() if is_admin else None,

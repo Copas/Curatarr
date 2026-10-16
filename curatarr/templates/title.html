@@ -48,7 +48,7 @@
   {% endif %}
 </section>
 {% endif %}
-{% if is_admin and actions %}<h2 class="h5">Recent history</h2><ul>{% for action in actions %}<li><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type.replace('_',' ')|title }}</a> · {{ action.state }} · {{ action.reason_text }}</li>{% endfor %}</ul>{% endif %}
+{% if is_admin and actions %}<h2 class="h5">Recent history</h2><ul>{% for action in actions %}<li><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action_name(action) }}</a> · {{ action.state }} · {{ action.reason_text }}</li>{% endfor %}</ul>{% endif %}
 {% if is_admin %}<details class="mt-4"><summary class="h5">Advanced: overrides and effective policy</summary><div class="pt-3">
 <form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="row g-3">
   {% set fields = [('never_purge','Never Purge','choice'),('fill_minimum_footprint','Download always-keep episodes that are missing','choice'),('tv_inactivity_days','TV inactivity days','number'),('movie_inactivity_days','Movie inactivity days','number'),('minimum_mode','Always keep for each show','choice'),('minimum_episodes','N for "First N episodes"','number'),('acquisition_threshold','Completed episode trigger','number'),('meaningful_threshold','Meaningful watch threshold','number'),('grace_days','Grace days','number'),('review_mode','Review mode','choice'),('purge_strategy','Purge strategy','choice')] %}
