@@ -430,6 +430,52 @@ def chapter_identity_fix_audio(state_id):
     return redirect(url_for("main.chapter_identity"))
 
 
+@bp.get("/chapters/dubs")
+def chapter_dubs():
+    """Films made in another language: is the English audio really English?"""
+    from . import dub_jobs
+
+    return render_template(
+        "chapter_dubs.html",
+        found=dub_jobs.review(),
+        enabled=dub_jobs.enabled(),
+        file_label=file_label,
+        language=_language_name,
+    )
+
+
+def _language_name(value):
+    from .dubs import name
+
+    return name(value)
+
+
+@bp.post("/chapters/dubs/<state_id>/<action>")
+def chapter_dub_action(state_id, action):
+    from . import dub_jobs
+
+    state = db.session.get(ChapterState, state_id)
+    if (
+        not state
+        or not state.dub_result
+        or action not in ("replace", "dismiss", "recheck")
+    ):
+        abort(404)
+    try:
+        if action == "replace":
+            flash(dub_jobs.replace(state), "success")
+        elif action == "dismiss":
+            dub_jobs.dismiss(state)
+            flash("Dismissed. This film won't be listed again.", "success")
+        else:
+            dub_jobs.recheck(state)
+            flash("It will be listened to again shortly.", "success")
+    except (IntegrationError, ValueError) as exc:
+        db.session.rollback()
+        flash(f"Couldn't do that: {exc}", "danger")
+    return redirect(url_for("main.chapter_dubs"))
+
+
 @bp.get("/transcripts")
 def transcript_search():
     """Find an episode by something said in it."""

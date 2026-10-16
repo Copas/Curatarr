@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}English dubs · Curatarr{% endblock %}
+{% macro track_list(state) %}{% set r = state.dub_result %}<ul class="small mb-0 ps-3">{% for t in r.tracks %}<li>Track {{ t.index }}{% if t.default %} (default){% endif %}: labelled <strong>{{ language(t.label) if t.label else 'no language' }}</strong>{% if 'was' in t %} (was {{ language(t.was) if t.was else 'unlabelled' }}){% endif %}, sounds <strong>{{ language(t.heard) if t.heard else 'unclear' }}</strong></li>{% endfor %}</ul>{% endmacro %}
+{% macro film(state) %}<a class="h5" href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}<div class="small text-secondary text-break">{{ state.part.file_path }}</div>{% endmacro %}
+{% macro button(state, action, label, style='btn-outline-light') %}<form method="post" action="{{ url_for('main.chapter_dub_action', state_id=state.id, action=action) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ style }}">{{ label }}</button></form>{% endmacro %}
+{% block content %}
+<div class="eyebrow">Manage · <a href="{{ url_for('main.chapter_maintenance') }}">Chapter maintenance</a></div><h1>English dubs</h1>
+<p class="text-secondary">For films made in another language, Curatarr listens to a few moments of each audio track and checks it's the language its label says. Wrong labels are corrected and a real English track is made the default on their own; a film with no English audio is listed here to replace. {{ found.checked|commas }} foreign-language film{{ '' if found.checked == 1 else 's' }} checked so far.</p>
+{% if not enabled %}<div class="alert alert-secondary">This check is off. Turn on “Check English dubs of foreign films” in <a href="{{ url_for('main.chapter_settings') }}">Chapter settings</a> to use it.</div>{% endif %}
+<h2 class="h4">No English audio</h2>
+{% for state in found.to_act %}
+<div class="card p-3 mb-3">
+  <div class="d-flex flex-wrap justify-content-between gap-2">
+    <div>{{ film(state) }}</div>
+    <div class="d-flex gap-2">{{ button(state, 'replace', 'Replace with another release', 'btn-primary') }}{{ button(state, 'recheck', 'Listen again') }}{{ button(state, 'dismiss', 'Keep it') }}</div>
+  </div>
+  <p class="mt-2 mb-1">Made in {{ language(state.dub_result.original) }}, and none of its audio sounds English.{% if state.dub_result.applied %} Its labels now say what each track really is.{% endif %}</p>
+  {{ track_list(state) }}
+  <p class="small text-secondary mt-2 mb-0">Replacing blocklists this release in Radarr, deletes the file and searches for another. With English dubs allowed in your Radarr profile, the next grab can be one.</p>
+</div>
+{% else %}<div class="empty-state mb-4"><p class="mb-0">None found.</p></div>{% endfor %}
+<h2 class="h4">Fixed</h2>
+{% for state in found.fixed %}
+<div class="card p-3 mb-3">
+  <div>{{ film(state) }}</div>
+  <p class="mt-2 mb-1">{% for a in state.dub_result.applied %}{% if a[0] == 'label' %}Relabelled track {{ a[1] }} as {{ language(a[2]) }}{% else %}Made track {{ a[1] }}, the English one, the default{% endif %}{{ '; ' if not loop.last else '.' }}{% endfor %}</p>
+  {{ track_list(state) }}
+</div>
+{% else %}<div class="empty-state mb-4"><p class="mb-0">Nothing needed fixing yet.</p></div>{% endfor %}
+{% if found.unsure %}
+<h2 class="h4">Couldn't tell</h2>
+<p class="text-secondary">Too little clear speech in the samples (music, silence or a mix of languages), or the file couldn't be read. Left alone.</p>
+{% for state in found.unsure %}
+<div class="card p-3 mb-3">
+  <div class="d-flex flex-wrap justify-content-between gap-2"><div>{{ film(state) }}</div><div>{{ button(state, 'recheck', 'Listen again') }}</div></div>
+  {% if state.dub_result.error %}<p class="small mt-2 mb-0">{{ state.dub_result.error }}</p>{% else %}{{ track_list(state) }}{% endif %}
+</div>
+{% endfor %}{% endif %}
+{% endblock %}

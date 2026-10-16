@@ -125,6 +125,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Movie skip-marker check failed")
     try:
+        from . import dub_jobs
+
+        dub_jobs.start()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Starting the dub check failed")
+    try:
         from .enrichment import link_transcripts
 
         link_transcripts()

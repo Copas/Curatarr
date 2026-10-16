@@ -249,6 +249,8 @@ def parse_options(form) -> dict:
         "pause_during_playback",
         "movie_credits_only",
         "episode_identity_check",
+        "dub_check",
+        "dub_replace_automatically",
     ):
         if f"{key}_shown" in form:
             values[key] = form.get(key) in {"true", "on", "1"}
@@ -1462,10 +1464,14 @@ def _due_jobs(limit, *, scans, recaps=False):
     rows = (
         query.order_by(priority, ChapterState.requested_at).limit(limit * 4 + 100).all()
     )
+    from . import dub_jobs
+
+    dubs_on = not scans and not recaps and dub_jobs.enabled()
     return [
         row
         for row in rows
-        if not row.next_attempt_at or _as_datetime(row.next_attempt_at) <= now
+        if (not row.next_attempt_at or _as_datetime(row.next_attempt_at) <= now)
+        and not dub_jobs.holds_chapters(row, dubs_on)
     ][:limit]
 
 
@@ -1987,7 +1993,11 @@ def maintenance_summary(library_id=None) -> dict:
     checked = markers_checked(library_id)
     existing = by_status.get("existing", 0)
     with_subtitles = subtitles.get("existing", 0) + subtitles.get("generated", 0)
+    from . import dub_jobs
+
+    dub_counts = dub_jobs.counts() if not library_id else {}
     return {
+        **dub_counts,
         # Coverage: how much of what can have each thing now has it.
         "chapters_have": existing + generated,
         "chapters_possible": existing + generated + needing,
