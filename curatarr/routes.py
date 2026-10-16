@@ -345,6 +345,41 @@ DRY_RUN_BANNER_PAGES = {
 }
 
 
+def _work_paused():
+    if request.endpoint in (None, "static") or request.path.startswith("/api/"):
+        return None
+    from . import pause
+
+    return pause.state()
+
+
+@bp.post("/pause")
+def pause_work():
+    """Pause all of Curatarr's work for a while, to free the machine."""
+    from . import pause
+
+    hours = request.form.get("hours", "")
+    if hours not in {"1", "4", "0"}:
+        abort(400)
+    user = (session.get("user") or {}).get("name")
+    pause.pause(int(hours) or None, by=user)
+    flash(
+        "Paused. Running jobs stop and go back in the queue within 15 seconds, "
+        "and the language model is unloaded from the graphics card.",
+        "success",
+    )
+    return redirect(_safe_next(request.form.get("next")))
+
+
+@bp.post("/resume")
+def resume_work():
+    from . import pause
+
+    pause.resume()
+    flash("Resumed. Queued work starts again within 15 seconds.", "success")
+    return redirect(_safe_next(request.form.get("next")))
+
+
 def _nav_section():
     """Which top-level navigation entry the current page belongs to."""
     if request.endpoint == "main.rules":
@@ -371,6 +406,7 @@ def template_values():
         "jellyfin_link_for": jellyfin_links.link_for,
         "jellyfin_part_link": jellyfin_links.part_link,
         "jellyfin_url": jellyfin_links.item_url,
+        "work_paused": _work_paused() if is_admin else None,
         "dry_run_banner": request.endpoint in DRY_RUN_BANNER_PAGES
         or (
             request.endpoint == "main.rules"

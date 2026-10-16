@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Pause all work** (Enhance → Progress) for 1 hour, 4 hours or until resumed, to free the graphics card and processor for something else: running jobs are stopped and requeued, nothing new starts, and Ollama unloads its model. A banner on every page shows the pause with Resume now.
 - **A file that's gone on purpose isn't a failure.** When a job can't find its file, Curatarr now asks Radarr or Sonarr first: if they have no file either (Curatarr replaced it for having no English audio, say, or it was deleted), the job closes quietly and the next copy is processed when it arrives; if the file was renamed or upgraded, Curatarr follows it. Failures recorded before this are cleared the same way in the background. Each failed job on Progress now has **Try again**, **Find another copy** (a Radarr or Sonarr search) and **Ignore**, and says when Curatarr itself replaced the file.
 - **Fixed: the Progress tab's count of failed jobs didn't match the page.** The badge counted every failed chapter job; the page left out files that couldn't be read at all, and never listed any. Both now count the same files, and Progress lists them with the reason. A file that's shorter than listed because its name marks it as one part of a split release ("Part.2", "CD1") now says so on Problems.
 - **Clicks show they registered.** Any button or link shows a spinner and a loading bar runs along the top while the next page loads, and a form can't be sent twice by clicking again.

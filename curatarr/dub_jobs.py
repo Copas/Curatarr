@@ -15,7 +15,7 @@ from datetime import timedelta
 from flask import current_app
 from sqlalchemy import case, or_
 
-from . import db, dubs
+from . import db, dubs, throttle
 from .chapters import GENERATED_STATUSES, ChapterConfigError
 from .integrations import IntegrationError
 from .mediafile import (
@@ -123,6 +123,8 @@ def _run(app):
     with app.app_context():
         try:
             sweep()
+        except throttle.Interrupted:
+            db.session.rollback()  # all work paused; it carries on after resuming
         except Exception:
             db.session.rollback()
             app.logger.exception("Dub check failed")
@@ -180,7 +182,11 @@ def sweep(foreign_limit=FOREIGN_PER_RUN) -> dict:
             db.session.commit()
             counts["english"] += 1
             continue
-        if counts["foreign"] >= foreign_limit or setting("chapters_paused_since"):
+        if (
+            counts["foreign"] >= foreign_limit
+            or setting("chapters_paused_since")
+            or throttle.stopping()
+        ):
             continue  # listening needs the GPU: not while playback has priority
         try:
             check(state, part, original)

@@ -172,6 +172,8 @@ Below, **Suggested for you** takes Radarr's recommendations (films TMDB links to
 
 ## Sharing the machine with playback
 
+**Pause all work** (Enhance → Progress) is for when you need the machine for something else: for an hour, four hours or until you resume. Running jobs are stopped and put back in the queue (they start over on resume), nothing new starts (chapters, subtitles, skip-marker, dub and file checks, transcription), and the language model is unloaded from the graphics card. A banner on every page says until when, with **Resume now**.
+
 Chapter work is heavy (scene detection, transcription, a language model), and the same server usually streams to the household. Curatarr adapts how many chapter jobs run, every worker cycle:
 
 - It measures CPU use, GPU use (counted only while Jellyfin is transcoding), how many people are watching, and how many of those streams are transcoded.

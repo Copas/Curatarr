@@ -14,6 +14,15 @@ import threading
 import time
 
 _paused = threading.Event()
+_stopping = threading.Event()  # all work paused on request: tools are ended
+
+
+class Interrupted(BaseException):
+    """A tool was ended because all work was paused; the job goes back in the
+    queue. A BaseException, so error handling that catches tool failures
+    doesn't record it as one."""
+
+
 _children: set[subprocess.Popen] = set()
 _lock = threading.Lock()
 POLL_SECONDS = 2.0
@@ -61,7 +70,31 @@ def _signal_children(sig):
 
 def wait_while_paused():
     while _paused.is_set():
+        if _stopping.is_set():
+            raise Interrupted
         time.sleep(POLL_SECONDS)
+    if _stopping.is_set():
+        raise Interrupted
+
+
+def stop_all() -> None:
+    """End every running tool and refuse to start more, until allow()."""
+    with _lock:
+        _stopping.set()
+        for process in list(_children):
+            for sig in (signal.SIGCONT, signal.SIGKILL):  # a suspended one too
+                try:
+                    os.killpg(process.pid, sig)
+                except ProcessLookupError:
+                    pass
+
+
+def allow() -> None:
+    _stopping.clear()
+
+
+def stopping() -> bool:
+    return _stopping.is_set()
 
 
 def run(args, timeout, env=None) -> subprocess.CompletedProcess:
@@ -70,6 +103,8 @@ def run(args, timeout, env=None) -> subprocess.CompletedProcess:
     ``timeout`` counts only time spent running, not time suspended. Raises
     subprocess.TimeoutExpired like subprocess.run.
     """
+    if _stopping.is_set():
+        raise Interrupted
     process = subprocess.Popen(
         args,
         stdout=subprocess.PIPE,
@@ -98,4 +133,6 @@ def run(args, timeout, env=None) -> subprocess.CompletedProcess:
     finally:
         with _lock:
             _children.discard(process)
+    if _stopping.is_set() and process.returncode != 0:
+        raise Interrupted
     return subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
