@@ -2153,7 +2153,32 @@ def describe(state: ChapterState | None) -> dict:
         }.get(state.subtitle_status if state else None, "—"),
         "subtitles_ours": bool(state and state.subtitle_fingerprint),
         "queued": bool(state and state.job_state in {"queued", "running"}),
+        "recap": (state.recap_start, state.recap_end)
+        if state and state.recap_end is not None
+        else None,
+        "preview": (state.preview_start, state.preview_end)
+        if state and state.preview_start is not None
+        else None,
+        "markers_fixed": len(state.markers_hidden or []) if state else 0,
+        "dub": _dub_label(state.dub_result if state else None),
     }
+
+
+def _dub_label(result) -> tuple[str, str] | None:
+    """(text, tone) for a film's dub check, or None when there's nothing to say."""
+    if not result or "verdict" not in result:
+        return None
+    if result.get("replaced"):
+        return "Replaced: no English audio", "accent"
+    if result["verdict"] == "no_english":
+        return "No English audio", "danger"
+    if result.get("removed"):
+        return "Other languages removed", "on"
+    if result.get("applied"):
+        return "English audio fixed", "on"
+    if result["verdict"] == "english":
+        return "English audio", "on"
+    return None
 
 
 def environment_status() -> dict:

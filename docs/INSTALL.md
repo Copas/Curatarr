@@ -93,7 +93,7 @@ Chapters, subtitles, recap and preview detection, and dub checks need a few more
    sudo systemctl restart curatarr-worker
    ```
 
-Then switch it on per library in **Manage → Chapters → Chapter settings**. If Sonarr and Radarr see the files under a different path than this machine does, add a path mapping there (for example `/tv => /mnt/media/tv`).
+Then switch it on per library in **Settings → Enhance**. If Sonarr and Radarr see the files under a different path than this machine does, add a path mapping there (for example `/tv => /mnt/media/tv`).
 
 ### Change settings
 
@@ -205,7 +205,7 @@ services:
               capabilities: [gpu]
 ```
 
-Then run `docker compose up -d --build`. Only the worker needs the media. In Chapter settings, add a path mapping from how Sonarr and Radarr see the files to `/media` (for example `/tv => /media/tv`), and point the Ollama URL at an Ollama the container can reach (for Ollama on the host, `http://host.docker.internal:11434` with `extra_hosts: ["host.docker.internal:host-gateway"]` on the worker, or the host's LAN address). Transcription models download to `/config/models`.
+Then run `docker compose up -d --build`. Only the worker needs the media. In Settings → Enhance, add a path mapping from how Sonarr and Radarr see the files to `/media` (for example `/tv => /media/tv`), and point the Ollama URL at an Ollama the container can reach (for Ollama on the host, `http://host.docker.internal:11434` with `extra_hosts: ["host.docker.internal:host-gateway"]` on the worker, or the host's LAN address). Transcription models download to `/config/models`.
 
 ---
 
@@ -298,7 +298,7 @@ Logs: `docker compose logs --tail=100 web worker`. Don't use `docker compose dow
 ## First run
 
 1. **Sign in.** Open `http://<your-server>:8787` and sign in with a Jellyfin **administrator** account. On the very first sign-in, also enter your Jellyfin server's address (unless `CURATARR_JELLYFIN_URL` is set). Do this before exposing Curatarr beyond a trusted network: until then, anyone who can reach the page could bind it to a different server.
-2. **Connect your apps.** Follow the **Setup** checklist (Manage → Setup) and add the API keys in Manage → Integrations:
+2. **Connect your apps.** Follow the **Setup** checklist (Settings → Setup) and add the API keys in Settings → Integrations:
    - **Jellyfin:** Dashboard → API Keys → **+** (default port 8096)
    - **Sonarr:** Settings → General → Security → API Key (default port 8989)
    - **Radarr:** Settings → General → Security → API Key (default port 7878)
@@ -309,9 +309,9 @@ Logs: `docker compose logs --tail=100 web worker`. Don't use `docker compose dow
    - Add the request header `X-Curatarr-Token` with the token shown once on the Integrations page (generate a new one there if you missed it)
 
    Without the webhook, the hourly reconciliation still picks up playback, just later.
-4. **Discover.** Click **Discover** on Overview. It runs in the background; a large library takes about a minute. Manage → Operations shows when it's done.
-5. **Review the rules.** Look over Manage → Acquisition and Manage → Retention. Every library starts in **dry run**: Curatarr goes through the whole process and records what it *would* remove in History, but deletes nothing. Turn dry run off globally or per library when you're happy.
-6. **Optional:** switch on chapters per library in Manage → Chapters, and allow household members in Manage → Integrations → Household access.
+4. **Discover.** Click **Discover** on Overview. It runs in the background; a large library takes about a minute. Settings → Operations shows when it's done.
+5. **Review the rules.** Look over Settings → Acquisition and Settings → Retention. Every library starts in **dry run**: Curatarr goes through the whole process and records what it *would* remove in History, but deletes nothing. Turn dry run off globally or per library when you're happy.
+6. **Optional:** switch on chapters per library in Settings → Enhance, and allow household members in Settings → Integrations → Household access.
 
 ---
 

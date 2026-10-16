@@ -2,7 +2,7 @@
 {% block title %}Skip markers · Curatarr{% endblock %}
 {% set kinds = {'recap': 'Recap marked', 'preview': 'Preview marked', 'hidden': 'Intro Skipper marker hidden'} %}
 {% block content %}
-<div class="eyebrow">Manage · <a href="{{ url_for('main.chapter_maintenance') }}">Chapter maintenance</a></div><h1>Skip markers</h1>
+<div class="eyebrow">Enhance</div><h1>Skip markers</h1>
 <p class="text-secondary">Recaps and previews Curatarr marked, and Intro Skipper markers it hid as wrong, newest first. Open an episode in Jellyfin and jump to the time shown to check it; <strong>Undo</strong> reverses one if it's wrong.</p>
 <div class="d-flex flex-wrap gap-2 mb-3" aria-label="Show">
   <a class="btn btn-sm {{ 'btn-primary' if not kind else 'btn-outline-light' }}" href="{{ url_for('main.chapter_markers') }}">Everything</a>

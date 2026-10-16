@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **A new interface layout.** The top bar is Overview, Review (with a count), Library, **Enhance**, Activity and **Settings** (formerly Manage), with a search box and a dry-run pill; the full dry-run notice stays on Review and the retention pages. Enhance gathers what was under Manage → Chapters into Progress, Files, Skip markers and English dubs tabs. Settings → Enhance is a set of collapsible feature cards with one-line summaries, switches and a save bar that stays on screen. One search page covers titles and what was said. On phones a bottom tab bar replaces the Menu toggle, with a More page for the rest, and Review cards keep Keep and Delete visible with the rest in a menu.
+- **Overview leads with what needs you**: titles leaving soon (with Keep), the review queue, films with no English audio (Replace / Keep), failed chapter jobs, integrations that aren't responding and unfinished setup; and a Library care card with coverage bars and what's running.
+- **Each title's page has an Enhancements panel**: per file (episodes grouped by season), its chapters, generated subtitles, the recap and preview Curatarr marked, skip markers it fixed, and its English-audio check.
+
 - **Credits start when the talking stops.** A credits marker people are still talking in isn't credits: Intro Skipper's fingerprint matching can latch onto a recurring music cue and mark minutes of the episode (on one show, the last 7½ minutes of ten episodes, each exactly 447 s). The skip-marker check now finds the last line of dialogue inside each credits marker (ignoring theme lyrics heard in other episodes and a marked preview) and, when there's at least 20 s of it, moves the credits to start after it, or hides the marker when the talking runs to within 10 s of the end. Trims are listed on Review skip markers; Undo restores Intro Skipper's original. Episodes already checked are checked again (only the marker step); press Check skip markers to queue them.
 
 ## 0.2.0rc4 (2026-10-15)

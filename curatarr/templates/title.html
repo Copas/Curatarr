@@ -19,10 +19,35 @@
 {% if is_admin and candidate.score_detail_json %}<details><summary>Decision score and observations</summary><pre class="overflow-auto">{{ candidate.score_detail_json|tojson(indent=2) }}</pre></details>{% endif %}</div>
 {% else %}<p class="mb-0">No cleanup decision has been recorded for this title.</p>{% endfor %}
 </div>
-{% if is_admin and chapter_rows %}<details class="card p-3 mb-4"{% if media.media_type == 'movie' %} open{% endif %}><summary class="h5 mb-0">Chapters</summary>
-<div class="table-responsive mt-3"><table class="table table-sm align-middle mb-0"><thead><tr>{% if media.media_type == 'series' %}<th scope="col">Episode</th>{% endif %}<th scope="col">Chapters</th><th scope="col">Source</th><th scope="col">Count</th><th scope="col">Last processed</th><th scope="col">Generated subtitles</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead><tbody>
-{% for part, chapters in chapter_rows %}<tr>{% if media.media_type == 'series' %}<td class="text-nowrap">S{{ '%02d'|format(part.season_number or 0) }}E{{ '%02d'|format(part.episode_number or 0) }}{{ jellyfin_part_link(part, media) }}</td>{% endif %}<td>{{ chapters.label }}{% if chapters.queued %} · queued{% endif %}</td><td>{{ chapters.source }}</td><td>{{ chapters.count if chapters.count is not none else '—' }}</td><td>{{ chapters.processed_at|when('date') if chapters.processed_at else '—' }}</td><td>{{ chapters.subtitles }}</td><td><a href="{{ url_for('main.chapter_part', part_id=part.id) }}">Preview and actions</a></td></tr>{% endfor %}
-</tbody></table></div></details>{% endif %}
+{% if is_admin and chapter_rows %}
+{% macro clock(seconds) %}{{ '%d:%02d'|format((seconds or 0) // 60, (seconds or 0) % 60) }}{% endmacro %}
+{% macro file_row(part, c) %}<li class="enh-row">
+  <div class="enh-name">{% if media.media_type == 'series' %}<strong>E{{ '%02d'|format(part.episode_number or 0) }}</strong>{% else %}<strong>{{ media.title }}</strong>{% endif %}{{ jellyfin_part_link(part, media) }}</div>
+  <div class="enh-chips">
+    <span class="chip{{ ' chip-on' if c.label in ('Generated', 'Existing') }}" title="Chapters: {{ c.label }}{% if c.source != '—' %}, {{ c.source }}{% endif %}">{{ icon('chapters', 12) }} {% if c.count %}{{ c.count }} chapters{% else %}{{ c.label }}{% endif %}{% if c.queued %} · queued{% endif %}</span>
+    {% if c.subtitles_ours %}<span class="chip chip-on" title="Generated subtitles">{{ icon('subtitles', 12) }} Generated subtitles</span>{% endif %}
+    {% if c.recap %}<span class="chip chip-accent" title="Recap Curatarr marked">{{ icon('skip', 12) }} Recap {{ clock(c.recap[0]) }}–{{ clock(c.recap[1]) }}</span>{% endif %}
+    {% if c.preview %}<span class="chip chip-accent" title="Preview Curatarr marked">{{ icon('skip', 12) }} Preview</span>{% endif %}
+    {% if c.markers_fixed %}<span class="chip" title="Intro Skipper markers Curatarr hid or trimmed">{{ c.markers_fixed }} marker{{ '' if c.markers_fixed == 1 else 's' }} fixed</span>{% endif %}
+    {% if c.dub %}<span class="chip chip-{{ c.dub[1] }}">{{ icon('audio', 12) }} {{ c.dub[0] }}</span>{% endif %}
+  </div>
+  <a class="enh-go" href="{{ url_for('main.chapter_part', part_id=part.id) }}" aria-label="Preview and actions for {{ 'E%02d'|format(part.episode_number or 0) if media.media_type == 'series' else media.title }}">Preview and actions {{ icon('chevron', 14) }}</a>
+</li>{% endmacro %}
+<section class="card p-3 mb-4" aria-labelledby="enhance-heading">
+  <h2 class="h5 mb-1" id="enhance-heading">{{ icon('enhance', 18) }} Enhancements</h2>
+  <p class="small text-secondary mb-3">What Curatarr has done to {{ 'each episode' if media.media_type == 'series' else 'this file' }}: chapters, generated subtitles, recaps and previews it marked, skip markers it fixed{% if media.media_type == 'movie' %}, and its English audio{% endif %}.</p>
+  {% if media.media_type == 'series' %}
+    {% set seasons = chapter_rows|groupby('0.season_number') %}
+    {% for season, rows in seasons %}
+    <details class="enh-season"{% if seasons|length == 1 or loop.last %} open{% endif %}><summary><strong>Season {{ season or 0 }}</strong><span class="small text-secondary">{{ rows|length }} episode{{ '' if rows|length == 1 else 's' }}{% set done = rows|selectattr('1.count')|list|length %} · {{ done }} with chapters</span>{{ icon('chevron', 16) }}</summary>
+      <ul class="enh-list list-unstyled mb-0">{% for part, c in rows %}{{ file_row(part, c) }}{% endfor %}</ul>
+    </details>
+    {% endfor %}
+  {% else %}
+    <ul class="enh-list list-unstyled mb-0">{% for part, c in chapter_rows %}{{ file_row(part, c) }}{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endif %}
 {% if is_admin and actions %}<h2 class="h5">Recent history</h2><ul>{% for action in actions %}<li><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action.action_type.replace('_',' ')|title }}</a> · {{ action.state }} · {{ action.reason_text }}</li>{% endfor %}</ul>{% endif %}
 {% if is_admin %}<details class="mt-4"><summary class="h5">Advanced: overrides and effective policy</summary><div class="pt-3">
 <form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="row g-3">
