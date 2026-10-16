@@ -1999,3 +1999,63 @@ def test_chapter_jobs_ceiling_shows_its_range_and_accepts_up_to_eight(app, clien
     assert enrichment.options()["concurrency"] == 6
     client.post("/chapters/settings", data={**form, "concurrency": "9"})
     assert enrichment.options()["concurrency"] == 6  # over the ceiling: refused
+
+
+def test_credits_people_talk_through_are_trimmed_and_can_be_undone(
+    media_env, monkeypatch
+):
+    from curatarr.chapters import Segment
+
+    files, arr = media_env
+    parts, rows = _series_with_recaps(files)
+    target = parts[-1]
+    talk = [
+        Segment(t, t + 4.5, f"line {n} of the punishment, nobody has said this before")
+        for n, t in enumerate(range(3000, 3400, 6))
+    ]
+    first_minutes = [Segment(r["start"], r["end"], r["text"]) for r in rows]
+
+    def fake_transcribe(
+        _info, _model, _device, _dir, make_room=None, opening=False, window=None
+    ):
+        return (first_minutes if opening else talk), {}
+
+    monkeypatch.setattr("curatarr.transcribe.transcribe", fake_transcribe)
+    segments = [
+        {
+            "Id": "long",
+            "Type": "Credits",
+            "Start": 3000.0,
+            "End": 3590.0,
+            "Source": "Chromaprint",
+            "Suppressed": False,
+        }
+    ]
+    calls = []
+
+    def plugin(method, path, **kwargs):
+        calls.append((method, path, kwargs.get("json")))
+        if method == "GET":
+            return segments if path.split("/")[2] == "jf-ep4" else []
+        if method == "POST" and kwargs.get("json"):
+            return {"Id": f"ours-{kwargs['json']['Type']}"}
+        return None
+
+    arr.request = plugin
+    enrichment.request(target, "recap")
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=target.id).one()
+    added = [c for c in calls if c[0] == "POST" and c[2] and c[2]["Type"] == "Credits"]
+    assert len(added) == 1 and 3400 < added[0][2]["Start"] < 3403
+    assert added[0][2]["End"] == 3590.0
+    assert ("DELETE", "/Episode/jf-ep4/Segments/long", None) in calls
+    [entry] = state.markers_hidden
+    assert (
+        entry["replaced_by"] == "ours-Credits"
+        and "credits now start there" in entry["reason"]
+    )
+    calls.clear()
+    enrichment.undo_marker(state, "hidden", "long")
+    assert ("DELETE", "/Episode/jf-ep4/Segments/ours-Credits", None) in calls
+    assert ("POST", "/Episode/jf-ep4/Segments/long/Restore", None) in calls
