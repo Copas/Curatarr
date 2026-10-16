@@ -1825,21 +1825,42 @@ def job_forecast(now=None) -> dict | None:
             .scalar()
         )
 
+    def video_since(moment):
+        return (
+            db.session.query(func.sum(ChapterState.duration_seconds))
+            .filter(ChapterState.chapter_processed_at >= moment)
+            .scalar()
+        ) or 0
+
     done = finished_since(started)
-    rate = None
+    rate = video_rate = None
     for window in (FORECAST_WINDOW, FORECAST_LONG_WINDOW):
         since = max(now - window, started)
         hours = (now - since).total_seconds() / 3600
         count = finished_since(since)
         if count >= FORECAST_MIN_SAMPLES and hours > 0:
             rate = count / hours
+            video_rate = video_since(since) / hours or None
             break
-    eta = now + timedelta(hours=remaining / rate) if rate else None
+    # Paced by hours of video rather than files, so a run of long films after a
+    # run of short episodes doesn't read as a slowdown. Files of unknown length
+    # count as the average of those known.
+    known, video_left = pending.with_entities(
+        func.count(ChapterState.duration_seconds),
+        func.sum(ChapterState.duration_seconds),
+    ).one()
+    hours_left = None
+    if video_rate and known:
+        hours_left = video_left * remaining / known / video_rate
+    elif rate:
+        hours_left = remaining / rate
+    eta = now + timedelta(hours=hours_left) if hours_left is not None else None
     return {
         "remaining": remaining,
         "done": done,
         "percent": round(100 * done / (done + remaining), 1),
         "per_hour": rate,
+        "video_per_hour": video_rate / 3600 if video_rate else None,
         "finishes_at": eta,
         "left": _duration_words(eta - now) if eta else None,
         "started": started,
