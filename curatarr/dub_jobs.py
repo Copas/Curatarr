@@ -22,6 +22,7 @@ from .mediafile import (
     MediaToolError,
     can_write,
     probe,
+    remove_tracks,
     set_audio_language,
     set_default_audio,
 )
@@ -129,13 +130,32 @@ def _run(app):
             db.session.remove()
 
 
-def _original_languages() -> dict:
-    """Radarr id -> ISO 639-1 code of the language the film was made in."""
+def _codes(text) -> set:
+    return {dubs.code(part) for part in str(text or "").split("/")} - {None}
+
+
+def _films() -> dict:
+    """Radarr id -> (original language, audio languages, subtitle languages),
+    as ISO 639-1 codes, the file's languages from Radarr's media info."""
     found = {}
     for movie in client("radarr").movies() or []:
         language = (movie.get("originalLanguage") or {}).get("name")
-        found[movie["id"]] = dubs.code(language) or (language or None)
+        info = (movie.get("movieFile") or {}).get("mediaInfo") or {}
+        found[movie["id"]] = (
+            dubs.code(language) or (language or None),
+            _codes(info.get("audioLanguages")),
+            _codes(info.get("subtitles")),
+        )
     return found
+
+
+def _needs_listening(film, remove_others: bool) -> bool:
+    """Films made in English are checked only when their file has audio (or,
+    when removing other languages, subtitles) in another language."""
+    original, audio, subtitles = film
+    if original != "en":
+        return True
+    return bool(audio - {"en"}) or (remove_others and bool(subtitles - {"en"}))
 
 
 def sweep(foreign_limit=FOREIGN_PER_RUN) -> dict:
@@ -143,17 +163,19 @@ def sweep(foreign_limit=FOREIGN_PER_RUN) -> dict:
     counts = {"english": 0, "foreign": 0}
     if not parts:
         return counts
-    originals = _original_languages()
+    films = _films()
     e = _enrichment()
+    remove_others = bool(e.options()["dub_remove_other_languages"])
     for part in parts:
-        original = originals.get(part.media.radarr_id)
-        if original is None:
+        film = films.get(part.media.radarr_id)
+        if film is None:
             continue  # not in Radarr any more; the reconciler will catch up
         state = e.state_for(part)
-        if original == "en":
+        original = film[0]
+        if not _needs_listening(film, remove_others):
             state.dub_checked_at = utcnow()
             state.dub_file_size = part.size_bytes
-            state.dub_result = {"original": "en"}
+            state.dub_result = {"original": original}
             db.session.commit()
             counts["english"] += 1
             continue
@@ -211,8 +233,22 @@ def check(state, part, original) -> dict:
     state.dub_checked_at = utcnow()
     # Radarr's size for the file: a different one later means it was replaced.
     state.dub_file_size = part.size_bytes
+    if opts["dub_remove_other_languages"] and result["verdict"] == "english":
+        removed = _remove_others(state, part, path, result)
+        if removed:
+            result["removed"] = removed
+            state.dub_file_size = removed["size"]  # what Radarr will now report
     state.dub_result = _jsonable(result)
     db.session.commit()
+    if result.get("removed"):
+        r = result["removed"]
+        audit(
+            "dub_tracks_removed",
+            part.media.id,
+            f"Removed {_removed_words(r)} from {e._part_label(part)}.",
+            f"dub-removed:{state.id}:{state.dub_checked_at.isoformat()}",
+            payload={"file": path, **r},
+        )
     if result["applied"]:
         audit(
             "dub_fixed",
@@ -232,6 +268,68 @@ def check(state, part, original) -> dict:
                 db.session.rollback()
                 e._log("dub_replace_failed", state_id=state.id, error=str(exc))
     return state.dub_result
+
+
+def _removed_words(removed) -> str:
+    parts = []
+    for kind, noun in (("audio", "audio"), ("subtitles", "subtitle")):
+        languages = sorted({dubs.name(lang) for _index, lang in removed[kind]})
+        if languages:
+            count = len(removed[kind])
+            parts.append(
+                f"{count} {noun} track{'s' if count != 1 else ''} ({', '.join(languages)})"
+            )
+    return " and ".join(parts)
+
+
+def _remove_others(state, part, path, result):
+    """Rewrite the file without audio and subtitles in other languages."""
+    e = _enrichment()
+    if _dry_run(part.media):
+        result["not_removed"] = "dry run is on for this library"
+        return None
+    info = probe(path)
+    writable, reason = can_write(info)
+    if not writable:
+        result["not_removed"] = reason
+        return None
+    drop = dubs.removable(result, info.streams)
+    if not drop["audio"] and not drop["subtitles"]:
+        return None
+    english = [t["index"] for t in result["tracks"] if t["heard"] == "en"]
+    default = next(
+        (
+            s["index"]
+            for s in info.streams
+            if s.get("default") and s["index"] in english
+        ),
+        english[0],
+    )
+    in_sync = (state.chapter_file_size, state.chapter_file_mtime) == (
+        info.size,
+        info.mtime,
+    )
+    heard = {t["index"]: t["heard"] for t in result["tracks"]}
+    labels = {s["index"]: dubs.code(s.get("language")) for s in info.streams}
+    try:
+        after = remove_tracks(path, info, drop["audio"] + drop["subtitles"], default)
+    except MediaToolError as exc:
+        result["not_removed"] = str(exc)
+        return None
+    if in_sync:
+        state.chapter_file_size, state.chapter_file_mtime = after.size, after.mtime
+    for track in result["tracks"]:
+        track["removed"] = track["index"] in drop["audio"]
+    e._refresh_jellyfin(part, part.media)
+    try:
+        client("radarr").rescan_movie(part.media.radarr_id)
+    except IntegrationError:
+        pass  # Radarr notices on its own next rescan
+    return {
+        "audio": [[i, heard.get(i)] for i in drop["audio"]],
+        "subtitles": [[i, labels.get(i)] for i in drop["subtitles"]],
+        "size": after.size,
+    }
 
 
 def _jsonable(result):
@@ -351,14 +449,14 @@ def review() -> dict:
     to_act, fixed, unsure, checked = [], [], [], 0
     for state in rows:
         result = state.dub_result or {}
-        if result.get("original") in (None, "en"):
+        if result.get("original") in (None, "en") and "verdict" not in result:
             continue
         checked += 1
         if result.get("dismissed") or result.get("replaced"):
             continue
         if result.get("verdict") == "no_english":
             to_act.append(state)
-        elif result.get("applied"):
+        elif result.get("applied") or result.get("removed"):
             fixed.append(state)
         elif result.get("verdict") == "unsure" or result.get("error"):
             unsure.append(state)

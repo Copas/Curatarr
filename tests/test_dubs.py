@@ -57,8 +57,19 @@ class FakeRadarr:
         self.original = original
         self.calls = []
 
+    audio = ""
+
     def movies(self):
-        return [{"id": 7, "originalLanguage": {"id": 9, "name": self.original}}]
+        return [
+            {
+                "id": 7,
+                "originalLanguage": {"id": 9, "name": self.original},
+                "movieFile": {"mediaInfo": {"audioLanguages": self.audio}},
+            }
+        ]
+
+    def rescan_movie(self, movie_id):
+        self.calls.append(("rescan", movie_id))
 
     def movie(self, movie_id):
         return {"id": movie_id, "movieFile": {"id": 55}}
@@ -228,3 +239,130 @@ def test_a_foreign_films_chapter_job_waits_for_its_dub_check(dub_env):
     assert not dub_jobs.holds_chapters(state, False)  # check switched off
     dub_jobs.sweep()
     assert not dub_jobs.holds_chapters(db.session.get(ChapterState, state.id), True)
+
+
+def test_removable_keeps_english_and_unclear_tracks():
+    streams = _streams(("eng", True), ("ita", False), ("tur", False)) + [
+        {"index": 4, "codec_type": "subtitle", "language": "ita"},
+        {"index": 5, "codec_type": "subtitle", "language": "eng"},
+        {"index": 6, "codec_type": "subtitle", "language": None},
+    ]
+    result = dubs.plan(streams, {1: "en", 2: "it", 3: None})
+    assert dubs.removable(result, streams) == {"audio": [2], "subtitles": [4]}
+    unsure = dubs.plan(streams, {1: None, 2: "it", 3: None})
+    assert dubs.removable(unsure, streams) == {"audio": [], "subtitles": []}
+
+
+def test_other_languages_are_removed_only_when_switched_on(dub_env, monkeypatch):
+    radarr, files = dub_env
+    radarr.original = "English"
+    radarr.audio = "eng/ita"
+    files["streams"] = _streams(("eng", True), ("ita", False))
+    files["heard"] = {1: "en", 2: "it"}
+    removed = []
+
+    def remove(path, info, drop, default):
+        removed.append((sorted(drop), default))
+        return MediaInfo(
+            path=path, size=800, mtime=2.0, duration=6000.0, format_name="matroska,webm"
+        )
+
+    monkeypatch.setattr(dub_jobs, "remove_tracks", remove)
+    _movie(PATH)
+    dub_jobs.sweep()  # an English film with an Italian dub is listened to
+    assert db.session.query(ChapterState).one().dub_result["verdict"] == "english"
+    assert removed == []  # off by default
+    set_setting(
+        "chapter_options", {**enrichment.options(), "dub_remove_other_languages": True}
+    )
+    dub_jobs.recheck(db.session.query(ChapterState).one())
+    dub_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+    assert removed == [([2], 1)]
+    assert state.dub_result["removed"]["audio"] == [[2, "it"]]
+    assert state.dub_file_size == 800
+    assert dub_jobs.review()["fixed"] == [state]
+
+
+def test_english_films_with_only_english_audio_are_not_listened_to(
+    dub_env, monkeypatch
+):
+    radarr, _files = dub_env
+    radarr.original, radarr.audio = "English", "eng"
+    monkeypatch.setattr(dubs, "listen", lambda *a, **k: pytest.fail("listened"))
+    _movie(PATH)
+    assert dub_jobs.sweep() == {"english": 1, "foreign": 0}
+
+
+def test_remove_tracks_rewrites_a_real_file(tmp_path):
+    import shutil
+    import subprocess
+
+    from curatarr import mediafile
+
+    ffmpeg, merge = mediafile.tool("ffmpeg"), mediafile.tool("mkvmerge")
+    if not ffmpeg or not merge or not mediafile.tool("ffprobe"):
+        pytest.skip("needs ffmpeg, ffprobe and mkvmerge")
+    parts = []
+    for name, freq in (("v", None), ("a1", 440), ("a2", 550), ("a3", 660)):
+        out = tmp_path / f"{name}.mkv"
+        source = (
+            ["-f", "lavfi", "-i", "testsrc=size=160x90:rate=10:duration=6"]
+            if freq is None
+            else ["-f", "lavfi", "-i", f"sine=frequency={freq}:duration=6"]
+        )
+        subprocess.run([ffmpeg, "-v", "error", "-y", *source, str(out)], check=True)
+        parts.append(out)
+    for lang in ("ita", "eng"):
+        (tmp_path / f"{lang}.srt").write_text("1\n00:00:01,000 --> 00:00:02,000\nhi\n")
+    (tmp_path / "chapters.txt").write_text(
+        "CHAPTER01=00:00:00.000\nCHAPTER01NAME=One\nCHAPTER02=00:00:03.000\nCHAPTER02NAME=Two\n"
+    )
+    film = tmp_path / "film.mkv"
+    subprocess.run(
+        [
+            merge,
+            "-q",
+            "-o",
+            str(film),
+            "--chapters",
+            str(tmp_path / "chapters.txt"),
+            str(parts[0]),
+            "--language",
+            "0:ita",
+            "--default-track-flag",
+            "0:1",
+            str(parts[1]),
+            "--language",
+            "0:eng",
+            "--default-track-flag",
+            "0:0",
+            str(parts[2]),
+            "--language",
+            "0:tur",
+            "--default-track-flag",
+            "0:0",
+            str(parts[3]),
+            "--language",
+            "0:ita",
+            str(tmp_path / "ita.srt"),
+            "--language",
+            "0:eng",
+            str(tmp_path / "eng.srt"),
+        ],
+        check=True,
+    )
+    info = mediafile.probe(str(film))
+    audio = [s for s in info.streams if s["codec_type"] == "audio"]
+    subs = [s for s in info.streams if s["codec_type"] == "subtitle"]
+    english = next(s["index"] for s in audio if s["language"] == "eng")
+    drop = [s["index"] for s in audio if s["language"] != "eng"]
+    drop += [s["index"] for s in subs if s["language"] == "ita"]
+    after = mediafile.remove_tracks(str(film), info, drop, english)
+    kept = [(s["codec_type"], s["language"], s["default"]) for s in after.streams]
+    assert ("audio", "eng", True) in kept
+    assert [k for k in kept if k[0] == "audio"] == [("audio", "eng", True)]
+    assert [k[1] for k in kept if k[0] == "subtitle"] == ["eng"]
+    assert len(after.chapters) == 2 and abs(after.duration - info.duration) < 1
+    assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith(".")) == []
+    shutil.rmtree(tmp_path, ignore_errors=True)

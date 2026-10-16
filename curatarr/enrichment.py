@@ -251,6 +251,7 @@ def parse_options(form) -> dict:
         "episode_identity_check",
         "dub_check",
         "dub_replace_automatically",
+        "dub_remove_other_languages",
     ):
         if f"{key}_shown" in form:
             values[key] = form.get(key) in {"true", "on", "1"}

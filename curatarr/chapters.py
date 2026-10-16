@@ -67,6 +67,7 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "episode_identity_check": False,
     "dub_check": True,
     "dub_replace_automatically": False,
+    "dub_remove_other_languages": False,
     "settle_minutes": 10,
     "scene_threshold": 0.3,
     "ollama_url": "http://127.0.0.1:11434",
@@ -234,6 +235,8 @@ def validate_global_options(values: dict) -> dict:
         raise ChapterConfigError("Invalid dub check setting")
     if type(merged["dub_replace_automatically"]) is not bool:
         raise ChapterConfigError("Invalid dub replacement setting")
+    if type(merged["dub_remove_other_languages"]) is not bool:
+        raise ChapterConfigError("Invalid setting for removing other languages")
     if merged["whisper_device"] not in WHISPER_DEVICES:
         raise ChapterConfigError("Transcription device must be auto, cuda, or cpu")
     if not str(merged["ollama_url"]).startswith(("http://", "https://")):

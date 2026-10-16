@@ -453,6 +453,11 @@ class RadarrClient(Client):
             json={"name": "MoviesSearch", "movieIds": [movie_id]},
         )
 
+    def rescan_movie(self, movie_id):
+        return self.request(
+            "POST", "/api/v3/command", json={"name": "RescanMovie", "movieId": movie_id}
+        )
+
     def delete_movie(self, movie_id):
         return self.request(
             "DELETE",
