@@ -56,11 +56,13 @@ class Client:
         data=None,
         headers=None,
         destructive=False,
+        read_timeout=None,
+        attempts=None,
     ):
         if not path.startswith("/") or path.startswith("//"):
             raise ValueError("Integration path must be relative to configured host")
-        timeout = (5, 60 if destructive else 30)
-        attempts = 3 if method.upper() == "GET" else 1
+        timeout = (5, read_timeout or (60 if destructive else 30))
+        attempts = attempts or (3 if method.upper() == "GET" else 1)
         integration = type(self).__name__.removesuffix("Client").lower()
         started = time.monotonic()
         for attempt in range(attempts):
@@ -382,6 +384,17 @@ class SonarrClient(Client):
             json={"episodeIds": sorted(episode_ids), "monitored": monitored},
         )
 
+    def releases(self, episode_id):
+        """Every release the indexers have for an episode, with Sonarr's verdict
+        on each (this asks every indexer, so it can take a minute or two)."""
+        return self.request(
+            "GET",
+            "/api/v3/release",
+            params={"episodeId": episode_id},
+            read_timeout=300,
+            attempts=1,
+        )
+
     def ignore_for_series(self, series_id, label, pattern, name):
         """Make Sonarr ignore releases matching `pattern` for this series only."""
         _ignore_releases(self, f"/api/v3/series/{series_id}", label, pattern, name)
@@ -480,6 +493,17 @@ class SonarrClient(Client):
 
 class RadarrClient(Client):
     status_path = "/api/v3/system/status"
+
+    def releases(self, movie_id):
+        """Every release the indexers have for a film, with Radarr's verdict on
+        each (this asks every indexer, so it can take a minute or two)."""
+        return self.request(
+            "GET",
+            "/api/v3/release",
+            params={"movieId": movie_id},
+            read_timeout=300,
+            attempts=1,
+        )
 
     def ignore_for_movie(self, movie_id, label, pattern, name):
         """Make Radarr ignore releases matching `pattern` for this film only."""

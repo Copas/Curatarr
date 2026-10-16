@@ -1,8 +1,10 @@
+from typing import ClassVar
+
 import pytest
 from conftest import database_free
 from test_enrichment import _movie
 
-from curatarr import db, dub_jobs, dubs, enrichment
+from curatarr import better_copy, db, dub_jobs, dubs, enrichment
 from curatarr.mediafile import MediaInfo
 from curatarr.models import ChapterState
 from curatarr.services import set_setting
@@ -78,6 +80,13 @@ class FakeRadarr:
     def grabs(self, movie_id):
         return [{"id": 300, "sourceTitle": "Film.2020.1080p.WEB-DL"}]
 
+    available: ClassVar[list] = [
+        {"title": "Film.2020.1080p.BluRay.English-DUB", "rejections": []}
+    ]
+
+    def releases(self, _movie_id):
+        return self.available
+
     def mark_failed(self, history_id):
         self.calls.append(("failed", history_id))
 
@@ -116,6 +125,7 @@ def dub_env(app, monkeypatch):
                 s["default"] = s["index"] == index
 
     monkeypatch.setattr(dub_jobs, "client", lambda _kind: radarr)
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: radarr)
     monkeypatch.setattr(dub_jobs, "_dry_run", lambda media: False)
     monkeypatch.setattr(dub_jobs, "probe", probe)
     monkeypatch.setattr(dub_jobs, "can_write", lambda info: (True, None))
@@ -158,6 +168,7 @@ def test_a_fake_english_dub_is_relabelled_listed_and_replaced(app, client, dub_e
     assert "none of its audio sounds English" in page and "Danish" in page
     assert radarr.calls == []  # replacing waits for approval by default
     client.post(f"/chapters/dubs/{state.id}/replace")
+    better_copy.sweep()  # a copy Radarr would take exists
     assert radarr.calls == [("failed", 300), ("delete", 55), ("search", 7)]
     assert dub_jobs.review()["to_act"] == []
 
@@ -169,7 +180,26 @@ def test_replace_automatically_when_switched_on(dub_env):
     opts = enrichment.options()
     set_setting("chapter_options", {**opts, "dub_replace_automatically": True})
     dub_jobs.sweep()
+    better_copy.sweep()
     assert ("search", 7) in radarr.calls
+
+
+def test_a_film_with_no_english_copy_anywhere_is_kept(client, dub_env):
+    """Amélie and Pluto were deleted with nothing to replace them."""
+    radarr, files = dub_env
+    files["heard"] = {1: "da"}
+    radarr.available = [
+        {"title": "Film.2020.Danish.1080p", "rejections": ["Language: Not English"]}
+    ]
+    _movie(PATH)
+    dub_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+    client.post(f"/chapters/dubs/{state.id}/replace")
+    better_copy.sweep()
+    assert radarr.calls == []
+    assert "No copy Radarr would take was available" in client.get(
+        "/chapters/dubs"
+    ).get_data(as_text=True)
 
 
 def test_dry_run_keeps_the_file(dub_env, monkeypatch):
