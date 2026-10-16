@@ -164,6 +164,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Finding catchphrases failed")
     try:
+        from . import wrong_version
+
+        wrong_version.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Checking shows for the wrong version failed")
+    try:
         from .enrichment import link_transcripts
 
         link_transcripts()
