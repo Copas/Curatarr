@@ -356,5 +356,9 @@ class ChapterState(db.Model, Timed):
     # Whether the transcript fits this episode (see identity.py).
     identity_checked_at = db.Column(db.DateTime(timezone=True))
     identity_issue = db.Column(db.JSON)
+    # Whether a film made in another language has real English audio (dubs.py).
+    dub_checked_at = db.Column(db.DateTime(timezone=True))
+    dub_file_size = db.Column(db.BigInteger)  # the file that was checked
+    dub_result = db.Column(db.JSON)
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")
