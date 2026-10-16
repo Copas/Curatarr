@@ -804,7 +804,7 @@ NOT_FOUND = "The media file was not found%"
 MISSING_RECHECK = timedelta(minutes=30)
 
 
-def resolve_missing_failures(limit=50) -> int:
+def resolve_missing_failures(limit=20) -> int:
     """Retry jobs that failed because their file couldn't be found, once it can
     be (a network share back after an outage), or explain why it can't."""
     now = utcnow()
@@ -835,19 +835,26 @@ def resolve_missing_failures(limit=50) -> int:
         if now - _missing_tried.get(r.id, now - MISSING_RECHECK) >= MISSING_RECHECK
     ][:limit]
     resolved = 0
-    for state in rows:
-        _missing_tried[state.id] = now
-        part, media = state.part, state.media
+    targets = [(state.id, state.part, state.media) for state in rows]
+    for state_id, part, media in targets:
+        # One short transaction per file: asking Radarr or Sonarr while holding
+        # SQLite's write lock for the whole batch stalled the web app and worker.
+        _missing_tried[state_id] = now
         path = local_path(part.file_path)
+        state = db.session.get(ChapterState, state_id)
         if path and file_exists(path):
             _retry_failed(state)
             resolved += 1
         elif state.chapter_status == "failed" and _resolve_missing(state, part, media):
             resolved += 1
-    if rows:
         db.session.commit()
-    _recheck_unreachable_checks()
+    if now - _last_recheck[0] >= MISSING_RECHECK:
+        _last_recheck[0] = now
+        _recheck_unreachable_checks()
     return resolved
+
+
+_last_recheck = [utcnow() - timedelta(days=1)]
 
 
 UNREACHABLE_ERRORS = (
@@ -915,9 +922,10 @@ def retry_all_failed() -> int:
         )
         .all()
     )
-    for state in rows:
-        _retry_failed(state)
-    db.session.commit()
+    for start in range(0, len(rows), 50):  # short writes, so nothing waits long
+        for state in rows[start : start + 50]:
+            _retry_failed(state)
+        db.session.commit()
     return len(rows)
 
 
