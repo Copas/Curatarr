@@ -458,6 +458,37 @@ class RadarrClient(Client):
             "POST", "/api/v3/command", json={"name": "RescanMovie", "movieId": movie_id}
         )
 
+    def collections(self):
+        return self.request("GET", "/api/v3/collection")
+
+    def collection(self, collection_id):
+        return self.request("GET", f"/api/v3/collection/{collection_id}")
+
+    def update_collection(self, collection):
+        return self.request(
+            "PUT", f"/api/v3/collection/{collection['id']}", json=collection
+        )
+
+    def recommendations(self):
+        """Films TMDB recommends from the ones in the library."""
+        return self.request(
+            "GET",
+            "/api/v3/importlist/movie",
+            params={
+                "includeRecommendations": "true",
+                "includeTrending": "false",
+                "includePopular": "false",
+            },
+        )
+
+    def lookup_tmdb(self, tmdb_id):
+        return self.request(
+            "GET", "/api/v3/movie/lookup/tmdb", params={"tmdbId": tmdb_id}
+        )
+
+    def add_movie(self, movie):
+        return self.request("POST", "/api/v3/movie", json=movie)
+
     def delete_movie(self, movie_id):
         return self.request(
             "DELETE",
