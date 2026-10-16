@@ -345,3 +345,4 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .btn.is-busy::after, button.is-busy::after { content: ""; display: inline-block; width: .85em; height: .85em; margin-left: .45em; vertical-align: -.1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: busy-spin .7s linear infinite; }
 @keyframes busy-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .page-loading.is-on { animation: none; width: 70%; } .btn.is-busy::after, button.is-busy::after { animation: none; border-right-color: currentColor; } }
+.pause-menu .action-menu-items { left: auto; right: 0; }

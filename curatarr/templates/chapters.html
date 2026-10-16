@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Enhance · Curatarr{% endblock %}
 {% block content %}
-<header class="page-heading"><div><div class="eyebrow">Enhance</div><h1>Progress</h1><p class="text-secondary mb-0">Chapters, subtitles, skip markers and dubs across your library: what's done, what's left, and what's running.</p></div><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.chapter_settings') }}">{{ icon('settings', 16) }} Settings</a></header>
+<header class="page-heading"><div><div class="eyebrow">Enhance</div><h1>Progress</h1><p class="text-secondary mb-0">Chapters, subtitles, skip markers and dubs across your library: what's done, what's left, and what's running.</p></div><div class="d-flex flex-wrap gap-2 align-items-start">{% include '_pause_menu.html' %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.chapter_settings') }}">{{ icon('settings', 16) }} Settings</a></div></header>
 {% if smart_blocked %}<div class="alert alert-danger"><strong>Smart Chapters is stopped.</strong> This install doesn't include faster-whisper, so it can't transcribe. Chapter jobs in Smart libraries are waiting instead of getting Navigation chapters. Reinstall with <code>sudo env EXTRAS=chapters-gpu ./scripts/install.sh</code>.</div>{% endif %}
 {% set endpoint = 'main.chapter_maintenance' %}{% include '_library_filter.html' %}
 {% macro stat(label, value, hint=None, todo=False) %}<div class="{{ 'stat-todo' if todo else '' }}{{ ' stat-done' if todo and not value else '' }}"><h3 class="stat-label mb-0">{{ label }}</h3><p class="stat-value mb-0">{{ value|commas }}</p>{% if hint %}<p class="stat-hint mb-0">{{ hint }}</p>{% endif %}</div>{% endmacro %}

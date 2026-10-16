@@ -105,6 +105,10 @@ def worker_cycle():
 
 def _dispatch_chapters():
     """Start chapter jobs in background threads; never blocks the cycle."""
+    from . import pause
+
+    if pause.enforce():
+        return  # all work paused on request
     try:
         from .enrichment import run_requested_skip_marker_check
 
