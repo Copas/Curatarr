@@ -452,10 +452,12 @@ def _nav_counts(signed_in_user, is_admin) -> dict:
         from .enrichment import maintenance_failed_count
 
         counts["dubs"] = dub_jobs.counts()["dubs_to_act"]
-        from . import filecheck_jobs, missing_keep
+        from . import filecheck_jobs, missing_keep, wrong_version
 
         counts["problems"] = (
-            filecheck_jobs.counts()["problems_to_act"] + missing_keep.count()
+            filecheck_jobs.counts()["problems_to_act"]
+            + missing_keep.count()
+            + wrong_version.count()
         )
         counts["failed"] = maintenance_failed_count()
     return counts
@@ -731,8 +733,21 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "href": url_for("main.chapter_problems"),
             }
         )
-    from . import missing_keep
+    from . import missing_keep, wrong_version
 
+    for row in wrong_version.rows()[:NEEDS_SHOWN]:
+        needs.append(
+            {
+                "icon": "tools",
+                "tone": "danger",
+                "title": row["media"].title,
+                "detail": "Looks like another show with the same name: "
+                + "; ".join(row["evidence"])
+                + ".",
+                "wrong_version": row["media"].id,
+                "href": url_for("main.chapter_problems"),
+            }
+        )
     for row in [r for r in missing_keep.rows() if not r["waiting"]][:NEEDS_SHOWN]:
         needs.append(
             {
