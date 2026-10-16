@@ -2180,9 +2180,13 @@ def test_a_renamed_file_is_followed(media_env):
     assert state.chapter_status != "failed"
 
 
-def test_an_unexplained_missing_file_still_fails_and_has_controls(client, media_env):
+def test_an_unexplained_missing_file_fails_after_a_day_and_has_controls(
+    client, media_env
+):
     files, arr = media_env
     _part, state = _queued_missing(arr, files, None)  # Radarr can't be asked
+    state.attempts = enrichment.MISSING_PATIENCE  # a day of retries already
+    db.session.commit()
     enrichment.dispatch(synchronous=True)
     db.session.expire_all()
     state = db.session.get(ChapterState, state.id)
@@ -2198,9 +2202,75 @@ def test_an_unexplained_missing_file_still_fails_and_has_controls(client, media_
 
 def test_old_missing_file_failures_are_cleared_with_radarr(media_env):
     files, arr = media_env
-    _queued_missing(arr, files, None)
+    _part, state = _queued_missing(arr, files, None)
+    state.attempts = enrichment.MISSING_PATIENCE
+    db.session.commit()
     enrichment.dispatch(synchronous=True)
+    assert enrichment.maintenance_failed_count() == 1
     arr.movie_record = {"id": 7, "hasFile": False}
     enrichment._missing_tried.clear()
     assert enrichment.resolve_missing_failures() == 1
     assert enrichment.maintenance_failed_count() == 0
+
+
+def test_a_file_on_an_offline_share_waits_instead_of_failing(client, media_env):
+    """Radarr still has it: the network share dropped. Retry; fail after a day."""
+    files, arr = media_env
+    _part, state = _queued_missing(
+        arr,
+        files,
+        {
+            "id": 7,
+            "hasFile": True,
+            "movieFile": {"path": "/movies/Film (2020)/Film.mkv"},
+        },
+    )
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert state.chapter_status != "failed" and state.job_state == "queued"
+    assert state.chapter_error == enrichment.UNREACHABLE and state.next_attempt_at
+    arr.movie_record = None  # Radarr unreachable too (the whole network is down)
+    state.next_attempt_at = None
+    db.session.commit()
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    assert db.session.get(ChapterState, state.id).chapter_status != "failed"
+
+
+def test_not_found_failures_heal_when_the_share_returns(client, media_env):
+    files, _arr = media_env
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.chapter_status, state.chapter_error = (
+        "failed",
+        "The media file was not found at its expected path",
+    )
+    state.subtitle_status, state.subtitle_error = (
+        "failed",
+        "The media file was not found",
+    )
+    db.session.commit()
+    files.add(part.file_path)  # the share is back
+    enrichment._missing_tried.clear()
+    assert enrichment.resolve_missing_failures() == 1
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert (state.job_state, state.requested_action, state.subtitle_status) == (
+        "queued",
+        "auto",
+        None,
+    )
+    assert enrichment.maintenance_failed_count() == 0
+
+
+def test_try_all_again(client, media_env):
+    _files, _arr = media_env
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.chapter_status, state.chapter_error = "failed", "Something broke"
+    db.session.commit()
+    assert "Try all 1 again" in client.get("/chapters").text
+    client.post("/chapters/failed/retry-all")
+    db.session.expire_all()
+    assert db.session.get(ChapterState, state.id).job_state == "queued"

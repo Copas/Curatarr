@@ -172,6 +172,9 @@ def sweep(foreign_limit=FOREIGN_PER_RUN) -> dict:
         film = films.get(part.media.radarr_id)
         if film is None:
             continue  # not in Radarr any more; the reconciler will catch up
+        path = e.local_path(part.file_path)
+        if not path or not e.file_exists(path):
+            continue  # unreachable for now (a share offline?): check it later
         state = e.state_for(part)
         db.session.commit()  # not holding the write lock while listening
         original = film[0]
