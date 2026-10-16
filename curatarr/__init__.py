@@ -82,7 +82,10 @@ def create_app(test_config=None):
                 }
             ), 503
 
-    from . import chapter_routes  # noqa: F401  (adds the chapter pages to bp)
+    from . import (
+        chapter_routes,  # noqa: F401  (adds the chapter pages to bp)
+        franchise_routes,  # noqa: F401  (adds Library → Collections)
+    )
 
     app.register_blueprint(bp)
     register_commands(app)

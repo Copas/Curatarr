@@ -380,6 +380,112 @@ class DemoClient:
             return {"id": external_id, "tvdbId": 10000 + external_id}
         return {"id": external_id, "tmdbId": 20000 + external_id}
 
+    # --- Radarr collections and recommendations (Library → Collections) ---
+
+    def _demo_movies(self):
+        return (
+            db.session.query(MediaIdentity)
+            .filter(MediaIdentity.radarr_id.isnot(None))
+            .order_by(MediaIdentity.title)
+            .all()
+        )
+
+    def _added(self):
+        row = db.session.query(AppSetting).filter_by(key="demo_added_films").first()
+        return set(row.value_json or []) if row else set()
+
+    def _film(self, tmdb_id, title, year, genres, status="released", existing=False):
+        return {
+            "tmdbId": tmdb_id,
+            "title": title,
+            "year": year,
+            "status": status,
+            "genres": genres,
+            "runtime": 95,
+            "ratings": {"tmdb": {"value": 6.0 + (tmdb_id % 30) / 10}},
+            "overview": f"A synthetic demo film ({title}).",
+            "isExisting": existing or tmdb_id in self._added(),
+            "isExcluded": False,
+        }
+
+    def movies(self):
+        self._check()
+        return [
+            {
+                "id": media.radarr_id,
+                "tmdbId": media.tmdb_id,
+                "title": media.title,
+                "genres": ["Comedy", "Drama"] if n % 2 else ["Horror", "Thriller"],
+                "qualityProfileId": 1,
+                "rootFolderPath": "/demo/movies",
+                "collection": {"tmdbId": 900} if n < 2 else None,
+            }
+            for n, media in enumerate(self._demo_movies())
+        ]
+
+    def collections(self):
+        self._check()
+        owned = self._demo_movies()[:2]
+        films = [
+            self._film(
+                media.tmdb_id or 30000 + n,
+                media.title,
+                2001 + n,
+                ["Horror"],
+                existing=True,
+            )
+            for n, media in enumerate(owned)
+        ] + [
+            self._film(30101, "Demo Saga III", 2010, ["Horror"]),
+            self._film(30102, "Demo Saga IV", 2014, ["Horror"]),
+            self._film(30103, "Demo Saga V", 2099, ["Horror"], status="announced"),
+        ]
+        return [
+            {
+                "id": 1,
+                "tmdbId": 900,
+                "title": "Demo Saga Collection",
+                "monitored": False,
+                "movies": films,
+            }
+        ]
+
+    def collection(self, collection_id):
+        return next(c for c in self.collections() if c["id"] == collection_id)
+
+    def update_collection(self, collection):
+        self._check()
+        return collection
+
+    def recommendations(self):
+        self._check()
+        return [
+            self._film(30200 + n, f"Demo Pick {n + 1}", 1990 + n, genres)
+            for n, genres in enumerate(
+                [
+                    ["Horror"],
+                    ["Comedy"],
+                    ["Crime", "Thriller"],
+                    ["Drama"],
+                    ["Horror", "Comedy"],
+                ]
+            )
+        ]
+
+    def lookup_tmdb(self, tmdb_id):
+        self._check()
+        return {"tmdbId": tmdb_id, "title": f"Demo film {tmdb_id}", "year": 2000}
+
+    def add_movie(self, movie):
+        self._check()
+        row = db.session.query(AppSetting).filter_by(key="demo_added_films").first()
+        if not row:
+            row = AppSetting(key="demo_added_films", value_json=[])
+            db.session.add(row)
+        row.value_json = sorted(set(row.value_json or []) | {movie["tmdbId"]})
+        db.session.commit()
+        return movie | {"id": 50000 + movie["tmdbId"]}
+
     def monitor_episode(self, _episode_id):
         self._check()
 
