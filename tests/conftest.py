@@ -54,3 +54,12 @@ def no_dub_wait(request, monkeypatch):
     from curatarr import dub_jobs
 
     monkeypatch.setattr(dub_jobs, "holds_chapters", lambda state, enabled: False)
+
+
+@pytest.fixture(autouse=True)
+def fresh_caches():
+    """Fun facts and Radarr collections are cached between requests."""
+    from curatarr import franchises, trivia
+
+    trivia._cache.clear()
+    franchises.forget()
