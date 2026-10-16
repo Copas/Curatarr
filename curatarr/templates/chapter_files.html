@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Files · Enhance · Curatarr{% endblock %}
 {% block content %}
-<header class="page-heading"><div><div class="eyebrow">Enhance</div><h1>Files without chapters</h1><p class="text-secondary mb-0">Preview what would be added to a file, or process the ones you pick. Scanning only reads files.</p></div>{% if summary.needing %}<a class="btn btn-sm btn-outline-warning" href="{{ url_for('main.chapter_confirm_library', library_id=library_id or 'all') }}">{{ 'Process this library…' if library_id else 'Process all…' }}</a>{% endif %}</header>
+<header class="page-heading"><div><div class="eyebrow">Enhance</div><h1>Files without chapters</h1><p class="text-secondary mb-0">Preview what would be added to a file, or process the ones you pick. Scanning only reads files.</p></div>{% set label = 'Process this library…' if library_id else 'Process all…' %}{% include '_process_all.html' %}</header>
 {% set endpoint = 'main.chapter_files' %}{% include '_library_filter.html' %}
 {% if candidates %}
 <form method="post" action="{{ url_for('main.chapter_queue') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}">
@@ -13,7 +13,7 @@
   <span class="chip{% if state.chapter_status == 'failed' %} chip-danger{% elif state.job_state != 'idle' %} chip-accent{% endif %}">{{ state.job_state|capitalize if state.job_state != 'idle' else state.chapter_status.replace('_', ' ')|capitalize }}</span>
 </li>{% endfor %}
 </ul>
-<div class="sticky-actions"><span class="small text-secondary">Selected files</span><button class="btn btn-outline-secondary" name="action" value="preview">Dry run</button><button class="btn btn-primary" name="action" value="generate">Process</button></div>
+<div class="sticky-actions"><span class="small text-secondary">Selected files</span><button class="btn btn-outline-secondary" name="action" value="preview" data-tip="Queues the ticked files to work out their chapters and show what would be added, without changing the files.">Dry run</button><button class="btn btn-primary" name="action" value="generate" data-tip="Queues the ticked files to have chapters written into them. Files already queued are left as they are.">Process</button></div>
 </form>
 {% else %}<div class="empty-state"><h2 class="h5">Nothing to show yet</h2><p class="mb-0">{{ 'Scan a library to find files without chapters.' if not summary.scanned else 'Every scanned file already has chapters, is too short, or is not MKV.' }}</p></div>{% endif %}
 {% endblock %}

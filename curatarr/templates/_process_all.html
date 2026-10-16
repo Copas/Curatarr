@@ -1,0 +1,4 @@
+{# "Process all…": queues files without chapters that aren't queued already. #}
+{% set b = backlog %}{% set where = 'this library' if library_id else 'every library with chapters on' %}
+{% if b.addable %}<a class="btn btn-sm btn-outline-warning" href="{{ url_for('main.chapter_confirm_library', library_id=library_id or 'all') }}" data-tip="Adds {{ b.addable|commas }} file{{ '' if b.addable == 1 else 's' }} without chapters in {{ where }} to the queue: ones that failed, only had a dry run, or weren't picked up automatically.{% if b.queued %} {{ b.queued|commas }} more {{ 'is' if b.queued == 1 else 'are' }} already queued and won't be added twice.{% endif %} You'll see the count and confirm first.">{{ label }}</a>
+{% elif b.queued %}<span class="chip" data-tip="Files without chapters are added to the queue automatically as they're found, so there's nothing for Process all to add." tabindex="0">All {{ b.queued|commas }} already queued</span>{% endif %}
