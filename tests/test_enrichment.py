@@ -2111,3 +2111,16 @@ def test_title_page_shows_what_curatarr_did_to_each_file(app, client, media_env)
     assert "9 chapters" in panel and "Recap 0:00–1:22" in panel
     assert "1 marker fixed" in panel and "No English audio" in panel
     assert f"/chapters/parts/{part.id}" in panel
+
+
+def test_failed_files_are_counted_and_listed_alike(client, media_env):
+    """Including a file that couldn't be read at all, so it has no length."""
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.chapter_status, state.chapter_error = "failed", "The media file was not found"
+    state.attempts = 3
+    db.session.commit()
+    assert enrichment.maintenance_failed_count() == 1
+    assert enrichment.maintenance_summary()["failed"] == 1
+    page = client.get("/chapters").text
+    assert 'id="failed"' in page and "The media file was not found" in page

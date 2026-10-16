@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fixed: the Progress tab's count of failed jobs didn't match the page.** The badge counted every failed chapter job; the page left out files that couldn't be read at all, and never listed any. Both now count the same files, and Progress lists them with the reason. A file that's shorter than listed because its name marks it as one part of a split release ("Part.2", "CD1") now says so on Problems.
 - **Clicks show they registered.** Any button or link shows a spinner and a loading bar runs along the top while the next page loads, and a form can't be sent twice by clicking again.
 - **Fixed: pages hanging and "Internal Server Error" while the new background checks ran.** The file check held SQLite's write lock while it read frames (and the dub check while it listened), so web requests and Jellyfin webhooks waited until they timed out. Both now save before the slow part, transcript counting writes in short batches, and the web app serves several requests at once (`--threads 4`; takes effect on install).
 - **Library → Fun facts**, for everyone in the household: films and shows ranked by what's said in them (most swearing per hour, f-bomb champions, squeaky-clean films and the cleanest shows, bloodthirsty talk, panic stations, chatterboxes and strong silent types, hopeless romantics, manners and questions), each show's catchphrase, and library-wide totals. Counted once per transcript in the background, without the GPU.
