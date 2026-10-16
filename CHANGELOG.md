@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Credits start when the talking stops.** A credits marker people are still talking in isn't credits: Intro Skipper's fingerprint matching can latch onto a recurring music cue and mark minutes of the episode (on one show, the last 7½ minutes of ten episodes, each exactly 447 s). The skip-marker check now finds the last line of dialogue inside each credits marker (ignoring theme lyrics heard in other episodes and a marked preview) and, when there's at least 20 s of it, moves the credits to start after it, or hides the marker when the talking runs to within 10 s of the end. Trims are listed on Review skip markers; Undo restores Intro Skipper's original. Episodes already checked are checked again (only the marker step); press Check skip markers to queue them.
+
 ## 0.2.0rc4 (2026-10-15)
 
 - **English dubs.** For films made in another language (from Radarr), and English films whose file carries other languages, Curatarr samples each audio track and has Whisper identify its language (no transcription). It relabels tracks whose language tag is wrong or missing, makes a real English track the default when the default is clearly another language, and lists films with no English audio on a new English dubs page to Replace (blocklist in Radarr, delete, search again), Listen again or Keep. Options: *Replace films with no English audio automatically* and *Remove audio and subtitles in other languages* (an mkvmerge copy, verified before it replaces the file; MKV only), both off by default. A foreign film's chapter job waits briefly for its dub check so it's transcribed from the right track.

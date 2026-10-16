@@ -2589,6 +2589,20 @@ def _check_markers(ep: _Episode) -> str:
     others = ep.others() if checked or len(credits) > 1 else []
     other_grams = recaps.said_in(others) if others else None
     bad = markers.bad_outros(credits, duration, speech_after, other_grams)
+    flagged = {id(segment) for segment, _reason in bad}
+    preview = (
+        [(state.preview_start, state.preview_end)]
+        if state.preview_start is not None and state.preview_end is not None
+        else []
+    )
+    trims = []
+    for segment, new_start, reason in markers.talk_in_credits(
+        [c for c in credits if id(c) not in flagged], speech_after, other_grams, preview
+    ):
+        if new_start is None:
+            bad.append((segment, reason))
+        else:
+            trims.append((segment, new_start, reason))
     if checked and other_grams:
         lines = []
         for intro in checked:
@@ -2623,8 +2637,36 @@ def _check_markers(ep: _Episode) -> str:
             end=segment["End"],
             reason=reason,
         )
+    for segment, new_start, reason in trims:
+        try:
+            ours = plugin.add(item_id, "Credits", new_start, segment["End"])
+        except IntegrationError as exc:
+            _log("marker_trim_failed", state_id=state.id, error=str(exc))
+            continue
+        try:
+            plugin.hide(item_id, segment["Id"])
+        except IntegrationError as exc:
+            plugin.hide(item_id, ours)  # don't leave two credits markers
+            _log("marker_hide_failed", state_id=state.id, error=str(exc))
+            continue
+        hidden.append(
+            {
+                "id": segment["Id"],
+                "type": segment.get("Type"),
+                "start": round(segment["Start"], 1),
+                "end": round(segment["End"], 1),
+                "source": segment.get("Source"),
+                "reason": f"{reason}; credits now start there",
+                "replaced_by": ours,
+                "new_start": round(new_start, 1),
+                "at": utcnow().isoformat(),
+            }
+        )
+        _log("marker_trimmed", state_id=state.id, segment=segment["Id"])
     state.markers_hidden = hidden or None
-    return f"markers: {len(bad)} hidden" if bad else "markers: ok"
+    changed = [f"{len(bad)} hidden"] if bad else []
+    changed += [f"{len(trims)} trimmed"] if trims else []
+    return f"markers: {', '.join(changed)}" if changed else "markers: ok"
 
 
 _summaries_cache: dict = {}
@@ -3188,6 +3230,8 @@ def undo_marker(state: ChapterState, kind: str, segment_id: str | None = None) -
         if not hidden:
             raise ValueError("That marker isn't one Curatarr hid")
         if item_id:
+            if hidden[0].get("replaced_by"):
+                plugin.hide(item_id, hidden[0]["replaced_by"])  # the trimmed copy
             plugin.restore(item_id, segment_id)
         state.markers_hidden = [
             h for h in state.markers_hidden if h["id"] != segment_id
