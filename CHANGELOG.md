@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.0rc4 (2026-10-15)
+
+- **English dubs.** For films made in another language (from Radarr), and English films whose file carries other languages, Curatarr samples each audio track and has Whisper identify its language (no transcription). It relabels tracks whose language tag is wrong or missing, makes a real English track the default when the default is clearly another language, and lists films with no English audio on a new English dubs page to Replace (blocklist in Radarr, delete, search again), Listen again or Keep. Options: *Replace films with no English audio automatically* and *Remove audio and subtitles in other languages* (an mkvmerge copy, verified before it replaces the file; MKV only), both off by default. A foreign film's chapter job waits briefly for its dub check so it's transcribed from the right track.
+- **What Curatarr has done.** Chapter maintenance leads with chapters and subtitles added, recaps and previews marked and bad markers hidden, plus coverage bars splitting each total into what the library already had and what Curatarr added. The library card keeps only file counts.
+- The estimated finish for chapter jobs uses the last 24 hours' pace (72 when there's too little to go on) instead of 3, so evenings of viewing and long films don't swing it.
+- Fixed demo mode's worker failing every cycle on the movie skip-marker check (the demo Jellyfin had no answer for Intro Skipper's segments).
+- Documentation: a new README with screenshots, step-by-step install guides for Linux, Docker and Windows, and docs/FEATURES.md, docs/API.md and docs/DEVELOPMENT.md.
 
 - The Activity card's pause notice says why it paused (what was measured: CPU, GPU, who's watching, the target) and that jobs resume once there's room, rather than the old "continue when playback stops". When not paused, it leads with the current limit ("Up to 2 chapter jobs right now", or "No new chapter jobs right now").
 

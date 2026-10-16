@@ -370,7 +370,12 @@ class DemoClient:
 
     def request(self, method, path, **_kwargs):
         self._check()
-        external_id = int(path.rstrip("/").split("/")[-1])
+        last = path.rstrip("/").split("/")[-1]
+        if not last.isdigit():
+            # Anything else, such as Intro Skipper's segments: the demo server
+            # has no plugins, so answer as a server without them would.
+            raise IntegrationError(f"Demo {self.kind} has no {path}", 404)
+        external_id = int(last)
         if self.kind == "sonarr":
             return {"id": external_id, "tvdbId": 10000 + external_id}
         return {"id": external_id, "tmdbId": 20000 + external_id}

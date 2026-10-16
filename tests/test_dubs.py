@@ -1,10 +1,10 @@
 import pytest
+from test_enrichment import _movie
 
 from curatarr import db, dub_jobs, dubs, enrichment
 from curatarr.mediafile import MediaInfo
 from curatarr.models import ChapterState
 from curatarr.services import set_setting
-from tests.test_enrichment import _movie
 
 PATH = "/movies/Film (2020)/Film.mkv"
 

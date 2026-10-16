@@ -1,135 +1,102 @@
-# Curatarr
+<p align="center">
+  <img src="curatarr/static/logo.svg" alt="" width="96">
+</p>
 
-Curatarr is an independent Jellyfin, Sonarr, and Radarr lifecycle manager. It observes playback, stages TV acquisition one season ahead, evaluates retention rules, and presents cleanup decisions for review. Destructive actions begin in dry-run mode and are sent only through Sonarr or Radarr after fresh validation.
+<h1 align="center">Curatarr</h1>
 
-This is an early implementation. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for completed behavior and current gaps before connecting it to a real library.
+<p align="center">
+  <strong>A caretaker for your Jellyfin library.</strong><br>
+  It watches what your household plays, keeps the right things on disk, and quietly makes every file nicer to watch.
+</p>
 
-> **This repository is source code, not an installation.** Run Curatarr from an installed copy made from a tagged release, never from a git checkout. An installed copy keeps its own code, configuration, and data outside the checkout (`/opt/curatarr`, `/etc/curatarr`, `/var/lib/curatarr`, or Docker volumes). Development here cannot change it, and its database, keys, posters, and logs cannot end up in Git. See [docs/INSTALL.md](docs/INSTALL.md).
+<p align="center">
+  <a href="docs/INSTALL.md">Install</a> ·
+  <a href="docs/FEATURES.md">How it works</a> ·
+  <a href="docs/API.md">API</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="docs/DEVELOPMENT.md">Development</a>
+</p>
 
-## Installing
+---
 
-- **Native (Linux, systemd):** from a release checkout, run `sudo ./scripts/install.sh`. Re-run it from a newer release to upgrade; it backs up the default SQLite database before migration.
-- **Upgrading a native install:** use a clean tagged checkout and the commands in [docs/INSTALL.md](docs/INSTALL.md#upgrade). The installer leaves `/etc/curatarr/curatarr.env` and live data in place.
-- **Docker (Linux or Windows with Docker Desktop):** in a separate deployment directory, copy `.env.example` to `.env`, set the secrets, and run `docker compose up -d --build`.
+Curatarr sits beside **Jellyfin**, **Sonarr** and **Radarr**. It learns from what people actually watch, frees space by removing what nobody will miss, fetches the next season before anyone asks for it, and adds what downloads usually lack: chapters, subtitles, skippable recaps, and audio in the right language. It runs on your own server, uses local AI only, and is free and open source (MIT).
 
-[docs/INSTALL.md](docs/INSTALL.md) covers both in full, plus configuration, upgrades, rollback, backup, and uninstalling.
+![Overview](docs/images/overview.png)
 
-## First run
+## What it does
 
-Open `http://<host>:8787` and sign in with a Jellyfin administrator account (see Signing in below). Until setup is complete, Overview links to the `/setup` checklist: connect Jellyfin, Sonarr, and Radarr in Manage → Integrations, create the webhook token, run Discover from Overview, then optionally review the Acquisition and Retention rules. Saved keys are masked in the UI. The first Integrations visit generates a webhook token and shows it once. Configure Jellyfin's webhook plugin to send JSON to `/api/v1/webhook/jellyfin` with that token in the `X-Curatarr-Token` request header. The webhook stays closed until the token exists.
+### Keeps the right things on disk
+- **Cleans up by need, not by rule of thumb.** When a disk or library runs low, it picks the titles nobody has watched for longest, shows them as *Leaving Soon* (with a badge on the poster in Jellyfin), and removes them only if nobody presses play before the notice period ends.
+- **Stays one season ahead.** Finish an episode and the rest of the season, and the next one, are requested from Sonarr. Shows nobody continued stop downloading.
+- **Never surprises you.** Every library starts in **dry run**. Deletions go through Sonarr or Radarr after fresh safety checks, and every decision is in History with the reason.
 
-Integration keys and the webhook token are encrypted in the database with a key derived from `CURATARR_SECRET_KEY`. Losing or changing that key makes them unreadable, so back up the key together with the database. The application needs no media volume; deletion always goes through Sonarr or Radarr.
+![Review queue](docs/images/review.png)
 
-## Signing in
+### Makes every file nicer to watch
+- **Chapters**: adds them to files that have none: evenly spaced and snapped to scene changes, or *Smart Chapters* that are named from what's said (local Whisper + Ollama).
+- **Subtitles**: English subtitles from the same transcript, for files that have none.
+- **Recaps and previews**: finds *"Previously on…"* and *"Next time on…"* and marks them so Jellyfin offers Skip.
+- **Better skip markers**: hides Intro Skipper guesses that are plainly wrong (a "credits" marker in the middle of an episode, a recap at the start of a movie), each one undoable.
+- **English dubs**: for films made in another language, listens to each audio track to check it's really what its label says, makes the real English track the default, optionally removes tracks in other languages, and flags files with no English audio to replace.
+- **Search what was said**: find the episode where someone said *that line*.
 
-Sign in with a Jellyfin account that has the Administrator permission, or with an enabled non-admin account that an administrator has allowed in Curatarr. Curatarr checks the password with Jellyfin, ends the Jellyfin session it created, and keeps only the user's ID, name, role, and verification time in a signed session cookie that lasts up to seven days. Passwords and Jellyfin user tokens are never stored. Every five minutes Curatarr re-checks the account using its own Jellyfin API key, so a removed, disabled, or role-changed account loses access. If Jellyfin is unreachable, an existing session continues for up to one hour after its last successful check. After five failed sign-ins from one address within 15 minutes, further attempts are refused until the window passes.
+All of it writes only into MKV files, in place, without re-encoding, and only when you switch it on.
 
-On first run, the sign-in page also asks for the Jellyfin server URL and binds Curatarr to it. Until that first administrator signs in, anyone who can reach the page could bind a different server, so keep Curatarr on a trusted network until setup is done. Alternatively, set `CURATARR_JELLYFIN_URL` so the server is fixed from the start. After sign-in, add a Jellyfin API key in Manage → Integrations; it is needed for library discovery and the periodic account re-check.
+![Chapter maintenance](docs/images/chapters.png)
 
-Administrators can enable specific non-admin Jellyfin users in Manage → Integrations → Household access. Those users can browse managed titles and choose Keep, Snooze, or Never Purge in Review. They cannot approve deletion, change rules or integrations, run discovery, reset or request a show, or see full History and Operations. Curatarr rechecks their Jellyfin account periodically and ends a household session immediately when its allowlist entry is removed. Admins use the full interface. First-run server binding still requires an administrator.
+### Stays out of the way
+- **Adaptive workload**: measures CPU, GPU and who's watching, and runs as much work as the machine has room for. When someone starts a stream it backs off, and it resumes when they stop.
+- **Jellyfin sign-in**: administrators get the full interface; household members you allow can browse titles and say *Keep*.
+- **Works alone**: no cloud service and no account. A read-only API key lets a home dashboard show its status.
 
-`/health`, `/api/v1/status`, and the token-protected webhook stay public for dashboards. Every other page and API endpoint requires sign-in; operational APIs require administrator access. Set `CURATARR_ALLOW_UNAUTHENTICATED=true` only when another layer, such as an authenticating reverse proxy, already restricts access; it grants the full admin interface. In demo mode, sign in as `demo-admin` with password `demo`, then enable `demo-viewer` from the household list to try that view.
+## Install
 
-The interface groups daily decisions under Overview and Review, title browsing under Library, and administrator controls under Activity and Manage. The theme button in the header switches between dark and light on that browser. Approving a deletion has a confirmation page; Curatarr still performs its fresh safety checks before the worker removes files.
+| Your server | How | Guide |
+|---|---|---|
+| **Linux** (Debian, Ubuntu, Fedora, …) | Native install with systemd. Simplest, and the easiest way to use an NVIDIA GPU for Smart Chapters. | [Linux](docs/INSTALL.md#linux) |
+| **Linux** with Docker | Docker Compose, with PostgreSQL included. | [Docker on Linux](docs/INSTALL.md#docker-on-linux) |
+| **Windows 10 / 11** | Docker Desktop (WSL 2). | [Windows](docs/INSTALL.md#windows) |
+| **macOS** | Docker Desktop, following the Windows steps in Terminal. Not regularly tested; chapter AI runs on the CPU. | [Windows](docs/INSTALL.md#windows) |
 
-## Retention behavior
-
-Cleanup is driven by free space. Titles nobody has played are not removed just for being unwatched; a library can opt into that with "Clean up unwatched titles even when space is fine". When free space falls below a library's low threshold, Curatarr picks titles in purge-strategy order, longest unwatched first by default, and only enough to get back to the threshold. They show as Leaving Soon for the notice period (14 days by default) and are removed when it ends unless someone watches them. Below the critical threshold, removal happens without a notice. Dry run must be turned off per library before anything is actually removed. The default TV minimum is the first three episodes of Season 1. A completed episode may request missing episodes in that season and the next known season. Requests for a whole season also monitor that season in Sonarr, so episodes announced later are downloaded too. Once viewers have watched the latest season (by the acquisition threshold), the next season is requested whenever it appears, without the recent-viewing limit; a show not continued although its next season was already out is treated as abandoned. While viewers are on a season that is still airing, Curatarr makes sure Sonarr monitors it even when every episode so far is downloaded. Any playback resets inactivity and rescues pending cleanup. The default grace period is 30 days and inactivity period is 90 days. Movie cleanup is retention only; deleted movies are never automatically reacquired.
-
-Policy resolves title override → library → global → built-in default. The Acquisition and Retention pages edit global defaults or any one library, and show each effective value with its source. Every setting, including library-size limits, free-space enforcement, and dry run, can be set globally or per library. Library-size limits apply to each library separately; free space is measured per disk and shared by every library on it. A global change is rejected if it would leave any library with an invalid effective policy. Each library can override acquisition, retention, quota, disk-pressure, review mode, and dry-run settings. Review mode can also be set per cleanup rule: inactivity, quota, and low/critical disk pressure each have their own mode that inherits the library review mode when left blank, so one rule can run automatically while the others still require review. A title-level review mode overrides all rule modes. Title overrides include Never Purge, thresholds, minimum footprint, and review behavior. A show's title page also has "Reset to minimum", which trims it to its always-keep episodes as if nobody had watched it: the rest are deleted through Sonarr with the usual checks (except the grace period and recent viewing), all seasons are unmonitored, and viewing before the reset no longer drives acquisition. Dry run is respected. The review queue offers Delete, Keep, Snooze, and Never Purge. Quota rules require high-water bytes strictly above low-water bytes. Disk-pressure rules require an explicit path as seen by Sonarr or Radarr; when that path cannot be matched to a reported volume, Curatarr does not select media on disk pressure alone. All decisions and outcomes are written to History.
-
-Dry run is on by default. In dry run, Curatarr goes through the whole process and records what it would remove in History, but never asks Sonarr or Radarr to delete anything. The banner at the top of every page says which libraries are in dry run. Turn it off globally or per library. Before each deletion, Curatarr rechecks mapping, activity, grace, policy, queue state, and integration health. If it cannot verify these, it blocks deletion.
-
-## Chapter generation
-
-Optional, and off until enabled: Manage → Chapters. After Sonarr or Radarr finish importing a movie or episode of at least 20 minutes that has no chapters, Curatarr can add them. *Navigation Chapters* places one about every 7 minutes (4–10 minutes apart), moved to the nearest scene change. *Smart Chapters* also transcribes the audio locally with faster-whisper. It asks an Ollama model where the story moves on and what to call each chapter, and falls back to Navigation Chapters if that fails. Chapters are written into MKV files in place with `mkvpropedit`, which re-encodes nothing; other containers are reported as unsupported. Every file is verified afterwards, and only that item is refreshed in Jellyfin.
-
-Existing chapters are preserved. Curatarr regenerates or removes only chapters it can show it wrote. Enabling the feature never processes the existing library: Chapter maintenance scans it read-only, shows counts, and processes only the files or library you confirm. Each file's page under its title shows a preview with the scene changes, the plan from each method, and the exact write command, before anything is modified. Settings are global with per-library overrides, and dry run is available. Jobs run in the background with a configurable concurrency (default 1), so they never delay lifecycle work. See docs/decisions/009-chapter-enrichment.md.
-
-The same transcript can also produce English subtitles (`<video>.en.Curatarr.srt`), a separate per-library setting. They are added only when a file has no English subtitles of its own, are never written over another file, and can be removed from the file's page.
-
-Smart Chapters needs `pip install "curatarr[chapters]"` (or `chapters-gpu` for CUDA), Ollama with a model, and write access to the media files for the worker's user. `flask --app curatarr chapters preview <file>` prints the full analysis for one file without changing it.
-
-## API and health
-
-Read-only endpoints (all except `/health` and `/api/v1/status` require sign-in): `/health`, `/api/v1/status`, `/api/v1/metrics`, `/api/v1/libraries`, `/api/v1/review/summary`, and `/api/v1/history`. Another tool, such as a home dashboard, can read the `/api/v1/` ones without signing in by sending an API key in an `X-Api-Key` header. Generate the key under Manage → Integrations → API key; it is shown once, stored only as a hash, and grants nothing but these GET requests. `/api/v1/history?limit=20&exclude=admin_signed_in` returns the newest actions with the title, library, Jellyfin item ID, and paths to Curatarr's own pages; repeat `type=` or `exclude=` to filter by action type. The webhook endpoint is `/api/v1/webhook/jellyfin`.
-
-## Dashboard integration
-
-Curatarr runs on its own and does not depend on any dashboard. To add it to a home dashboard, link to these pages and endpoints:
-
-- `/` for the overview and `/review` for the review queue (both require sign-in);
-- `/health` for a health check and `/api/v1/status` for review and Leaving Soon counts, dry-run state, and integration health (both public, no secrets);
-- `/static/logo.svg` for the app icon. The file is also in the repository at `curatarr/static/logo.svg` to copy into a dashboard's own assets.
-
-## Logs and metrics
-
-Operational log lines from the `curatarr.ops` logger are single JSON objects. They are limited to `event_id`, `action_id`, `media_identity_id`, `candidate_id`, `integration`, `operation`, `duration_ms`, `result`, and `status_code`, and never include API keys or payloads. Each external call, processed event, executed action, and reconciliation is logged. Successful GET requests log at DEBUG, failures at WARNING, and everything else at INFO. Set the level with `CURATARR_LOG_LEVEL`.
-
-`/api/v1/metrics` and Manage → Operations report: events processed, duplicate events ignored, acquisition actions, purge candidates created, rescues, bytes proposed and actually reclaimed, external API failures per integration, last reconciliation duration, pending actions, and oldest pending action age. Most values are computed from stored history. Duplicate-event and API-failure counts are held in memory and written to the `metric_counters` table when each request or worker cycle ends.
-
-## Developing Curatarr
-
-Everything in this section uses the source checkout. The database and posters it creates under `instance/` belong to the checkout only. They are a disposable development database, separate from any installation.
-
-### Local development
-
-Python 3.12 or newer is required.
+Quick start on Linux:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
-export CURATARR_SECRET_KEY='replace-with-a-random-secret'
-export CURATARR_DEMO_MODE=true          # synthetic data; never contacts real services
-.venv/bin/flask --app curatarr db upgrade
-.venv/bin/flask --app curatarr demo-seed
-.venv/bin/python -m curatarr
+git clone https://github.com/Copas/Curatarr.git curatarr-release
+cd curatarr-release
+git checkout v0.2.0rc4
+sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 
-In a second shell, run the worker with `.venv/bin/flask --app curatarr worker`. The development server listens on port 8787. In demo mode, sign in as `demo-admin` with password `demo`.
+Then open `http://<your-server>:8787` and sign in with a Jellyfin administrator account. The [first-run checklist](docs/INSTALL.md#first-run) walks you through connecting Jellyfin, Sonarr and Radarr.
 
-### Demo mode
+### Requirements
 
-Demo mode uses synthetic adapters and never contacts private services. After creating the database, set `CURATARR_DEMO_MODE=true` and run `flask --app curatarr demo-seed`. The overview includes controls for playback, favorites, time/size changes, and simulated outages. Run `flask --app curatarr worker --once` or use Reconcile in the UI to evaluate the sample libraries.
+| What | Needed for |
+|---|---|
+| Jellyfin, Sonarr and Radarr (current versions; Curatarr uses their API v3 and Jellyfin's REST API) | Everything |
+| Jellyfin **Webhook** plugin | Instant playback updates (otherwise hourly) |
+| FFmpeg and **MKVToolNix** | Chapters, subtitles, dub checks |
+| **Ollama** with a model (e.g. `qwen3:14b`) and optionally an NVIDIA GPU | Smart Chapters, recap and preview detection |
+| Jellyfin **Intro Skipper** plugin | Recap/preview skip buttons and marker clean-up |
 
-### Tests
+## Is it safe to point at my real library?
 
-```bash
-.venv/bin/pytest
-.venv/bin/ruff check .
-.venv/bin/ruff format --check .
-```
+Curatarr was built on a real 8,000-file library and is careful by design:
 
-Tests use synthetic media names and mocked integration boundaries. No real credentials or private media data belong in this repository.
+- **Dry run is on by default** for every library. Curatarr shows what it *would* remove and why, until you switch that off.
+- **Deletions only go through Sonarr or Radarr**, after Curatarr rechecks playback, grace periods, the download queue and integration health. If anything can't be verified, nothing is deleted.
+- **File edits never re-encode.** Chapters and track flags are written with `mkvpropedit`. Removing language tracks rewrites a copy that's verified before it replaces the original.
+- **Everything is undoable or recorded.** Markers it hid can be restored, chapters it wrote can be removed (the originals are kept), and every action is in History.
 
-PostgreSQL contention tests are opt-in: point `CURATARR_TEST_POSTGRES_URL` at an isolated, migrated test database and run `pytest tests/test_postgres_concurrency.py`. They skip during the normal SQLite test run.
+It's still a release candidate: read [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for known gaps.
 
-`tests/test_repository_hygiene.py` keeps the repository publishable (spec section 99). It fails if a tracked file is an `.env`, database, log, key, or `instance/` file, is larger than 1 MB, or contains a private IPv4 address or 32-hex-character key. Run the full test suite before every push.
+## Learn more
 
-### Configuration and records
+- [How it works](docs/FEATURES.md): retention rules, acquisition, sign-in, chapters, skip markers, dubs and search in detail.
+- [Installing, upgrading and backing up](docs/INSTALL.md)
+- [API, dashboards, logs and metrics](docs/API.md)
+- [Developing Curatarr](docs/DEVELOPMENT.md) and [design decisions](docs/decisions/)
 
-Configuration comes from the environment; `.env.example` lists every variable. The database URL is read from `DATABASE_URL`. If it is unset, Curatarr uses SQLite at `instance/curatarr.db`, and poster snapshots go to `instance/posters/` (or `CURATARR_DATA_DIR`). Both are git-ignored local state. Before running migrations, downgrades, or demo seeding for verification, point `DATABASE_URL` and `CURATARR_DATA_DIR` at a scratch location so your working database is not modified. The test suite already uses temporary databases and data directories.
+## License
 
-`IMPLEMENTATION_STATUS.md` tracks the current phase, open work, known issues, and blockers. `docs/decisions/` records design decisions. Update both alongside behavior changes.
-
-### Release checklist
-
-Run against a scratch database (spec section 92):
-
-```bash
-export DATABASE_URL=sqlite:////tmp/curatarr-release.db CURATARR_DATA_DIR=/tmp/curatarr-release
-.venv/bin/pytest && .venv/bin/ruff check . && .venv/bin/ruff format --check .
-.venv/bin/flask --app curatarr db upgrade
-.venv/bin/flask --app curatarr db check            # models match migrations
-.venv/bin/flask --app curatarr db downgrade base
-.venv/bin/flask --app curatarr db upgrade
-```
-
-Also build the release the way users install it, into scratch locations, and confirm the installed copy starts outside the checkout:
-
-```bash
-PREFIX=/tmp/c/opt CONFIG_DIR=/tmp/c/etc DATA_DIR=/tmp/c/data \
-  SERVICE_USER=$(id -un) NO_SYSTEMD=1 ./scripts/install.sh
-```
-
-Then start the app on a fresh database and in demo mode (`demo-seed`, `worker --once`), confirm `/health` and the main pages load, update `CHANGELOG.md`, and create an annotated `vX.Y.Z` tag.
+[MIT](LICENSE)
