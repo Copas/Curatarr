@@ -32,21 +32,6 @@ def test_count_tallies_swearing_violence_love_and_manners():
     assert stats["questions"] == 2 and stats["words"] == 24
 
 
-def test_catchphrases_skip_filler_and_common_words():
-    lines = ["Ha ha ha, the other guys lose."] * 3 + ["What are you talking about?"] * 3
-    assert trivia.count(said(*lines, start=600, end=1300))["phrases"] == [
-        ["the other guys", 600],
-        ["other guys lose", 600],
-    ]
-
-
-def test_phrases_skip_the_opening_and_closing_minutes():
-    """Where theme songs and credits are."""
-    theme = ["Who'd have thought they'd lead ya back here"] * 2
-    assert trivia.count(said(*theme, start=20, end=1300))["phrases"] == []
-    assert trivia.count(said(*theme, start=1200, end=1300))["phrases"] == []
-
-
 def _transcribed(
     app, title, kind, minutes, lines, *, library, episode=1, start=600.0, language="en"
 ):
@@ -163,16 +148,23 @@ def test_the_fun_facts_page_ranks_films_and_shows(app, client):
             language="zh",
         )
     assert trivia.sweep() == 26 and trivia.sweep() == 0  # each counted once
+    from curatarr import catchphrases
+
+    assert catchphrases.sweep() and catchphrases.sweep() == 0  # until it changes
     facts = trivia.facts()
     swearing = next(c for c in facts["categories"] if c["id"] == "swearing")
     assert swearing["films"][0]["media"].title == "Sweary Film"
     clean = next(c for c in facts["categories"] if c["id"] == "clean")
     assert [f["media"].title for f in clean["films"]] == ["Polite Film"]
     assert "Hong Kong Show" not in {s["media"].title for s in clean["shows"]}
-    assert [c["phrase"] for c in facts["catchphrases"]] == ["the other guys"]
+    # Not the theme (same spot every episode), the show's own name, or a show
+    # transcribed in another language.
+    assert [(c["media"].title, c["phrase"]) for c in facts["catchphrases"]] == [
+        ("Prank Show", "other guys fail again")
+    ]
     page = client.get("/fun").text
     assert "Potty mouths" in page and "Sweary Film" in page
-    assert "“the other guys”" in page and "in 7 of 7 episodes" in page
+    assert "“other guys fail again”" in page and "in 7 of 7 episodes" in page
     assert "3 transcripts in other languages are left out" in page
     # A replaced transcript is counted again.
     state = db.session.query(ChapterState).first()
