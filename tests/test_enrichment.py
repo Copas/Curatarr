@@ -2274,3 +2274,19 @@ def test_try_all_again(client, media_env):
     client.post("/chapters/failed/retry-all")
     db.session.expire_all()
     assert db.session.get(ChapterState, state.id).job_state == "queued"
+
+
+def test_checks_that_hit_an_offline_share_are_redone(media_env):
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.dub_checked_at = state.file_checked_at = utcnow()
+    state.dub_result = {
+        "original": "fr",
+        "error": "[Errno 112] Host is down: '/movies/x.mkv'",
+    }
+    state.file_check = {"issues": [], "error": "The file wasn't found"}
+    db.session.commit()
+    enrichment.resolve_missing_failures()
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert state.dub_checked_at is None and state.file_checked_at is None
