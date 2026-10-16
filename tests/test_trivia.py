@@ -214,3 +214,65 @@ def test_every_ranking_is_a_rate(app, client):
     page = client.get("/fun").text
     assert "Swears an hour" in page and "I love you” an hour" in page
     assert '"I love you"s' not in page and "“I love you”s" not in page
+
+
+def test_names_pauses_vocabulary_and_exclamations():
+    lines = [
+        SimpleNamespace(start=300, end=304, text="Well, Michael said no. Ask Michael!"),
+        SimpleNamespace(start=305, end=309, text="Your Honor, Sister Bertrille left!"),
+        SimpleNamespace(start=310, end=314, text="We flew to New York with Dwight."),
+        # Speech recognition stretched nine words over 18 minutes of quiet.
+        SimpleNamespace(
+            start=320, end=1400, text="I don't know what to say to you now."
+        ),
+        SimpleNamespace(start=1400, end=1403, text="Then Pam left."),
+        SimpleNamespace(start=3000, end=3004, text="Credits roll now."),
+    ]
+    stats = trivia.count(lines)
+    assert stats["first_word"] == 300 and stats["exclaims"] == 2
+    # Sentence-initial words, titles and place words aren't names.
+    assert stats["names"] == {"Michael": 2, "Bertrille": 1, "Dwight": 1, "Pam": 1}
+    # The stretched line is quiet after its words, not 18 minutes of talking.
+    assert stats["longest_talk"] < 60
+    assert stats["longest_silence"] > 1000
+
+
+def test_vocabulary_is_per_thousand_words():
+    import itertools
+
+    letters = "abcdefghij"
+    varied = " ".join(
+        "".join(t) for t in itertools.islice(itertools.product(letters, repeat=4), 2000)
+    )
+    stats = trivia.count([SimpleNamespace(start=0, end=600, text=varied)])
+    assert stats["vocab_windows"] == 2 and stats["vocab_sum"] == 2000
+    samey = " ".join(["same thing"] * 1000)
+    stats = trivia.count([SimpleNamespace(start=0, end=600, text=samey)])
+    assert stats["vocab_sum"] / stats["vocab_windows"] == 2
+
+
+def test_who_gets_talked_about(app, client):
+    tv = Library(jellyfin_library_id="t", name="TV", media_type="tv")
+    db.session.add(tv)
+    db.session.flush()
+    for n in range(1, 4):
+        _transcribed(
+            app,
+            "Gilligan's Island",
+            "episode",
+            25,
+            ["Hello, Gilligan, where is the Skipper?", "Ask the Skipper now."] * 3
+            + [f"Guest star Thurston{n} waves."],
+            library=tv,
+            episode=n,
+        )
+    trivia.sweep()
+    names = trivia.facts()["names"]
+    # Not the show's own name, not a one-episode guest.
+    assert [(n["media"].title, n["name"]) for n in names] == [
+        ("Gilligan's Island", "Skipper")
+    ]
+    page = client.get("/fun").text
+    assert "Who gets talked about" in page and "“Skipper”" in page
+    # Vocabulary needs 5,000 words a show, more than these episodes have.
+    assert "Shouty" in page and "Slow burners" in page and "Non-stop talkers" in page
