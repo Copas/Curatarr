@@ -67,8 +67,11 @@ def test_global_defaults_cover_size_space_and_dry_run(app, client, tmp_path):
     page = client.get("/rules/retention").text
     for field in ("dry_run", "quota_enabled", "free_space_enabled", "disk_path"):
         assert f'name="{field}"' in page
-    # Every library is in dry run by default.
-    assert "Dry run is on for every library." in client.get("/").text
+    # Every library is in dry run by default: the full notice is on Review and
+    # the retention rules, and every other page has the pill in its header.
+    assert "Dry run is on for every library." in client.get("/review").text
+    overview = client.get("/").text
+    assert "status-pill-warning" in overview and "dry-run-banner" not in overview
     client.post(
         "/rules/retention",
         data={
@@ -85,13 +88,14 @@ def test_global_defaults_cover_size_space_and_dry_run(app, client, tmp_path):
     }
     library_page = client.get(f"/rules/retention?scope={shows.id}").text
     assert "Currently in effect: No (global default)" in library_page
-    assert "Deletion is on for every library." in client.get("/").text
+    assert "Deletion is on for every library." in client.get("/review").text
+    assert "status-pill-warning" not in client.get("/").text
     # A library can still keep itself in dry run.
     client.post(f"/rules/retention?scope={shows.id}", data={"dry_run": "true"})
     movies = Library(jellyfin_library_id="m", name="Films", media_type="movies")
     db.session.add(movies)
     db.session.commit()
-    banner = client.get("/").text
+    banner = client.get("/review").text
     assert "<strong>Deletion is on for:</strong> Films." in banner
     assert "<strong>Dry run (nothing is removed) for:</strong> Rules TV." in banner
     status = client.get("/api/v1/status").get_json()

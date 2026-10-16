@@ -1,13 +1,9 @@
 {% extends 'base.html' %}
-{% block title %}Chapter maintenance · Curatarr{% endblock %}
+{% block title %}Enhance · Curatarr{% endblock %}
 {% block content %}
-<div class="eyebrow">Manage</div><h1>Chapter maintenance</h1>
-<p class="text-secondary">Find files in your existing library that have no chapters, preview what would be added, and process only what you choose. Scanning only reads files. <a href="{{ url_for('main.chapter_settings') }}">Chapter settings</a> · <a href="{{ url_for('main.chapter_markers') }}">Review skip markers</a> · <a href="{{ url_for('main.chapter_dubs') }}">English dubs</a></p>
+<header class="page-heading"><div><div class="eyebrow">Enhance</div><h1>Progress</h1><p class="text-secondary mb-0">Chapters, subtitles, skip markers and dubs across your library: what's done, what's left, and what's running.</p></div><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.chapter_settings') }}">{{ icon('settings', 16) }} Settings</a></header>
 {% if smart_blocked %}<div class="alert alert-danger"><strong>Smart Chapters is stopped.</strong> This install doesn't include faster-whisper, so it can't transcribe. Chapter jobs in Smart libraries are waiting instead of getting Navigation chapters. Reinstall with <code>sudo env EXTRAS=chapters-gpu ./scripts/install.sh</code>.</div>{% endif %}
-<div class="d-flex flex-wrap gap-2 mb-3" aria-label="Library">
-  <a class="btn btn-sm {{ 'btn-primary' if not library_id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_maintenance') }}">All libraries</a>
-  {% for other in libraries %}<a class="btn btn-sm {{ 'btn-primary' if other.id == library_id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_maintenance', library=other.id) }}">{{ other.name }}{% if other.id not in enabled_libraries %} (off){% endif %}</a>{% endfor %}
-</div>
+{% set endpoint = 'main.chapter_maintenance' %}{% include '_library_filter.html' %}
 {% macro stat(label, value, hint=None, todo=False) %}<div class="{{ 'stat-todo' if todo else '' }}{{ ' stat-done' if todo and not value else '' }}"><h3 class="stat-label mb-0">{{ label }}</h3><p class="stat-value mb-0">{{ value|commas }}</p>{% if hint %}<p class="stat-hint mb-0">{{ hint }}</p>{% endif %}</div>{% endmacro %}
 {% if not summary.files %}<div class="alert alert-info">No file locations are recorded yet. Curatarr records them during discovery (hourly, or Discover on Overview); pressing Scan starts discovery and then the scan.</div>{% endif %}
 {% macro coverage(label, before, added, possible, noun, before_text, added_text) %}{% if possible %}
@@ -63,19 +59,7 @@
     <p class="coverage-hint mt-3 mb-0">Short and non-MKV files are skipped, so they aren't counted in the totals above.</p>
   </div></section>
 </div>
-<h2 class="h4">Activity</h2>
+<h2 class="section-title">Activity</h2>
 {% include "_chapter_activity.html" %}
 <script src="{{ url_for('static', filename='chapter-activity.js', v='1') }}" defer></script>
-<h2 class="h4">Files needing chapters</h2>
-{% if candidates %}
-<form method="post" action="{{ url_for('main.chapter_queue') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="library" value="{{ library_id or '' }}">
-<div class="table-responsive"><table class="table align-middle"><thead><tr><th scope="col"><span class="visually-hidden">Select</span></th><th scope="col">Title</th><th scope="col">Length</th><th scope="col">Status</th></tr></thead><tbody>
-{% for state in candidates %}<tr><td><input class="form-check-input" type="checkbox" name="state_id" value="{{ state.id }}" aria-label="Select {{ state.media.title }}"></td>
-<td><a href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ state.media.title }}{% if state.part.kind == 'episode' %} · S{{ '%02d'|format(state.part.season_number or 0) }}E{{ '%02d'|format(state.part.episode_number or 0) }}{% endif %}</a>{{ jellyfin_part_link(state.part, state.media) }}<br><small class="text-secondary">{{ state.media.library.name }}</small></td>
-<td>{{ ((state.duration_seconds or 0) / 60)|round|int }} min</td>
-<td>{{ state.chapter_status.replace('_', ' ')|capitalize }}{% if state.job_state != 'idle' %} · {{ state.job_state }}{% endif %}{% if state.chapter_error %}<br><small class="text-secondary">{{ state.chapter_error }}</small>{% endif %}</td></tr>{% endfor %}
-</tbody></table></div>
-<div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-light" name="action" value="preview">Dry run selected</button><button class="btn btn-primary" name="action" value="generate">Process selected</button></div>
-</form>
-{% else %}<div class="empty-state"><h2 class="h5">Nothing to show yet</h2><p class="mb-0">{{ 'Scan a library to find files without chapters.' if not summary.scanned else 'Every scanned file already has chapters, is too short, or is not MKV.' }}</p></div>{% endif %}
 {% endblock %}

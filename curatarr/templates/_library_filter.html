@@ -1,0 +1,4 @@
+<nav class="chip-row mb-3" aria-label="Library">
+  <a class="chip-link{% if not library_id %} active{% endif %}" href="{{ url_for(endpoint) }}"{% if not library_id %} aria-current="true"{% endif %}>All libraries</a>
+  {% for other in libraries %}<a class="chip-link{% if other.id == library_id %} active{% endif %}" href="{{ url_for(endpoint, library=other.id) }}"{% if other.id == library_id %} aria-current="true"{% endif %}>{{ other.name }}{% if other.id not in enabled_libraries %} <span class="chip-note">off</span>{% endif %}</a>{% endfor %}
+</nav>

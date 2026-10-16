@@ -53,12 +53,14 @@ from .services import request_reconciliation
 
 NAV_SECTIONS.update(
     {
-        "main.chapter_settings": "manage",
-        "main.chapter_maintenance": "manage",
-        "main.chapter_confirm_library": "manage",
-        "main.chapter_part": "library",
-        "main.chapter_markers": "manage",
-        "main.chapter_identity": "manage",
+        "main.chapter_settings": "settings",
+        "main.chapter_maintenance": "enhance",
+        "main.chapter_files": "enhance",
+        "main.chapter_confirm_library": "enhance",
+        "main.chapter_part": "enhance",
+        "main.chapter_markers": "enhance",
+        "main.chapter_dubs": "enhance",
+        "main.chapter_identity": "enhance",
         "main.transcript_search": "library",
     }
 )
@@ -117,11 +119,42 @@ def chapter_settings():
     )
 
 
-@bp.get("/chapters")
-def chapter_maintenance():
+def _enabled_libraries():
+    return {
+        row.id
+        for row in _managed_libraries()
+        if effective_config(global_layer(), library_layers().get(row.id))["enabled"]
+    }
+
+
+def _library_arg():
     library_id = request.args.get("library") or None
     if library_id and not db.session.get(Library, library_id):
         abort(404)
+    return library_id
+
+
+@bp.get("/chapters")
+def chapter_maintenance():
+    """Enhance → Progress: what's been done, what's left, what's running."""
+    library_id = _library_arg()
+    return render_template(
+        "chapters.html",
+        libraries=_managed_libraries(),
+        library_id=library_id,
+        summary=maintenance_summary(library_id),
+        smart_blocked=smart_chapters_blocked(),
+        activity=job_activity(),
+        action_labels=ACTION_LABELS,
+        file_label=file_label,
+        enabled_libraries=_enabled_libraries(),
+    )
+
+
+@bp.get("/chapters/files")
+def chapter_files():
+    """Enhance → Files: files without chapters, to preview or process."""
+    library_id = _library_arg()
     candidates = (
         needs_chapters_query(library_id)
         .join(Library, MediaIdentity.library_id == Library.id)
@@ -132,20 +165,13 @@ def chapter_maintenance():
         .all()
     )
     return render_template(
-        "chapters.html",
+        "chapter_files.html",
         libraries=_managed_libraries(),
         library_id=library_id,
         summary=maintenance_summary(library_id),
-        smart_blocked=smart_chapters_blocked(),
-        activity=job_activity(),
-        action_labels=ACTION_LABELS,
         file_label=file_label,
         candidates=candidates,
-        enabled_libraries={
-            row.id
-            for row in _managed_libraries()
-            if effective_config(global_layer(), library_layers().get(row.id))["enabled"]
-        },
+        enabled_libraries=_enabled_libraries(),
     )
 
 
@@ -221,7 +247,7 @@ def chapter_queue():
             ),
             "success",
         )
-    return redirect(url_for("main.chapter_maintenance", library=library_id))
+    return redirect(url_for("main.chapter_files", library=library_id))
 
 
 @bp.post("/chapters/recaps")
@@ -474,6 +500,32 @@ def chapter_dub_action(state_id, action):
         db.session.rollback()
         flash(f"Couldn't do that: {exc}", "danger")
     return redirect(url_for("main.chapter_dubs"))
+
+
+@bp.get("/search")
+def search():
+    """One search box: titles by name, and episodes and films by what was said."""
+    query = (request.args.get("q") or "").strip()[:200]
+    titles = []
+    if query:
+        titles = (
+            db.session.query(MediaIdentity)
+            .join(Library)
+            .filter(
+                Library.media_type.in_(("tv", "movies")),
+                MediaIdentity.title.ilike(f"%{query}%"),
+            )
+            .order_by(MediaIdentity.title)
+            .limit(12)
+            .all()
+        )
+    return render_template(
+        "search.html",
+        query=query,
+        titles=titles,
+        results=search_transcripts(query, 15) if query else [],
+        searchable=transcripts_searchable(),
+    )
 
 
 @bp.get("/transcripts")

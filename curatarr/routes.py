@@ -21,7 +21,7 @@ from flask import (
 from markupsafe import Markup
 from sqlalchemy import func
 
-from . import db, jellyfin_links
+from . import db, icons, jellyfin_links
 from .auth import (
     SignInError,
     current_user,
@@ -145,6 +145,8 @@ def require_sign_in():
 
 HOUSEHOLD_PAGES = {
     "main.overview",
+    "main.search",
+    "main.more",
     "main.review",
     "main.shows",
     "main.titles",
@@ -323,20 +325,30 @@ NAV_SECTIONS = {
     "main.title_reset": "library",
     "main.shows": "library",
     "main.reset_unwatched": "library",
+    "main.search": "library",
     "main.history": "activity",
     "main.history_detail": "activity",
-    "main.settings": "manage",
-    "main.setup": "manage",
-    "main.library_policy": "manage",
-    "main.cleanup_preview": "manage",
-    "main.operations": "manage",
+    "main.settings": "settings",
+    "main.setup": "settings",
+    "main.library_policy": "settings",
+    "main.cleanup_preview": "settings",
+    "main.operations": "settings",
+    "main.more": "more",
+}
+
+# Pages where the full dry-run explanation belongs; elsewhere the header pill says it.
+DRY_RUN_BANNER_PAGES = {
+    "main.review",
+    "main.review_delete_confirm",
+    "main.cleanup_preview",
+    "main.library_policy",
 }
 
 
 def _nav_section():
     """Which top-level navigation entry the current page belongs to."""
     if request.endpoint == "main.rules":
-        return "manage"
+        return "settings"
     return NAV_SECTIONS.get(request.endpoint)
 
 
@@ -354,14 +366,41 @@ def template_values():
         "dry_run_split": dry_run_by_library(),
         "signed_in_user": signed_in_user,
         "is_admin": is_admin,
+        "icon": icons.icon,
         "jellyfin_link": jellyfin_links.link,
         "jellyfin_link_for": jellyfin_links.link_for,
         "jellyfin_part_link": jellyfin_links.part_link,
         "jellyfin_url": jellyfin_links.item_url,
+        "dry_run_banner": request.endpoint in DRY_RUN_BANNER_PAGES
+        or (
+            request.endpoint == "main.rules"
+            and (request.view_args or {}).get("section") == "retention"
+        ),
+        "nav_counts": _nav_counts(signed_in_user, is_admin),
         "theme": request.cookies.get("curatarr_theme")
         if request.cookies.get("curatarr_theme") in {"light", "dark"}
         else "dark",
     }
+
+
+def _nav_counts(signed_in_user, is_admin) -> dict:
+    """Small attention badges for the navigation (one cheap query each)."""
+    if not (signed_in_user or current_app.config["ALLOW_UNAUTHENTICATED"]):
+        return {}
+    if request.endpoint in (None, "static") or request.path.startswith("/api/"):
+        return {}
+    counts = {
+        "review": db.session.query(PurgeCandidate)
+        .filter(PurgeCandidate.state == "REVIEW")
+        .count()
+    }
+    if is_admin and _nav_section() == "enhance":
+        from . import dub_jobs
+        from .enrichment import maintenance_failed_count
+
+        counts["dubs"] = dub_jobs.counts()["dubs_to_act"]
+        counts["failed"] = maintenance_failed_count()
+    return counts
 
 
 def _dry_run_status():
@@ -1159,6 +1198,12 @@ def title(media_id):
             flash("Title override saved", "success")
         return redirect(url_for("main.title", media_id=media.id))
     return render_template("title.html", media=media, **title_view(media))
+
+
+@bp.get("/more")
+def more():
+    """Everything the phone's bottom bar doesn't fit."""
+    return render_template("more.html")
 
 
 @bp.get("/titles")
