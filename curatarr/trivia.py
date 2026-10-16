@@ -347,7 +347,6 @@ def _facts() -> dict:
     ]
     long_films = [f for f in films if f["stats"]["minutes"] >= MIN_FILM_MINUTES]
     rate = lambda key: lambda item: _per_hour(item["stats"], key)
-    total = lambda key: lambda item: item["stats"].get(key, 0)
     wpm = lambda item: item["stats"].get("words", 0) / max(item["stats"]["minutes"], 1)
     categories = [
         {
@@ -362,12 +361,11 @@ def _facts() -> dict:
         {
             "id": "f-words",
             "title": "F-bomb champions",
-            "blurb": "Most f-words in a single film or episode",
-            "films": _top(films, total("f_words")),
-            "shows": _top(episodes, total("f_words")),
-            "value": total("f_words"),
-            "unit": "f-words",
-            "episodes": True,
+            "blurb": "Most f-words per hour",
+            "films": _top(long_films, rate("f_words")),
+            "shows": _top(show_list, rate("f_words")),
+            "value": rate("f_words"),
+            "unit": "an hour",
         },
         {
             "id": "clean",
@@ -420,7 +418,7 @@ def _facts() -> dict:
         {
             "id": "love",
             "title": "Hopeless romantics",
-            "blurb": 'Most "I love you"s per hour',
+            "blurb": 'Most times "I love you" is said, per hour',
             "films": _top(long_films, rate("love")),
             # Per hour, or the longest-running show wins by sheer length.
             "shows": _top(show_list, rate("love")),

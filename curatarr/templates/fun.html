@@ -5,16 +5,17 @@
 {% macro ranking(items, value, unit) %}<ol class="fun-list">{% for item in items %}<li><a href="{{ url_for('main.title', media_id=item.media.id) }}">{{ label(item) }}</a><span class="fun-value">{{ number(value(item)) }} <small>{{ unit }}</small></span></li>{% endfor %}</ol>{% endmacro %}
 {% block content %}
 {% set t = facts.totals %}
-<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Fun facts</h1><p class="text-secondary mb-0">Superlatives from what's actually said in your films and shows, counted from Curatarr's transcripts: {{ facts.films|commas }} film{{ '' if facts.films == 1 else 's' }} and {{ facts.episodes|commas }} episode{{ '' if facts.episodes == 1 else 's' }} so far. More join as they're transcribed.{% if t.other_language %} {{ t.other_language|commas }} transcript{{ '' if t.other_language == 1 else 's' }} in other languages {{ 'is' if t.other_language == 1 else 'are' }} left out, since every count looks for English words.{% endif %}</p></div></header>
+<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Fun facts</h1><p class="text-secondary mb-0">Superlatives from what's actually said in your films and shows, all per hour or per minute so long-running shows don't win by length, counted from Curatarr's transcripts: {{ facts.films|commas }} film{{ '' if facts.films == 1 else 's' }} and {{ facts.episodes|commas }} episode{{ '' if facts.episodes == 1 else 's' }} so far. More join as they're transcribed.{% if t.other_language %} {{ t.other_language|commas }} transcript{{ '' if t.other_language == 1 else 's' }} in other languages {{ 'is' if t.other_language == 1 else 'are' }} left out, since every count looks for English words.{% endif %}</p></div></header>
 {% if not t.files %}
 <div class="empty-state"><h2 class="h6">Nothing counted yet</h2><p class="mb-0">Fun facts come from Smart Chapters transcripts. They appear here as files are transcribed.</p></div>
 {% else %}
 <section class="card p-3 mb-4"><div class="stat-grid">
   <div><div class="stat-label">Hours transcribed</div><div class="stat-value">{{ (t.minutes / 60)|round|int|commas }}</div></div>
-  <div><div class="stat-label">Words said</div><div class="stat-value">{{ t.words|int|commas }}</div></div>
-  <div><div class="stat-label">Swear words</div><div class="stat-value">{{ t.swears|int|commas }}</div><div class="stat-hint">{{ t.f_words|int|commas }} of them f-words</div></div>
-  <div><div class="stat-label">“I love you”s</div><div class="stat-value">{{ t.love|int|commas }}</div></div>
-  <div><div class="stat-label">Calls for help</div><div class="stat-value">{{ t.panic|int|commas }}</div></div>
+  {% set hours = (t.minutes / 60) or 1 %}
+  <div><div class="stat-label">Words a minute</div><div class="stat-value">{{ (t.words / (t.minutes or 1))|round|int }}</div><div class="stat-hint">{{ t.words|int|commas }} words in all</div></div>
+  <div><div class="stat-label">Swears an hour</div><div class="stat-value">{{ '%.1f'|format(t.swears / hours) }}</div><div class="stat-hint">{{ '%.1f'|format(t.f_words / hours) }} of them f-words</div></div>
+  <div><div class="stat-label">“I love you” an hour</div><div class="stat-value">{{ '%.2f'|format(t.love / hours) }}</div><div class="stat-hint">once every {{ ((t.minutes / t.love)|round|int) if t.love else '—' }} minutes</div></div>
+  <div><div class="stat-label">Calls for help an hour</div><div class="stat-value">{{ '%.1f'|format(t.panic / hours) }}</div></div>
 </div></section>
 <div class="fun-grid">
 {% for c in facts.categories %}<section class="card p-3 fun-card" id="{{ c.id }}">
