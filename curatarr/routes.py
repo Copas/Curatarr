@@ -715,6 +715,7 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "title": file_label(state),
                 "detail": "No English audio: replace it with another release?",
                 "dub": state.id,
+                "jellyfin_media": state.media.id,
                 "href": url_for("main.chapter_dubs"),
             }
         )
@@ -730,6 +731,7 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "title": file_label(state),
                 "detail": filecheck_jobs.describe(state.file_check)[0] + ".",
                 "problem": state.id,
+                "jellyfin_media": state.media.id,
                 "href": url_for("main.chapter_problems"),
             }
         )
