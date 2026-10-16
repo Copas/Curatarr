@@ -360,5 +360,10 @@ class ChapterState(db.Model, Timed):
     dub_checked_at = db.Column(db.DateTime(timezone=True))
     dub_file_size = db.Column(db.BigInteger)  # the file that was checked
     dub_result = db.Column(db.JSON)
+    # Burned-in subtitles and signs of a broken file (filecheck.py).
+    file_checked_at = db.Column(db.DateTime(timezone=True))
+    file_check_size = db.Column(db.BigInteger)  # the file that was checked
+    file_check = db.Column(db.JSON)
+    file_problem = db.Column(db.Boolean, index=True)  # something to act on
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")

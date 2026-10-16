@@ -132,6 +132,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Starting the dub check failed")
     try:
+        from . import filecheck_jobs
+
+        filecheck_jobs.start()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Starting the file check failed")
+    try:
         from .enrichment import link_transcripts
 
         link_transcripts()

@@ -399,6 +399,9 @@ def _nav_counts(signed_in_user, is_admin) -> dict:
         from .enrichment import maintenance_failed_count
 
         counts["dubs"] = dub_jobs.counts()["dubs_to_act"]
+        from . import filecheck_jobs
+
+        counts["problems"] = filecheck_jobs.counts()["problems_to_act"]
         counts["failed"] = maintenance_failed_count()
     return counts
 
@@ -656,6 +659,21 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "detail": "No English audio: replace it with another release?",
                 "dub": state.id,
                 "href": url_for("main.chapter_dubs"),
+            }
+        )
+    from . import filecheck_jobs
+
+    for state in filecheck_jobs.review()["to_act"][:NEEDS_SHOWN]:
+        needs.append(
+            {
+                "icon": "subtitles"
+                if (state.file_check.get("subtitles") or {}).get("verdict") == "burned"
+                else "tools",
+                "tone": "warning",
+                "title": file_label(state),
+                "detail": filecheck_jobs.describe(state.file_check)[0] + ".",
+                "problem": state.id,
+                "href": url_for("main.chapter_problems"),
             }
         )
     failed = maintenance_failed_count()
