@@ -272,11 +272,9 @@ def check(state, part, original) -> dict:
     if result["verdict"] == "no_english":
         e._log("dub_no_english", state_id=state.id)
         if opts["dub_replace_automatically"] and not _dry_run(part.media):
-            try:
-                replace(state)
-            except (IntegrationError, ValueError) as exc:
-                db.session.rollback()
-                e._log("dub_replace_failed", state_id=state.id, error=str(exc))
+            from . import better_copy
+
+            better_copy.request(state, "dub")  # replaced only if a better copy exists
     return state.dub_result
 
 

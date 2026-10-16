@@ -186,11 +186,9 @@ def check(state, part, runtimes=None) -> dict:
     if state.file_problem:
         e._log("file_problem", state_id=state.id, kinds=_kinds(result))
         if e.options()["file_replace_automatically"] and not _dry_run(media):
-            try:
-                replace(state)
-            except (IntegrationError, ValueError) as exc:
-                db.session.rollback()
-                e._log("file_replace_failed", state_id=state.id, error=str(exc))
+            from . import better_copy
+
+            better_copy.request(state, "file")  # replaced only if a better copy exists
     return result
 
 
@@ -226,7 +224,9 @@ def _dry_run(media) -> bool:
 
 # Release names marking one piece of a split film ("Part.1", "CD2"), as a
 # Radarr/Sonarr release-profile regular expression.
-SPLIT_RELEASE = r"/(^|[ ._\-\[(])(part|pt|cd|disc|disk)[ ._\-]?(\d|i{1,3}|iv)([ ._\-\])]|$)/i"
+SPLIT_RELEASE = (
+    r"/(^|[ ._\-\[(])(part|pt|cd|disc|disk)[ ._\-]?(\d|i{1,3}|iv)([ ._\-\])]|$)/i"
+)
 
 
 def replace(state) -> str:
