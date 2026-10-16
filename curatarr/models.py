@@ -365,5 +365,8 @@ class ChapterState(db.Model, Timed):
     file_check_size = db.Column(db.BigInteger)  # the file that was checked
     file_check = db.Column(db.JSON)
     file_problem = db.Column(db.Boolean, index=True)  # something to act on
+    # What's said, counted for Library → Fun facts (trivia.py).
+    talk_stats = db.Column(db.JSON)
+    talk_stats_key = db.Column(db.String(32))  # the transcript counted
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")

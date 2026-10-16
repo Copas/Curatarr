@@ -6,7 +6,10 @@
 - [Chapters and subtitles](#chapters-and-subtitles)
 - [Recaps, previews and skip markers](#recaps-previews-and-skip-markers)
 - [English dubs](#english-dubs)
+- [Problems: burned-in subtitles and broken files](#problems-burned-in-subtitles-and-broken-files)
 - [Search what was said](#search-what-was-said)
+- [Collections and suggestions](#collections-and-suggestions)
+- [Fun facts](#fun-facts)
 - [Sharing the machine with playback](#sharing-the-machine-with-playback)
 
 The interface groups daily decisions under **Overview** and **Review**, title browsing under **Library**, and file improvements under **Enhance**, and administrator controls under **Activity** and **Settings**. The theme button in the header switches between dark and light for that browser.
@@ -131,9 +134,39 @@ For Radarr to grab dubs in the first place, its quality profile's language must 
 
 ---
 
+## Problems: burned-in subtitles and broken files
+
+On by default; settings in Settings → Enhance → File problems. A background check goes through every film and episode a few files at a time (films first), stands aside while someone is watching, and looks again only when a file is replaced. It reads a few dozen frames and a few seconds of each file and changes nothing.
+
+| Looks for | How |
+|---|---|
+| **Subtitles burned into the picture** (films) | Frames from moments of speech and of silence, chosen from the saved transcript (or evenly spaced without one). Subtitles are a line or two of bright, dark-outlined text centred near the bottom, on most speech frames and few silent ones. Title cards, signs and corner captions are too tall, off-centre or don't follow the talking. |
+| **Shorter than listed** | The file runs under three quarters of the runtime Radarr or Sonarr gives. |
+| **Cut off** | The picture is there halfway through but missing at 80% and 90% of the file's length: an incomplete download. A soundtrack or subtitle track running a little past the picture doesn't count. |
+| **Goes quiet** (films) | Nobody speaks after the first 60% of a film that has a transcript. |
+| **Decoding errors** | Errors from the video or audio decoder at two or more of six points through the file. |
+
+Problem files are listed on **Enhance → Problems** and on Overview, to **Replace** (blocklist the release in Radarr or Sonarr, delete the file, search again), **Check again** or **Keep**. **Replace problem files automatically** is off by default; dry run is respected.
+
+---
+
 ## Search what was said
 
 **Search** (the box in the header, or Library → Search) (and `GET /api/v1/transcripts/search?q=…`) finds an episode or film by a line or what's talked about in it, across every transcript Smart Chapters has made. An exact phrase ranks first, then short windows holding most of the words; each result shows the moment's lines and timestamp, linked to the episode. Words are matched by rough stem ("frying" finds "fry"). Household accounts can use it too.
+
+---
+
+## Collections and suggestions
+
+**Library → Collections** (administrators) lists the film series you have part of, from Radarr's collections (TMDB's film series), nearly complete ones first: "You have 5 of 6". The missing films are ticked ready to add; films not yet released are listed as coming. **Add ticked** adds them to Radarr with the quality profile and root folder of the series' films already in the library, and starts a search. **Follow series** turns on Radarr's own collection monitoring, so the series' missing films and later ones are added as they're released. **Not interested** hides a series for good.
+
+Below, **Suggested for you** takes Radarr's recommendations (films TMDB links to ones in the library), drops anything already there, unreleased or hidden, and ranks the rest by rating and by how well their genres match the films the household has favourited in Jellyfin. Tick and add, or hide a film with **Not for us**.
+
+---
+
+## Fun facts
+
+**Library → Fun facts** (everyone, household accounts included) ranks films and shows by what's said in them, from the Smart Chapters transcripts: most swearing per hour, the f-bomb champions, squeaky-clean talkative films and the shows that swear least (handy for picking something for the kids), the most kill-and-blood talk, the most "help!" and "run!", the chattiest and quietest, the most "I love you"s, pleases and thank-yous, and questions. **Catchphrases** finds the phrase each show says in more of its episodes than other shows do. Each transcript is counted once in the background, with no GPU, and the page grows as more files are transcribed.
 
 ---
 

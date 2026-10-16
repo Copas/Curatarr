@@ -139,6 +139,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Starting the file check failed")
     try:
+        from . import trivia
+
+        trivia.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Counting transcripts failed")
+    try:
         from .enrichment import link_transcripts
 
         link_transcripts()
