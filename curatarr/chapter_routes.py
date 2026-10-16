@@ -605,15 +605,49 @@ def chapter_failed_action(state_id, action):
 @bp.get("/chapters/problems")
 def chapter_problems():
     """Burned-in subtitles and broken files (filecheck.py)."""
-    from . import filecheck_jobs
+    from . import filecheck_jobs, missing_keep
 
     return render_template(
         "chapter_problems.html",
+        missing_shows=missing_keep.rows(),
         found=filecheck_jobs.review(),
         enabled=filecheck_jobs.enabled(),
         describe=filecheck_jobs.describe,
         file_label=file_label,
     )
+
+
+@bp.post("/chapters/problems/show/<media_id>/<action>")
+def missing_keep_action(media_id, action):
+    """Search once for a show's missing always-keep episodes, or stop listing it."""
+    from . import missing_keep
+
+    media = db.session.get(MediaIdentity, media_id)
+    if not media or action not in ("search", "ignore"):
+        abort(404)
+    if action == "ignore":
+        missing_keep.ignore(media)
+        db.session.commit()
+        flash(f"{media.title} won't be listed for these episodes again.", "success")
+    else:
+        try:
+            result = missing_keep.search_once(media)
+        except ValueError as exc:
+            flash(str(exc), "info")
+        else:
+            if result == "succeeded":
+                flash(
+                    f"Asked Sonarr to search for {media.title}'s missing episodes. "
+                    "If nothing arrives within a couple of days, it's listed here again.",
+                    "success",
+                )
+            else:
+                flash(
+                    f"Sonarr couldn't be asked ({result}). Try again shortly.", "danger"
+                )
+    if request.form.get("back") == "overview":
+        return redirect(url_for("main.overview"))
+    return redirect(url_for("main.chapter_problems"))
 
 
 @bp.post("/chapters/problems/<state_id>/<action>")

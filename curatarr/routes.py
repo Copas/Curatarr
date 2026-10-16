@@ -452,9 +452,11 @@ def _nav_counts(signed_in_user, is_admin) -> dict:
         from .enrichment import maintenance_failed_count
 
         counts["dubs"] = dub_jobs.counts()["dubs_to_act"]
-        from . import filecheck_jobs
+        from . import filecheck_jobs, missing_keep
 
-        counts["problems"] = filecheck_jobs.counts()["problems_to_act"]
+        counts["problems"] = (
+            filecheck_jobs.counts()["problems_to_act"] + missing_keep.count()
+        )
         counts["failed"] = maintenance_failed_count()
     return counts
 
@@ -726,6 +728,24 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "title": file_label(state),
                 "detail": filecheck_jobs.describe(state.file_check)[0] + ".",
                 "problem": state.id,
+                "href": url_for("main.chapter_problems"),
+            }
+        )
+    from . import missing_keep
+
+    for row in [r for r in missing_keep.rows() if not r["waiting"]][:NEEDS_SHOWN]:
+        needs.append(
+            {
+                "icon": "tools",
+                "tone": "warning",
+                "title": row["media"].title,
+                "detail": f"Missing {row['codes']}, which it always keeps"
+                + (
+                    "; Sonarr has the show unmonitored, so nothing will fetch them."
+                    if row["unmonitored"]
+                    else "."
+                ),
+                "missing_show": row["media"].id,
                 "href": url_for("main.chapter_problems"),
             }
         )
