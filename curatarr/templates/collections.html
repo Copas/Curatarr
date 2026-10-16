@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}Collections · Library · Curatarr{% endblock %}
+{% macro film_line(film) %}<strong>{{ film.title }}</strong> <span class="text-secondary">({{ film.year or '?' }}){% if film.rating %} · ★ {{ film.rating }}{% endif %}{% if film.runtime %} · {{ film.runtime }} min{% endif %}</span>{% endmacro %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Collections</h1><p class="text-secondary mb-0">Film series you have part of, and films that fit what the household favourites. Adding a film sends it to Radarr, which searches for it straight away.</p></div>{% if missing_total %}<span class="status-pill text-nowrap">{{ missing_total|commas }} film{{ '' if missing_total == 1 else 's' }} missing</span>{% endif %}</header>
+{% if error %}<div class="alert alert-warning">Couldn't read Radarr: {{ error }}</div>{% endif %}
+
+<h2 class="h5 mt-2">Series with gaps</h2>
+{% if gaps %}
+<p class="text-secondary small">Nearly complete series first. Films that haven't been released yet are listed as coming, not missing.</p>
+{% for c in gaps %}<section class="card p-3 mb-3 collection-card" id="c-{{ c.id }}">
+  <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2"><h3 class="h6 mb-0">{{ c.title|replace(' Collection', '') }}</h3><span class="small text-secondary">You have <strong>{{ c.have }}</strong> of {{ c.total }}{% if c.following %} · <span class="chip chip-on">Following</span>{% endif %}</span></div>
+  <progress class="w-100 d-block my-2" value="{{ c.have }}" max="{{ c.total }}" aria-label="{{ c.have }} of {{ c.total }} in the library">{{ c.have }} of {{ c.total }}</progress>
+  <ul class="list-unstyled mb-2">{% for film in c.missing %}<li class="form-check"><input class="form-check-input" type="checkbox" name="tmdb_id" value="{{ film.tmdb_id }}" id="m-{{ c.id }}-{{ film.tmdb_id }}" form="add-{{ c.id }}" checked><label class="form-check-label" for="m-{{ c.id }}-{{ film.tmdb_id }}">{{ film_line(film) }}</label></li>{% endfor %}</ul>
+  {% if c.coming %}<p class="small text-secondary mb-2">Coming: {% for film in c.coming %}{{ film.title }}{% if film.year %} ({{ film.year }}){% endif %}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  <div class="d-flex flex-wrap gap-2">
+    <form method="post" action="{{ url_for('main.collections_add') }}" id="add-{{ c.id }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="collection" value="{{ c.tmdb_id }}"><input type="hidden" name="anchor" value="#c-{{ c.id }}"><input type="hidden" name="all" value="{{ '1' if show_all else '' }}"><button class="btn btn-sm btn-primary" data-tip="Adds the ticked films to Radarr with the same quality profile and folder as the rest of this series, and starts a search for each.">Add ticked</button></form>
+    {% if not c.following %}<form method="post" action="{{ url_for('main.collections_follow', collection_id=c.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light" data-tip="Turns on Radarr's monitoring for this series: it adds every film missing from it now, and new ones as they're released.">Follow series</button></form>{% endif %}
+    <form method="post" action="{{ url_for('main.collections_dismiss') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="collections"><input type="hidden" name="tmdb_id" value="{{ c.tmdb_id }}"><input type="hidden" name="all" value="{{ '1' if show_all else '' }}"><button class="btn btn-sm btn-outline-secondary" data-tip="Hides this series here for good. Nothing changes in Radarr.">Not interested</button></form>
+  </div>
+</section>{% endfor %}
+{% if gaps_total > gaps|length %}<p><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.collections', all=1) }}">Show all {{ gaps_total }} series</a></p>{% endif %}
+{% elif not error %}<div class="empty-state mb-4"><h2 class="h6">No gaps</h2><p class="mb-0">Every film series you have part of is complete, apart from films not yet released.</p></div>{% endif %}
+
+<h2 class="h5 mt-4" id="suggestions">Suggested for you</h2>
+{% if picks.films %}
+<p class="text-secondary small">Films TMDB links to ones in your library, ranked by rating and by how well they fit the genres the household favourites most{% if picks.genres %} ({{ picks.genres|join(', ') }}){% endif %}.</p>
+<form method="post" action="{{ url_for('main.collections_add') }}" id="add-picks"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="anchor" value="#suggestions-0"><input type="hidden" name="all" value="{{ '1' if show_all else '' }}"></form>
+<ul class="list-unstyled pick-list mb-3" id="suggestions-0">{% for film in picks.films %}<li class="pick-row">
+  <input class="form-check-input" type="checkbox" name="tmdb_id" value="{{ film.tmdb_id }}" id="p-{{ film.tmdb_id }}" form="add-picks" aria-label="Add {{ film.title }}">
+  <div class="pick-main"><label for="p-{{ film.tmdb_id }}">{{ film_line(film) }}</label>{% if film.matches %}<div class="d-flex flex-wrap gap-1 my-1">{% for g in film.matches %}<span class="chip">{{ g }}</span>{% endfor %}</div>{% endif %}<div class="small text-secondary pick-overview">{{ film.overview|truncate(220) }}</div></div>
+  <form method="post" action="{{ url_for('main.collections_dismiss') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="films"><input type="hidden" name="tmdb_id" value="{{ film.tmdb_id }}"><input type="hidden" name="anchor" value="#suggestions-0"><input type="hidden" name="all" value="{{ '1' if show_all else '' }}"><button class="btn btn-sm btn-outline-secondary" data-tip="Hides this film from suggestions for good.">Not for us</button></form>
+</li>{% endfor %}</ul>
+<div class="sticky-actions"><span class="small text-secondary">Ticked suggestions</span><button class="btn btn-primary" form="add-picks" data-tip="Adds the ticked films to Radarr with the library's usual quality profile and folder, and starts a search for each.">Add to Radarr</button></div>
+{% elif not error %}<div class="empty-state"><h2 class="h6">No suggestions right now</h2><p class="mb-0">Radarr hasn't recommended anything that isn't already in the library or hidden.</p></div>{% endif %}
+{% endblock %}
