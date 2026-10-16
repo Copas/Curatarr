@@ -1,14 +1,16 @@
-"""Library → Collections: gaps in film series, and suggestions (franchises.py)."""
+"""Library → Collections (franchises.py) and Library → Fun facts (trivia.py)."""
 
 import re
 
 from flask import flash, redirect, render_template, request, url_for
 
-from . import franchises
+from . import franchises, trivia
 from .integrations import IntegrationError
-from .routes import NAV_SECTIONS, bp
+from .routes import HOUSEHOLD_PAGES, NAV_SECTIONS, bp
 
 NAV_SECTIONS["main.collections"] = "library"
+NAV_SECTIONS["main.fun"] = "library"
+HOUSEHOLD_PAGES.add("main.fun")  # for everyone, not just admins
 SHOWN = 30  # series listed before "Show all"
 
 
@@ -83,3 +85,9 @@ def collections_dismiss():
         franchises.dismiss(kind, int(tmdb_id))
         flash("Hidden. It won't be suggested again.", "success")
     return _back()
+
+
+@bp.get("/fun")
+def fun():
+    """Library superlatives from what's said in it."""
+    return render_template("fun.html", facts=trivia.facts())

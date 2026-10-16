@@ -328,3 +328,13 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .pick-main { flex: 1; min-width: 0; }
 .pick-main label { cursor: pointer; }
 .collection-card progress { height: .5rem; }
+.fun-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: 1rem; }
+.fun-kind { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--app-muted); margin: .6rem 0 .3rem; }
+.fun-list { list-style: none; padding: 0; margin: 0; counter-reset: fun; }
+.fun-list li { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; padding: .3rem 0; border-top: 1px solid var(--app-border); counter-increment: fun; }
+.fun-list li:first-child { border-top: 0; }
+.fun-card .fun-list li::before { content: counter(fun); color: var(--app-muted); font-size: .8rem; min-width: 1rem; }
+.fun-list li a { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fun-value { font-weight: 600; white-space: nowrap; text-align: right; }
+.fun-value small { font-weight: 400; color: var(--app-muted); }
+.fun-phrases .fun-value { white-space: normal; }
