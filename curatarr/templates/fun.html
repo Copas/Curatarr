@@ -5,7 +5,7 @@
 {% macro ranking(items, value, unit) %}<ol class="fun-list">{% for item in items %}<li><a href="{{ url_for('main.title', media_id=item.media.id) }}">{{ label(item) }}</a><span class="fun-value">{{ number(value(item)) }} <small>{{ unit }}</small></span></li>{% endfor %}</ol>{% endmacro %}
 {% block content %}
 {% set t = facts.totals %}
-<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Fun facts</h1><p class="text-secondary mb-0">Superlatives from what's actually said in your films and shows, counted from Curatarr's transcripts: {{ facts.films|commas }} film{{ '' if facts.films == 1 else 's' }} and {{ facts.episodes|commas }} episode{{ '' if facts.episodes == 1 else 's' }} so far. More join as they're transcribed.</p></div></header>
+<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Fun facts</h1><p class="text-secondary mb-0">Superlatives from what's actually said in your films and shows, counted from Curatarr's transcripts: {{ facts.films|commas }} film{{ '' if facts.films == 1 else 's' }} and {{ facts.episodes|commas }} episode{{ '' if facts.episodes == 1 else 's' }} so far. More join as they're transcribed.{% if t.other_language %} {{ t.other_language|commas }} transcript{{ '' if t.other_language == 1 else 's' }} in other languages {{ 'is' if t.other_language == 1 else 'are' }} left out, since every count looks for English words.{% endif %}</p></div></header>
 {% if not t.files %}
 <div class="empty-state"><h2 class="h6">Nothing counted yet</h2><p class="mb-0">Fun facts come from Smart Chapters transcripts. They appear here as files are transcribed.</p></div>
 {% else %}

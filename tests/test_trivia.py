@@ -5,11 +5,16 @@ from curatarr import db, enrichment, trivia
 from curatarr.models import ChapterState, Library, MediaIdentity, MediaPart
 
 
-def said(*lines, every=10.0):
-    return [
-        SimpleNamespace(start=i * every, end=i * every + 4, text=text)
+def said(*lines, every=10.0, start=0.0, end=None):
+    """Segments every `every` seconds from `start`; `end` adds a last (credits)
+    segment there, so the lines are mid-episode."""
+    segments = [
+        SimpleNamespace(start=start + i * every, end=start + i * every + 4, text=text)
         for i, text in enumerate(lines)
     ]
+    if end is not None:
+        segments.append(SimpleNamespace(start=end - 4, end=end, text="Credits."))
+    return segments
 
 
 def test_count_tallies_swearing_violence_love_and_manners():
@@ -29,13 +34,22 @@ def test_count_tallies_swearing_violence_love_and_manners():
 
 def test_catchphrases_skip_filler_and_common_words():
     lines = ["Ha ha ha, the other guys lose."] * 3 + ["What are you talking about?"] * 3
-    assert trivia.count(said(*lines))["phrases"] == [
-        "the other guys",
-        "other guys lose",
+    assert trivia.count(said(*lines, start=600, end=1300))["phrases"] == [
+        ["the other guys", 600],
+        ["other guys lose", 600],
     ]
 
 
-def _transcribed(app, title, kind, minutes, lines, *, library, episode=1):
+def test_phrases_skip_the_opening_and_closing_minutes():
+    """Where theme songs and credits are."""
+    theme = ["Who'd have thought they'd lead ya back here"] * 2
+    assert trivia.count(said(*theme, start=20, end=1300))["phrases"] == []
+    assert trivia.count(said(*theme, start=1200, end=1300))["phrases"] == []
+
+
+def _transcribed(
+    app, title, kind, minutes, lines, *, library, episode=1, start=600.0, language="en"
+):
     media = db.session.query(MediaIdentity).filter_by(
         title=title
     ).first() or MediaIdentity(
@@ -63,8 +77,9 @@ def _transcribed(app, title, kind, minutes, lines, *, library, episode=1):
             {
                 "segments": [
                     {"start": s.start, "end": s.end, "text": s.text}
-                    for s in said(*lines)
-                ]
+                    for s in said(*lines, start=start, end=minutes * 60)
+                ],
+                "details": {"language": language},
             }
         )
     )
@@ -101,17 +116,64 @@ def test_the_fun_facts_page_ranks_films_and_shows(app, client):
             + [f"Then {n} tried."] * 3,
             library=tv,
             episode=n,
+            start=300 + n * 97,  # said at a different point each episode
         )
-    assert trivia.sweep() == 9 and trivia.sweep() == 0  # each counted once
+        # A theme after the cold open: same words, same spot, every episode.
+        _transcribed(
+            app,
+            "Theme Show",
+            "episode",
+            22,
+            ["Sunny days chasing the clouds away"] * 2 + [f"Plot {n}."] * 3,
+            library=tv,
+            episode=n,
+            start=240,
+        )
+        # The show's own name ("Ricky Gervais, Stephen Merchant").
+        _transcribed(
+            app,
+            "The Ricky Gervais Show",
+            "episode",
+            22,
+            ["Hello Ricky Gervais"] * 2 + [f"Story {n}."] * 3,
+            library=tv,
+            episode=n,
+            start=300 + n * 97,
+        )
+    # Transcribed in another language (a misfiled foreign show): every count
+    # looks for English words, so it would be the "cleanest" and "quietest".
+    _transcribed(
+        app,
+        "Hong Kong Show",
+        "episode",
+        45,
+        ["少爺, 去哪兒了?"] * 9,
+        library=tv,
+        language="zh",
+    )
+    for n in (2, 3):
+        _transcribed(
+            app,
+            "Hong Kong Show",
+            "episode",
+            45,
+            ["阿樂"] * 9,
+            library=tv,
+            episode=n,
+            language="zh",
+        )
+    assert trivia.sweep() == 26 and trivia.sweep() == 0  # each counted once
     facts = trivia.facts()
     swearing = next(c for c in facts["categories"] if c["id"] == "swearing")
     assert swearing["films"][0]["media"].title == "Sweary Film"
     clean = next(c for c in facts["categories"] if c["id"] == "clean")
     assert [f["media"].title for f in clean["films"]] == ["Polite Film"]
-    assert facts["catchphrases"][0]["phrase"] == "the other guys"
+    assert "Hong Kong Show" not in {s["media"].title for s in clean["shows"]}
+    assert [c["phrase"] for c in facts["catchphrases"]] == ["the other guys"]
     page = client.get("/fun").text
     assert "Potty mouths" in page and "Sweary Film" in page
     assert "“the other guys”" in page and "in 7 of 7 episodes" in page
+    assert "3 transcripts in other languages are left out" in page
     # A replaced transcript is counted again.
     state = db.session.query(ChapterState).first()
     state.transcript_key = "0" * 32

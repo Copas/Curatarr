@@ -189,10 +189,22 @@ def words(text: str) -> list[str]:
     return re.findall(r"[a-z']+", (text or "").lower().replace("’", "'"))
 
 
+# Theme songs, intros and credits are said in every episode and would win
+# "catchphrase" (the Welcome Back, Kotter theme's "who'd have thought they'd"):
+# phrases count only away from the first and last minutes, and each keeps the
+# time it was first said, since a theme after a cold open comes at the same
+# point every episode while a real catchphrase doesn't.
+EDGE_SECONDS = 180
+SAME_SPOT_SECONDS = 45
+
+
 def count(segments) -> dict:
     """The numbers one transcript contributes."""
     total = Counter()
     trigrams = Counter()
+    contexts = {}
+    segments = list(segments)
+    ends = max((segment.end for segment in segments), default=0)
     for segment in segments:
         text = segment.text or ""
         said = words(text)
@@ -211,12 +223,24 @@ def count(segments) -> dict:
                 total["swears"] += 1
             if VIOLENT.match(word):
                 total["violent"] += 1
+        if segment.start < EDGE_SECONDS or segment.end > ends - EDGE_SECONDS:
+            continue
         for i in range(len(said) - 2):
             gram = said[i : i + 3]
-            if sum(w not in STOP for w in gram) >= 2 and not FILLER & set(gram):
-                trigrams[" ".join(gram)] += 1
+            if (
+                sum(w not in STOP for w in gram) >= 2
+                and not FILLER & set(gram)
+                # Spelled-out letters ("the u s"), not words.
+                and all(len(w) > 1 or w in ("a", "i") for w in gram)
+            ):
+                joined_gram = " ".join(gram)
+                trigrams[joined_gram] += 1
+                contexts.setdefault(joined_gram, int(segment.start))
     result = {key: round(value, 1) for key, value in total.items()}
-    result["phrases"] = [g for g, n in trigrams.most_common(25) if n >= 2]
+    # [phrase, seconds into the episode it was first said]
+    result["phrases"] = [
+        [g, contexts[g]] for g, n in trigrams.most_common(25) if n >= 2
+    ]
     return result
 
 
@@ -244,7 +268,10 @@ def sweep() -> int:
     counted = {}
     for state_id, key in rows:
         hit = load(cache_dir() / "transcripts" / f"{key}.json")
-        counted[state_id] = (count(hit[0]) if hit else None, key)
+        stats = count(hit[0]) if hit else None
+        if stats is not None:
+            stats["language"] = hit[1].get("language")
+        counted[state_id] = (stats, key)
     for start in range(0, len(rows), 50):  # short writes, so nothing waits long
         for state_id, (stats, key) in list(counted.items())[start : start + 50]:
             state = db.session.get(ChapterState, state_id)
@@ -296,13 +323,23 @@ def _top(items, key, *, reverse=True, limit=SHOWN, keep=lambda item: True):
 def _facts() -> dict:
     films, episodes = [], []
     shows = defaultdict(
-        lambda: {"stats": Counter(), "episodes": 0, "phrases": Counter()}
+        lambda: {
+            "stats": Counter(),
+            "episodes": 0,
+            "phrases": Counter(),
+            "when": defaultdict(list),
+        }
     )
     totals = Counter()
     for state, part, media in _rows():
         stats = dict(state.talk_stats)
         stats["minutes"] = (state.duration_seconds or 0) / 60
         if not stats["minutes"]:
+            continue
+        if stats.get("language") not in (None, "en"):
+            # Every count looks for English words; a transcript in another
+            # language would rank as the quietest and cleanest thing there is.
+            totals["other_language"] += 1
             continue
         for key in ("words", "swears", "f_words", "panic", "love", "violent"):
             totals[key] += stats.get(key, 0)
@@ -326,7 +363,12 @@ def _facts() -> dict:
             show["stats"].update(
                 {k: v for k, v in stats.items() if isinstance(v, int | float)}
             )
-            show["phrases"].update(set(stats.get("phrases") or []))
+            for item in stats.get("phrases") or []:
+                if isinstance(item, str):
+                    continue  # counted before fingerprints; recounted soon
+                phrase, first_said = item
+                show["phrases"][phrase] += 1
+                show["when"][phrase].append(first_said)
     show_list = [
         {"media": s["media"], "stats": dict(s["stats"]), "episodes": s["episodes"]}
         for s in shows.values()
@@ -363,7 +405,8 @@ def _facts() -> dict:
             "films": _top(
                 long_films, wpm, keep=lambda f: f["stats"].get("swears", 0) == 0
             ),
-            "shows": _top(show_list, rate("swears"), reverse=False),
+            # Fewest swears, then the most talkative (many shows never swear).
+            "shows": _top(show_list, lambda s: (-rate("swears")(s), wpm(s))),
             "value": rate("swears"),
             "unit": "swears an hour",
         },
@@ -406,11 +449,12 @@ def _facts() -> dict:
         {
             "id": "love",
             "title": "Hopeless romantics",
-            "blurb": 'Most "I love you"s',
-            "films": _top(films, total("love")),
-            "shows": _top(show_list, total("love")),
-            "value": total("love"),
-            "unit": "times",
+            "blurb": 'Most "I love you"s per hour',
+            "films": _top(long_films, rate("love")),
+            # Per hour, or the longest-running show wins by sheer length.
+            "shows": _top(show_list, rate("love")),
+            "value": rate("love"),
+            "unit": "an hour",
         },
         {
             "id": "polite",
@@ -440,17 +484,20 @@ def _facts() -> dict:
     }
 
 
+def _same_spot(times) -> bool:
+    """Said at about the same point in most episodes: a theme song or an intro."""
+    middle = sorted(times)[len(times) // 2]
+    near = sum(abs(t - middle) <= SAME_SPOT_SECONDS for t in times)
+    return len(times) >= 3 and near > len(times) / 2
+
+
 def _catchphrases(shows) -> list[dict]:
     """Each show's phrase: said in many of its episodes and few other shows'."""
+    # How many shows say it at all (in two or more episodes): "wait a minute"
+    # and "a little bit" are everyone's, not one show's.
     everywhere = Counter()
     for show in shows.values():
-        everywhere.update(
-            {
-                p
-                for p, n in show["phrases"].items()
-                if n >= max(2, show["episodes"] // 4)
-            }
-        )
+        everywhere.update({p for p, n in show["phrases"].items() if n >= 2})
     found = []
     for show in shows.values():
         if show["episodes"] < MIN_EPISODES * 2:
@@ -459,9 +506,17 @@ def _catchphrases(shows) -> list[dict]:
         ranked = sorted(show["phrases"].items(), key=lambda kv: (-kv[1], kv[0]))
         for phrase, in_episodes in ranked[:40]:
             share = in_episodes / show["episodes"]
-            if share < 0.2:
+            if share < 0.2 or in_episodes < 3:
                 break
-            score = share / (1 + everywhere[phrase])
+            if _same_spot(show["when"][phrase]):
+                continue
+            # Part of the show's own name ("Gervais" in The Ricky Gervais Show).
+            if set(phrase.split()) & set(words(show["media"].title)) - STOP:
+                continue
+            others = everywhere[phrase] - 1
+            if others >= 3:
+                continue
+            score = share / (1 + others) ** 2
             if best is None or score > best[0]:
                 best = (score, phrase, in_episodes)
         if best:

@@ -338,7 +338,8 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .fun-list li a { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .fun-value { font-weight: 600; white-space: nowrap; text-align: right; }
 .fun-value small { font-weight: 400; color: var(--app-muted); }
-.fun-phrases .fun-value { white-space: normal; }
+.fun-phrases li { flex-direction: column; align-items: stretch; gap: .1rem; }
+.fun-phrases .fun-value { white-space: normal; text-align: left; }
 .page-loading { position: fixed; top: 0; left: 0; z-index: 2000; height: 3px; width: 0; background: var(--app-accent); box-shadow: 0 0 8px var(--app-accent); pointer-events: none; }
 .page-loading.is-on { animation: page-loading 10s cubic-bezier(.1, .8, .2, 1) forwards; }
 @keyframes page-loading { 0% { width: 0; } 10% { width: 35%; } 100% { width: 92%; } }
