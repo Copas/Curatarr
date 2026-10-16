@@ -60,6 +60,7 @@ NAV_SECTIONS.update(
         "main.chapter_part": "enhance",
         "main.chapter_markers": "enhance",
         "main.chapter_dubs": "enhance",
+        "main.chapter_problems": "enhance",
         "main.chapter_identity": "enhance",
         "main.transcript_search": "library",
     }
@@ -518,6 +519,48 @@ def chapter_dub_action(state_id, action):
     if request.form.get("back") == "overview":
         return redirect(url_for("main.overview"))
     return redirect(url_for("main.chapter_dubs"))
+
+
+@bp.get("/chapters/problems")
+def chapter_problems():
+    """Burned-in subtitles and broken files (filecheck.py)."""
+    from . import filecheck_jobs
+
+    return render_template(
+        "chapter_problems.html",
+        found=filecheck_jobs.review(),
+        enabled=filecheck_jobs.enabled(),
+        describe=filecheck_jobs.describe,
+        file_label=file_label,
+    )
+
+
+@bp.post("/chapters/problems/<state_id>/<action>")
+def chapter_problem_action(state_id, action):
+    from . import filecheck_jobs
+
+    state = db.session.get(ChapterState, state_id)
+    if (
+        not state
+        or not state.file_check
+        or action not in ("replace", "dismiss", "recheck")
+    ):
+        abort(404)
+    try:
+        if action == "replace":
+            flash(filecheck_jobs.replace(state), "success")
+        elif action == "dismiss":
+            filecheck_jobs.dismiss(state)
+            flash("Kept. This file won't be listed again.", "success")
+        else:
+            filecheck_jobs.recheck(state)
+            flash("It will be checked again shortly.", "success")
+    except (IntegrationError, ValueError) as exc:
+        db.session.rollback()
+        flash(f"Couldn't do that: {exc}", "danger")
+    if request.form.get("back") == "overview":
+        return redirect(url_for("main.overview"))
+    return redirect(url_for("main.chapter_problems"))
 
 
 @bp.get("/search")

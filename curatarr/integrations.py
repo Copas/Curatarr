@@ -404,6 +404,35 @@ class SonarrClient(Client):
         self.request("PUT", f"/api/v3/episode/{episode_id}", json=episode)
         return True
 
+    def episode_grabs(self, episode_id):
+        """The episode's download history, newest first, grabs only."""
+        page = self.request(
+            "GET",
+            "/api/v3/history",
+            params={
+                "episodeId": episode_id,
+                "eventType": 1,
+                "sortKey": "date",
+                "sortDirection": "descending",
+                "pageSize": 20,
+            },
+        )
+        rows = page.get("records", []) if isinstance(page, dict) else page or []
+        return sorted(rows, key=lambda r: r.get("date") or "", reverse=True)
+
+    def mark_failed(self, history_id):
+        """Blocklist the release behind a grab, so it isn't downloaded again."""
+        return self.request(
+            "POST", f"/api/v3/history/failed/{history_id}", destructive=True
+        )
+
+    def episode_search(self, episode_ids):
+        return self.request(
+            "POST",
+            "/api/v3/command",
+            json={"name": "EpisodeSearch", "episodeIds": list(episode_ids)},
+        )
+
     def delete_episode_file(self, file_id):
         return self.request(
             "DELETE", f"/api/v3/episodefile/{file_id}", destructive=True
