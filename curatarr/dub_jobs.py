@@ -171,6 +171,7 @@ def sweep(foreign_limit=FOREIGN_PER_RUN) -> dict:
         if film is None:
             continue  # not in Radarr any more; the reconciler will catch up
         state = e.state_for(part)
+        db.session.commit()  # not holding the write lock while listening
         original = film[0]
         if not _needs_listening(film, remove_others):
             state.dub_checked_at = utcnow()

@@ -239,13 +239,19 @@ def sweep() -> int:
     from .enrichment import cache_dir
     from .transcribe import load
 
-    rows = _due().all()
-    for state in rows:
-        hit = load(cache_dir() / "transcripts" / f"{state.transcript_key}.json")
-        state.talk_stats = count(hit[0]) if hit else None
-        state.talk_stats_key = state.transcript_key
-    if rows:
+    rows = [(state.id, state.transcript_key) for state in _due()]
+    db.session.rollback()  # read the transcripts outside any transaction
+    counted = {}
+    for state_id, key in rows:
+        hit = load(cache_dir() / "transcripts" / f"{key}.json")
+        counted[state_id] = (count(hit[0]) if hit else None, key)
+    for start in range(0, len(rows), 50):  # short writes, so nothing waits long
+        for state_id, (stats, key) in list(counted.items())[start : start + 50]:
+            state = db.session.get(ChapterState, state_id)
+            if state is not None:
+                state.talk_stats, state.talk_stats_key = stats, key
         db.session.commit()
+    if rows:
         _cache.clear()
     return len(rows)
 
