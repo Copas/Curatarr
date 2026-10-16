@@ -295,6 +295,10 @@ def _removed_words(removed) -> str:
 def _remove_others(state, part, path, result):
     """Rewrite the file without audio and subtitles in other languages."""
     e = _enrichment()
+    # Save what's been decided first: the rewrite copies the whole film, which
+    # takes minutes on a network share, and unsaved changes hold SQLite's write
+    # lock for all of it (the web app, webhooks and the worker wait and fail).
+    db.session.commit()
     if _dry_run(part.media):
         result["not_removed"] = "dry run is on for this library"
         return None
@@ -328,6 +332,7 @@ def _remove_others(state, part, path, result):
         return None
     if in_sync:
         state.chapter_file_size, state.chapter_file_mtime = after.size, after.mtime
+        db.session.commit()  # before asking Jellyfin and Radarr
     for track in result["tracks"]:
         track["removed"] = track["index"] in drop["audio"]
     e._refresh_jellyfin(part, part.media)

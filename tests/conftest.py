@@ -63,3 +63,19 @@ def fresh_caches():
 
     trivia._cache.clear()
     franchises.forget()
+
+
+def database_free(app) -> bool:
+    """Whether another connection (the web app, say) could write right now."""
+    import sqlite3
+
+    path = app.config["SQLALCHEMY_DATABASE_URI"].removeprefix("sqlite:///")
+    other = sqlite3.connect(path, timeout=0)
+    try:
+        other.execute("BEGIN IMMEDIATE")
+        other.rollback()
+        return True
+    except sqlite3.OperationalError:
+        return False
+    finally:
+        other.close()
