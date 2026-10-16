@@ -132,6 +132,9 @@ def sweep(limit=PER_RUN) -> int:
         if setting("chapters_paused_since"):
             break  # someone started watching: their stream comes first
         state = e.state_for(part)
+        # Save a new record now: the check reads frames for up to a minute, and
+        # holding SQLite's write lock that long stalls the web app and webhooks.
+        db.session.commit()
         try:
             check(state, part, runtimes)
         except (MediaToolError, OSError, ValueError) as exc:

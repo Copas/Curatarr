@@ -28,4 +28,4 @@ USER curatarr
 EXPOSE 8787
 VOLUME ["/config"]
 ENTRYPOINT ["curatarr-entrypoint"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8787", "--workers", "1", "curatarr:create_app()"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8787", "--workers", "1", "--threads", "4", "curatarr:create_app()"]
