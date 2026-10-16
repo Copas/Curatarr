@@ -4,6 +4,7 @@
 Phase 8 — Media enrichment (chapters and subtitles) running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc4 release candidate: English dub checks (language identification per audio track, relabelling, default track, optional removal of other languages, replacement through Radarr), the chapter maintenance accomplishments card, a 24-hour pace for the finish estimate, and rewritten README and install guides for Linux, Docker and Windows. The Windows Docker Desktop steps are still untested on a Windows host.
 - v0.2.0rc3 release candidate: Docker Desktop installation steps for Windows, LF shell entrypoints, and Windows Arr disk-path matching are included. The Docker image was built and served HTTP on Linux; a Windows host smoke test is still pending. The rc2 native upgrade is running on the owner's host. Live lifecycle validation remains pending before v0.2.0.
 - UI/UX pass: grouped navigation, responsive review cards, browsable title list, clearer policy sections, a dedicated Operations page, light/dark theme choice, and deletion confirmation. Admins can allowlist non-admin Jellyfin household accounts for focused viewing and Keep/Snooze/Never Purge decisions; route-level checks keep administration and deletion approval with admins.
 - v0.1.0 tagged 2026-10-04 after the Section 92 release checks: tests and lint, migration upgrade/check/downgrade/re-upgrade on a fresh database, and fresh-install and demo-mode startup with all main pages and API endpoints returning 200.

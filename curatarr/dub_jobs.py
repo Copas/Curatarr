@@ -388,7 +388,7 @@ def _dry_run(media) -> bool:
 def replace(state) -> str:
     """Blocklist the release in Radarr, delete the file, and search again."""
     e = _enrichment()
-    part, media = state.part, state.media
+    media = state.media
     if not media.radarr_id:
         raise ValueError("This film isn't in Radarr")
     if _dry_run(media):
