@@ -15,7 +15,7 @@
   <td>{{ kinds[row.kind] }}{% if row.kind == 'hidden' %}<br><small class="text-secondary">{{ 'credits' if row.segment.type == 'Credits' else row.segment.type|lower }} · {{ row.segment.source }}</small>{% endif %}</td>
   <td class="text-nowrap">{{ row.start|chapter_time }} – {{ row.end|chapter_time }}<br><small class="text-secondary">{{ ((row.end - row.start)|round|int) }} s</small></td>
   <td><small>{{ row.why }}</small></td>
-  <td><form method="post" action="{{ url_for('main.chapter_marker_undo', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="{{ row.kind }}"><input type="hidden" name="segment" value="{{ row.segment.id if row.segment else '' }}"><input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn btn-sm btn-outline-warning">Undo</button></form></td>
+  <td><form method="post" action="{{ url_for('main.chapter_marker_undo', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="{{ row.kind }}"><input type="hidden" name="segment" value="{{ row.segment.id if row.segment else '' }}"><input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn btn-sm btn-outline-warning" data-tip="Puts the skip markers back the way they were before Curatarr changed them.">Undo</button></form></td>
 </tr>{% endfor %}
 </tbody></table></div>
 {% else %}<div class="empty-state"><h2 class="h5">Nothing yet</h2><p class="mb-0">Skip-marker checks haven't marked or hidden anything{{ ' of this kind' if kind else '' }} yet.</p></div>{% endif %}

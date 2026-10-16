@@ -318,3 +318,5 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 @media (max-width: 575.98px) {
   .chip-row { flex-wrap: wrap; overflow: visible; }
 }
+.app-tip { position: absolute; z-index: 1080; max-width: min(20rem, calc(100vw - 16px)); padding: .45rem .65rem; border-radius: .5rem; background: var(--bs-emphasis-color); color: var(--app-bg); font-size: .82rem; line-height: 1.35; box-shadow: var(--app-shadow); pointer-events: none; }
+[data-tip] { -webkit-touch-callout: none; }

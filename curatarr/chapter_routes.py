@@ -127,6 +127,31 @@ def _enabled_libraries():
     }
 
 
+def _backlog(library_id):
+    """What "Process all…" would do: files without chapters it would add to the
+    queue, and those already queued or running (new files queue on their own
+    when a library processes new media or its whole library)."""
+    if library_id in (None, "all"):
+        library, targets = None, sorted(_enabled_libraries())
+    else:
+        library = db.session.get(Library, library_id)
+        if not library or not library.managed:
+            abort(404)
+        targets = [library.id]
+    addable = queued = 0
+    for target in targets:
+        query = needs_chapters_query(target)
+        addable += query.filter(ChapterState.job_state == "idle").count()
+        queued += query.filter(ChapterState.job_state != "idle").count()
+    return {
+        "library": library,
+        "targets": targets,
+        "addable": addable,
+        "queued": queued,
+        "name": library.name if library else "every library with chapters enabled",
+    }
+
+
 def _library_arg():
     library_id = request.args.get("library") or None
     if library_id and not db.session.get(Library, library_id):
@@ -142,6 +167,7 @@ def chapter_maintenance():
         "chapters.html",
         libraries=_managed_libraries(),
         library_id=library_id,
+        backlog=_backlog(library_id),
         summary=maintenance_summary(library_id),
         smart_blocked=smart_chapters_blocked(),
         activity=job_activity(),
@@ -168,6 +194,7 @@ def chapter_files():
         "chapter_files.html",
         libraries=_managed_libraries(),
         library_id=library_id,
+        backlog=_backlog(library_id),
         summary=maintenance_summary(library_id),
         file_label=file_label,
         candidates=candidates,
@@ -282,20 +309,8 @@ def chapter_upgrade():
 @bp.route("/chapters/libraries/<library_id>/process", methods=["GET", "POST"])
 def chapter_confirm_library(library_id):
     """Queue one library's backlog, or (library_id "all") every enabled one's."""
-    if library_id == "all":
-        library = None
-        targets = [
-            row.id
-            for row in _managed_libraries()
-            if effective_config(global_layer(), library_layers().get(row.id))["enabled"]
-        ]
-    else:
-        library = db.session.get(Library, library_id)
-        if not library or not library.managed:
-            abort(404)
-        targets = [library.id]
-    count = sum(needs_chapters_query(target).count() for target in targets)
-    name = library.name if library else "every library with chapters enabled"
+    backlog = _backlog(library_id)
+    library, count, name = backlog["library"], backlog["addable"], backlog["name"]
     if request.method == "POST":
         if request.form.get("confirm") != str(count):
             flash(
@@ -305,7 +320,7 @@ def chapter_confirm_library(library_id):
             return redirect(
                 url_for("main.chapter_confirm_library", library_id=library_id)
             )
-        queued = sum(queue_library(target) for target in targets)
+        queued = sum(queue_library(target) for target in backlog["targets"])
         flash(f"Queued {queued} files in {name} for chapters.", "success")
         return redirect(
             url_for("main.chapter_maintenance", library=library.id if library else None)
@@ -315,6 +330,7 @@ def chapter_confirm_library(library_id):
         library=library,
         name=name,
         count=count,
+        already_queued=backlog["queued"],
         summary=maintenance_summary(library.id if library else None),
         config=effective_config(
             global_layer(), library_layers().get(library.id) if library else None

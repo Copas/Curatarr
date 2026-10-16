@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Buttons explain what they'll do.** Hover over (or tab to) a button to see a tip; on a phone, press and hold. **Process all…** now counts only the files it would actually add: files that are already queued (with automatic processing they all are) aren't counted again, and when there's nothing left to add the button gives way to an "All N already queued" note.
+- **The chapter-job estimate goes by hours of video**, not file count, so a run of long films after short episodes no longer reads as a slowdown.
 - **A new interface layout.** The top bar is Overview, Review (with a count), Library, **Enhance**, Activity and **Settings** (formerly Manage), with a search box and a dry-run pill; the full dry-run notice stays on Review and the retention pages. Enhance gathers what was under Manage → Chapters into Progress, Files, Skip markers and English dubs tabs. Settings → Enhance is a set of collapsible feature cards with one-line summaries, switches and a save bar that stays on screen. One search page covers titles and what was said. On phones a bottom tab bar replaces the Menu toggle, with a More page for the rest, and Review cards keep Keep and Delete visible with the rest in a menu.
 - **Overview leads with what needs you**: titles leaving soon (with Keep), the review queue, films with no English audio (Replace / Keep), failed chapter jobs, integrations that aren't responding and unfinished setup; and a Library care card with coverage bars and what's running.
 - **Each title's page has an Enhancements panel**: per file (episodes grouped by season), its chapters, generated subtitles, the recap and preview Curatarr marked, skip markers it fixed, and its English-audio check.

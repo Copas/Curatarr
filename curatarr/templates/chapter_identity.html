@@ -11,8 +11,8 @@
     <div><a class="h5" href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}
       <div class="small text-secondary text-break">{{ state.part.file_path }}</div></div>
     <div class="d-flex gap-2">
-      {% if i.kind == 'audio' and i.english_track %}<form method="post" action="{{ url_for('main.chapter_identity_fix_audio', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-primary">Make English the default</button></form>{% endif %}
-      <form method="post" action="{{ url_for('main.chapter_identity_dismiss', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light">Dismiss</button></form>
+      {% if i.kind == 'audio' and i.english_track %}<form method="post" action="{{ url_for('main.chapter_identity_fix_audio', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-primary" data-tip="Marks the English audio track as the default in the file, so Jellyfin plays it first. Nothing is re-encoded.">Make English the default</button></form>{% endif %}
+      <form method="post" action="{{ url_for('main.chapter_identity_dismiss', state_id=state.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light" data-tip="Leaves the file as it is and stops listing it here.">Dismiss</button></form>
     </div>
   </div>
   {% if i.kind == 'audio' %}
