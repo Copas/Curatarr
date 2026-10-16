@@ -846,7 +846,42 @@ def resolve_missing_failures(limit=50) -> int:
             resolved += 1
     if rows:
         db.session.commit()
+    _recheck_unreachable_checks()
     return resolved
+
+
+UNREACHABLE_ERRORS = (
+    "wasn't found",
+    "Host is down",
+    "No such file",
+    "Input/output error",
+)
+
+
+def _recheck_unreachable_checks() -> None:
+    """Dub and file checks that ran while the file couldn't be read recorded an
+    error instead of a result; check those files again."""
+    from sqlalchemy import String, cast
+
+    for column, stamp in (
+        (ChapterState.dub_result, "dub_checked_at"),
+        (ChapterState.file_check, "file_checked_at"),
+    ):
+        text = cast(column, String)
+        rows = (
+            db.session.query(ChapterState)
+            .filter(
+                column.isnot(None),
+                or_(*(text.like(f"%{e}%") for e in UNREACHABLE_ERRORS)),
+            )
+            .limit(200)
+            .all()
+        )
+        for state in rows:
+            error = str((getattr(state, column.key) or {}).get("error") or "")
+            if any(e in error for e in UNREACHABLE_ERRORS):
+                setattr(state, stamp, None)
+    db.session.commit()
 
 
 _missing_tried: dict = {}
