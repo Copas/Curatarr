@@ -323,11 +323,14 @@ def _facts() -> dict:
         totals["minutes"] += stats["minutes"]
         totals["files"] += 1
         # Plain values: the result is cached past this request's session.
-        media = SimpleNamespace(id=media.id, title=media.title)
+        media = SimpleNamespace(
+            id=media.id, title=media.title, jellyfin_id=media.jellyfin_id
+        )
         part = SimpleNamespace(
             kind=part.kind,
             season_number=part.season_number,
             episode_number=part.episode_number,
+            jellyfin_id=part.jellyfin_id,
         )
         item = {"media": media, "part": part, "stats": stats}
         if part.kind == "movie_file":
