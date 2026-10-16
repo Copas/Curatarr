@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 from sqlalchemy import or_
 
-from . import db
+from . import catchphrases, db, services
 from .models import ChapterState, MediaIdentity, MediaPart
 
 SWEEP = 300  # transcripts counted per worker cycle
@@ -189,22 +189,9 @@ def words(text: str) -> list[str]:
     return re.findall(r"[a-z']+", (text or "").lower().replace("’", "'"))
 
 
-# Theme songs, intros and credits are said in every episode and would win
-# "catchphrase" (the Welcome Back, Kotter theme's "who'd have thought they'd"):
-# phrases count only away from the first and last minutes, and each keeps the
-# time it was first said, since a theme after a cold open comes at the same
-# point every episode while a real catchphrase doesn't.
-EDGE_SECONDS = 180
-SAME_SPOT_SECONDS = 45
-
-
 def count(segments) -> dict:
     """The numbers one transcript contributes."""
     total = Counter()
-    trigrams = Counter()
-    contexts = {}
-    segments = list(segments)
-    ends = max((segment.end for segment in segments), default=0)
     for segment in segments:
         text = segment.text or ""
         said = words(text)
@@ -223,25 +210,7 @@ def count(segments) -> dict:
                 total["swears"] += 1
             if VIOLENT.match(word):
                 total["violent"] += 1
-        if segment.start < EDGE_SECONDS or segment.end > ends - EDGE_SECONDS:
-            continue
-        for i in range(len(said) - 2):
-            gram = said[i : i + 3]
-            if (
-                sum(w not in STOP for w in gram) >= 2
-                and not FILLER & set(gram)
-                # Spelled-out letters ("the u s"), not words.
-                and all(len(w) > 1 or w in ("a", "i") for w in gram)
-            ):
-                joined_gram = " ".join(gram)
-                trigrams[joined_gram] += 1
-                contexts.setdefault(joined_gram, int(segment.start))
-    result = {key: round(value, 1) for key, value in total.items()}
-    # [phrase, seconds into the episode it was first said]
-    result["phrases"] = [
-        [g, contexts[g]] for g, n in trigrams.most_common(25) if n >= 2
-    ]
-    return result
+    return {key: round(value, 1) for key, value in total.items()}
 
 
 def _due():
@@ -309,6 +278,21 @@ def _rows():
     )
 
 
+def _episodes_watched() -> dict:
+    """{show id: episodes played to the end, counting each viewer}."""
+    from sqlalchemy import func
+
+    from .models import EpisodeUserState
+
+    return dict(
+        db.session.query(MediaPart.media_identity_id, func.count(EpisodeUserState.id))
+        .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
+        .filter(EpisodeUserState.played.is_(True))
+        .group_by(MediaPart.media_identity_id)
+        .all()
+    )
+
+
 def _per_hour(stats, key):
     hours = (stats.get("minutes") or 0) / 60
     return stats.get(key, 0) / hours if hours else 0
@@ -322,14 +306,7 @@ def _top(items, key, *, reverse=True, limit=SHOWN, keep=lambda item: True):
 
 def _facts() -> dict:
     films, episodes = [], []
-    shows = defaultdict(
-        lambda: {
-            "stats": Counter(),
-            "episodes": 0,
-            "phrases": Counter(),
-            "when": defaultdict(list),
-        }
-    )
+    shows = defaultdict(lambda: {"stats": Counter(), "episodes": 0})
     totals = Counter()
     for state, part, media in _rows():
         stats = dict(state.talk_stats)
@@ -363,12 +340,6 @@ def _facts() -> dict:
             show["stats"].update(
                 {k: v for k, v in stats.items() if isinstance(v, int | float)}
             )
-            for item in stats.get("phrases") or []:
-                if isinstance(item, str):
-                    continue  # counted before fingerprints; recounted soon
-                phrase, first_said = item
-                show["phrases"][phrase] += 1
-                show["when"][phrase].append(first_said)
     show_list = [
         {"media": s["media"], "stats": dict(s["stats"]), "episodes": s["episodes"]}
         for s in shows.values()
@@ -477,56 +448,13 @@ def _facts() -> dict:
     ]
     return {
         "categories": [c for c in categories if c["films"] or c["shows"]],
-        "catchphrases": _catchphrases(shows),
+        "catchphrases": catchphrases.pick(
+            services.setting(catchphrases.KEY, {}) or {},
+            {media_id: show["media"] for media_id, show in shows.items()},
+            services.setting(catchphrases.SPREAD_KEY),
+            _episodes_watched(),
+        ),
         "totals": dict(totals),
         "films": len(films),
         "episodes": len(episodes),
     }
-
-
-def _same_spot(times) -> bool:
-    """Said at about the same point in most episodes: a theme song or an intro."""
-    middle = sorted(times)[len(times) // 2]
-    near = sum(abs(t - middle) <= SAME_SPOT_SECONDS for t in times)
-    return len(times) >= 3 and near > len(times) / 2
-
-
-def _catchphrases(shows) -> list[dict]:
-    """Each show's phrase: said in many of its episodes and few other shows'."""
-    # How many shows say it at all (in two or more episodes): "wait a minute"
-    # and "a little bit" are everyone's, not one show's.
-    everywhere = Counter()
-    for show in shows.values():
-        everywhere.update({p for p, n in show["phrases"].items() if n >= 2})
-    found = []
-    for show in shows.values():
-        if show["episodes"] < MIN_EPISODES * 2:
-            continue
-        best = None
-        ranked = sorted(show["phrases"].items(), key=lambda kv: (-kv[1], kv[0]))
-        for phrase, in_episodes in ranked[:40]:
-            share = in_episodes / show["episodes"]
-            if share < 0.2 or in_episodes < 3:
-                break
-            if _same_spot(show["when"][phrase]):
-                continue
-            # Part of the show's own name ("Gervais" in The Ricky Gervais Show).
-            if set(phrase.split()) & set(words(show["media"].title)) - STOP:
-                continue
-            others = everywhere[phrase] - 1
-            if others >= 3:
-                continue
-            score = share / (1 + others) ** 2
-            if best is None or score > best[0]:
-                best = (score, phrase, in_episodes)
-        if best:
-            found.append(
-                {
-                    "media": show["media"],
-                    "phrase": best[1],
-                    "episodes": best[2],
-                    "of": show["episodes"],
-                }
-            )
-    found.sort(key=lambda f: -f["episodes"] / f["of"])
-    return found[:20]
