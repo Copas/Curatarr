@@ -8,6 +8,7 @@ Problems, where a file can be replaced through Radarr or Sonarr (its release
 blocklisted, the file deleted, a new search started) or kept.
 """
 
+import re
 import threading
 
 from flask import current_app
@@ -223,6 +224,11 @@ def _dry_run(media) -> bool:
     return bool(resolved_policy(media)[0]["dry_run"])
 
 
+# Release names marking one piece of a split film ("Part.1", "CD2"), as a
+# Radarr/Sonarr release-profile regular expression.
+SPLIT_RELEASE = r"/(^|[ ._\-\[(])(part|pt|cd|disc|disk)[ ._\-]?\d([ ._\-\])]|$)/i"
+
+
 def replace(state) -> str:
     """Blocklist the release, delete the file, and search again."""
     e = _enrichment()
@@ -233,10 +239,22 @@ def replace(state) -> str:
             "Turn dry run off, or replace it yourself"
         )
     blocklisted = None
+    # One part of a release split in several files: the same release's other
+    # parts, and other split releases, would come straight back.
+    split = any(
+        "split into parts" in (issue.get("text") or "")
+        for issue in (state.file_check or {}).get("issues") or []
+    ) and not re.search(  # "Deathly Hallows – Part 2": every release says so
+        r"(?i)\b(part|pt|cd|disc|disk)[ ._\-]?\d", media.title or ""
+    )
+    label = f"curatarr-split-{media.radarr_id or media.sonarr_id}"
+    name = f"Curatarr: whole {media.title}, not one part"
     if part.kind == "movie_file":
         if not media.radarr_id:
             raise ValueError("This film isn't in Radarr")
         radarr = client("radarr")
+        if split:
+            radarr.ignore_for_movie(media.radarr_id, label, SPLIT_RELEASE, name)
         movie = radarr.movie(media.radarr_id)
         grabs = radarr.grabs(media.radarr_id)
         if grabs:
@@ -251,6 +269,8 @@ def replace(state) -> str:
         if not part.sonarr_episode_id:
             raise ValueError("This episode isn't in Sonarr")
         sonarr = client("sonarr")
+        if split and media.sonarr_id:
+            sonarr.ignore_for_series(media.sonarr_id, label, SPLIT_RELEASE, name)
         grabs = sonarr.episode_grabs(part.sonarr_episode_id)
         if grabs:
             sonarr.mark_failed(grabs[0]["id"])
@@ -278,6 +298,8 @@ def replace(state) -> str:
     )
     db.session.commit()
     message = f"Deleted the file and asked {service} to find another release."
+    if split:
+        message += f" {service} now ignores releases split into parts for this title."
     if blocklisted:
         message += " The old release is blocklisted so it won't come back."
     else:
