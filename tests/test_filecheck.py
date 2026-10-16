@@ -365,6 +365,8 @@ def test_split_release_pattern():
     pattern = re.compile(filecheck_jobs.SPLIT_RELEASE[1:-2], re.IGNORECASE)
     assert pattern.search("The.Girl.Who.Kicked.the.Hornets.Nest.2009.Part.1.EXTENDED")
     assert pattern.search("Film.2009.CD2.avi")
+    assert pattern.search("The.Girl.Who.Kicked.the.Hornets.Nest.Part.II.2009.Extended")
+    assert not pattern.search("Pirates.2006") and not pattern.search("Partition.2007")
     assert not pattern.search("Party.Down.2009") and not pattern.search(
         "Part.Time.2010"
     )

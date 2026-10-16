@@ -226,7 +226,7 @@ def _dry_run(media) -> bool:
 
 # Release names marking one piece of a split film ("Part.1", "CD2"), as a
 # Radarr/Sonarr release-profile regular expression.
-SPLIT_RELEASE = r"/(^|[ ._\-\[(])(part|pt|cd|disc|disk)[ ._\-]?\d([ ._\-\])]|$)/i"
+SPLIT_RELEASE = r"/(^|[ ._\-\[(])(part|pt|cd|disc|disk)[ ._\-]?(\d|i{1,3}|iv)([ ._\-\])]|$)/i"
 
 
 def replace(state) -> str:
