@@ -175,3 +175,42 @@ def test_the_fun_facts_page_ranks_films_and_shows(app, client):
 
 def test_the_page_explains_itself_before_anything_is_transcribed(client):
     assert "Nothing counted yet" in client.get("/fun").text
+
+
+def test_every_ranking_is_a_rate(app, client):
+    """A show with hundreds of episodes mustn't win by length (The Simpsons and
+    its 177 "I love you"s)."""
+    tv = Library(jellyfin_library_id="t", name="TV", media_type="tv")
+    db.session.add(tv)
+    db.session.flush()
+    for n in range(1, 21):  # long-running, says it now and then
+        _transcribed(
+            app,
+            "Long Show",
+            "episode",
+            22,
+            ["I love you."] + ["Hi."] * 30,
+            library=tv,
+            episode=n,
+        )
+    for n in range(1, 4):  # short-lived, says it all the time
+        _transcribed(
+            app,
+            "Sweet Show",
+            "episode",
+            22,
+            ["I love you."] * 10,
+            library=tv,
+            episode=n,
+        )
+    trivia.sweep()
+    facts = trivia.facts()
+    for category in facts["categories"]:
+        assert "hour" in category["unit"] or "minute" in category["unit"], category[
+            "id"
+        ]
+    love = next(c for c in facts["categories"] if c["id"] == "love")
+    assert love["shows"][0]["media"].title == "Sweet Show"
+    page = client.get("/fun").text
+    assert "Swears an hour" in page and "I love you” an hour" in page
+    assert '"I love you"s' not in page and "“I love you”s" not in page
