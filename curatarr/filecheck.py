@@ -20,6 +20,7 @@ Only frames and a few seconds of the file are read; nothing is re-encoded.
 """
 
 import io
+import os
 import re
 import subprocess
 from itertools import pairwise
@@ -43,6 +44,10 @@ EVEN_BURNED_SHARE, EVEN_CLEAN_SHARE = 0.4, 0.2  # without a transcript
 SHORT_SHARE = 0.75  # of the listed runtime
 SILENT_END_SHARE = 0.6  # last speech before this share of a film's length
 DECODE_POINTS = 6
+# "Part.2", "CD1", "Disc 2": one piece of a film released in several files.
+SPLIT_PART = re.compile(
+    r"(?i)(?:^|[ ._\-\[(])(part|pt|cd|disc|disk)[ ._\-]?(\d)(?=[ ._\-\])]|$)"
+)
 TRUNCATED_AT = (0.8, 0.9)  # no picture at these shares of the length
 # Errors from a decoder, not notes about the container (an unused chapter
 # track, say), which ffmpeg also prints at error level.
@@ -232,11 +237,18 @@ def health(
     """Problems found, each {"kind", "text"} (and "at", seconds, where useful)."""
     issues = []
     if runtime_minutes and duration < SHORT_SHARE * runtime_minutes * 60:
+        split = SPLIT_PART.search(os.path.basename(path))
+        reason = (
+            f"the file name says it's {split.group(1).lower()} {split.group(2)} of a "
+            "release split into parts, so the rest of the film is missing"
+            if split
+            else "it may be cut short or a different version"
+        )
         issues.append(
             {
                 "kind": "short",
                 "text": f"Runs {round(duration / 60)} min, but it's listed as "
-                f"{runtime_minutes} min: it may be cut short or a different version",
+                f"{runtime_minutes} min: {reason}",
             }
         )
     # A subtitle or audio track often runs a little past the picture, so only a

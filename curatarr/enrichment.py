@@ -1971,13 +1971,22 @@ def file_label(state: ChapterState) -> str:
     return media.title
 
 
-def maintenance_failed_count() -> int:
-    return (
-        db.session.query(func.count(ChapterState.id))
+def failed_query(library_id=None):
+    """Files whose chapter job failed, including ones that couldn't be read at
+    all (no length): the tab badge, Overview and the Progress list all use it."""
+    query = (
+        db.session.query(ChapterState)
         .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
         .filter(ChapterState.chapter_status == "failed", MediaPart.has_file.is_(True))
-        .scalar()
     )
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    return query
+
+
+def maintenance_failed_count() -> int:
+    return failed_query().count()
 
 
 def maintenance_summary(library_id=None) -> dict:
@@ -2050,7 +2059,7 @@ def maintenance_summary(library_id=None) -> dict:
         "needing_subtitles": needing_subtitles,
         "short": by_status.get("skipped_short", 0),
         "unsupported": by_status.get("unsupported_container", 0),
-        "failed": by_status.get("failed", 0),
+        "failed": failed_query(library_id).count(),
         "removed": by_status.get("removed", 0),
         "transcription_estimate": needing_smart,
         "smart_upgradable": smart_upgrade_query(library_id).count(),

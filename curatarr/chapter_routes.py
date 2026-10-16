@@ -17,6 +17,7 @@ from .enrichment import (
     describe,
     dismiss_identity,
     environment_status,
+    failed_query,
     file_label,
     file_locations_known,
     fix_default_audio,
@@ -168,6 +169,10 @@ def chapter_maintenance():
         "chapters.html",
         libraries=_managed_libraries(),
         library_id=library_id,
+        failed=failed_query(library_id)
+        .order_by(ChapterState.updated_at.desc())
+        .limit(25)
+        .all(),
         backlog=_backlog(library_id),
         summary=maintenance_summary(library_id),
         smart_blocked=smart_chapters_blocked(),

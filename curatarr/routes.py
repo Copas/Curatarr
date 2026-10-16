@@ -685,8 +685,8 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "title": f"{failed} chapter job"
                 + ("s" if failed != 1 else "")
                 + " failed",
-                "detail": "See why on Enhance → Files",
-                "href": url_for("main.chapter_files"),
+                "detail": "See why on Enhance → Progress",
+                "href": url_for("main.chapter_maintenance") + "#failed",
             }
         )
     return needs

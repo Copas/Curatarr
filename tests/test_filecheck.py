@@ -292,3 +292,13 @@ def test_nothing_is_left_unsaved_while_frames_are_read(check_env, monkeypatch):
     _movie(PATH)
     filecheck_jobs.sweep()
     assert seen == [False]
+
+
+def test_a_short_file_named_as_one_part_says_so(monkeypatch):
+    monkeypatch.setattr(filecheck, "grab", lambda path, t, width=640: frame())
+    monkeypatch.setattr(filecheck, "_decode_errors", lambda path, t: False)
+    name = "/films/Film.2009.Part.2.EXTENDED.1080p.BluRay.mkv"
+    issue = filecheck.health(name, 93 * 60, 129, [], film=True)[0]
+    assert "part 2 of a release split into parts" in issue["text"]
+    other = filecheck.health("/films/Partisan.1080p.mkv", 93 * 60, 129, [], film=True)
+    assert "different version" in other[0]["text"]
