@@ -311,7 +311,8 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .tab-short { display: none; }
 @media (max-width: 575.98px) {
   .section-nav-fit { overflow: visible; gap: 0; }
-  .section-nav-fit a { flex: 1 1 0; min-width: 0; text-align: center; padding: .6rem .2rem; font-size: .9rem; }
+  .section-nav-fit a { flex: 1 1 auto; min-width: 0; text-align: center; padding: .6rem .2rem; font-size: .9rem; white-space: nowrap; }
+  .section-nav-fit .nav-badge { margin-left: .15rem; margin-right: 0; padding: 0 .3rem; }
   .section-nav-fit .tab-long { display: none; }
   .section-nav-fit .tab-short { display: inline; }
 }

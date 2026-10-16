@@ -2277,6 +2277,38 @@ def test_try_all_again(client, media_env):
     assert db.session.get(ChapterState, state.id).job_state == "queued"
 
 
+def test_try_all_again_includes_failed_files_queued_for_other_work(client, media_env):
+    """A failed file waiting for a marker check still counts as failed; the
+    button has to clear it, or the badge never goes down."""
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.chapter_status, state.chapter_error = "failed", "Something broke"
+    state.job_state, state.requested_action = "queued", "recap"
+    db.session.commit()
+    assert enrichment.maintenance_failed_count() == 1
+    client.post("/chapters/failed/retry-all")
+    db.session.expire_all()
+    assert enrichment.maintenance_failed_count() == 0
+
+
+def test_an_unreachable_file_waits_without_counting_as_failed(media_env):
+    """An old "not found" failure on a share that's still offline waits."""
+    files, arr = media_env
+    _library, _media, part = _movie()
+    arr.movie_record = None  # Radarr can't be asked either
+    state = enrichment.state_for(part)
+    state.chapter_status = "failed"
+    state.chapter_error = "The media file was not found at its expected path"
+    db.session.commit()
+    enrichment._missing_tried.clear()
+    enrichment.resolve_missing_failures()
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert (state.job_state, state.requested_action) == ("queued", "auto")
+    assert state.chapter_error == enrichment.UNREACHABLE
+    assert enrichment.maintenance_failed_count() == 0
+
+
 def test_checks_that_hit_an_offline_share_are_redone(media_env):
     _library, _media, part = _movie()
     state = enrichment.state_for(part)

@@ -789,11 +789,15 @@ def _resolve_missing(state, part, media) -> bool:
         if moved and moved != local_path(part.file_path) and file_exists(moved):
             part.file_path = arr_path
             state.job_state, state.next_attempt_at = "queued", None
-            state.chapter_error = None
+            state.chapter_status, state.chapter_error = "not_processed", None
+            state.requested_action = state.requested_action or "auto"
             return True
     if state.attempts >= MISSING_PATIENCE:
         return False
     state.attempts += 1
+    # Waiting, not failed: the Progress badge and Try all again count failures.
+    state.chapter_status = "not_processed"
+    state.requested_action = state.requested_action or "auto"
     state.job_state = "queued"
     state.next_attempt_at = utcnow() + timedelta(minutes=MISSING_RETRY_MINUTES)
     state.chapter_error = UNREACHABLE
@@ -914,7 +918,9 @@ def retry_all_failed() -> int:
         .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
         .filter(
             MediaPart.has_file.is_(True),
-            ChapterState.job_state == "idle",
+            # Queued ones too: a failed file waiting for a marker or dub check
+            # still counts as failed until its chapters are tried again.
+            ChapterState.job_state != "running",
             or_(
                 ChapterState.chapter_status == "failed",
                 ChapterState.subtitle_status == "failed",
