@@ -7,12 +7,23 @@ from curatarr.models import LifecycleAction, MediaIdentity, utcnow
 
 
 class _Sonarr:
-    def __init__(self):
+    def __init__(self, episodes=()):
         self.episode_searches, self.season_searches = [], []
-        self.series_monitored, self.episodes_monitored = [], []
+        self.monitored_series, self.episodes_monitored = [], []
+        self.listed, self.unmonitored = list(episodes), []
+
+    def series_monitored(self, _series_id):
+        return bool(self.monitored_series)
+
+    def episodes(self, _series_id):
+        return self.listed
+
+    def set_episodes_monitored(self, episode_ids, monitored):
+        assert monitored is False
+        self.unmonitored.extend(episode_ids)
 
     def monitor_series(self, series_id):
-        self.series_monitored.append(series_id)
+        self.monitored_series.append(series_id)
         return True
 
     def monitor_episode(self, episode_id):
@@ -50,7 +61,14 @@ def test_lists_shows_missing_always_keep_episodes(app):
 
 
 def test_search_once_asks_for_just_the_missing_episodes(app, client, monkeypatch):
-    sonarr = _Sonarr()
+    # Leftovers: monitored inside the unmonitored show, inert until it's monitored.
+    sonarr = _Sonarr(
+        [
+            {"id": 1002, "monitored": False},
+            {"id": 1004, "monitored": True},
+            {"id": 2001, "monitored": True},
+        ]
+    )
     monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: sonarr)
     media, _ = _show(
         "Gappy",
@@ -64,7 +82,9 @@ def test_search_once_asks_for_just_the_missing_episodes(app, client, monkeypatch
     ).text
     assert "Asked Sonarr to search" in page
     # Sonarr won't search an unmonitored show; only the missing episodes are monitored.
-    assert sonarr.series_monitored == [media.sonarr_id]
+    assert sonarr.monitored_series == [media.sonarr_id]
+    # ...so those are unmonitored first, or Sonarr would download them all.
+    assert sonarr.unmonitored == [1004, 2001]
     assert sorted(sonarr.episodes_monitored) == [1002, 1003]
     # Just these episodes: a season search would grab whole-season packs.
     assert sonarr.episode_searches == [[1002, 1003]] and sonarr.season_searches == []

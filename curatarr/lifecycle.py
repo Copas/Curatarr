@@ -1132,10 +1132,23 @@ def _execute_action(action_id):
         try:
             arr = client("sonarr")
             if action.payload_json.get("monitor_series"):
-                action.payload_json = action.payload_json | {
-                    "series_monitored": arr.monitor_series(
-                        action.payload_json["sonarr_id"]
+                series_id = action.payload_json["sonarr_id"]
+                if not arr.series_monitored(series_id):
+                    # Episodes left monitored inside an unmonitored show are
+                    # inert until the show is monitored, then Sonarr downloads
+                    # them all. Only the requested episodes should come.
+                    wanted = set(action.payload_json.get("episode_ids", []))
+                    quieted = sorted(
+                        episode["id"]
+                        for episode in arr.episodes(series_id)
+                        if episode.get("monitored") and episode["id"] not in wanted
                     )
+                    arr.set_episodes_monitored(quieted, False)
+                    action.payload_json = action.payload_json | {
+                        "unmonitored_others": quieted
+                    }
+                action.payload_json = action.payload_json | {
+                    "series_monitored": arr.monitor_series(series_id)
                 }
                 media.arr_monitored = True
             # Record what actually changed; most listed episodes are often
