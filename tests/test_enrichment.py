@@ -4,6 +4,7 @@ import time
 from datetime import timedelta
 
 import pytest
+from conftest import database_free
 
 from curatarr import db, enrichment
 from curatarr.chapters import Chapter
@@ -2293,7 +2294,7 @@ def test_checks_that_hit_an_offline_share_are_redone(media_env):
     assert state.dub_checked_at is None and state.file_checked_at is None
 
 
-def test_radarr_is_never_asked_while_changes_are_unsaved(media_env, monkeypatch):
+def test_radarr_is_never_asked_while_changes_are_unsaved(app, media_env, monkeypatch):
     """Unsaved changes hold SQLite's write lock; the web app would wait on it."""
     _files, arr = media_env
     seen = []
@@ -2316,7 +2317,7 @@ def test_radarr_is_never_asked_while_changes_are_unsaved(media_env, monkeypatch)
     real = enrichment._arr_file
 
     def watched(part, media):
-        seen.append(bool(db.session.new or db.session.dirty))
+        seen.append(not database_free(app))
         return real(part, media)
 
     monkeypatch.setattr(enrichment, "_arr_file", watched)

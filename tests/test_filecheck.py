@@ -2,6 +2,7 @@ import subprocess
 from types import SimpleNamespace
 
 import pytest
+from conftest import database_free
 from PIL import Image, ImageDraw, ImageFont
 from test_enrichment import _movie
 
@@ -280,12 +281,12 @@ def test_a_real_cut_off_download_is_found(tmp_path):
     assert kinds == ["truncated"]
 
 
-def test_nothing_is_left_unsaved_while_frames_are_read(check_env, monkeypatch):
+def test_nothing_is_left_unsaved_while_frames_are_read(app, check_env, monkeypatch):
     """Unsaved changes hold SQLite's write lock; the web app would wait on it."""
     seen = []
 
     def health(*args, **kwargs):
-        seen.append(bool(db.session.new or db.session.dirty))
+        seen.append(not database_free(app))
         return []
 
     monkeypatch.setattr(filecheck, "health", health)

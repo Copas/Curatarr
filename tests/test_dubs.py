@@ -1,4 +1,5 @@
 import pytest
+from conftest import database_free
 from test_enrichment import _movie
 
 from curatarr import db, dub_jobs, dubs, enrichment
@@ -253,7 +254,7 @@ def test_removable_keeps_english_and_unclear_tracks():
     assert dubs.removable(unsure, streams) == {"audio": [], "subtitles": []}
 
 
-def test_other_languages_are_removed_only_when_switched_on(dub_env, monkeypatch):
+def test_other_languages_are_removed_only_when_switched_on(app, dub_env, monkeypatch):
     radarr, files = dub_env
     radarr.original = "English"
     radarr.audio = "eng/ita"
@@ -262,6 +263,8 @@ def test_other_languages_are_removed_only_when_switched_on(dub_env, monkeypatch)
     removed = []
 
     def remove(path, info, drop, default):
+        # Minutes of copying: nothing may be left unsaved (it holds SQLite's lock).
+        assert database_free(app)
         removed.append((sorted(drop), default))
         return MediaInfo(
             path=path, size=800, mtime=2.0, duration=6000.0, format_name="matroska,webm"
