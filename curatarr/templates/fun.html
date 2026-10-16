@@ -2,7 +2,7 @@
 {% block title %}Fun facts · Library · Curatarr{% endblock %}
 {% macro number(value) %}{{ ('%.1f'|format(value)) if value < 10 and value != value|int else (value|round|int|commas) }}{% endmacro %}
 {% macro label(item) %}{% if item.part and item.part.kind == 'episode' %}{{ item.media.title }} · S{{ '%02d'|format(item.part.season_number or 0) }}E{{ '%02d'|format(item.part.episode_number or 0) }}{% else %}{{ item.media.title }}{% endif %}{% endmacro %}
-{% macro ranking(items, value, unit) %}<ol class="fun-list">{% for item in items %}<li><a href="{{ url_for('main.title', media_id=item.media.id) }}">{{ label(item) }}</a><span class="fun-value">{{ number(value(item)) }} <small>{{ unit }}</small></span></li>{% endfor %}</ol>{% endmacro %}
+{% macro ranking(items, value, unit) %}<ol class="fun-list">{% for item in items %}<li><span class="fun-name"><a href="{{ url_for('main.title', media_id=item.media.id) }}">{{ label(item) }}</a>{{ jellyfin_link_for(item.media) }}</span><span class="fun-value">{{ number(value(item)) }} <small>{{ unit }}</small></span></li>{% endfor %}</ol>{% endmacro %}
 {% block content %}
 {% set t = facts.totals %}
 <header class="page-heading"><div><div class="eyebrow">Library</div><h1>Fun facts</h1><p class="text-secondary mb-0">Superlatives from what's actually said in your films and shows, all per hour or per minute so long-running shows don't win by length, counted from Curatarr's transcripts: {{ facts.films|commas }} film{{ '' if facts.films == 1 else 's' }} and {{ facts.episodes|commas }} episode{{ '' if facts.episodes == 1 else 's' }} so far. More join as they're transcribed.{% if t.other_language %} {{ t.other_language|commas }} transcript{{ '' if t.other_language == 1 else 's' }} in other languages {{ 'is' if t.other_language == 1 else 'are' }} left out, since every count looks for English words.{% endif %}</p></div></header>
@@ -25,6 +25,6 @@
 </section>{% endfor %}
 </div>
 {% if facts.catchphrases %}<section class="card p-3 mt-4" id="catchphrases"><h2 class="h5 mb-0">Catchphrases</h2><p class="small text-secondary">The longest phrase each show says across its episodes, leaving out theme songs, the show's own name and everyday English. Shows you watch most come first.</p>
-<ul class="fun-list fun-phrases">{% for c in facts.catchphrases %}<li><a href="{{ url_for('main.title', media_id=c.media.id) }}">{{ c.media.title }}</a><span class="fun-value">“{{ c.phrase }}” <small>in {{ c.episodes }} of {{ c.of }} episodes</small></span></li>{% endfor %}</ul></section>{% endif %}
+<ul class="fun-list fun-phrases">{% for c in facts.catchphrases %}<li><span class="fun-name"><a href="{{ url_for('main.title', media_id=c.media.id) }}">{{ c.media.title }}</a>{{ jellyfin_link_for(c.media) }}</span><span class="fun-value">“{{ c.phrase }}” <small>in {{ c.episodes }} of {{ c.of }} episodes</small></span></li>{% endfor %}</ul></section>{% endif %}
 {% endif %}
 {% endblock %}

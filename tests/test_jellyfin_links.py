@@ -70,3 +70,53 @@ def test_no_link_without_a_jellyfin_integration(app, client):
     db.session.commit()
     page = client.get(f"/titles/{media.id}").get_data(as_text=True)
     assert "Open in Jellyfin" not in page and "jf-link" not in page
+
+
+def test_newer_pages_link_every_title_too(app, client):
+    """Fun facts, search, Overview's Needs you and Progress's activity."""
+    from datetime import timedelta
+
+    from curatarr import trivia
+    from curatarr.models import ChapterState, utcnow
+
+    media, part = _setup()
+    media.sonarr_id, media.arr_monitored = 9, False
+    part.has_file = False  # an always-keep episode that never arrived
+    part.sonarr_episode_id, part.air_date = 99, utcnow() - timedelta(days=400)
+    state = ChapterState(
+        media_part_id=part.id,
+        media_identity_id=media.id,
+        job_state="queued",
+        next_attempt_at=utcnow() + timedelta(minutes=10),
+        chapter_error="Waiting: the file can't be reached right now",
+    )
+    db.session.add(state)
+    db.session.commit()
+    link = "details?id=abc123"
+    assert link in client.get("/").get_data(as_text=True)  # Needs you
+    assert link in client.get("/search?q=Cardinal").get_data(as_text=True)
+    assert "details?id=ep456" in client.get("/chapters").get_data(as_text=True)
+    trivia._cache["facts"] = (
+        1e18,
+        {
+            "totals": {
+                "files": 1,
+                "minutes": 60,
+                "words": 10,
+                "swears": 0,
+                "f_words": 0,
+                "love": 0,
+                "panic": 0,
+            },
+            "films": 0,
+            "episodes": 1,
+            "categories": [],
+            "catchphrases": [
+                {"media": media, "phrase": "never gonna", "episodes": 3, "of": 4}
+            ],
+        },
+    )
+    try:
+        assert link in client.get("/fun").get_data(as_text=True)
+    finally:
+        trivia._cache.clear()

@@ -336,7 +336,7 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .fun-list li { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; padding: .3rem 0; border-top: 1px solid var(--app-border); counter-increment: fun; }
 .fun-list li:first-child { border-top: 0; }
 .fun-card .fun-list li::before { content: counter(fun); color: var(--app-muted); font-size: .8rem; min-width: 1rem; }
-.fun-list li a { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fun-list li .fun-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .fun-value { font-weight: 600; white-space: nowrap; text-align: right; }
 .fun-value small { font-weight: 400; color: var(--app-muted); }
 .fun-phrases li { flex-direction: column; align-items: stretch; gap: .1rem; }
