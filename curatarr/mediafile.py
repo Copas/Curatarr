@@ -270,6 +270,28 @@ def set_default_audio(path: str, info: MediaInfo, stream_index: int) -> None:
     _mkvpropedit(args)
 
 
+def set_audio_language(
+    path: str, info: MediaInfo, stream_index: int, language: str, ietf: str
+) -> None:
+    """Relabel one audio track's language (ISO 639-2 and IETF), in place."""
+    audio = [s["index"] for s in info.streams if s.get("codec_type") == "audio"]
+    if stream_index not in audio:
+        raise MediaToolError("That isn't an audio track in this file")
+    number = audio.index(stream_index) + 1
+    _mkvpropedit(
+        [
+            required_tool("mkvpropedit"),
+            path,
+            "--edit",
+            f"track:a{number}",
+            "--set",
+            f"language={language}",
+            "--set",
+            f"language-ietf={ietf}",
+        ]
+    )
+
+
 def remove_chapters(path: str) -> None:
     _mkvpropedit(remove_command(path))
 

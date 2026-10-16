@@ -428,6 +428,31 @@ class RadarrClient(Client):
     def diskspace(self):
         return self.request("GET", "/api/v3/diskspace")
 
+    def grabs(self, movie_id):
+        """The movie's download history, newest first, grabs only."""
+        rows = self.request(
+            "GET",
+            "/api/v3/history/movie",
+            params={"movieId": movie_id, "eventType": 1},
+        )
+        return sorted(rows or [], key=lambda r: r.get("date") or "", reverse=True)
+
+    def mark_failed(self, history_id):
+        """Blocklist the release behind a grab, so it isn't downloaded again."""
+        return self.request(
+            "POST", f"/api/v3/history/failed/{history_id}", destructive=True
+        )
+
+    def delete_movie_file(self, file_id):
+        return self.request("DELETE", f"/api/v3/moviefile/{file_id}", destructive=True)
+
+    def search_movie(self, movie_id):
+        return self.request(
+            "POST",
+            "/api/v3/command",
+            json={"name": "MoviesSearch", "movieIds": [movie_id]},
+        )
+
     def delete_movie(self, movie_id):
         return self.request(
             "DELETE",

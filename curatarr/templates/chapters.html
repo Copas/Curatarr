@@ -2,7 +2,7 @@
 {% block title %}Chapter maintenance · Curatarr{% endblock %}
 {% block content %}
 <div class="eyebrow">Manage</div><h1>Chapter maintenance</h1>
-<p class="text-secondary">Find files in your existing library that have no chapters, preview what would be added, and process only what you choose. Scanning only reads files. <a href="{{ url_for('main.chapter_settings') }}">Chapter settings</a> · <a href="{{ url_for('main.chapter_markers') }}">Review skip markers</a></p>
+<p class="text-secondary">Find files in your existing library that have no chapters, preview what would be added, and process only what you choose. Scanning only reads files. <a href="{{ url_for('main.chapter_settings') }}">Chapter settings</a> · <a href="{{ url_for('main.chapter_markers') }}">Review skip markers</a> · <a href="{{ url_for('main.chapter_dubs') }}">English dubs</a></p>
 {% if smart_blocked %}<div class="alert alert-danger"><strong>Smart Chapters is stopped.</strong> This install doesn't include faster-whisper, so it can't transcribe. Chapter jobs in Smart libraries are waiting instead of getting Navigation chapters. Reinstall with <code>sudo env EXTRAS=chapters-gpu ./scripts/install.sh</code>.</div>{% endif %}
 <div class="d-flex flex-wrap gap-2 mb-3" aria-label="Library">
   <a class="btn btn-sm {{ 'btn-primary' if not library_id else 'btn-outline-light' }}" href="{{ url_for('main.chapter_maintenance') }}">All libraries</a>
@@ -24,6 +24,7 @@
     {{ stat('Recaps marked', summary.recaps_found, '"previously on", skippable') }}
     {{ stat('Previews marked', summary.previews_found, '"next time on", skippable') }}
     {{ stat('Bad skip markers hidden', summary.markers_hidden, 'Intro Skipper guesses that were wrong') }}
+    {% if summary.dubs_fixed %}{{ stat('Dubbed films fixed', summary.dubs_fixed, 'English track labelled or made the default') }}{% endif %}
   </div>
   {{ coverage('Files with chapters', summary.existing, summary.generated, summary.chapters_possible, 'files', 'already had them', 'added by Curatarr') }}
   {{ coverage('Files with English subtitles', summary.subtitles_existing, summary.subtitles_generated, summary.subtitles_possible, 'files', 'already had them', 'added by Curatarr') }}
@@ -40,6 +41,7 @@
       {{ stat('Redo with Smart Chapters', summary.smart_upgradable, 'got Navigation chapters' if summary.smart_upgradable else None, True) }}
       {{ stat('Failed', summary.failed, 'reasons listed below' if summary.failed else None, True) }}
       {% if summary.identity_issues %}<div class="stat-todo"><h3 class="stat-label mb-0"><a href="{{ url_for('main.chapter_identity') }}">Possible wrong episodes</a></h3><p class="stat-value mb-0">{{ summary.identity_issues|commas }}</p><p class="stat-hint mb-0">transcript fits another episode, or isn't English</p></div>{% endif %}
+      {% if summary.dubs_to_act %}<div class="stat-todo"><h3 class="stat-label mb-0"><a href="{{ url_for('main.chapter_dubs') }}">Films with no English audio</a></h3><p class="stat-value mb-0">{{ summary.dubs_to_act|commas }}</p><p class="stat-hint mb-0">labelled English, but they aren't</p></div>{% endif %}
       {{ stat('Episodes to check skip markers', summary.recaps_to_check, ((summary.recaps_to_check - summary.recaps_unqueued)|commas ~ ' queued') if summary.recaps_to_check > summary.recaps_unqueued else None, True) }}
     </div>
     <div class="d-flex flex-wrap gap-2 mt-3">
