@@ -292,6 +292,80 @@ def set_audio_language(
     )
 
 
+def remove_tracks(
+    path: str, info: MediaInfo, drop: list[int], default_audio: int
+) -> MediaInfo:
+    """Rewrite the file without some tracks (a copy, never a re-encode).
+
+    The copy is written beside the file, checked (same length, chapters and
+    video, the expected audio and subtitles) and only then moved over it.
+    """
+    merge = required_tool("mkvmerge")
+    listing = _run([merge, "-J", path], timeout=120)
+    if listing.returncode not in (0, 1):
+        raise MediaToolError("mkvmerge could not read the file")
+    tracks = json.loads(listing.stdout or "{}").get("tracks") or []
+    # ffprobe's stream indexes and mkvmerge's track ids follow the same order;
+    # match them per type by position rather than assume the numbers agree.
+    ids = {}
+    for kind, probe_kind in (("audio", "audio"), ("subtitles", "subtitle")):
+        ours = [s["index"] for s in info.streams if s.get("codec_type") == probe_kind]
+        theirs = [t["id"] for t in tracks if t.get("type") == kind]
+        if len(ours) != len(theirs):
+            raise MediaToolError("The file's tracks didn't match up; left unchanged")
+        ids.update(zip(ours, theirs, strict=True))
+    audio = [s["index"] for s in info.streams if s.get("codec_type") == "audio"]
+    subtitles = [s["index"] for s in info.streams if s.get("codec_type") == "subtitle"]
+    keep_audio = [i for i in audio if i not in drop]
+    keep_subtitles = [i for i in subtitles if i not in drop]
+    if default_audio not in keep_audio:
+        raise MediaToolError("That would remove the English audio; left unchanged")
+    folder = os.path.dirname(path)
+    free = shutil.disk_usage(folder).free
+    if free < info.size * 1.1:
+        raise MediaToolError("Not enough free space beside the file to rewrite it")
+    target = os.path.join(folder, f".{os.path.basename(path)}.curatarr-partial")
+    args = [
+        merge,
+        "-o",
+        target,
+        "--audio-tracks",
+        ",".join(str(ids[i]) for i in keep_audio),
+    ]
+    if keep_subtitles:
+        args += ["--subtitle-tracks", ",".join(str(ids[i]) for i in keep_subtitles)]
+    else:
+        args += ["--no-subtitles"]
+    for index in keep_audio:
+        args += [
+            "--default-track-flag",
+            f"{ids[index]}:{'1' if index == default_audio else '0'}",
+        ]
+    args.append(path)
+    try:
+        result = throttle.run(args, timeout=4 * 3600)
+        if result.returncode not in (0, 1) or not os.path.exists(target):
+            raise MediaToolError(
+                "mkvmerge failed: "
+                + (result.stdout.strip().splitlines() or ["unknown error"])[-1][:200]
+            )
+        after = probe(target)
+        count = lambda i, kind: sum(1 for s in i.streams if s.get("codec_type") == kind)
+        if (
+            abs(after.duration - info.duration) > 2
+            or len(after.chapters) != len(info.chapters)
+            or count(after, "video") != count(info, "video")
+            or count(after, "audio") != len(keep_audio)
+            or count(after, "subtitle") != len(keep_subtitles)
+        ):
+            raise MediaToolError("The rewritten file didn't check out; left unchanged")
+        os.replace(target, path)
+    finally:
+        if os.path.exists(target):
+            os.unlink(target)
+    return probe(path)
+
+
 def remove_chapters(path: str) -> None:
     _mkvpropedit(remove_command(path))
 

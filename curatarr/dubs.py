@@ -165,6 +165,25 @@ def plan(streams: list[dict], heard_by_track: dict) -> dict:
     return {"verdict": verdict, "tracks": tracks, "actions": actions}
 
 
+def removable(result: dict, streams: list[dict]) -> dict:
+    """Tracks in other languages that can go, with a real English track kept.
+
+    Audio goes only when it was heard clearly in another language; a track
+    that couldn't be made out stays. Subtitles go by their label (they can't
+    be listened to); English and unlabelled ones stay.
+    """
+    if result["verdict"] != "english":
+        return {"audio": [], "subtitles": []}
+    audio = [t["index"] for t in result["tracks"] if t["heard"] and t["heard"] != "en"]
+    subtitles = [
+        s["index"]
+        for s in streams
+        if s.get("codec_type") == "subtitle"
+        and code(s.get("language")) not in (None, "en")
+    ]
+    return {"audio": audio, "subtitles": subtitles}
+
+
 def sample_times(duration: float) -> list[float]:
     return [round(duration * p, 1) for p in POSITIONS[:CLIPS]]
 
