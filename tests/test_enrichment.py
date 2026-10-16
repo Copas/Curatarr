@@ -7,6 +7,7 @@ import pytest
 
 from curatarr import db, enrichment
 from curatarr.chapters import Chapter
+from curatarr.integrations import IntegrationError
 from curatarr.mediafile import MediaInfo
 from curatarr.models import (
     ChapterState,
@@ -84,6 +85,17 @@ class FakeArr:
 
     def refresh_item(self, item_id):
         self.refreshed.append(item_id)
+
+    movie_record = None  # what Radarr says about the film; None: Radarr unreachable
+    searched: tuple = ()
+
+    def movie(self, movie_id):
+        if self.movie_record is None:
+            raise IntegrationError("Radarr unavailable")
+        return self.movie_record
+
+    def search_movie(self, movie_id):
+        self.searched = (*self.searched, movie_id)
 
 
 @pytest.fixture(autouse=True)
@@ -2124,3 +2136,71 @@ def test_failed_files_are_counted_and_listed_alike(client, media_env):
     assert enrichment.maintenance_summary()["failed"] == 1
     page = client.get("/chapters").text
     assert 'id="failed"' in page and "The media file was not found" in page
+
+
+def _queued_missing(arr, files, movie_record):
+    _library, _media, part = _movie()
+    _navigation(_library)
+    arr.movie_record = movie_record
+    state = enrichment.request(part, "generate")
+    return part, state
+
+
+def test_a_file_radarr_also_lost_is_not_a_failure(media_env):
+    """Replaced for having no English audio: wait for the next copy, quietly."""
+    files, arr = media_env
+    part, state = _queued_missing(arr, files, {"id": 7, "hasFile": False})
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert state.chapter_status == "not_processed" and state.job_state == "idle"
+    assert (
+        not state.chapter_error and db.session.get(MediaPart, part.id).has_file is False
+    )
+    assert enrichment.maintenance_failed_count() == 0
+
+
+def test_a_renamed_file_is_followed(media_env):
+    files, arr = media_env
+    part, state = _queued_missing(
+        arr,
+        files,
+        {
+            "id": 7,
+            "hasFile": True,
+            "movieFile": {"path": "/movies/Film (2020)/Film.v2.mkv"},
+        },
+    )
+    files.add("/movies/Film (2020)/Film.v2.mkv")
+    enrichment.dispatch(synchronous=True)
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert db.session.get(MediaPart, part.id).file_path.endswith("Film.v2.mkv")
+    assert state.chapter_status != "failed"
+
+
+def test_an_unexplained_missing_file_still_fails_and_has_controls(client, media_env):
+    files, arr = media_env
+    _part, state = _queued_missing(arr, files, None)  # Radarr can't be asked
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert state.chapter_status == "failed"
+    page = client.get("/chapters").text
+    assert "Find another copy" in page and "Try again" in page and "Ignore" in page
+    arr.movie_record = {"id": 7, "hasFile": False}
+    client.post(f"/chapters/failed/{state.id}/search")
+    assert arr.searched == (7,)
+    client.post(f"/chapters/failed/{state.id}/ignore")
+    assert enrichment.maintenance_failed_count() == 0
+
+
+def test_old_missing_file_failures_are_cleared_with_radarr(media_env):
+    files, arr = media_env
+    _queued_missing(arr, files, None)
+    enrichment.dispatch(synchronous=True)
+    arr.movie_record = {"id": 7, "hasFile": False}
+    enrichment._missing_tried.clear()
+    assert enrichment.resolve_missing_failures() == 1
+    assert enrichment.maintenance_failed_count() == 0

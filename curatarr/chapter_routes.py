@@ -526,6 +526,58 @@ def chapter_dub_action(state_id, action):
     return redirect(url_for("main.chapter_dubs"))
 
 
+@bp.post("/chapters/failed/<state_id>/<action>")
+def chapter_failed_action(state_id, action):
+    """Controls for a failed chapter job: try again, find another copy, ignore."""
+    from . import enrichment
+    from .enrichment import request as request_action
+
+    client = enrichment.client
+    state = db.session.get(ChapterState, state_id)
+    if (
+        not state
+        or state.chapter_status != "failed"
+        or action
+        not in {
+            "retry",
+            "search",
+            "ignore",
+        }
+    ):
+        abort(404)
+    part, media = state.part, state.media
+    try:
+        if action == "retry":
+            request_action(part, "generate")
+            flash(
+                f"Trying {file_label(state)} again. If the file has gone, Curatarr "
+                "checks with Radarr or Sonarr and waits for the next copy.",
+                "success",
+            )
+        elif action == "search":
+            if part.kind == "movie_file" and media.radarr_id:
+                client("radarr").search_movie(media.radarr_id)
+                flash(f"Radarr is searching for {media.title}.", "success")
+            elif part.kind == "episode" and part.sonarr_episode_id:
+                client("sonarr").episode_search([part.sonarr_episode_id])
+                flash(f"Sonarr is searching for {file_label(state)}.", "success")
+            else:
+                flash("Radarr and Sonarr don't know this file.", "warning")
+        else:
+            state.chapter_status, state.chapter_error = "ignored", None
+            state.job_state, state.next_attempt_at = "idle", None
+            db.session.commit()
+            flash(
+                f"Ignored. {file_label(state)} won't get chapters unless it's "
+                "replaced or you ask from its page.",
+                "success",
+            )
+    except (IntegrationError, ValueError) as exc:
+        db.session.rollback()
+        flash(f"Couldn't do that: {exc}", "danger")
+    return redirect(url_for("main.chapter_maintenance") + "#failed")
+
+
 @bp.get("/chapters/problems")
 def chapter_problems():
     """Burned-in subtitles and broken files (filecheck.py)."""

@@ -731,6 +731,84 @@ def _transcriber_missing(info, config) -> bool:
     )
 
 
+def _arr_file(part, media):
+    """(has a file, its path) according to Radarr or Sonarr, or None if unknown."""
+    try:
+        if part.kind == "movie_file" and media.radarr_id:
+            movie = client("radarr").movie(media.radarr_id) or {}
+            return bool(movie.get("hasFile")), (movie.get("movieFile") or {}).get(
+                "path"
+            )
+        if part.kind == "episode" and part.sonarr_episode_id:
+            sonarr = client("sonarr")
+            episode = (
+                sonarr.request("GET", f"/api/v3/episode/{part.sonarr_episode_id}") or {}
+            )
+            if not episode.get("hasFile"):
+                return False, None
+            file = (
+                sonarr.request("GET", f"/api/v3/episodefile/{episode['episodeFileId']}")
+                or {}
+            )
+            return True, file.get("path")
+    except (IntegrationError, KeyError):
+        return None
+    return None
+
+
+def _resolve_missing(state, part, media) -> bool:
+    """A job's file isn't there. Not a failure if Radarr or Sonarr agree it's
+    gone (replaced, deleted) or know where it went (renamed, upgraded).
+
+    Gone: the file is marked as having no copy and the job closes quietly; the
+    next import is processed as new. Moved: the new path is recorded and the
+    job runs again. Returns False when nothing explains it (a real failure).
+    """
+    known = _arr_file(part, media)
+    if known is None:
+        return False
+    has_file, arr_path = known
+    if has_file and arr_path:
+        moved = local_path(arr_path)
+        if not moved or moved == local_path(part.file_path) or not file_exists(moved):
+            return False
+        part.file_path = arr_path
+        state.job_state, state.next_attempt_at = "queued", None
+        state.chapter_error = None
+        return True
+    part.has_file = False
+    _finish(state, "not_processed")
+    state.chapter_processed_at = None  # the next copy is new to Curatarr
+    state.attempts = 0
+    return True
+
+
+def resolve_missing_failures(limit=20) -> int:
+    """Failures recorded before Curatarr checked with Radarr and Sonarr."""
+    rows = (
+        failed_query()
+        .filter(ChapterState.chapter_error.like("The media file was not found%"))
+        .filter(ChapterState.id.notin_(list(_missing_tried) or [""]))
+        .limit(limit)
+        .all()
+    )
+    resolved = 0
+    for state in rows:
+        _missing_tried.add(state.id)
+        part, media = state.part, state.media
+        path = local_path(part.file_path)
+        if path and file_exists(path):
+            continue
+        if _resolve_missing(state, part, media):
+            resolved += 1
+    if rows:
+        db.session.commit()
+    return resolved
+
+
+_missing_tried: set = set()
+
+
 def _defer(state, reason):
     state.job_state = "queued"
     state.next_attempt_at = utcnow() + timedelta(minutes=DEFER_MINUTES)
@@ -789,6 +867,10 @@ def run_job(state_id: str, *, llm=None) -> str:
     except ChapterConfigError as exc:
         _fail(state, f"Invalid chapter settings: {exc}", retry=False)
         db.session.commit()
+        return state.chapter_status
+    if (not path or not file_exists(path)) and _resolve_missing(state, part, media):
+        db.session.commit()
+        _log("file_gone", **fields)
         return state.chapter_status
     if action in SUBTITLE_ACTIONS:
         return run_subtitles(state, action, part, media, path, config, opts)
@@ -1177,6 +1259,8 @@ def _chain_subtitles(state_id):
     state = db.session.get(ChapterState, state_id)
     if not state or state.job_state != "idle" or state.subtitle_status is not None:
         return
+    if state.part is None or not state.part.has_file:
+        return  # the file has gone (replaced or deleted); the next copy starts afresh
     try:
         enabled = config_for(state.media.library_id)["subtitles"]["enabled"]
     except ChapterConfigError:
@@ -1206,6 +1290,7 @@ def _chain_recap(state_id):
         or state.job_state != "idle"
         or state.markers_checked_at is not None
         or state.part is None
+        or not state.part.has_file
         or state.part.kind != "episode"
         or not _smart(state)
     ):
