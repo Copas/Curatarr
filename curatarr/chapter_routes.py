@@ -605,16 +605,42 @@ def chapter_failed_action(state_id, action):
 @bp.get("/chapters/problems")
 def chapter_problems():
     """Burned-in subtitles and broken files (filecheck.py)."""
-    from . import filecheck_jobs, missing_keep
+    from . import filecheck_jobs, missing_keep, wrong_version
 
     return render_template(
         "chapter_problems.html",
         missing_shows=missing_keep.rows(),
+        wrong_shows=wrong_version.rows(),
         found=filecheck_jobs.review(),
         enabled=filecheck_jobs.enabled(),
         describe=filecheck_jobs.describe,
         file_label=file_label,
     )
+
+
+@bp.post("/chapters/problems/version/<media_id>/<action>")
+def wrong_version_action(media_id, action):
+    """Replace a show's files that are another show, or say it's the right one."""
+    from . import wrong_version
+
+    media = db.session.get(MediaIdentity, media_id)
+    if not media or action not in ("replace", "dismiss"):
+        abort(404)
+    try:
+        if action == "replace":
+            flash(wrong_version.replace(media), "success")
+        else:
+            wrong_version.dismiss(media)
+            flash(
+                f"Kept. {media.title} won't be listed unless its files change.",
+                "success",
+            )
+    except (IntegrationError, ValueError) as exc:
+        db.session.rollback()
+        flash(f"Couldn't do that: {exc}", "danger")
+    if request.form.get("back") == "overview":
+        return redirect(url_for("main.overview"))
+    return redirect(url_for("main.chapter_problems"))
 
 
 @bp.post("/chapters/problems/show/<media_id>/<action>")

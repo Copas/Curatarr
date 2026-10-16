@@ -351,6 +351,38 @@ class SonarrClient(Client):
             json={"episodeIds": sorted(episode_ids), "monitored": monitored},
         )
 
+    def ignore_for_series(self, series_id, label, pattern, name):
+        """Make Sonarr ignore releases matching `pattern` for this series only:
+        a release profile limited to a tag that only this series has."""
+        tags = self.request("GET", "/api/v3/tag")
+        tag = next((t for t in tags if t.get("label") == label), None) or self.request(
+            "POST", "/api/v3/tag", json={"label": label}
+        )
+        profiles = self.request("GET", "/api/v3/releaseprofile")
+        profile = next(
+            (p for p in profiles if tag["id"] in (p.get("tags") or [])), None
+        )
+        if profile is None:
+            self.request(
+                "POST",
+                "/api/v3/releaseprofile",
+                json={
+                    "name": name,
+                    "enabled": True,
+                    "required": [],
+                    "ignored": [pattern],
+                    "indexerId": 0,
+                    "tags": [tag["id"]],
+                },
+            )
+        elif pattern not in (profile.get("ignored") or []):
+            profile["ignored"] = [*(profile.get("ignored") or []), pattern]
+            self.request("PUT", f"/api/v3/releaseprofile/{profile['id']}", json=profile)
+        series = self.request("GET", f"/api/v3/series/{series_id}")
+        if tag["id"] not in (series.get("tags") or []):
+            series["tags"] = [*(series.get("tags") or []), tag["id"]]
+            self.request("PUT", f"/api/v3/series/{series_id}", json=series)
+
     def series_monitored(self, series_id):
         series = self.request("GET", f"/api/v3/series/{series_id}")
         return bool(series.get("monitored"))
