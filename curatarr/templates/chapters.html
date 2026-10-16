@@ -59,6 +59,8 @@
     <p class="coverage-hint mt-3 mb-0">Short and non-MKV files are skipped, so they aren't counted in the totals above.</p>
   </div></section>
 </div>
+{% if failed %}<h2 class="section-title" id="failed">Failed</h2>
+<ul class="file-list list-unstyled mb-4">{% for state in failed %}<li class="file-row"><div class="file-main"><a href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}<div class="small text-secondary text-break">{{ state.part.file_path }}</div><div class="small text-warning">{{ state.chapter_error or 'No reason was recorded' }}</div></div><span class="chip chip-danger">{{ state.attempts }} attempt{{ '' if state.attempts == 1 else 's' }}</span></li>{% endfor %}</ul>{% endif %}
 <h2 class="section-title">Activity</h2>
 {% include "_chapter_activity.html" %}
 <script src="{{ url_for('static', filename='chapter-activity.js', v='1') }}" defer></script>
