@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}{{ query ~ ' · ' if query }}Search · Curatarr{% endblock %}
+{% macro moment(r) %}<li class="result-card">
+  <div class="d-flex flex-wrap justify-content-between gap-2 align-items-baseline"><a class="result-title" href="{{ url_for('main.chapter_part', part_id=r.part_id) if is_admin else url_for('main.title', media_id=r.media_id) }}">{{ r.label }}</a>{{ jellyfin_link(r.jellyfin_id) if r.jellyfin_id }}<span class="chip">at {{ r.timestamp }}</span>{% if r.exact %}<span class="chip chip-accent">exact line</span>{% endif %}</div>
+  <blockquote class="result-quote mb-0">{% for line in r.lines %}<div>{{ line }}</div>{% endfor %}</blockquote>
+</li>{% endmacro %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Search</h1><p class="text-secondary mb-0">Find a title by name, or an episode or film by something said in it.</p></div></header>
+<form class="search-hero mb-4" method="get" role="search"><label class="visually-hidden" for="q">Title, words or a line</label>{{ icon('search') }}<input id="q" name="q" type="search" value="{{ query }}" placeholder="A title, or a line like “the one about the stapler”" autofocus><button class="btn btn-primary">Search</button></form>
+{% if query %}
+  {% if titles %}<h2 class="section-label">Titles</h2>
+  <div class="list-group mb-4">{% for media in titles %}<div class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 position-relative"><img class="poster" src="{{ url_for('main.poster', media_id=media.id) }}" loading="lazy" alt=""><span><a class="stretched-link text-reset text-decoration-none" href="{{ url_for('main.title', media_id=media.id) }}"><strong>{{ media.title }}</strong></a><br><small class="text-secondary">{{ media.library.name }} · {{ 'TV show' if media.media_type == 'series' else 'Movie' }}</small></span><span class="ms-auto" aria-hidden="true">{{ icon('chevron', 18) }}</span></div>{% endfor %}</div>{% endif %}
+  {% if results %}<h2 class="section-label">What was said</h2><ul class="list-unstyled d-grid gap-2">{% for r in results %}{{ moment(r) }}{% endfor %}</ul>{% endif %}
+  {% if not titles and not results %}<div class="empty-state"><h2 class="h5">No matches</h2><p class="mb-0">No title has that name, and nothing transcribed so far says it. Try fewer or different words.</p></div>{% endif %}
+{% else %}
+  <p class="text-secondary small">{{ searchable|commas }} episodes and films have transcripts to search, from Smart Chapters.</p>
+{% endif %}
+{% endblock %}

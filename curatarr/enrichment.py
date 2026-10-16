@@ -1948,6 +1948,15 @@ def file_label(state: ChapterState) -> str:
     return media.title
 
 
+def maintenance_failed_count() -> int:
+    return (
+        db.session.query(func.count(ChapterState.id))
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .filter(ChapterState.chapter_status == "failed", MediaPart.has_file.is_(True))
+        .scalar()
+    )
+
+
 def maintenance_summary(library_id=None) -> dict:
     parts = _parts_query(library_id).count()
     rows = (
@@ -3429,6 +3438,7 @@ def search_transcripts(query: str, limit: int = 10) -> list[dict]:
                 "exact": hit["exact"],
                 "lines": hit["lines"],
                 "part_id": part.id,
+                "media_id": media.id,
                 "jellyfin_id": jellyfin_item_id(part, media),
             }
         )
