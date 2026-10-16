@@ -1058,6 +1058,33 @@ def test_forecast_projects_the_finish_from_the_recent_pace(app, client, media_en
     assert 'style="width' not in page
 
 
+def test_forecast_goes_by_hours_of_video(media_env):
+    _library, media, _part = _movie()
+    now = utcnow()
+    for n in range(9):
+        part = MediaPart(
+            media_identity_id=media.id,
+            kind="movie_file",
+            has_file=True,
+            file_path=f"/movies/Film (2020)/Film {n}.mkv",
+            acquired_at=now,
+        )
+        db.session.add(part)
+        db.session.flush()
+        state = enrichment.state_for(part)
+        state.requested_at = now - timedelta(hours=30)
+        if n < 6:  # six half-hour episodes finished over the day
+            state.duration_seconds = 1800
+            state.chapter_processed_at = now - timedelta(minutes=30 * n)
+        else:  # three two-hour films to go, one not yet measured
+            state.job_state, state.requested_action = "queued", "generate"
+            state.duration_seconds = 7200 if n < 8 else None
+    db.session.commit()
+    forecast = enrichment.job_forecast(now)
+    # 3 hours of video a day; 6 hours left = 2 days (by files it would say 12 h).
+    assert forecast["video_per_hour"] == 0.125 and forecast["left"] == "2 days"
+
+
 def test_forecast_waits_for_enough_finished_jobs(media_env):
     _library, _media, part = _movie()
     state = enrichment.state_for(part)
