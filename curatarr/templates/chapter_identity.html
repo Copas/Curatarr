@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% block title %}Possible wrong episodes · Curatarr{% endblock %}
 {% block content %}
-<div class="eyebrow">Manage · <a href="{{ url_for('main.chapter_maintenance') }}">Chapter maintenance</a></div><h1>Possible wrong episodes</h1>
+<div class="eyebrow">Enhance</div><h1>Possible wrong episodes</h1>
 <p class="text-secondary">Episodes whose transcript fits another episode's title and summary in Sonarr far better than their own (a misfiled or mislabelled download), or whose default audio isn't English. These are flags to check, not certainties: open the episode, and fix it in Sonarr if it's wrong. <strong>Dismiss</strong> one that's fine.</p>
-{% if not enabled %}<div class="alert alert-secondary">This check is off. Turn on “Check episodes against their summaries” in <a href="{{ url_for('main.chapter_settings') }}">Chapter settings</a> to use it.</div>
+{% if not enabled %}<div class="alert alert-secondary">This check is off. Turn on “Check episodes against their summaries” in <a href="{{ url_for('main.chapter_settings') }}">Settings → Enhance</a> to use it.</div>
 {% elif states %}
 {% for state in states %}{% set i = state.identity_issue %}
 <div class="card p-3 mb-3">

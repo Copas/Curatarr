@@ -9,7 +9,7 @@
 - [Search what was said](#search-what-was-said)
 - [Sharing the machine with playback](#sharing-the-machine-with-playback)
 
-The interface groups daily decisions under **Overview** and **Review**, title browsing under **Library**, and administrator controls under **Activity** and **Manage**. The theme button in the header switches between dark and light for that browser.
+The interface groups daily decisions under **Overview** and **Review**, title browsing under **Library**, and file improvements under **Enhance**, and administrator controls under **Activity** and **Settings**. The theme button in the header switches between dark and light for that browser.
 
 ---
 
@@ -21,7 +21,7 @@ Sign in with a Jellyfin account that has the **Administrator** permission, or wi
 - After five failed sign-ins from one address within 15 minutes, further attempts are refused until the window passes.
 - On first run, the sign-in page also asks for the Jellyfin server URL and binds Curatarr to it. Until that first administrator signs in, anyone who can reach the page could bind a different server, so keep Curatarr on a trusted network until setup is done, or set `CURATARR_JELLYFIN_URL` so the server is fixed from the start.
 
-**Household access.** Administrators can enable specific non-admin Jellyfin users in Manage → Integrations → Household access. Those users can browse managed titles, search what was said, and choose **Keep**, **Snooze** or **Never Purge** in Review. They can't approve deletion, change rules or integrations, run discovery, reset or request a show, or see full History and Operations. Curatarr rechecks their Jellyfin account periodically and ends a household session as soon as its allowlist entry is removed.
+**Household access.** Administrators can enable specific non-admin Jellyfin users in Settings → Integrations → Household access. Those users can browse managed titles, search what was said, and choose **Keep**, **Snooze** or **Never Purge** in Review. They can't approve deletion, change rules or integrations, run discovery, reset or request a show, or see full History and Operations. Curatarr rechecks their Jellyfin account periodically and ends a household session as soon as its allowlist entry is removed.
 
 `/health`, `/api/v1/status` and the token-protected webhook stay public for dashboards. Every other page and API endpoint requires sign-in, and operational APIs require administrator access (or the read-only API key; see [API](API.md)). Set `CURATARR_ALLOW_UNAUTHENTICATED=true` only when another layer, such as an authenticating reverse proxy, already restricts access: it grants the full admin interface.
 
@@ -75,7 +75,7 @@ Policy resolves **title override → library → global → built-in default**. 
 
 ## Chapters and subtitles
 
-Optional, and off until you enable it per library in **Manage → Chapters → Chapter settings**.
+Optional, and off until you enable it per library in **Settings → Enhance**.
 
 After Sonarr or Radarr finish importing a movie or episode of at least 20 minutes that has no chapters, Curatarr adds them:
 
@@ -85,9 +85,9 @@ After Sonarr or Radarr finish importing a movie or episode of at least 20 minute
 Chapters are written into MKV files in place with `mkvpropedit`, which re-encodes nothing; other containers are reported as unsupported. Every file is verified afterwards, and only that item is refreshed in Jellyfin.
 
 - **Existing chapters are preserved.** Curatarr regenerates or removes only chapters it can show it wrote, and keeps the originals of any it replaced.
-- **Your existing library is never processed by surprise.** Chapter maintenance scans it read-only, shows what's done and what's left, and processes only the files or libraries you confirm. Each file's page shows a preview: the scene changes, the plan from each method, and the exact write command, before anything is modified.
+- **Your existing library is never processed by surprise.** Enhance → Files scans it read-only, shows what's done and what's left, and processes only the files or libraries you confirm. Each file's page shows a preview: the scene changes, the plan from each method, and the exact write command, before anything is modified.
 - **Subtitles.** The same transcript can produce English subtitles (`<video>.en.Curatarr.srt`), a separate per-library setting. They're added only when a file has no English subtitles of its own, never written over another file, and removable from the file's page.
-- **Progress.** Chapter maintenance leads with what Curatarr has done (chapters and subtitles added, recaps and previews marked, bad markers hidden) and how much of the library is covered, then what's left to do, with an estimated finish based on the last day's pace.
+- **Progress.** Enhance → Progress leads with what Curatarr has done (chapters and subtitles added, recaps and previews marked, bad markers hidden) and how much of the library is covered, then what's left to do, with an estimated finish based on the last day's pace.
 
 Smart Chapters needs the `chapters` or `chapters-gpu` extra, Ollama with a model, and write access to the media files for the worker (see [Installing](INSTALL.md#optional-chapter-generation)). `flask --app curatarr chapters preview <file>` prints the full analysis for one file without changing it. Design notes: [decision 009](decisions/009-chapter-enrichment.md).
 
@@ -95,14 +95,14 @@ Smart Chapters needs the `chapters` or `chapters-gpu` extra, Ollama with a model
 
 ## Recaps, previews and skip markers
 
-With the Jellyfin **Intro Skipper** plugin installed, Curatarr improves the skip buttons Jellyfin shows. It works on episodes in libraries with Smart Chapters. Press **Check skip markers** in Chapter maintenance to check every episode not yet checked (press it again later for newly added ones), or check one episode from its page. Checks reuse Smart Chapters transcripts where they exist and wait while a chapter backlog is running.
+With the Jellyfin **Intro Skipper** plugin installed, Curatarr improves the skip buttons Jellyfin shows. It works on episodes in libraries with Smart Chapters. Press **Check skip markers** on Enhance → Progress to check every episode not yet checked (press it again later for newly added ones), or check one episode from its page. Checks reuse Smart Chapters transcripts where they exist and wait while a chapter backlog is running.
 
 - **Recaps.** A *"Previously on…"* segment is found from the opening transcript: a known opener phrase ("previously on", "last time on", "here's what you missed", …), and an end found from the series' own closing line or from where the quoted clips of earlier episodes stop. It's marked as an Intro Skipper **Recap** segment and, if the chapters are Curatarr's, a *Previously On* chapter.
 - **Previews.** A *"Next time on…"* segment at the end is marked as a **Preview** segment.
 - **Bad markers hidden.** Intro Skipper sometimes guesses wrong: a short "credits" marker with lots of dialogue after it, credits in the first quarter of an episode, an "intro" that's mostly unique dialogue. Curatarr hides those, recording why.
 - **Movies keep only their credits marker** (on by default). Opening chapter names like "Chapter 1" made Intro Skipper mark recaps and intros at the start of movies; they're hidden. Credits stay, for *Skip Credits* and *Next*.
 
-Everything is listed on **Review skip markers**, newest first, with the span, the reason and a link to the episode, and each change has **Undo**.
+Everything is listed on **Enhance → Skip markers**, newest first, with the span, the reason and a link to the episode, and each change has **Undo**.
 
 Jellyfin decides per user whether to show a Skip button for each segment type (Settings → Playback → Media segments). Some clients, such as the Roku app, keep their own per-device setting.
 
@@ -110,7 +110,7 @@ Jellyfin decides per user whether to show a Skip button for each segment type (S
 
 ## English dubs
 
-For households that watch films dubbed rather than subtitled. On by default; settings in Chapter settings.
+For households that watch films dubbed rather than subtitled. On by default; settings in Settings → Enhance.
 
 Radarr can grab an English dub of a film made in another language, but uploads are sometimes labelled English when the audio is really the original. For films whose original language (from Radarr) isn't English, and for English films whose file also carries other languages, Curatarr **listens**: five 20-second clips from the middle of the film, per audio track, through Whisper's language identification, with a voice filter so music isn't mistaken for speech. A track's language counts only when most clips agree with high confidence. This is not a transcription, and takes seconds per film.
 
@@ -133,7 +133,7 @@ For Radarr to grab dubs in the first place, its quality profile's language must 
 
 ## Search what was said
 
-**Library → Search what was said** (and `GET /api/v1/transcripts/search?q=…`) finds an episode or film by a line or what's talked about in it, across every transcript Smart Chapters has made. An exact phrase ranks first, then short windows holding most of the words; each result shows the moment's lines and timestamp, linked to the episode. Words are matched by rough stem ("frying" finds "fry"). Household accounts can use it too.
+**Search** (the box in the header, or Library → Search) (and `GET /api/v1/transcripts/search?q=…`) finds an episode or film by a line or what's talked about in it, across every transcript Smart Chapters has made. An exact phrase ranks first, then short windows holding most of the words; each result shows the moment's lines and timestamp, linked to the episode. Words are matched by rough stem ("frying" finds "fry"). Household accounts can use it too.
 
 ---
 
@@ -146,4 +146,4 @@ Chapter work is heavy (scene detection, transcription, a language model), and th
 - Below the target it adds a job, one a minute. Above it, nothing new starts and running jobs finish.
 - With **Make room for people watching** on, if someone is watching and the machine stays well over the target for 30 seconds, running jobs are suspended for at least two minutes and resume once there's room.
 
-**Chapter jobs at once** (1–8) is only the ceiling. The Activity card on Chapter maintenance says what was measured and decided, for example *Up to 3 chapter jobs right now · CPU 42%, 1 watching (aiming under 70%)*.
+**Chapter jobs at once** (1–8) is only the ceiling. The Activity card on Enhance → Progress says what was measured and decided, for example *Up to 3 chapter jobs right now · CPU 42%, 1 watching (aiming under 70%)*.
