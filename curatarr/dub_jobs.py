@@ -245,7 +245,7 @@ def check(state, part, original) -> dict:
         audit(
             "dub_tracks_removed",
             part.media.id,
-            f"Removed {_removed_words(r)} from {e._part_label(part)}.",
+            f"Removed {_removed_words(r)} from {e.file_label(state)}.",
             f"dub-removed:{state.id}:{state.dub_checked_at.isoformat()}",
             payload={"file": path, **r},
         )
@@ -253,7 +253,7 @@ def check(state, part, original) -> dict:
         audit(
             "dub_fixed",
             part.media.id,
-            f"Fixed the audio tracks of {e._part_label(part)}: "
+            f"Fixed the audio tracks of {e.file_label(state)}: "
             + "; ".join(_describe(a) for a in result["applied"])
             + ".",
             f"dub-fixed:{state.id}:{state.dub_checked_at.isoformat()}",
@@ -415,7 +415,7 @@ def replace(state) -> str:
     audit(
         "dub_replaced",
         media.id,
-        f"Replaced {e._part_label(part)}: it had no English audio."
+        f"Replaced {e.file_label(state)}: it had no English audio."
         + (f" Blocklisted {blocklisted}." if blocklisted else ""),
         f"dub-replaced:{state.id}:{state.dub_result['replaced']['at']}",
         payload={"blocklisted": blocklisted, "file_id": file_id},
