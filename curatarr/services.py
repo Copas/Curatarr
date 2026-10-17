@@ -2310,7 +2310,40 @@ def title_view(media):
         .limit(10)
         .all(),
         "chapter_rows": _chapter_rows(media),
+        "requested": requested_waiting(media),
     }
+
+
+def requested_waiting(media):
+    """A search sent to Sonarr recently whose episodes haven't all arrived:
+    {"at", "waiting"} for "Request now", or None to offer the button."""
+    from .missing_keep import WAITING
+
+    if media.media_type != "series":
+        return None
+    since = utcnow() - WAITING
+    missing = {
+        p.sonarr_episode_id
+        for p in media.parts
+        if p.kind == "episode" and not p.has_file and p.sonarr_episode_id
+    }
+    for action in (
+        db.session.query(LifecycleAction)
+        .filter(
+            LifecycleAction.media_identity_id == media.id,
+            LifecycleAction.action_type == "sonarr_season_search",
+            LifecycleAction.state.in_(("PENDING", "EXECUTING", "SUCCEEDED")),
+        )
+        .order_by(LifecycleAction.created_at.desc())
+    ):
+        at = _as_datetime(action.created_at)
+        if at < since:
+            break
+        payload = action.payload_json or {}
+        waiting = missing & set(payload.get("episode_ids") or [])
+        if payload.get("search_now") and waiting:
+            return {"at": at, "waiting": len(waiting)}
+    return None
 
 
 def _chapter_rows(media):

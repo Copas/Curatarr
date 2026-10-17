@@ -1,0 +1,4 @@
+{# A button that asks first, in place: the first click opens the question, the
+   second does it. For one-click actions that break something elsewhere (a token
+   another tool uses). Put it inside the form; the confirm button submits it. #}
+{% macro confirm_submit(label, question, confirm_label, style='btn-outline-danger', tip='') %}<details class="confirm-inline"><summary class="btn btn-sm {{ style }}"{% if tip %} data-tip="{{ tip }}"{% endif %}><span class="when-closed">{{ label }}…</span><span class="when-open">Cancel</span></summary><div class="confirm-inline-body"><span>{{ question }}</span><button class="btn btn-sm btn-danger">{{ confirm_label }}</button></div></details>{% endmacro %}

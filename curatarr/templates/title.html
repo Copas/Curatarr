@@ -5,7 +5,8 @@
   <h2 class="h5 px-3 pt-3 mb-2">Actions</h2>
   <div class="d-flex justify-content-between align-items-center gap-3 px-3 py-3 border-top border-secondary-subtle">
     <div><div class="fw-semibold">Request downloads now</div><div class="text-secondary small">Apply the always-keep and season-ahead rules to this show now and send anything due to Sonarr.</div></div>
-    <form method="post" action="{{ url_for('main.title_request_now', media_id=media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-outline-light text-nowrap" data-tip="Sends any episodes these rules want right now to Sonarr to download.">Request now</button></form>
+    {% if requested %}<span class="replace-status" role="status" data-tip="Sonarr is searching and downloading. Any that haven't arrived after two days can be requested again."><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Requested {{ requested.at|when('datetime') }}, waiting for {{ requested.waiting }} episode{{ '' if requested.waiting == 1 else 's' }}</span>
+    {% else %}<form method="post" action="{{ url_for('main.title_request_now', media_id=media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-outline-light text-nowrap" data-tip="Sends any episodes these rules want right now to Sonarr to download.">Request now</button></form>{% endif %}
   </div>
   {% if media.sonarr_id %}<div class="d-flex justify-content-between align-items-center gap-3 px-3 py-3 border-top border-secondary-subtle">
     <div><div class="fw-semibold">Reset to minimum</div><div class="text-secondary small">Trim this show back to its always-keep episodes, as if nobody had watched it. You'll see exactly what changes before anything happens.</div></div>
