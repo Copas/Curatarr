@@ -692,7 +692,13 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "href": url_for("main.setup"),
             },
         )
-    unhealthy = [k for k, v in status["integrations"].items() if v != "healthy"]
+    # Not set up is the setup checklist's business (and Sonarr or Radarr may be
+    # left out on purpose); this is for ones that stopped answering.
+    unhealthy = [
+        k
+        for k, v in status["integrations"].items()
+        if v not in ("healthy", "unconfigured")
+    ]
     if unhealthy:
         needs.insert(
             0,
