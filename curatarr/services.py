@@ -250,11 +250,14 @@ def _library_type(collection_type):
 def discover():
     """Read Jellyfin and arr state; persist stable identity and file observations."""
     jellyfin = client("jellyfin")
-    sonarr = client("sonarr")
-    radarr = client("radarr")
+    # Either may be left out (a TV-only or film-only household); its titles are
+    # then simply not matched. One that's set up but unreachable stops discovery,
+    # rather than unmatching everything it manages.
+    sonarr = client("sonarr") if configured("sonarr") else None
+    radarr = client("radarr") if configured("radarr") else None
     libraries = jellyfin.libraries()
-    sonarr_series = sonarr.series()
-    radarr_movies = radarr.movies()
+    sonarr_series = sonarr.series() if sonarr else []
+    radarr_movies = radarr.movies() if radarr else []
     series_by_tvdb = {str(s.get("tvdbId")): s for s in sonarr_series if s.get("tvdbId")}
     movies_by_tmdb = {str(m.get("tmdbId")): m for m in radarr_movies if m.get("tmdbId")}
     seen = set()
@@ -1276,13 +1279,23 @@ def setup_progress():
     """First-run checklist derived from stored state (spec section 40)."""
     integrations = {row.kind: row for row in db.session.query(Integration).all()}
     steps = []
-    for kind in ("jellyfin", "sonarr", "radarr"):
-        row = integrations.get(kind)
+    done = {
+        kind: bool(row and row.secret_ref and row.health_state == "healthy")
+        for kind, row in ((k, integrations.get(k)) for k in CLIENTS)
+    }
+    for kind, label in (
+        ("jellyfin", "Connect Jellyfin"),
+        ("sonarr", "Connect Sonarr, for TV"),
+        ("radarr", "Connect Radarr, for films"),
+    ):
         steps.append(
             {
                 "key": kind,
-                "label": f"Connect {kind.title()} (URL, API key, connectivity test)",
-                "done": bool(row and row.secret_ref and row.health_state == "healthy"),
+                "label": f"{label} (URL, API key, connectivity test)",
+                "done": done[kind],
+                # Sonarr or Radarr is enough; the other is for later, if ever.
+                "optional": kind != "jellyfin"
+                and done["radarr" if kind == "sonarr" else "sonarr"],
                 "endpoint": "main.settings",
             }
         )
@@ -1751,12 +1764,17 @@ def action_context(action_id):
     }
 
 
+def configured(kind) -> bool:
+    """Whether an integration has been set up (URL and key saved)."""
+    if current_app.config["DEMO_MODE"]:
+        return True
+    row = db.session.query(Integration).filter_by(kind=kind).first()
+    return bool(row and row.secret_ref)
+
+
 def integrations_ready():
-    rows = {row.kind: row for row in db.session.query(Integration)}
-    return all(
-        rows.get(kind) is not None and rows[kind].secret_ref
-        for kind in ("jellyfin", "sonarr", "radarr")
-    )
+    """Jellyfin, and Sonarr or Radarr (or both)."""
+    return configured("jellyfin") and (configured("sonarr") or configured("radarr"))
 
 
 def request_reconciliation():

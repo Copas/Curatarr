@@ -1,7 +1,15 @@
+import pytest
+
 from curatarr import db
 from curatarr.lifecycle import reconcile_candidates
 from curatarr.models import MediaIdentity, MediaPart, PurgeCandidate
 from curatarr.services import discover
+
+
+@pytest.fixture(autouse=True)
+def arr_configured(monkeypatch):
+    """The fake clients stand in for a Sonarr and Radarr that are set up."""
+    monkeypatch.setattr("curatarr.services.configured", lambda _kind: True)
 
 
 class FakeJellyfin:
@@ -188,3 +196,16 @@ def test_external_movie_removal_rescues_pending_candidate(app, monkeypatch):
         assert not db.session.query(MediaPart).one().has_file
         assert reconcile_candidates() == 1
         assert candidate.state == "RESCUED"
+
+
+def test_discovery_without_radarr_matches_the_shows(app, monkeypatch):
+    def client(kind):
+        if kind == "radarr":
+            raise AssertionError("Radarr isn't set up, so it isn't asked")
+        return {"jellyfin": FakeJellyfin(), "sonarr": FakeSonarr()}[kind]
+
+    monkeypatch.setattr("curatarr.services.client", client)
+    monkeypatch.setattr("curatarr.services.configured", lambda kind: kind != "radarr")
+    with app.app_context():
+        assert discover() == 1
+        assert db.session.query(MediaIdentity).one().sonarr_id == 42
