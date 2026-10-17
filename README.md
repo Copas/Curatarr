@@ -78,7 +78,7 @@ Click **Replace** and Curatarr first checks that a better copy actually exists. 
 - **Skip "Previously on…" and "Next time on…"** with Jellyfin's own Skip button.
 - **Better skip markers**: Intro Skipper guesses that are plainly wrong are hidden, each one undoable.
 - **The right audio first**: tracks labelled in the wrong language are relabelled, and the real English track becomes the default.
-- **Audio every TV can play**: films with DTS, TrueHD or FLAC sound get an AC3 copy beside the original, so a Roku or TV plays them directly instead of stumbling over conversion.
+- **Audio every TV can play**: films and episodes with DTS, TrueHD or FLAC sound get an AC3 copy beside the original, so a Roku or TV plays them directly instead of stumbling over conversion.
 
 The picture is never re-encoded, the only thing ever encoded is that optional extra audio track, and none of it happens until you switch it on.
 

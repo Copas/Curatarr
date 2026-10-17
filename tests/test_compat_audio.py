@@ -133,3 +133,22 @@ def test_the_sweep_does_hard_films_once(app, monkeypatch):
 def test_off_by_default(app):
     assert not compat_audio.enabled()
     assert not compat_audio.start()
+
+
+class Sonarr:
+    def series(self):
+        return [{"id": 5}]
+
+    def episode_files(self, series_id):
+        return [
+            {"id": 51, "mediaInfo": {"audioCodec": "DTS"}},
+            {"id": 52, "mediaInfo": {"audioCodec": "EAC3"}},
+        ]
+
+
+def test_episodes_with_dts_are_found_from_sonarr(app, monkeypatch):
+    clients = {"radarr": Radarr(), "sonarr": Sonarr()}
+    monkeypatch.setattr("curatarr.services.client", lambda kind: clients[kind])
+    monkeypatch.setattr("curatarr.services.configured", lambda kind: True)
+    films, episodes = compat_audio.hard_files()
+    assert films == {1} and episodes == {51}
