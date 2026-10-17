@@ -983,6 +983,9 @@ def _finish_reset(media, policy, arr, action, unmonitored):
         if part.kind == "episode"
         and part.sonarr_episode_id is not None
         and retained(part, policy)
+        # Specials are kept because they're left alone, not wanted: one that
+        # was never downloaded stays unmonitored with its season.
+        and (part.season_number != 0 or part.has_file)
     )
     arr.set_episodes_monitored(trimmed, False)
     arr.set_episodes_monitored(kept, True)
