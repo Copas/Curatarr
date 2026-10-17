@@ -171,3 +171,43 @@ def test_progress_shows_on_enhance_and_overview(app, client, monkeypatch):
     assert found["films"] == {"done": 1, "total": 4, "left": 3}
     assert found["episodes"]["total"] == 10
     assert "TV-friendly audio: films" in client.get("/chapters").text
+
+
+def test_a_busy_database_doesnt_lose_an_added_track(app, monkeypatch):
+    """The file is already rewritten; Radarr then reports the new track, so
+    the film would never be looked at again."""
+    from sqlalchemy.exc import OperationalError
+    from test_enrichment import _movie
+
+    from curatarr.models import MediaIdentity
+
+    _movie("/movies/Loud (2020)/Loud.mkv")
+    db.session.query(MediaIdentity).one().radarr_id = 1
+    db.session.commit()
+    monkeypatch.setattr("curatarr.services.client", lambda kind: Radarr())
+    monkeypatch.setattr(enrichment, "file_exists", lambda p: True)
+    monkeypatch.setattr(enrichment, "playback_sessions", list)
+    monkeypatch.setattr(enrichment, "_refresh_jellyfin", lambda part, media: None)
+    monkeypatch.setattr("curatarr.filecheck_jobs._dry_run", lambda media: False)
+    monkeypatch.setattr(compat_audio, "probe", lambda path: _info(("dts", "eng", True)))
+    monkeypatch.setattr(compat_audio, "can_write", lambda info: (True, None))
+    monkeypatch.setattr(
+        compat_audio,
+        "add_compatible_audio",
+        lambda path, info, source: _info(("ac3", "eng", True), ("dts", "eng", False)),
+    )
+    real, tries = compat_audio._record, []
+
+    def busy_once(state, part, result):
+        tries.append(1)
+        if len(tries) == 1:
+            state.compat_audio = {"half": True}
+            db.session.flush()
+            raise OperationalError("UPDATE", {}, Exception("database is locked"))
+        real(state, part, result)
+
+    monkeypatch.setattr(compat_audio, "_record", busy_once)
+    assert compat_audio.sweep() == 1
+    db.session.expire_all()
+    state = db.session.query(ChapterState).one()
+    assert len(tries) == 2 and state.compat_audio["added"]

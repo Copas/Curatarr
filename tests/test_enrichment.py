@@ -2401,3 +2401,47 @@ def test_radarr_is_never_asked_while_changes_are_unsaved(app, media_env, monkeyp
     enrichment._missing_tried.clear()
     assert enrichment.resolve_missing_failures() == 3
     assert seen == [False, False, False]
+
+
+@pytest.mark.parametrize("action", ["generate", "recap"])
+def test_slow_episode_work_never_holds_the_write_lock(
+    app, media_env, monkeypatch, action
+):
+    """Transcription, Ollama and Intro Skipper can take minutes: with a change
+    left unsaved, SQLite's write lock is held and every other job fails."""
+    from curatarr.chapters import Segment
+
+    files, arr = media_env
+    parts, rows = _series_with_recaps(files)
+    target = parts[-1]
+    files.files[target.file_path]["chapters"] = []
+    segments = [Segment(r["start"], r["end"], r["text"]) for r in rows] + [
+        Segment(t, t + 15, f"line {t}") for t in range(120, 3600, 20)
+    ]
+    seen = []
+
+    def transcribe(*_a, **_k):
+        seen.append(("transcribe", database_free(app)))
+        return segments, {"cached": False, "device": "cpu"}
+
+    def ask_jellyfin(method, path, **kwargs):
+        seen.append((f"{method} {path}", database_free(app)))
+        return {"Id": "ours"} if method == "POST" else []
+
+    class Model:
+        model = "fake"
+        calls = 0
+
+        def ask(self, prompt, schema):
+            seen.append(("model", database_free(app)))
+            self.calls += 1
+            if "choice" in schema["properties"]:
+                return {"choice": "A"}
+            return {"summary": "Something happens.", "name": f"Scene {self.calls}"}
+
+    monkeypatch.setattr("curatarr.transcribe.transcribe", transcribe)
+    arr.request = ask_jellyfin
+    enrichment.request(target, action)
+    enrichment.dispatch(synchronous=True, llm=Model())
+    assert seen
+    assert [what for what, free in seen if not free] == []
