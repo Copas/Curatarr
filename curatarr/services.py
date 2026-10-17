@@ -260,6 +260,9 @@ def discover():
     radarr_movies = radarr.movies() if radarr else []
     series_by_tvdb = {str(s.get("tvdbId")): s for s in sonarr_series if s.get("tvdbId")}
     movies_by_tmdb = {str(m.get("tmdbId")): m for m in radarr_movies if m.get("tmdbId")}
+    from . import curation
+
+    from_lists = curation.ListArrivals(sonarr, radarr)
     seen = set()
     for source in libraries:
         external_id = str(source.get("ItemId") or source.get("Id"))
@@ -298,6 +301,8 @@ def discover():
                         media.sonarr_id = match["id"]
                         media.arr_monitored = match.get("monitored")
                         media.series_type = match.get("seriesType")
+                        curation.remember_tags(media, match)
+                        from_lists.observe(media, match)
                         episode_files = {
                             entry["id"]: entry
                             for entry in sonarr.episode_files(media.sonarr_id)
@@ -331,6 +336,8 @@ def discover():
                     if match:
                         media.radarr_id = match["id"]
                         media.arr_monitored = match.get("monitored")
+                        curation.remember_tags(media, match)
+                        from_lists.observe(media, match)
                         file_data = match.get("movieFile") or {}
                         movie_part = _upsert_part(
                             media,
@@ -367,6 +374,7 @@ def discover():
     for media in db.session.query(MediaIdentity).all():
         if media.id not in seen and media.missing_since is None:
             media.missing_since = utcnow()
+    from_lists.save()
     for library in db.session.query(Library).all():
         library.last_size_bytes = (
             db.session.query(func.sum(MediaPart.size_bytes))
@@ -976,6 +984,7 @@ def reconcile_user_state():
     """Repair missed playback and favorite changes from Jellyfin user data."""
     jellyfin = client("jellyfin")
     generated = 0
+    plays = {}  # (media id, user id): play_count, see UserMediaState
     users = jellyfin.users()
     set_setting(
         "jellyfin_user_names",
@@ -1008,6 +1017,14 @@ def reconcile_user_state():
                     if not media:
                         continue
                     user_data = item.get("UserData") or {}
+                    count = user_data.get("PlayCount") or 0
+                    key = (media.id, user_id)
+                    if kind == "Movie":
+                        plays[key] = count if type(count) is int else 0
+                    elif kind == "Series":
+                        plays.setdefault(key, 0)
+                    elif kind == "Episode" and type(count) is int and count >= 2:
+                        plays[key] = plays.get(key, 0) + 1
                     state = (
                         db.session.query(UserMediaState)
                         .filter_by(media_identity_id=media.id, jellyfin_user_id=user_id)
@@ -1087,7 +1104,24 @@ def reconcile_user_state():
                 ):
                     break
     process_pending_events(limit=max(100, generated))
+    _save_play_counts(plays)
     return generated
+
+
+def _save_play_counts(plays):
+    """Store how often each person has watched each title (rewatched titles)."""
+    states = {
+        (state.media_identity_id, state.jellyfin_user_id): state
+        for state in db.session.query(UserMediaState)
+    }
+    for (media_id, user_id), count in plays.items():
+        state = states.get((media_id, user_id))
+        if state is None and count:
+            state = UserMediaState(media_identity_id=media_id, jellyfin_user_id=user_id)
+            db.session.add(state)
+        if state is not None:
+            state.play_count = count
+    db.session.commit()
 
 
 def queue_watch_restoration():
@@ -1469,6 +1503,7 @@ def unwatched_reset_plan(skip_recent_days=30, library_id=None):
 
 def review_rows():
     """Pending candidates with the section 29 review context."""
+    from . import curation, shrink
     from .lifecycle import _candidate_input
     from .policy import retained
 
@@ -1528,6 +1563,8 @@ def review_rows():
                 "favorite": item.favorite,
                 "meaningful": meaningful,
                 "proposed_action": action,
+                "signals": curation.signals(media),
+                "shrink": shrink.view(media),
             }
         )
     return rows
@@ -1624,6 +1661,11 @@ INTEGRATION_HELP = {
         "port": 7878,
         "key_path": "/settings/general",
         "where": "Radarr Settings → General → Security → API Key",
+    },
+    "seerr": {
+        "port": 5055,
+        "key_path": "/settings",
+        "where": "Seerr (or Jellyseerr/Overseerr) Settings → General → API Key",
     },
 }
 
@@ -2265,6 +2307,7 @@ def overview_data():
         "scheduled": scheduled,
         "cleanup": cleanup,
         "media_titles": media_titles,
+        "forecast": setting("disk_forecast"),
     }
 
 
@@ -2304,6 +2347,7 @@ def save_title_override(media, form):
 
 
 def title_view(media):
+    from . import curation, shrink
     from .policy import reclaimable_bytes, retained
 
     values, sources = resolved_policy(media)
@@ -2329,6 +2373,8 @@ def title_view(media):
         .all(),
         "chapter_rows": _chapter_rows(media),
         "requested": requested_waiting(media),
+        "signals": curation.signals(media),
+        "shrink": shrink.view(media),
     }
 
 

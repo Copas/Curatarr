@@ -104,6 +104,9 @@ class MediaIdentity(db.Model, Timed):
     series_type = db.Column(db.String(20))  # Sonarr: standard, daily, anime
     # Set by "Reset to minimum": viewing before this time no longer drives acquisition.
     viewing_reset_at = db.Column(db.DateTime(timezone=True))
+    # From Sonarr/Radarr, for seasonal shelves (curation.py).
+    genres = db.Column(db.JSON)
+    keywords = db.Column(db.JSON)
     library = db.relationship("Library")
     override = db.relationship("TitleOverride", backref="media", uselist=False)
     parts = db.relationship("MediaPart", backref="media", cascade="all, delete-orphan")
@@ -153,6 +156,9 @@ class UserMediaState(db.Model, Timed):
     last_played_at = db.Column(db.DateTime(timezone=True))
     completed_episode_count = db.Column(db.Integer, default=0, nullable=False)
     favorite = db.Column(db.Boolean, default=False, nullable=False)
+    # A film: how many times this person has played it. A show: how many of
+    # its episodes they have played more than once.
+    play_count = db.Column(db.Integer, default=0, nullable=False)
     __table_args__ = (db.UniqueConstraint("media_identity_id", "jellyfin_user_id"),)
 
 

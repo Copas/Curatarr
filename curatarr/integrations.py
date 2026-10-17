@@ -330,6 +330,9 @@ class SonarrClient(Client):
     def series(self):
         return self.request("GET", "/api/v3/series")
 
+    def import_lists(self):
+        return self.request("GET", "/api/v3/importlist")
+
     def episodes(self, series_id):
         return self.request("GET", "/api/v3/episode", params={"seriesId": series_id})
 
@@ -593,5 +596,65 @@ class RadarrClient(Client):
             destructive=True,
         )
 
+    def list_movies(self):
+        """Films currently on Radarr's import lists (TMDB ids, cached by Radarr)."""
+        return self.request(
+            "GET",
+            "/api/v3/importlist/movie",
+            params={
+                "includeRecommendations": "false",
+                "includeTrending": "false",
+                "includePopular": "false",
+            },
+        )
 
-CLIENTS = {"jellyfin": JellyfinClient, "sonarr": SonarrClient, "radarr": RadarrClient}
+    def import_lists(self):
+        return self.request("GET", "/api/v3/importlist")
+
+    def quality_profile(self, profile_id):
+        return self.request("GET", f"/api/v3/qualityprofile/{profile_id}")
+
+    def set_monitored(self, movie_id, monitored):
+        return self.request(
+            "PUT",
+            "/api/v3/movie/editor",
+            json={"movieIds": [movie_id], "monitored": monitored},
+        )
+
+    def grab(self, release):
+        """Download one release from a search, as Radarr's interactive search does."""
+        return self.request(
+            "POST",
+            "/api/v3/release",
+            json={"guid": release["guid"], "indexerId": release["indexerId"]},
+        )
+
+
+class SeerrClient(Client):
+    """Seerr (or Jellyseerr/Overseerr): who asked for what. Read-only."""
+
+    status_path = "/api/v1/status"
+
+    def requests(self, limit=2000):
+        """Every request, newest first, in pages of 100."""
+        rows, skip = [], 0
+        while skip < limit:
+            page = self.request(
+                "GET",
+                "/api/v1/request",
+                params={"take": 100, "skip": skip, "sort": "added", "filter": "all"},
+            )
+            results = (page or {}).get("results") or []
+            rows += results
+            if len(results) < 100:
+                break
+            skip += 100
+        return rows
+
+
+CLIENTS = {
+    "jellyfin": JellyfinClient,
+    "sonarr": SonarrClient,
+    "radarr": RadarrClient,
+    "seerr": SeerrClient,
+}

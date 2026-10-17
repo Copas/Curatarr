@@ -1,0 +1,8 @@
+{# Why the household's choices change how cleanup treats a title (curation.py). #}
+{% macro household_notes(signals, names=True) %}
+{% set first = signals.requests[0] if signals.requests else none %}
+{% if first %}<span class="chip chip-accent" title="From Seerr">{{ icon('user', 12) }} Requested by {{ first.user or 'someone' }}{% if first.at %} {{ first.at|when('date') }}{% endif %}{% if signals.request_until %}: kept until they watch it, up to {{ signals.request_until|when('date') }}{% endif %}</span>{% endif %}
+{% if signals.season %}<span class="chip chip-accent" title="Seasonal shelf">{{ icon('calendar', 12) }} {{ signals.season }}: kept until {{ signals.season_until|when('date') }}</span>{% endif %}
+{% if signals.rewatched %}<span class="chip chip-on" title="Watched more than once">{{ icon('heart', 12) }} Rewatched: last in line for cleanup</span>{% endif %}
+{% if signals.from_list %}<span class="chip" title="Added by a Sonarr or Radarr import list, and nobody has played it">{{ icon('list', 12) }} From an import list, not played yet</span>{% endif %}
+{% endmacro %}

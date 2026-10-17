@@ -42,7 +42,24 @@ Titles nobody has played are not removed just for being unwatched. (A library ca
 2. They're removed when the notice ends, unless someone watches them. **Any playback** resets inactivity and rescues pending cleanup.
 3. Below the **critical** threshold, removal happens without a notice.
 
-The default grace period after adding a title is 30 days, and the inactivity period is 90 days. Movie cleanup is retention only: deleted movies are never automatically re-acquired.
+The default grace period after adding a title is 30 days, and the inactivity period is 90 days. Movie cleanup is retention only: deleted movies are never automatically re-acquired (except seasonal films, below, when you switch that on).
+
+### What the household's choices change
+
+Settings → Household. Each of these shows on a title's page, and in Review, as a short note saying why.
+
+- **Requested.** With Seerr (or Jellyseerr/Overseerr) connected, a title someone asked for isn't cleaned up until that person has played it, for up to 90 days. Declined requests don't count.
+- **Rewatched.** A film played twice or more (by one person or several), or a show someone has rewatched three episodes of or two people each follow, goes to the back of the line, like a favourite. Play counts come from Jellyfin.
+- **Added by an import list.** Titles Sonarr or Radarr added from a list rather than a person get a shorter grace period (7 days) and go first, until someone plays one. Radarr's lists are recognised from Radarr itself; for Sonarr's, give the list a tag (Sonarr puts it on every show the list adds).
+- **Seasonal shelves.** Halloween and Christmas titles, by their TMDB keywords or because they were watched mostly in that season in earlier years, are kept through their season and the two weeks before it. Optionally (off by default), a seasonal film Curatarr removed is added back to Radarr, with its old quality profile and folder, two weeks before its season.
+
+### Shrink instead of delete
+
+A film of 4 GB or more has **Shrink…** in Review and on its page. Curatarr asks Radarr's indexers for a copy **half the size or smaller**, at the same resolution (1080p for anything bigger), that Radarr would accept once the current file is gone. Only if one exists is the current file deleted and that copy downloaded; the film leaves the review queue, and its page shows the swap until the new file arrives. If nothing is small enough it says so, with the date, and changes nothing. When the film's quality profile allows upgrades, it's unmonitored so Radarr doesn't fetch a big copy again; if the small copy hasn't arrived in two days, the film is monitored again and Radarr searches for any copy.
+
+### Disk forecast
+
+Overview shows, for each disk with a path set in the retention rules, how much is free, how fast it's filling (what arrived over the last week) and roughly when it reaches the low free-space mark, with the titles cleanup would take first then. It's updated at each reconciliation and takes the household's choices into account.
 
 ### Before anything is deleted
 
