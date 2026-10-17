@@ -462,6 +462,9 @@ def _nav_counts(signed_in_user, is_admin) -> dict:
             + wrong_version.count()
         )
         counts["failed"] = maintenance_failed_count()
+        from .enrichment import identity_issues
+
+        counts["identity"] = len(identity_issues())
     return counts
 
 
@@ -774,6 +777,26 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "search_state": row["state"],
                 "searched": row["searched"],
                 "href": url_for("main.chapter_problems"),
+            }
+        )
+    from .enrichment import identity_issues
+
+    for state in identity_issues()[:NEEDS_SHOWN]:
+        issue = state.identity_issue
+        needs.append(
+            {
+                "icon": "audio" if issue.get("kind") == "audio" else "tools",
+                "tone": "warning",
+                "title": file_label(state),
+                "detail": f"Plays in {issue.get('language')} by default, not English."
+                if issue.get("kind") == "audio"
+                else f"Filed as E{issue.get('filed_as'):02}, but sounds like "
+                f"E{issue.get('fits'):02}. Check it in Sonarr.",
+                "identity": state.id,
+                "fix_audio": issue.get("kind") == "audio"
+                and bool(issue.get("english_track")),
+                "jellyfin_media": state.media.id,
+                "href": url_for("main.chapter_identity"),
             }
         )
     failed = maintenance_failed_count()

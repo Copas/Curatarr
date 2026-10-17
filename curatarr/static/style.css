@@ -300,12 +300,12 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .enh-season[open] > summary .icon { transform: rotate(90deg); }
 .enh-season[open] > summary { border-bottom: 1px solid var(--app-border); }
 .enh-list { display: grid; }
-.enh-row { display: grid; grid-template-columns: minmax(4rem, auto) 1fr auto; align-items: center; gap: .4rem .9rem; padding: .55rem .9rem; }
+.enh-row { display: grid; grid-template-columns: minmax(4rem, auto) minmax(0, 1fr) auto; align-items: center; gap: .4rem .9rem; padding: .55rem .9rem; }
 .enh-row + .enh-row { border-top: 1px solid var(--app-border); }
 .enh-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
 .enh-go { font-size: .8rem; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: .1rem; }
 @media (max-width: 575.98px) {
-  .enh-row { grid-template-columns: 1fr auto; }
+  .enh-row { grid-template-columns: minmax(0, 1fr) auto; }
   .enh-chips { grid-column: 1 / -1; grid-row: 2; }
 }
 
@@ -355,3 +355,13 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .replace-status { display: inline-block; font-size: .85rem; color: var(--app-muted); }
 .replace-status .spinner-border { width: .9rem; height: .9rem; border-width: .15em; margin-right: .35rem; vertical-align: -.15em; color: var(--app-accent); }
 .needs-actions { align-items: center; flex-wrap: wrap; }
+
+/* A button that asks first, in place (templates/_confirm.html). */
+.confirm-inline { display: inline-block; }
+.confirm-inline > summary { list-style: none; }
+.confirm-inline > summary::-webkit-details-marker { display: none; }
+.confirm-inline .when-open, .confirm-inline[open] .when-closed { display: none; }
+.confirm-inline[open] .when-open { display: inline; }
+.confirm-inline[open] { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.confirm-inline-body { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .875rem; }
+.confirm-inline[open] > summary { --bs-btn-color: var(--app-muted); --bs-btn-border-color: var(--app-border); --bs-btn-bg: transparent; --bs-btn-hover-color: var(--bs-body-color); --bs-btn-hover-bg: transparent; --bs-btn-hover-border-color: var(--app-muted); }
