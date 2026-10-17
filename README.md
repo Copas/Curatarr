@@ -34,6 +34,7 @@ That's all you need to get started. Add these when you want more:
 | **FFmpeg** and **MKVToolNix** | Chapters, English-dub checks, file problem checks |
 | **Local AI**: Whisper (installed with the `chapters` extra) and **Ollama** with a model (e.g. `qwen3:14b`), ideally on an NVIDIA GPU | Smart Chapters, subtitles, recap and preview detection, Fun facts, search by what was said |
 | Jellyfin **Intro Skipper** plugin | Skip buttons for recaps and previews, and clean-up of bad skip markers |
+| **Seerr** (or Jellyseerr/Overseerr) | Requested titles are kept until whoever asked has watched them |
 
 Everything runs on your own server. No cloud service, no account, no tracking. Free and open source (MIT).
 
@@ -43,6 +44,15 @@ Everything runs on your own server. No cloud service, no account, no tracking. F
 
 ### 💾 Never run out of space, and never lose what someone's in the middle of
 When a disk runs low, Curatarr picks the titles nobody has touched for longest and puts them on a **Leaving Soon** shelf, with a badge on the poster in Jellyfin. Anyone who presses play saves it. New arrivals get a grace period, favourites go to the back of the line, and you can keep, snooze or protect anything for good.
+
+It knows what your household cares about, too:
+
+- **Asked for it in Seerr?** It stays until whoever asked has watched it.
+- **The comfort rewatches** go to the back of the line without anyone pressing Keep.
+- **What an import list dragged in** and nobody played goes first.
+- **Halloween films stay through October** (and Christmas ones through December), and can even come back before their season.
+- **Shrink instead of delete:** swap a 25 GB copy of a film you keep for a 6 GB one, only if one exists.
+- **A disk forecast** says when you'll run low at this week's pace, and what would go first.
 
 ![The review queue: why each title was picked, and what happens next](docs/images/review.png)
 

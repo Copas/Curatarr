@@ -29,7 +29,7 @@ You need:
 
 - **Jellyfin**, and **Sonarr** and/or **Radarr** (at least one: Sonarr for TV, Radarr for films), reachable from the Curatarr machine, and an administrator login for each to create API keys.
 - A Jellyfin account with the **Administrator** permission to sign in to Curatarr.
-- Optional: Jellyfin's **Webhook** plugin (Dashboard → Plugins → Catalog) for instant playback updates, and the **Intro Skipper** plugin if you want recap and preview skip buttons.
+- Optional: Jellyfin's **Webhook** plugin (Dashboard → Plugins → Catalog) for instant playback updates, the **Intro Skipper** plugin if you want recap and preview skip buttons, and **Seerr** (or Jellyseerr/Overseerr) so requested titles are kept until whoever asked has watched them.
 
 Always install a **tagged release** (the newest is `v0.2.0rc4`; see [CHANGELOG.md](../CHANGELOG.md)), not the `main` branch.
 
@@ -313,7 +313,7 @@ Logs: `docker compose logs --tail=100 web worker`. Don't use `docker compose dow
    Without the webhook, the hourly reconciliation still picks up playback, just later.
 4. **Discover.** Click **Discover** on Overview. It runs in the background; a large library takes about a minute. Settings → Operations shows when it's done.
 5. **Review the rules.** Look over Settings → Acquisition and Settings → Retention. Every library starts in **dry run**: Curatarr goes through the whole process and records what it *would* remove in History, but deletes nothing. Turn dry run off globally or per library when you're happy.
-6. **Optional:** switch on chapters per library in Settings → Enhance, and allow household members in Settings → Integrations → Household access.
+6. **Optional:** switch on chapters per library in Settings → Enhance, allow household members in Settings → Integrations → Household access, connect Seerr on the same page, and look over Settings → Household (requests, import lists, seasonal shelves).
 
 ---
 

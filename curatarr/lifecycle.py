@@ -7,7 +7,7 @@ from math import isfinite
 
 from sqlalchemy import func, update
 
-from . import db
+from . import curation, db
 from .integrations import IntegrationError
 from .models import (
     AcquisitionState,
@@ -71,6 +71,7 @@ def _candidate_input(media, active_queue=False):
     )
     if latest_acquisition:
         added_at = max(_aware(added_at), _aware(latest_acquisition))
+    signals = curation.signals(media, states)
     return CandidateInput(
         media.id,
         media.media_type,
@@ -83,6 +84,10 @@ def _candidate_input(media, active_queue=False):
         active_queue,
         existing.snooze_until if existing else None,
         mapped,
+        held_until=signals["held_until"],
+        rewatched=signals["rewatched"],
+        from_list=signals["from_list"],
+        list_grace_days=signals["list_grace_days"],
     )
 
 
@@ -456,6 +461,16 @@ def rescue_candidate(candidate, reason):
     db.session.commit()
 
 
+def _held_reason(media):
+    found = curation.signals(media)
+    if found["request"]:
+        who = found["request"].get("user") or "Someone"
+        return f"{who} requested it and hasn't watched it yet."
+    if found["season"]:
+        return f"It's {found['season']} season."
+    return "Held for now."
+
+
 def reconcile_candidates():
     """Remove stale candidates before evaluating fresh retention state."""
     now = utcnow()
@@ -479,6 +494,8 @@ def reconcile_candidates():
             item = _candidate_input(media)
             if policy["never_purge"]:
                 reason = "Never Purge is now enabled."
+            elif item.held_until and _aware(item.held_until) > now:
+                reason = _held_reason(media)
             elif not item.mapped or item.size_bytes <= 0:
                 reason = "Media mapping or reclaimable content changed."
             elif item.last_played_at and (
@@ -531,6 +548,7 @@ def evaluate_retention():
 
 
 def _evaluate_retention_locked():
+    curation.forget()
     reconcile_candidates()
     queue = _queue_ids()
     now = utcnow()
@@ -1316,7 +1334,14 @@ def _execute_action(action_id):
                 arr = client("radarr")
                 if _playback_preempts_delete(candidate, action):
                     return "blocked"
+                movie = None
+                if curation.seasons_for(media):
+                    try:  # its profile and folder, for when its season comes
+                        movie = arr.movie(media.radarr_id)
+                    except IntegrationError:
+                        pass
                 arr.delete_movie(media.radarr_id)
+                curation.remember_for_return(media, movie)
                 for part in media.parts:
                     part.has_file = False
             else:
@@ -1560,3 +1585,122 @@ def expire_snoozes():
         )
     db.session.commit()
     return len(rows)
+
+
+FORECAST_KEY = "disk_forecast"
+FORECAST_DAYS = 7  # the pace is what arrived over this many days
+FORECAST_TITLES = 8
+
+
+def update_forecast():
+    """When each measured disk reaches its low free-space mark at this week's
+    download pace, and which titles cleanup would take first then. Stored for
+    Overview; computed during reconciliation (it asks Sonarr and Radarr)."""
+    from .services import set_setting
+
+    now = utcnow()
+    queue = _queue_ids()
+    since = now - timedelta(days=FORECAST_DAYS)
+    disks = {}
+    libraries = (
+        db.session.query(Library)
+        .filter(Library.media_type.in_(["tv", "movies"]))
+        .order_by(Library.name)
+    )
+    for library in libraries:
+        rows = (
+            db.session.query(MediaIdentity)
+            .filter_by(library_id=library.id, missing_since=None)
+            .all()
+        )
+        if not rows:
+            continue
+        policy, _ = resolved_policy(rows[0])
+        if not policy["disk_path"]:
+            continue
+        # Measured even where free-space cleanup is off: it's only a forecast.
+        measured = _disk_measure(rows[0], policy | {"free_space_enabled": True})
+        if measured is None:
+            continue
+        total, free, key = measured
+        disk = disks.setdefault(
+            str(key),
+            {
+                "total": total,
+                "free": free,
+                "low": int(total * policy["low_free_percent"] / 100),
+                "libraries": [],
+                "library_ids": [],
+                "items": [],
+                "policies": [],
+            },
+        )
+        disk["libraries"].append(library.name)
+        disk["library_ids"].append(library.id)
+        disk["policies"].append(policy)
+        for media in rows:
+            kind = "sonarr" if media.media_type == "series" else "radarr"
+            active_ids = queue.get(kind)
+            arr_id = media.sonarr_id if kind == "sonarr" else media.radarr_id
+            item = _candidate_input(
+                media, active_ids is not None and arr_id in active_ids
+            )
+            media_policy, _ = resolved_policy(media)
+            if eligible(item, media_policy, now, healthy=active_ids is not None):
+                disk["items"].append(item)
+    result = []
+    for disk in disks.values():
+        arrived = (
+            db.session.query(func.sum(MediaPart.size_bytes))
+            .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+            .filter(
+                MediaIdentity.library_id.in_(disk["library_ids"]),
+                MediaPart.has_file.is_(True),
+                MediaPart.acquired_at >= since,
+            )
+            .scalar()
+            or 0
+        )
+        per_day = arrived / FORECAST_DAYS
+        headroom = disk["free"] - disk["low"]
+        if headroom <= 0:
+            days = 0
+        elif per_day > 0:
+            days = headroom / per_day
+        else:
+            days = None
+        # The titles that would go first: enough for a week at this pace.
+        wanted = max(per_day * FORECAST_DAYS, 1)
+        picks, freed = [], 0
+        group = {"policies": disk["policies"], "items": disk["items"], "needed": wanted}
+        chosen, _deficit = _select_from_group(group, now)
+        titles = {
+            m.id: m.title
+            for m in db.session.query(MediaIdentity).filter(
+                MediaIdentity.id.in_([i.media_id for i in chosen[:FORECAST_TITLES]])
+            )
+        }
+        for item in chosen[:FORECAST_TITLES]:
+            freed += item.size_bytes
+            picks.append(
+                {
+                    "id": item.media_id,
+                    "title": titles.get(item.media_id),
+                    "size": item.size_bytes,
+                }
+            )
+        result.append(
+            {
+                "libraries": disk["libraries"],
+                "total": disk["total"],
+                "free": disk["free"],
+                "low": disk["low"],
+                "per_day": int(per_day),
+                "days": None if days is None else round(days, 1),
+                "picks": picks,
+                "freed": freed,
+            }
+        )
+    set_setting(FORECAST_KEY, {"at": now.isoformat(), "disks": result})
+    db.session.commit()
+    return result

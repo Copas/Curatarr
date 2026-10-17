@@ -1166,6 +1166,28 @@ def review_action(candidate_id, choice):
     return redirect(url_for("main.review"))
 
 
+@bp.post("/titles/<media_id>/shrink/<action>")
+def title_shrink(media_id, action):
+    """Shrink instead of delete (shrink.py): look, cancel, or OK a result."""
+    from . import shrink
+
+    media = db.session.get(MediaIdentity, media_id)
+    if not media or action not in {"shrink", "cancel", "dismiss"}:
+        abort(404)
+    try:
+        if action == "shrink":
+            flash(shrink.request(media), "info")
+        elif action == "cancel":
+            shrink.cancel(media)
+        else:
+            shrink.dismiss(media)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    if request.form.get("back") == "review":
+        return redirect(url_for("main.review"))
+    return redirect(url_for("main.title", media_id=media.id))
+
+
 @bp.route("/titles/<media_id>/reset", methods=["GET", "POST"])
 def title_reset(media_id):
     from .lifecycle import reset_series
@@ -1424,6 +1446,8 @@ def cleanup_preview():
 
 @bp.route("/rules/<section>", methods=["GET", "POST"])
 def rules(section):
+    if section == "household":
+        return _household_rules()
     if section not in RULE_SECTIONS:
         abort(404)
     library = None
@@ -1434,6 +1458,32 @@ def rules(section):
             abort(404)
     title, keys = RULE_SECTIONS[section]
     return _policy_page(section, title, keys, library)
+
+
+def _household_rules():
+    """Requests, rewatches, import lists and seasons (curation.py)."""
+    from . import curation
+    from .services import configured
+
+    if request.method == "POST":
+        try:
+            curation.save_options(request.form)
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+        else:
+            curation.forget()
+            flash("Saved", "success")
+        return redirect(url_for("main.rules", section="household"))
+    return render_template(
+        "household_rules.html",
+        options=curation.options(),
+        seasons=curation.SEASONS,
+        seerr=configured("seerr"),
+        requests=len(setting(curation.REQUESTS_KEY, {}) or {}),
+        listed=len(setting(curation.LISTS_KEY, []) or []),
+        returning=setting(curation.RETURNS_KEY, {}) or {},
+    )
 
 
 @bp.route("/libraries/<library_id>/policy", methods=["GET", "POST"])

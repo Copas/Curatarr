@@ -1,6 +1,15 @@
 {% extends 'base.html' %}
 {% block content %}
+{% from '_signals.html' import household_notes with context %}{% from '_shrink.html' import shrink_actions with context %}
 <div class="eyebrow">{{ 'TV show' if media.media_type == 'series' else 'Movie' }} · {{ media.library.name }}</div><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h1 class="mb-0">{{ media.title }}</h1>{% if jellyfin_url(media.jellyfin_id) %}<a class="btn btn-sm btn-outline-light" href="{{ jellyfin_url(media.jellyfin_id) }}" target="_blank" rel="noopener">Open in Jellyfin</a>{% endif %}</div><p class="text-secondary mt-2">Decisions{% if is_admin %}, recent activity,{% endif %} and options for this title.</p>
+{% set notes = household_notes(signals)|trim %}{% if notes %}<div class="d-flex flex-wrap gap-1 mb-4">{{ notes }}</div>{% endif %}
+{% if is_admin and media.media_type == 'movie' and (shrink.offered or shrink.status) %}<div class="card mb-4">
+  <h2 class="h5 px-3 pt-3 mb-2">Actions</h2>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 px-3 py-3 border-top border-secondary-subtle">
+    <div><div class="fw-semibold">Shrink instead of delete</div><div class="text-secondary small">Keep the film but free space: swap it for a copy half the size or smaller{% if shrink.offered %} (it's {{ media.parts|selectattr('has_file')|sum(attribute='size_bytes')|size }} now){% endif %}. Nothing changes unless one exists.</div></div>
+    <div class="d-flex flex-wrap align-items-center gap-2">{{ shrink_actions(media, shrink) }}</div>
+  </div>
+</div>{% endif %}
 {% if is_admin and media.media_type == 'series' %}<div class="card mb-4">
   <h2 class="h5 px-3 pt-3 mb-2">Actions</h2>
   <div class="d-flex justify-content-between align-items-center gap-3 px-3 py-3 border-top border-secondary-subtle">

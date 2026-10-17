@@ -64,6 +64,24 @@
 {% else %}<p>No libraries discovered yet.{% if is_admin %} Add integrations in Settings, then discover.{% endif %}</p>{% endfor %}
 </div>
 {% if is_admin and unmanaged_libraries %}<p class="text-secondary small" id="unmanaged-libraries">Not managed: {{ unmanaged_libraries|join(', ') }}. Curatarr only tracks Jellyfin TV and movie libraries, which Sonarr and Radarr manage; other library types are left untouched and their size is not counted.</p>{% endif %}
+{% if is_admin and forecast and forecast.disks %}
+<h2 class="section-title">Disk forecast</h2>
+<div class="row g-3 mb-4">
+{% for disk in forecast.disks %}
+  <div class="col-lg-6"><div class="card p-3 h-100 forecast-card">
+    <h3 class="h6 mb-1">{{ disk.libraries|join(' · ') }}</h3>
+    <p class="mb-2"><strong>{{ disk.free|size }}</strong> free of {{ disk.total|size }}.
+    {% if disk.days == 0 %}<span class="text-warning">Below the low-space mark ({{ disk.low|size }} free) now.</span>
+    {% elif disk.days is none %}Nothing new arrived this week, so it isn't filling up.
+    {% else %}At this week's pace, about {{ disk.per_day|size }} a day, it reaches the low-space mark ({{ disk.low|size }} free) in {% if disk.days > 60 %}more than two months{% elif disk.days < 1.5 %}about a day{% else %}about <strong>{{ disk.days|round|int }} days</strong>{% endif %}.{% endif %}</p>
+    {% if disk.picks %}<p class="small text-secondary mb-1">{{ 'Next to go' if disk.days == 0 else 'Then these would go first' }}, freeing {{ disk.freed|size }}:</p>
+    <ol class="forecast-list small mb-0">{% for pick in disk.picks %}<li><a href="{{ url_for('main.title', media_id=pick.id) }}">{{ pick.title or 'Unknown title' }}</a> <span class="text-secondary">{{ pick.size|size }}</span></li>{% endfor %}</ol>
+    {% else %}<p class="small text-secondary mb-0">Nothing is eligible for cleanup yet.</p>{% endif %}
+  </div></div>
+{% endfor %}
+</div>
+<p class="small text-secondary mt-n2 mb-4">Updated {{ forecast.at|when }}. Requested, seasonal and recently added titles are left out; rewatched ones come last.</p>
+{% endif %}
 {% if is_admin %}
 <h2 class="section-title">Scheduled cleanup</h2>
 <div class="table-responsive mb-4"><table class="table table-stack"><thead><tr><th>Date</th><th>Title</th><th>State</th><th>Size</th><th>Reason</th></tr></thead><tbody>

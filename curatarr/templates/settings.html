@@ -4,9 +4,10 @@
 <div class="eyebrow">Manage</div><h1>Integrations and access</h1><p class="text-secondary">Connect each application with its API URL and key. Saved keys are never shown here. The <a href="{{ url_for('main.setup') }}">setup checklist</a> shows what remains.</p>
 {% if new_token %}<div class="alert alert-info">Copy this webhook token now; it will not be shown again: <code>{{ new_token }}</code></div>{% endif %}
 <div class="row g-3">
-{% for kind in ['jellyfin', 'sonarr', 'radarr'] %}
+{% for kind in ['jellyfin', 'sonarr', 'radarr', 'seerr'] %}
   {% set integration = integrations.get(kind) %}
-  <div class="col-lg-4"><div class="card p-3 h-100"><h2 class="h5">{{ kind|title }}</h2>
+  <div class="col-md-6 col-xl-3"{% if kind == 'seerr' %} id="seerr"{% endif %}><div class="card p-3 h-100"><h2 class="h5">{{ kind|title }}{% if kind == 'seerr' %} <span class="badge text-bg-secondary align-middle">Optional</span>{% endif %}</h2>
+    {% if kind == 'seerr' %}<p class="text-secondary small">Requests protect a title until the person who asked has watched it. <a href="{{ url_for('main.rules', section='household') }}">Household choices</a></p>{% endif %}
     {% set guide = guides[kind] %}
     <p>Status: {{ integration.health_state if integration else 'unconfigured' }}{% if integration and integration.secret_ref %} · Key saved{% endif %}</p>
     <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="{{ kind }}">
