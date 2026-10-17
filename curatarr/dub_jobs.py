@@ -274,7 +274,7 @@ def check(state, part, original) -> dict:
         if opts["dub_replace_automatically"] and not _dry_run(part.media):
             from . import better_copy
 
-            better_copy.request(state, "dub")  # replaced only if a better copy exists
+            better_copy.request(state, "dub", auto=True)  # only if a better copy exists
     return state.dub_result
 
 

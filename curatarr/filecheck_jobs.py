@@ -188,7 +188,9 @@ def check(state, part, runtimes=None) -> dict:
         if e.options()["file_replace_automatically"] and not _dry_run(media):
             from . import better_copy
 
-            better_copy.request(state, "file")  # replaced only if a better copy exists
+            better_copy.request(
+                state, "file", auto=True
+            )  # only if a better copy exists
     return result
 
 

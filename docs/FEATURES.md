@@ -173,6 +173,10 @@ Problem files are listed on **Enhance → Problems** and on Overview, to **Repla
 
 Sonarr sometimes grabs a namesake: a remake, or a foreign show with the same title. A show is flagged when most of its files' names carry a year that isn't the show's (title years and air years excepted), or most of its audio is in another language and no file has an English or original-language track. **Replace** blocklists those releases, deletes the files, searches again and adds a Sonarr release profile, for that show only, ignoring the wrong year. **It's right** stops listing it until its files change.
 
+### Automatic fixes
+
+Settings → Automatic switches on, one by one, fixes Curatarr then starts by itself instead of listing them: replacing problem files, films with no English audio, and files of another show with the same name, and searching once for always-keep episodes that never arrived. All are off by default. Each fix is tried once, including for problems found before it was switched on. When it doesn't work (no better copy exists, or the episodes are still missing two days after the search), the item is dropped and Activity records that it couldn't be fixed; a Replace you clicked yourself still says "No better copy" and waits for your OK. Overview shows one line, "Handled in the last 7 days", instead of a row per item. Libraries in dry run never replace files.
+
 ### Replace checks first
 
 Every **Replace** (English dubs, Problems, wrong shows, and automatic replacement) is queued rather than done on the spot. The worker asks Radarr or Sonarr for the title's releases (a minute or two, across every indexer) and replaces the file only if one would be taken once the current file is gone: not the release already there, not one more part of a split film, and for a wrong show not the wrong year or the flagged releases. Otherwise the file stays.

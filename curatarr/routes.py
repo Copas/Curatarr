@@ -393,7 +393,18 @@ def action_name(action):
         if action.action_type == "would_delete":
             return "Dry run: would reset" if series else "Dry run: would delete"
         return "Reset to first episodes" if series else "Deleted"
-    return action.action_type.replace("_", " ").title()
+    return (
+        ACTION_WORDS.get(action.action_type)
+        or action.action_type.replace("_", " ").title()
+    )
+
+
+ACTION_WORDS = {
+    "auto_fix_started": "Searched automatically",
+    "auto_fix_gave_up": "Couldn't be fixed; stopped trying",
+    "shrunk": "Shrunk to a smaller copy",
+    "seasonal_returned": "Brought back for its season",
+}
 
 
 def _nav_section():
@@ -637,8 +648,15 @@ def overview():
         demo_mode=current_app.config["DEMO_MODE"],
         needs=_needs_you(status, data["scheduled"], setup_incomplete, admin),
         care=_library_care() if admin else None,
+        handled=_handled_summary() if admin else None,
         **data,
     )
+
+
+def _handled_summary():
+    from . import autofix
+
+    return autofix.summary()
 
 
 NEEDS_SHOWN = 4  # titles leaving soon listed individually on Overview
@@ -715,10 +733,20 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "href": url_for("main.settings"),
             },
         )
-    from . import better_copy, dub_jobs
+    from . import autofix, better_copy, dub_jobs
     from .enrichment import file_label, maintenance_failed_count
 
-    for state in dub_jobs.review()["to_act"][:NEEDS_SHOWN]:
+    auto = autofix.enabled()
+
+    def handled(status, kind):
+        """Being worked on, or about to be: not something that needs you."""
+        return status == "pending" or (status is None and auto[kind])
+
+    for state in [
+        s
+        for s in dub_jobs.review()["to_act"]
+        if not handled(better_copy.status(s, "dub"), "dubs")
+    ][:NEEDS_SHOWN]:
         needs.append(
             {
                 "icon": "audio",
@@ -734,7 +762,11 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
         )
     from . import filecheck_jobs
 
-    for state in filecheck_jobs.review()["to_act"][:NEEDS_SHOWN]:
+    for state in [
+        s
+        for s in filecheck_jobs.review()["to_act"]
+        if not handled(better_copy.status(s, "file"), "files")
+    ][:NEEDS_SHOWN]:
         needs.append(
             {
                 "icon": "subtitles"
@@ -752,7 +784,9 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
         )
     from . import missing_keep, wrong_version
 
-    for row in wrong_version.rows()[:NEEDS_SHOWN]:
+    for row in [
+        r for r in wrong_version.rows() if not handled(r["status"], "wrong_show")
+    ][:NEEDS_SHOWN]:
         needs.append(
             {
                 "icon": "tools",
@@ -767,7 +801,11 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "href": url_for("main.chapter_problems"),
             }
         )
-    for row in missing_keep.rows()[:NEEDS_SHOWN]:
+    for row in [
+        r
+        for r in missing_keep.rows()
+        if r["state"] != "waiting" and not (r["state"] == "new" and auto["missing"])
+    ][:NEEDS_SHOWN]:
         needs.append(
             {
                 "icon": "tools",
@@ -1448,6 +1486,8 @@ def cleanup_preview():
 def rules(section):
     if section == "household":
         return _household_rules()
+    if section == "automatic":
+        return _automatic_rules()
     if section not in RULE_SECTIONS:
         abort(404)
     library = None
@@ -1458,6 +1498,19 @@ def rules(section):
             abort(404)
     title, keys = RULE_SECTIONS[section]
     return _policy_page(section, title, keys, library)
+
+
+def _automatic_rules():
+    """Which fixes Curatarr starts by itself (autofix.py)."""
+    from . import autofix
+
+    if request.method == "POST":
+        autofix.save(request.form)
+        flash("Saved", "success")
+        return redirect(url_for("main.rules", section="automatic"))
+    return render_template(
+        "automatic_rules.html", kinds=autofix.KINDS, enabled=autofix.enabled()
+    )
 
 
 def _household_rules():
