@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Cleanup listens to the household.** Settings → Household, with a note on each title's page and in Review saying why:
+  - **Seerr requests** (optional integration): a requested title is kept until whoever asked has played it, for up to 90 days.
+  - **Rewatched titles** (Jellyfin play counts) go to the back of the line, like favourites.
+  - **Import-list arrivals** nobody has played get a 7-day grace period and go first. Radarr's lists are recognised directly; Sonarr's by a tag on the list.
+  - **Seasonal shelves:** Halloween and Christmas titles (TMDB keywords, or watched mostly in that season before) are kept through their season and the two weeks before; optionally, ones Curatarr removed are added back to Radarr before their season.
+- **Shrink instead of delete.** Films of 4 GB or more can be swapped for a copy half the size or smaller, from Review or the film's page. Curatarr checks such a copy exists first and changes nothing otherwise.
+- **Disk forecast** on Overview: how fast each disk is filling, roughly when it reaches the low free-space mark, and what cleanup would take first then.
+
 - **Sonarr or Radarr is enough.** A TV-only or film-only setup no longer needs the other: setup is complete with Jellyfin and either one, discovery skips the one that isn't set up, and Overview doesn't warn about it. One that's set up but stops answering still stops discovery, so nothing it manages is unmatched by mistake.
 - **A new README** leading with what Curatarr needs and what it does, with new screenshots.
 - **Replace checks there's something better first.** Replace (English dubs, Problems, wrong shows) used to blocklist the release, delete the file and then search, which could leave no copy at all when nothing better existed. Now the request is queued and the worker asks Radarr or Sonarr for releases first; the file is replaced only if one would be taken once the current file is gone (not the same release, and not one more part of a split film). Automatic replacement works the same way.

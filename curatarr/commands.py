@@ -81,7 +81,7 @@ def worker_cycle():
         return "waiting_for_setup"
     set_setting("last_reconcile_attempt_at", now.isoformat())
     started = time.monotonic()
-    for kind in ("jellyfin", "sonarr", "radarr"):
+    for kind in ("jellyfin", "sonarr", "radarr", "seerr"):
         check_integration(kind)
     if demo:
         from .demo import seed_demo
@@ -92,7 +92,9 @@ def worker_cycle():
         reconcile_user_state()
         queue_watch_restoration()
         reconcile_acquisition()
+        _curate()
     evaluate_retention()
+    _forecast()
     set_setting("last_reconcile_at", utcnow().isoformat())
     _record_reconcile_duration(started)
     if not demo:
@@ -101,6 +103,29 @@ def worker_cycle():
         run_requested_scan()
         _dispatch_chapters()
     return "reconciled"
+
+
+def _forecast():
+    """Overview's disk forecast; a failure leaves the last one."""
+    from .lifecycle import update_forecast
+
+    try:
+        update_forecast()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Updating the disk forecast failed")
+
+
+def _curate():
+    """Seerr requests, and seasonal films due back; neither stops a reconcile."""
+    from . import curation
+
+    for step in (curation.sync_requests, curation.return_seasonal):
+        try:
+            step()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Curation step %s failed", step.__name__)
 
 
 def _dispatch_chapters():
@@ -178,6 +203,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Looking for better copies failed")
     try:
+        from . import shrink
+
+        shrink.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Shrinking films failed")
+    try:
         from .enrichment import link_transcripts
 
         link_transcripts()
@@ -214,7 +246,7 @@ def register_commands(app):
         with current_app.app_context():
             started = time.monotonic()
             try:
-                for kind in ("jellyfin", "sonarr", "radarr"):
+                for kind in ("jellyfin", "sonarr", "radarr", "seerr"):
                     check_integration(kind)
                 if current_app.config["DEMO_MODE"]:
                     from .demo import seed_demo
@@ -225,11 +257,13 @@ def register_commands(app):
                     reconcile_user_state()
                     queue_watch_restoration()
                     reconcile_acquisition()
+                    _curate()
                 process_pending_events()
                 recover_stale_actions()
                 reconcile_unknown_actions()
                 expire_snoozes()
                 created = evaluate_retention()
+                _forecast()
                 run_actions()
                 resume_approved()
                 expire_notices()

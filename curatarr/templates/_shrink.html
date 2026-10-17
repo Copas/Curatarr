@@ -1,0 +1,14 @@
+{# Shrink instead of delete (shrink.py): offered, looking, swapping, or decided.
+   Import "with context". #}
+{% from '_confirm.html' import confirm_submit %}
+{% macro post(media, back, action, label, tip) %}<form method="post" action="{{ url_for('main.title_shrink', media_id=media.id, action=action) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}<button class="btn btn-sm btn-outline-secondary" data-tip="{{ tip }}">{{ label }}</button></form>{% endmacro %}
+{% macro shrink_actions(media, shrink, back=None) %}
+{% set entry = shrink.entry %}
+{% if shrink.status == 'pending' %}<span class="replace-status" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Looking for a smaller copy…</span>{{ post(media, back, 'cancel', 'Cancel', 'Stops looking. Nothing has been changed yet.') }}
+{% elif shrink.status == 'swapping' %}<span class="replace-status" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Downloading a {{ entry.swapped.to|size }} copy (was {{ entry.swapped.from|size }})</span>
+{% elif shrink.status == 'done' %}<span class="replace-status text-success">Shrunk from {{ entry.swapped.from|size }} to {{ entry.swapped.to|size }} on {{ entry.swapped.arrived|when('date') }}.</span>
+{% elif shrink.status == 'no_smaller' %}<span class="replace-status text-warning">No copy half the size or smaller was available{% if entry.no_smaller.at %}, checked {{ entry.no_smaller.at|when('date') }}{% endif %}.</span>{{ post(media, back, 'dismiss', 'OK', 'Keeps the film as it is.') }}
+{% elif shrink.status == 'error' %}<span class="replace-status text-warning">{{ entry.error }}</span>{{ post(media, back, 'dismiss', 'OK', 'Clears this message.') }}
+{% elif shrink.offered %}<form method="post" action="{{ url_for('main.title_shrink', media_id=media.id, action='shrink') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% if back %}<input type="hidden" name="back" value="{{ back }}">{% endif %}{{ confirm_submit('Shrink', 'Swap it for a copy half the size or smaller? Curatarr looks first and changes nothing unless one exists.', 'Look for a smaller copy', style='btn-outline-info', tip='Keeps the film but frees space: swaps it for a much smaller copy, if one exists.') }}</form>
+{% endif %}
+{% endmacro %}

@@ -203,6 +203,13 @@ class CandidateInput:
     active_queue: bool = False
     snoozed_until: datetime | None = None
     mapped: bool = True
+    # From the household's choices (curation.py): held for a request or a
+    # season, rewatched (kept like a favourite), or added by an import list
+    # and not played yet (shorter grace, first in line).
+    held_until: datetime | None = None
+    rewatched: bool = False
+    from_list: bool = False
+    list_grace_days: int | None = None
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -220,7 +227,12 @@ def eligible(
         return False
     if item.snoozed_until and _aware(item.snoozed_until) > now:
         return False
-    if added + timedelta(days=policy["grace_days"]) > now:
+    if item.held_until and _aware(item.held_until) > now:
+        return False
+    grace = policy["grace_days"]
+    if item.from_list and item.list_grace_days is not None:
+        grace = min(grace, item.list_grace_days)
+    if added + timedelta(days=grace) > now:
         return False
     if (
         item.media_type == "series"
@@ -251,10 +263,12 @@ def rank(items: list[CandidateInput], strategy: str, now: datetime, meaningful=2
         watched = item.last_played_at is not None
         last = _aware(item.last_played_at) or epoch
         added = _aware(item.added_at)
-        favorite = int(item.favorite)
+        favorite = int(item.favorite or item.rewatched)
+        listed = int(not item.from_list)  # unplayed list arrivals go first
         if strategy == "oldest_unwatched_first":
             return (
                 favorite,
+                listed,
                 int(item.completed_episodes >= meaningful),
                 int(watched),
                 last if watched else added,
@@ -264,6 +278,7 @@ def rank(items: list[CandidateInput], strategy: str, now: datetime, meaningful=2
         if strategy == "oldest_watched_nonfavorite_first":
             return (
                 favorite,
+                listed,
                 int(not watched),
                 last if watched else added,
                 added,
@@ -291,6 +306,8 @@ def weighted_score(item: CandidateInput, now: datetime, meaningful=2):
         "below_meaningful_bonus": 20 if item.completed_episodes < meaningful else 0,
         "unwatched_bonus": 30 if item.last_played_at is None else 0,
         "favorite_penalty": -200 if item.favorite else 0,
+        "rewatched_penalty": -150 if item.rewatched and not item.favorite else 0,
+        "list_bonus": 40 if item.from_list else 0,
     }
     return sum(detail.values()), detail
 

@@ -8,6 +8,7 @@
   {% for key, label in [('acquisition', 'Acquisition'), ('retention', 'Retention')] %}
   <li class="nav-item"><a class="nav-link {{ 'active' if key == section }}" href="{{ url_for('main.rules', section=key, scope=library.id if library else 'global') }}">{{ label }}</a></li>
   {% endfor %}
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('main.rules', section='household') }}">Household choices</a></li>
 </ul>
 <div class="d-flex flex-wrap gap-2 mb-3" aria-label="Policy scope">
   <a class="btn btn-sm {{ 'btn-primary' if not library else 'btn-outline-light' }}" href="{{ url_for('main.rules', section=section, scope='global') }}">Global defaults</a>
