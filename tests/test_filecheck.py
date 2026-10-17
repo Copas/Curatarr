@@ -434,9 +434,11 @@ def test_the_row_shows_what_replace_is_doing(client, check_env):
     replace_url = f"/chapters/problems/{state.id}/replace"
     assert replace_url in client.get("/").text
     client.post(replace_url, data={"back": "overview"})
-    for page in (client.get("/").text, client.get("/chapters/problems").text):
-        assert "Looking for a better copy…" in page and replace_url not in page
-        assert f"/chapters/problems/{state.id}/cancel" in page
+    page = client.get("/chapters/problems").text
+    assert "Looking for a better copy…" in page and replace_url not in page
+    assert f"/chapters/problems/{state.id}/cancel" in page
+    # Being looked into doesn't need anyone, so Overview leaves it out.
+    assert f"/chapters/problems/{state.id}" not in client.get("/").text
     # A second click (an old tab) changes nothing.
     page = client.post(replace_url, follow_redirects=True).text
     assert "Already looking for a better copy" in page

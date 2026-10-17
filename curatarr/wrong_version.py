@@ -234,6 +234,7 @@ def sweep() -> int:
             "dismissed": previous.get("dismissed") and same,
             "replace_requested": previous.get("replace_requested") if same else None,
             "no_better": previous.get("no_better") if same else None,
+            "replace_auto": previous.get("replace_auto") if same else None,
         }
         done += 1
         if time.monotonic() - started > RUN_SECONDS:

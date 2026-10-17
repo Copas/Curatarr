@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="eyebrow">Manage · Global defaults</div><h1>Automatic fixes</h1>
+<p class="text-secondary">Fixes Curatarr starts by itself as soon as it finds the problem, instead of listing it for you. Each is tried once: if it doesn't work (no better copy exists, or the episodes are still missing after searching) the item is dropped quietly and Activity says so. Overview shows one line about what was handled.</p>
+<form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="d-grid gap-3">
+  {% for kind, label in kinds.items() %}
+    <label class="form-check"><input class="form-check-input" type="checkbox" name="{{ kind }}"{% if enabled[kind] %} checked{% endif %}><span class="form-check-label">{{ label }}</span>
+      <div class="form-text">{{ {'files': 'Checks a better copy exists first; only then blocklists the release, deletes the file and downloads the other one.', 'dubs': 'Checks a release with English audio exists first; only then swaps the file.', 'wrong_show': "Checks the right show's releases exist first; only then deletes the wrong files and searches again.", 'missing': 'Monitors just those episodes in Sonarr and searches, a few shows at a time. Nothing else downloads.'}[kind] }}</div></label>
+  {% endfor %}
+  </div>
+  <p class="small text-secondary mt-3 mb-0">Libraries in dry run never replace files, automatically or not.</p>
+  <div class="border-top border-secondary-subtle mt-4 pt-3"><button class="btn btn-primary">Save</button></div>
+</form>
+{% endblock %}

@@ -41,6 +41,7 @@
     </li>{% endfor %}
     </ul>
     {% else %}<div class="needs-empty">{{ icon('review', 28) }}<div><strong>Nothing needs you.</strong><br><span class="text-secondary small">Decisions, replacements and problems show up here.</span></div></div>{% endif %}
+    {% if handled %}<p class="small text-secondary mb-0 mt-3">{{ icon('tools', 14) }} Handled in the last {{ handled.days }} days:{% set bits = [] %}{% if handled.replaced %}{% set _ = bits.append(handled.replaced ~ ' file' ~ ('s' if handled.replaced != 1 else '') ~ ' replaced') %}{% endif %}{% if handled.searched %}{% set _ = bits.append(handled.searched ~ ' search' ~ ('es' if handled.searched != 1 else '') ~ ' for missing episodes') %}{% endif %}{% if handled.gave_up %}{% set _ = bits.append(handled.gave_up ~ " couldn't be fixed") %}{% endif %} {{ bits|join(' · ') }}. <a href="{{ url_for('main.history') }}">Activity</a></p>{% endif %}
   </div></section>
   {% if care %}{% set c = care.summary %}{% set a = care.activity %}
   <section class="col-lg-5" aria-labelledby="care-heading"><a class="card p-3 h-100 care-card text-reset text-decoration-none" href="{{ url_for('main.chapter_maintenance') }}">

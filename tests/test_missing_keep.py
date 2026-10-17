@@ -149,8 +149,9 @@ def test_search_once_shows_searching_then_still_missing(app, client, monkeypatch
     search_url = f"/chapters/problems/show/{media.id}/search"
     assert search_url in client.get("/").text
     client.post(search_url, data={"back": "overview"})
-    for page in (client.get("/").text, client.get("/chapters/problems").text):
-        assert "Searching… asked" in page and search_url not in page
+    page = client.get("/chapters/problems").text
+    assert "Searching… asked" in page and search_url not in page
+    assert "Searching… asked" not in client.get("/").text  # nothing for you to do
     # Two days on and still nothing: say so, offer only OK.
     action = (
         db.session.query(LifecycleAction)

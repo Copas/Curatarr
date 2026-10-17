@@ -74,8 +74,11 @@ def _unqueue(target_id):
     )
 
 
-def request(target, kind) -> str:
-    """Queue a replacement; the worker replaces only if a better copy exists."""
+def request(target, kind, *, auto=False) -> str:
+    """Queue a replacement; the worker replaces only if a better copy exists.
+
+    ``auto``: started by an automatic fix (autofix.py), which drops the item
+    quietly if nothing better turns up."""
     from .services import set_setting, setting, utcnow
 
     if kind not in KINDS:
@@ -83,7 +86,13 @@ def request(target, kind) -> str:
     queue = [q for q in setting(QUEUE_KEY, []) or [] if q["state"] != target.id]
     queue.append({"state": target.id, "kind": kind})
     set_setting(QUEUE_KEY, queue)
-    _set(target, kind, replace_requested=utcnow().isoformat(), no_better=None)
+    _set(
+        target,
+        kind,
+        replace_requested=utcnow().isoformat(),
+        no_better=None,
+        replace_auto=auto,
+    )
     db.session.commit()
     return (
         "Looking for a better copy first. The file is replaced only if one can be "
@@ -111,6 +120,31 @@ def status(target, kind):
     if result.get("no_better"):
         return "no_better"
     return None
+
+
+def was_automatic(target, kind) -> bool:
+    return bool(_result(target, kind).get("replace_auto"))
+
+
+def give_up(target, kind) -> None:
+    """An automatic Replace found nothing better: stop listing it, quietly."""
+    from . import dub_jobs, filecheck_jobs, wrong_version
+    from .services import audit
+
+    found = _result(target, kind).get("no_better") or {}
+    media = target if kind == "version" else target.media
+    {"file": filecheck_jobs, "dub": dub_jobs, "version": wrong_version}[kind].dismiss(
+        target
+    )
+    audit(
+        "auto_fix_gave_up",
+        media.id,
+        f"No better copy was available ({found.get('checked', 0)} releases "
+        "checked); kept the file and stopped trying.",
+        f"auto-gave-up:{kind}:{target.id}:{found.get('at')}",
+        payload={"kind": kind},
+    )
+    db.session.commit()
 
 
 def checked_at(target, kind):
@@ -242,5 +276,7 @@ def sweep() -> int:
                 no_better={"at": utcnow().isoformat(), "checked": looked_at},
             )
             db.session.commit()
+            if was_automatic(target, kind):
+                give_up(target, kind)
         done += 1
     return done
