@@ -38,7 +38,9 @@ Curatarr sits beside **Jellyfin**, **Sonarr** and **Radarr**. It learns from wha
 - **Recaps and previews**: finds *"Previously on…"* and *"Next time on…"* and marks them so Jellyfin offers Skip.
 - **Better skip markers**: hides Intro Skipper guesses that are plainly wrong (a "credits" marker in the middle of an episode, a recap at the start of a movie), each one undoable.
 - **English dubs**: for films made in another language, listens to each audio track to check it's really what its label says, makes the real English track the default, optionally removes tracks in other languages, and flags files with no English audio to replace.
+- **Problems**: finds burned-in subtitles, incomplete or broken files, and shows that are really a namesake, and replaces them only once a better copy is confirmed to exist.
 - **Search what was said**: find the episode where someone said *that line*.
+- **Fun facts**: the sweariest films per hour, each show's catchphrase, who gets talked about most, for the whole household.
 
 All of it writes only into MKV files, in place, without re-encoding, and only when you switch it on.
 
@@ -92,7 +94,7 @@ It's still a release candidate: read [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_S
 
 ## Learn more
 
-- [How it works](docs/FEATURES.md): retention rules, acquisition, sign-in, chapters, skip markers, dubs and search in detail.
+- [How it works](docs/FEATURES.md): retention rules, acquisition, sign-in, chapters, skip markers, dubs, problems, search and fun facts in detail.
 - [Installing, upgrading and backing up](docs/INSTALL.md)
 - [API, dashboards, logs and metrics](docs/API.md)
 - [Developing Curatarr](docs/DEVELOPMENT.md) and [design decisions](docs/decisions/)
