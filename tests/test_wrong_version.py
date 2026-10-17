@@ -1,6 +1,6 @@
 from test_acquisition_reconcile import _show
 
-from curatarr import db, wrong_version
+from curatarr import better_copy, db, wrong_version
 from curatarr.models import ChapterState, LibraryPolicy
 
 SITCOM = {
@@ -77,6 +77,16 @@ class FakeSonarr:
     def episode_files(self, _series_id):
         return self.files
 
+    def releases(self, _episode_id):
+        # The Hong Kong show's release (wrong year) and the American one.
+        return [
+            {"title": "All.In.The.Family.S01E01.1976.720p.MyTVSuper", "rejections": []},
+            {
+                "title": "All.in.the.Family-S01E01-Meet.the.Bunkers.DVD",
+                "rejections": [],
+            },
+        ]
+
     def ignore_for_series(self, *args):
         self.calls.append(("ignore", *args))
 
@@ -118,7 +128,8 @@ def test_sweep_lists_it_and_replace_keeps_it_from_coming_back(app, client, monke
     page = client.post(
         f"/chapters/problems/version/{media.id}/replace", follow_redirects=True
     ).text
-    assert "Sonarr now ignores releases mentioning 1976 for this show" in page
+    assert "Looking for a better copy" in page and sonarr.calls == []
+    assert better_copy.sweep() == 1  # the American release counts; the 1976 one doesn't
     # The same uploader's other releases can't come back: ignored by year, for this show.
     assert sonarr.calls[0] == (
         "ignore",
@@ -190,3 +201,30 @@ def test_ignoring_a_year_is_limited_to_the_one_show(monkeypatch):
     assert profile["ignored"] == [r"/\b1976\b/"] and profile["tags"] == [9]
     series = next(j for m, p, j in sent if (m, p) == ("PUT", "/api/v3/series/77"))
     assert series["tags"] == [3, 9]  # its other tags kept
+
+
+def test_no_right_version_anywhere_deletes_nothing(app, client, monkeypatch):
+    media, parts = _show(
+        "All in the Family", [(1, e, True) for e in range(1, 4)], sonarr_id=77
+    )
+    for e, part in parts.items():
+        part.arr_file_id = 500 + e[1]
+    db.session.add(
+        LibraryPolicy(library_id=media.library_id, policy_json={"dry_run": False})
+    )
+    db.session.commit()
+    sonarr = FakeSonarr(
+        [file(500 + e, f"All.In.The.Family.S01E0{e}.1976.720p") for e in (1, 2, 3)]
+    )
+    sonarr.releases = lambda _id: [
+        {"title": "All.In.The.Family.S01E01.1976.1080p", "rejections": []}
+    ]
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: sonarr)
+    wrong_version.sweep()
+    client.post(f"/chapters/problems/version/{media.id}/replace")
+    better_copy.sweep()
+    assert sonarr.calls == []  # nothing ignored, blocklisted or deleted
+    page = client.get("/chapters/problems").text
+    assert "No better copy was available" in page and "Replace 3 files" not in page
+    wrong_version.sweep()  # a later check keeps the answer while files are the same
+    assert "No better copy was available" in client.get("/chapters/problems").text

@@ -279,6 +279,8 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
   /* Rows with buttons put them on their own line, under the description. */
   .needs-item:has(form) .needs-text { flex-basis: calc(100% - 3rem); }
   .needs-actions { margin-left: 3rem; }
+  .needs-item:has(form) .needs-actions { flex: 1 1 calc(100% - 3rem); min-width: 0; }
+  .replace-status { flex: 1 1 100%; }
   .table-stack thead { display: none; }
   .table-stack, .table-stack tbody, .table-stack tr, .table-stack td { display: block; width: 100%; }
   .table-stack tr { padding: .6rem 0; border-bottom: 1px solid var(--app-border); }
@@ -349,3 +351,7 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 @keyframes busy-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .page-loading.is-on { animation: none; width: 70%; } .btn.is-busy::after, button.is-busy::after { animation: none; border-right-color: currentColor; } }
 .pause-menu .action-menu-items { left: auto; right: 0; }
+/* What a Replace or Search once is doing, in place of its buttons. */
+.replace-status { display: inline-block; font-size: .85rem; color: var(--app-muted); }
+.replace-status .spinner-border { width: .9rem; height: .9rem; border-width: .15em; margin-right: .35rem; vertical-align: -.15em; color: var(--app-accent); }
+.needs-actions { align-items: center; flex-wrap: wrap; }

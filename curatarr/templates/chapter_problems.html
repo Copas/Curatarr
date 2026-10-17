@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from '_replace_actions.html' import replace_actions, search_actions with context %}
 {% block title %}Problems · Enhance · Curatarr{% endblock %}
 {% macro button(state, action, label, style='btn-outline-light') %}<form method="post" action="{{ url_for('main.chapter_problem_action', state_id=state.id, action=action) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ style }}" data-tip="{{ {'replace': 'Checks Radarr or Sonarr can find a better copy first; only then blocklists this release, deletes the file and grabs it.', 'dismiss': 'Keeps this file as it is and stops listing it here.', 'recheck': 'Looks at the file again from scratch.'}[action] }}">{{ label }}</button></form>{% endmacro %}
 {% block content %}
@@ -8,7 +9,7 @@
 {% for row in wrong_shows %}<div class="card p-3 mb-3" data-wrong-version="{{ row.media.id }}">
   <div class="d-flex flex-wrap justify-content-between gap-2">
     <div><a class="h5" href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media.id) }} <span class="text-secondary small">{{ row.media.library.name }}</span></div>
-    <div class="d-flex flex-wrap gap-2 align-items-start"><form method="post" action="{{ url_for('main.wrong_version_action', media_id=row.media.id, action='replace') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-primary" data-tip="Blocklists these releases, deletes the {{ row.files|length }} file{{ '' if row.files|length == 1 else 's' }} and asks Sonarr for the right show's episodes.{{ ' Sonarr is also told to ignore releases mentioning ' ~ row.year ~ ' for this show.' if row.year else '' }}">Replace {{ row.files|length }} file{{ '' if row.files|length == 1 else 's' }}</button></form><form method="post" action="{{ url_for('main.wrong_version_action', media_id=row.media.id, action='dismiss') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light" data-tip="These are the right show's episodes; stop listing it until its files change.">It's right</button></form></div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">{{ replace_actions('main.wrong_version_action', {'media_id': row.media.id}, row.status, row.checked_at, replace_label='Replace ' ~ (row.files|length) ~ ' file' ~ ('' if row.files|length == 1 else 's'), replace_tip="Checks Sonarr can find the right show first; only then blocklists these releases, deletes the files and grabs the right ones." ~ (' Sonarr is also told to ignore releases mentioning ' ~ row.year ~ ' for this show.' if row.year else ''), keep_label="It's right", keep_tip="These are the right show's episodes; stop listing it until its files change.") }}</div>
   </div>
   <ul class="mt-2 mb-0">{% for line in row.evidence %}<li class="text-break">{{ line }}.</li>{% endfor %}</ul>
 </div>{% endfor %}
@@ -18,10 +19,10 @@
 {% for row in missing_shows %}<div class="card p-3 mb-3" data-missing-show="{{ row.media.id }}">
   <div class="d-flex flex-wrap justify-content-between gap-2">
     <div><a class="h5" href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media.id) }} <span class="text-secondary small">{{ row.media.library.name }}</span></div>
-    <div class="d-flex flex-wrap gap-2 align-items-start"><form method="post" action="{{ url_for('main.missing_keep_action', media_id=row.media.id, action='search') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ 'btn-outline-light' if row.waiting else 'btn-primary' }}" data-tip="Asks Sonarr to search for just these episodes now.{{ ' Sonarr only searches monitored shows, so the show is monitored; nothing else in it is.' if row.unmonitored else '' }}">{{ 'Search again' if row.searched else 'Search once' }}</button></form><form method="post" action="{{ url_for('main.missing_keep_action', media_id=row.media.id, action='ignore') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light" data-tip="Stops listing these episodes. A different episode going missing is still listed.">Leave them missing</button></form></div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">{{ search_actions(row.media.id, row.state, row.searched) }}</div>
   </div>
   <p class="mb-1 mt-2">Missing {{ row.codes }}.{% if row.unmonitored %} Sonarr has the show unmonitored, so nothing will fetch them.{% endif %}</p>
-  <p class="small text-secondary mb-0">{% if row.waiting %}Searched {{ row.searched|when('datetime') }}; waiting to see if it arrives.{% elif row.searched %}Last searched {{ row.searched|when('datetime') }}, and it still hasn't arrived. If every release is rejected, an interactive search in Sonarr shows why.{% else %}Never searched for by Curatarr.{% endif %}</p>
+  {% if row.state == 'new' %}<p class="small text-secondary mb-0">Never searched for by Curatarr.</p>{% endif %}
 </div>{% endfor %}
 <h2 class="section-title">Files</h2>
 {% endif %}
@@ -30,10 +31,10 @@
 <div class="card p-3 mb-3">
   <div class="d-flex flex-wrap justify-content-between gap-2">
     <div><a class="h5" href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}<div class="small text-secondary text-break">{{ state.part.file_path }}</div></div>
-    <div class="d-flex flex-wrap gap-2 align-items-start">{{ button(state, 'replace', 'Replace with another release', 'btn-primary') }}{{ button(state, 'recheck', 'Check again') }}{{ button(state, 'dismiss', 'Keep it') }}</div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">{% set check_again = button(state, 'recheck', 'Check again') %}{{ replace_actions('main.chapter_problem_action', {'state_id': state.id}, better_copy_status(state, 'file'), better_copy_checked(state, 'file'), replace_label='Replace with another release', keep_label='Keep it', extra=check_again) }}</div>
   </div>
   <ul class="mt-2 mb-1">{% for line in describe(state.file_check) %}<li>{{ line }}.</li>{% endfor %}</ul>
-  {% set fc = state.file_check or {} %}{% if fc.replace_requested %}<p class="small text-info mb-1">Looking for a better copy; the file is replaced only if one is found.</p>{% elif fc.no_better %}<p class="small text-warning mb-1">No better copy was available on {{ fc.no_better.at|when('datetime') }} ({{ fc.no_better.checked }} release{{ '' if fc.no_better.checked == 1 else 's' }} looked at), so the file was kept.</p>{% elif fc.replace_error %}<p class="small text-danger mb-1">Replacing failed: {{ fc.replace_error }}</p>{% endif %}
+  {% set fc = state.file_check or {} %}{% if fc.replace_error %}<p class="small text-danger mb-1">Replacing failed: {{ fc.replace_error }}</p>{% endif %}
   <p class="small text-secondary mb-0">Checked {{ state.file_checked_at|when('datetime') }}.</p>
 </div>
 {% else %}<div class="empty-state"><h2 class="h6">Nothing to look at</h2><p class="mb-0">{{ 'No problems found in the files checked so far.' if found.files_checked else 'Files are checked in the background, a few at a time, and listed here if something is wrong.' }}</p></div>{% endfor %}

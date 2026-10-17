@@ -225,12 +225,15 @@ def sweep() -> int:
         ]
         verdict = judge(show, files, {p.arr_file_id: lang for p, lang in parts})
         previous = stored.get(media_id) or {}
+        same = previous.get("verdict") == verdict
         stored[media_id] = {
             "sig": _signature(parts),
             "verdict": verdict,
-            # "It's the right show" holds until the evidence changes.
-            "dismissed": previous.get("dismissed")
-            and previous.get("verdict") == verdict,
+            # "It's the right show", a Replace being looked into, and "no better
+            # copy" all hold until the evidence changes.
+            "dismissed": previous.get("dismissed") and same,
+            "replace_requested": previous.get("replace_requested") if same else None,
+            "no_better": previous.get("no_better") if same else None,
         }
         done += 1
         if time.monotonic() - started > RUN_SECONDS:
@@ -260,7 +263,16 @@ def rows() -> list[dict]:
     }
     return sorted(
         (
-            {"media": media[media_id], **stored[media_id]["verdict"]}
+            {
+                "media": media[media_id],
+                **stored[media_id]["verdict"],
+                "status": "pending"
+                if stored[media_id].get("replace_requested")
+                else "no_better"
+                if stored[media_id].get("no_better")
+                else None,
+                "checked_at": (stored[media_id].get("no_better") or {}).get("at"),
+            }
             for media_id in flagged
             if media_id in media
         ),
