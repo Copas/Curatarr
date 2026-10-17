@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0rc5 (2026-10-17)
 
 - **TV-friendly audio** (Settings → Enhance, off by default): films and episodes whose main audio is DTS, TrueHD or FLAC get an AC3 copy as the default track, beside the original, so Rokus and TVs that can't play those play the film directly instead of converting it (which can leave the Roku app restarting at one spot). Only that track is encoded; the file is replaced only after the copy checks out.
 - **Automatic fixes** (Settings → Automatic, all off by default): replace problem files, films with no English audio and files of another show with the same name, and search once for always-keep episodes that never arrived, without asking. Each is tried once; when it doesn't work (no better copy, or still missing after the search) the item is dropped quietly and Activity says so. Overview shows one line about what was handled instead of a row per item.
