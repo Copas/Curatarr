@@ -1,4 +1,4 @@
-"""TV-friendly audio: add an AC3 track to films whose audio many TVs can't play.
+"""TV-friendly audio: add an AC3 track to files whose audio many TVs can't play.
 
 Roku players, many smart TVs and their soundbars can't decode DTS, TrueHD or
 FLAC, so Jellyfin converts the audio while it plays. Some clients handle that
@@ -10,15 +10,15 @@ beside the original, which is kept. Only that new track is encoded: picture,
 other tracks, subtitles and chapters are copied untouched, and the file is
 replaced only after the copy checks out (mediafile.add_compatible_audio).
 
-Films are found from Radarr's media info (no file is opened until then), one
-at a time in the background, never one that's being played, and not in
-libraries in dry run.
+Films and episodes are found from Radarr's and Sonarr's media info (no file
+is opened until then; Sonarr's is read every six hours), one at a time in the
+background, never one that's being played, and not in libraries in dry run.
 """
 
 import threading
 
 from flask import current_app
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from . import db, throttle
 from .integrations import IntegrationError
@@ -26,9 +26,9 @@ from .mediafile import MediaToolError, add_compatible_audio, can_write, probe
 from .mediafile import compatible_audio_source as source_track
 from .models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
 
-# Radarr's names for audio Curatarr adds a TV-friendly track beside.
+# Radarr's and Sonarr's names for audio Curatarr adds a TV-friendly track beside.
 HARD_CODECS = ("DTS", "TrueHD", "FLAC", "PCM")
-PER_RUN = 2  # each rewrites a whole film
+PER_RUN = 2  # each rewrites a whole file
 _lock = threading.Lock()
 _thread = None
 
@@ -46,38 +46,71 @@ def enabled() -> bool:
         return False
 
 
-def hard_films() -> set:
-    """Radarr ids of films whose file has hard-to-play audio and no easy track."""
-    from .services import client
-
-    found = set()
-    for movie in client("radarr").movies() or []:
-        info = (movie.get("movieFile") or {}).get("mediaInfo") or {}
-        codec = str(info.get("audioCodec") or "")
-        if any(codec.upper().startswith(c.upper()) for c in HARD_CODECS):
-            found.add(movie["id"])
-    return found
+SONARR_SCAN_SECONDS = 6 * 3600  # episode files are read per show: not every cycle
+_sonarr_cache = {}
 
 
-def _due(radarr_ids):
-    """Their film files not yet looked at, or replaced since."""
+def _hard(info) -> bool:
+    codec = str((info or {}).get("audioCodec") or "")
+    return any(codec.upper().startswith(c.upper()) for c in HARD_CODECS)
+
+
+def hard_files() -> tuple[set, set]:
+    """(Radarr film ids, Sonarr episode-file ids) whose audio is hard to play,
+    from Radarr's and Sonarr's media info."""
+    import time
+
+    from .services import client, configured
+
+    films = {
+        movie["id"]
+        for movie in client("radarr").movies() or []
+        if _hard((movie.get("movieFile") or {}).get("mediaInfo"))
+    }
+    episodes = set()
+    if configured("sonarr"):
+        hit = _sonarr_cache.get("files")
+        if hit and time.monotonic() - hit[0] < SONARR_SCAN_SECONDS:
+            episodes = hit[1]
+        else:
+            sonarr = client("sonarr")
+            for show in sonarr.series() or []:
+                for entry in sonarr.episode_files(show["id"]) or []:
+                    if _hard(entry.get("mediaInfo")):
+                        episodes.add(entry["id"])
+            _sonarr_cache["files"] = (time.monotonic(), episodes)
+    return films, episodes
+
+
+def _due(radarr_ids, episode_file_ids):
+    """Their files not yet looked at, or replaced since."""
     return (
         db.session.query(MediaPart)
         .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
         .join(Library, MediaIdentity.library_id == Library.id)
         .outerjoin(ChapterState, ChapterState.media_part_id == MediaPart.id)
         .filter(
-            MediaPart.kind == "movie_file",
             MediaPart.has_file.is_(True),
             MediaPart.file_path.isnot(None),
-            MediaIdentity.radarr_id.in_(radarr_ids),
             MediaIdentity.missing_since.is_(None),
+            or_(
+                and_(
+                    MediaPart.kind == "movie_file",
+                    MediaIdentity.radarr_id.in_(radarr_ids),
+                ),
+                and_(
+                    MediaPart.kind == "episode",
+                    MediaPart.arr_file_id.in_(episode_file_ids),
+                ),
+            ),
             or_(
                 ChapterState.id.is_(None),
                 ChapterState.compat_audio_size.is_(None),
                 ChapterState.compat_audio_size != MediaPart.size_bytes,
             ),
         )
+        # Films first: they're where DTS and TrueHD mostly are.
+        .order_by(MediaPart.kind.desc())
     )
 
 
@@ -114,14 +147,14 @@ def sweep(limit=PER_RUN) -> int:
     from .filecheck_jobs import _dry_run
 
     try:
-        ids = hard_films()
+        films, episodes = hard_files()
     except IntegrationError:
         return 0
-    if not ids:
+    if not films and not episodes:
         return 0
     e = _enrichment()
     done = 0
-    for part in _due(ids).limit(limit * 3).all():
+    for part in _due(films, episodes).limit(limit * 3).all():
         if done >= limit:
             break
         path = e.local_path(part.file_path)
@@ -183,9 +216,16 @@ def _announce(state, part, path, result):
     e = _enrichment()
     e._refresh_jellyfin(part, part.media)
     try:
-        client("radarr").rescan_movie(part.media.radarr_id)
+        if part.kind == "movie_file":
+            client("radarr").rescan_movie(part.media.radarr_id)
+        else:
+            client("sonarr").request(
+                "POST",
+                "/api/v3/command",
+                json={"name": "RescanSeries", "seriesId": part.media.sonarr_id},
+            )
     except IntegrationError:
-        pass  # Radarr notices on its next rescan
+        pass  # Radarr/Sonarr notice on their next rescan
     audit(
         "compat_audio_added",
         part.media.id,

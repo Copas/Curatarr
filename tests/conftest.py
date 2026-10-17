@@ -59,10 +59,12 @@ def no_dub_wait(request, monkeypatch):
 @pytest.fixture(autouse=True)
 def fresh_caches():
     """Fun facts and Radarr collections are cached between requests."""
-    from curatarr import franchises, trivia
+    from curatarr import compat_audio, curation, franchises, trivia
 
     trivia._cache.clear()
     franchises.forget()
+    curation.forget()
+    compat_audio._sonarr_cache.clear()
 
 
 def database_free(app) -> bool:

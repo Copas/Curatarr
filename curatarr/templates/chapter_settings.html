@@ -95,7 +95,7 @@
 {% endcall %}
 {% call card('compat-audio', 'audio', 'TV-friendly audio', 'Adds AC3 beside DTS, TrueHD and FLAC' if opts.compat_audio else 'Off', opts.compat_audio) %}
   <div class="setting-grid">
-    {{ option('compat_audio', 'Add a TV-friendly audio track to films', 'Rokus and many TVs can\'t play DTS, TrueHD or FLAC, so Jellyfin converts it while you watch, and some players get stuck restarting. Adds an AC3 copy as the default track and keeps the original. Only that track is encoded; MKV only, one film at a time, never while it\'s playing.') }}
+    {{ option('compat_audio', 'Add a TV-friendly audio track to films and episodes', 'Rokus and many TVs can\'t play DTS, TrueHD or FLAC, so Jellyfin converts it while you watch, and some players get stuck restarting. Adds an AC3 copy as the default track and keeps the original. Only that track is encoded; MKV only, one film at a time, never while it\'s playing.') }}
   </div>
 {% endcall %}
 {% call card('problems', 'tools', 'File problems', ('Checking films and episodes' if opts.file_check else 'Off') ~ (' · replaces automatically' if opts.file_check and opts.file_replace_automatically else ''), opts.file_check) %}
