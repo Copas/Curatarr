@@ -404,6 +404,7 @@ ACTION_WORDS = {
     "auto_fix_gave_up": "Couldn't be fixed; stopped trying",
     "shrunk": "Shrunk to a smaller copy",
     "seasonal_returned": "Brought back for its season",
+    "compat_audio_added": "Added TV-friendly audio",
 }
 
 
