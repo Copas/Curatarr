@@ -5,8 +5,8 @@
 <h1 align="center">Curatarr</h1>
 
 <p align="center">
-  <strong>A caretaker for your Jellyfin library.</strong><br>
-  It watches what your household plays, keeps the right things on disk, and quietly makes every file nicer to watch.
+  <strong>The caretaker your Jellyfin library has been missing.</strong><br>
+  It learns what your household actually watches, keeps the disk from filling up, fetches the next season before anyone asks, and fixes the downloads that came out wrong.
 </p>
 
 <p align="center">
@@ -19,46 +19,94 @@
 
 ---
 
-Curatarr sits beside **Jellyfin**, **Sonarr** and **Radarr**. It learns from what people actually watch, frees space by removing what nobody will miss, fetches the next season before anyone asks for it, and adds what downloads usually lack: chapters, subtitles, skippable recaps, and audio in the right language. It runs on your own server, uses local AI only, and is free and open source (MIT).
+## What you need
 
-![Overview](docs/images/overview.png)
+| | |
+|---|---|
+| **Jellyfin** | Required. Curatarr reads who watched what, and you sign in with your Jellyfin account. |
+| **Sonarr** and/or **Radarr** | At least one. With Sonarr, Curatarr looks after your TV shows; with Radarr, your films; with both, everything. |
 
-## What it does
+That's all you need to get started. Add these when you want more:
 
-### Keeps the right things on disk
-- **Cleans up by need, not by rule of thumb.** When a disk or library runs low, it picks the titles nobody has watched for longest, shows them as *Leaving Soon* (with a badge on the poster in Jellyfin), and removes them only if nobody presses play before the notice period ends.
-- **Stays one season ahead.** Finish an episode and the rest of the season, and the next one, are requested from Sonarr. Shows nobody continued stop downloading.
-- **Never surprises you.** Every library starts in **dry run**. Deletions go through Sonarr or Radarr after fresh safety checks, and every decision is in History with the reason.
+| Optional | Unlocks |
+|---|---|
+| Jellyfin **Webhook** plugin | Instant reactions to playback (otherwise Curatarr catches up hourly) |
+| **FFmpeg** and **MKVToolNix** | Chapters, English-dub checks, file problem checks |
+| **Local AI**: Whisper (installed with the `chapters` extra) and **Ollama** with a model (e.g. `qwen3:14b`), ideally on an NVIDIA GPU | Smart Chapters, subtitles, recap and preview detection, Fun facts, search by what was said |
+| Jellyfin **Intro Skipper** plugin | Skip buttons for recaps and previews, and clean-up of bad skip markers |
 
-![Review queue](docs/images/review.png)
+Everything runs on your own server. No cloud service, no account, no tracking. Free and open source (MIT).
 
-### Makes every file nicer to watch
-- **Chapters**: adds them to files that have none: evenly spaced and snapped to scene changes, or *Smart Chapters* that are named from what's said (local Whisper + Ollama).
-- **Subtitles**: English subtitles from the same transcript, for files that have none.
-- **Recaps and previews**: finds *"Previously on…"* and *"Next time on…"* and marks them so Jellyfin offers Skip.
-- **Better skip markers**: hides Intro Skipper guesses that are plainly wrong (a "credits" marker in the middle of an episode, a recap at the start of a movie), each one undoable.
-- **English dubs**: for films made in another language, listens to each audio track to check it's really what its label says, makes the real English track the default, optionally removes tracks in other languages, and flags files with no English audio to replace.
-- **Problems**: finds burned-in subtitles, incomplete or broken files, and shows that are really a namesake, and replaces them only once a better copy is confirmed to exist.
-- **Search what was said**: find the episode where someone said *that line*.
-- **Fun facts**: the sweariest films per hour, each show's catchphrase, who gets talked about most, for the whole household.
+![Overview: everything that needs you, in one list](docs/images/overview.png)
 
-All of it writes only into MKV files, in place, without re-encoding, and only when you switch it on.
+## Why you'll want it
 
-![Enhance progress](docs/images/chapters.png)
+### 💾 Never run out of space, and never lose what someone's in the middle of
+When a disk runs low, Curatarr picks the titles nobody has touched for longest and puts them on a **Leaving Soon** shelf, with a badge on the poster in Jellyfin. Anyone who presses play saves it. New arrivals get a grace period, favourites go to the back of the line, and you can keep, snooze or protect anything for good.
 
-### Stays out of the way
-- **Adaptive workload**: measures CPU, GPU and who's watching, and runs as much work as the machine has room for. When someone starts a stream it backs off, and it resumes when they stop.
-- **Jellyfin sign-in**: administrators get the full interface; household members you allow can browse titles and say *Keep*.
-- **Works alone**: no cloud service and no account. A read-only API key lets a home dashboard show its status.
+![The review queue: why each title was picked, and what happens next](docs/images/review.png)
+
+### 📺 The next episode is already there
+Finish an episode and Curatarr asks Sonarr for the rest of the season, and the next one, before anyone has to. Shows nobody continued stop downloading. Every show keeps its first few episodes, so there's always something to start on; if one of those never arrived, Curatarr says so and searches once at a click.
+
+### 🛠️ Bad downloads, caught and fixed
+Curatarr checks every file so you don't find out halfway through a film:
+
+- **Subtitles burned into the picture** that can't be turned off
+- **Incomplete downloads** where the picture stops before the end, and files much shorter than they should be
+- **The wrong show entirely**: a 1987 namesake filed under your 2019 series
+- **No English audio** on a film that was sold as an English dub
+- **Wrong episodes**: a file whose dialogue matches a different episode's summary
+
+Click **Replace** and Curatarr first checks that a better copy actually exists. Only then does it blocklist the bad release, delete the file and grab the new one. If nothing better is out there, it keeps what you have and tells you so.
+
+![Problems: each with a fix, and a status once you've clicked](docs/images/problems.png)
+
+### ✨ Every file nicer to watch
+- **Chapters** for files that have none, named from what's actually said (*Smart Chapters*, local Whisper + Ollama), or evenly spaced at scene changes.
+- **English subtitles** made from the soundtrack, for files that have none.
+- **Skip "Previously on…" and "Next time on…"** with Jellyfin's own Skip button.
+- **Better skip markers**: Intro Skipper guesses that are plainly wrong are hidden, each one undoable.
+- **The right audio first**: tracks labelled in the wrong language are relabelled, and the real English track becomes the default.
+
+Nothing is re-encoded, and none of it happens until you switch it on.
+
+![Enhance: what Curatarr has done for your library so far](docs/images/chapters.png)
+
+### 🎉 Fun facts the whole household will argue about
+Which film swears most per hour? Which show says "I love you" most? Who talks longest without a pause, and what's each show's catchphrase? **Fun facts** ranks your library by what's actually said in it, all per hour or per minute so a long-running show doesn't win just by being long. Handy, too, for finding the films that don't swear at all when the kids are around.
+
+![Fun facts: superlatives from what's said in your films and shows](docs/images/fun.png)
+
+### 🔎 Find the episode where someone said *that line*
+Search every transcript for a quote or a topic and jump straight to the episode, with the lines around it and the timestamp.
+
+### 📱 On your phone, for the whole household
+Everything works on a phone. Household members sign in with their own Jellyfin accounts and can browse, search and say *Keep*; only administrators can approve deletions or change settings.
+
+<p align="center"><img src="docs/images/overview-phone.png" alt="Curatarr on a phone" width="270"></p>
+
+## Safe to point at your real library
+
+Curatarr was built on a real 8,000-file library and is careful by design:
+
+- **Dry run is on by default** for every library. Curatarr shows what it *would* remove and why, until you switch that off.
+- **Deletions only go through Sonarr or Radarr**, after Curatarr rechecks playback, grace periods, the download queue and connection health. If anything can't be verified, nothing is deleted.
+- **Replace never leaves you with nothing.** It confirms a better copy can be found before it deletes the one you have.
+- **File edits never re-encode.** Chapters and track flags are written in place with `mkvpropedit`. Removing language tracks writes a copy that's checked before it replaces the original.
+- **Everything is undoable or recorded.** Markers it hid can be restored, chapters it wrote can be removed (your originals are kept), and every action is in History with the reason.
+- **It steps aside for viewers.** It measures CPU, GPU and who's watching, and backs off when someone starts a stream.
+
+It's still a release candidate: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) lists the known gaps.
 
 ## Install
 
 | Your server | How | Guide |
 |---|---|---|
-| **Linux** (Debian, Ubuntu, Fedora, …) | Native install with systemd. Simplest, and the easiest way to use an NVIDIA GPU for Smart Chapters. | [Linux](docs/INSTALL.md#linux) |
+| **Linux** (Debian, Ubuntu, Fedora, …) | Native install with systemd. Simplest, and the easiest way to use an NVIDIA GPU. | [Linux](docs/INSTALL.md#linux) |
 | **Linux** with Docker | Docker Compose, with PostgreSQL included. | [Docker on Linux](docs/INSTALL.md#docker-on-linux) |
 | **Windows 10 / 11** | Docker Desktop (WSL 2). | [Windows](docs/INSTALL.md#windows) |
-| **macOS** | Docker Desktop, following the Windows steps in Terminal. Not regularly tested; chapter AI runs on the CPU. | [Windows](docs/INSTALL.md#windows) |
+| **macOS** | Docker Desktop, following the Windows steps in Terminal. Not regularly tested; the AI features run on the CPU. | [Windows](docs/INSTALL.md#windows) |
 
 Quick start on Linux:
 
@@ -69,32 +117,11 @@ git checkout v0.2.0rc4
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 
-Then open `http://<your-server>:8787` and sign in with a Jellyfin administrator account. The [first-run checklist](docs/INSTALL.md#first-run) walks you through connecting Jellyfin, Sonarr and Radarr.
-
-### Requirements
-
-| What | Needed for |
-|---|---|
-| Jellyfin, Sonarr and Radarr (current versions; Curatarr uses their API v3 and Jellyfin's REST API) | Everything |
-| Jellyfin **Webhook** plugin | Instant playback updates (otherwise hourly) |
-| FFmpeg and **MKVToolNix** | Chapters, subtitles, dub checks |
-| **Ollama** with a model (e.g. `qwen3:14b`) and optionally an NVIDIA GPU | Smart Chapters, recap and preview detection |
-| Jellyfin **Intro Skipper** plugin | Recap/preview skip buttons and marker clean-up |
-
-## Is it safe to point at my real library?
-
-Curatarr was built on a real 8,000-file library and is careful by design:
-
-- **Dry run is on by default** for every library. Curatarr shows what it *would* remove and why, until you switch that off.
-- **Deletions only go through Sonarr or Radarr**, after Curatarr rechecks playback, grace periods, the download queue and integration health. If anything can't be verified, nothing is deleted.
-- **File edits never re-encode.** Chapters and track flags are written with `mkvpropedit`. Removing language tracks rewrites a copy that's verified before it replaces the original.
-- **Everything is undoable or recorded.** Markers it hid can be restored, chapters it wrote can be removed (the originals are kept), and every action is in History.
-
-It's still a release candidate: read [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for known gaps.
+Then open `http://<your-server>:8787` and sign in with a Jellyfin administrator account. The [first-run checklist](docs/INSTALL.md#first-run) walks you through connecting Jellyfin, and Sonarr and/or Radarr.
 
 ## Learn more
 
-- [How it works](docs/FEATURES.md): retention rules, acquisition, sign-in, chapters, skip markers, dubs, problems, search and fun facts in detail.
+- [How it works](docs/FEATURES.md): cleanup and acquisition rules, sign-in, chapters, skip markers, dubs, problems, search and fun facts in detail.
 - [Installing, upgrading and backing up](docs/INSTALL.md)
 - [API, dashboards, logs and metrics](docs/API.md)
 - [Developing Curatarr](docs/DEVELOPMENT.md) and [design decisions](docs/decisions/)
