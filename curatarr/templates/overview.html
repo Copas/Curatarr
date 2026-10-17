@@ -46,7 +46,8 @@
   {% if care %}{% set c = care.summary %}{% set a = care.activity %}
   <section class="col-lg-5" aria-labelledby="care-heading"><a class="card p-3 h-100 care-card text-reset text-decoration-none" href="{{ url_for('main.chapter_maintenance') }}">
     <div class="d-flex justify-content-between align-items-baseline mb-3"><h2 class="section-label mb-0" id="care-heading">Library care</h2><span class="small text-secondary">Enhance {{ icon('chevron', 14) }}</span></div>
-    {% for label, have, total in [('Chapters', c.chapters_have, c.chapters_possible), ('English subtitles', c.subtitles_have, c.subtitles_possible), ('Skip markers checked', c.markers_checked, c.markers_possible)] %}{% if total %}
+    {% set rows = [('Chapters', c.chapters_have, c.chapters_possible), ('English subtitles', c.subtitles_have, c.subtitles_possible), ('Skip markers checked', c.markers_checked, c.markers_possible)] %}{% if care.compat and care.compat.total %}{% set rows = rows + [('TV-friendly audio', care.compat.done, care.compat.total)] %}{% endif %}
+    {% for label, have, total in rows %}{% if total %}
     <div class="care-row"><div class="d-flex justify-content-between small"><span>{{ label }}</span><span class="text-secondary">{{ (have * 100 / total)|round|int }}%</span></div><progress class="care-bar" value="{{ have }}" max="{{ total }}">{{ (have * 100 / total)|round|int }}%</progress></div>
     {% endif %}{% endfor %}
     <p class="care-now small mb-0">{% if a.paused_since %}<span class="chip">Paused</span> making room for people watching{% elif a.running %}<span class="chip chip-on">{{ a.running|length }} running</span>{% if a.forecast and a.forecast.left %} · about {{ a.forecast.left }} to go{% endif %}{% elif a.queued_total %}<span class="chip">{{ a.queued_total|commas }} queued</span>{% else %}<span class="chip">Idle</span>{% endif %}{% if c.generated %} · {{ c.generated|commas }} chapters added so far{% endif %}</p>

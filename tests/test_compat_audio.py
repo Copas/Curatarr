@@ -152,3 +152,22 @@ def test_episodes_with_dts_are_found_from_sonarr(app, monkeypatch):
     monkeypatch.setattr("curatarr.services.configured", lambda kind: True)
     films, episodes = compat_audio.hard_files()
     assert films == {1} and episodes == {51}
+
+
+def test_progress_shows_on_enhance_and_overview(app, client, monkeypatch):
+    from test_enrichment import _movie
+
+    from curatarr.models import MediaPart
+    from curatarr.services import set_setting
+
+    assert compat_audio.progress() is None  # off, nothing done
+    _movie("/movies/Loud (2020)/Loud.mkv")
+    state = enrichment.state_for(db.session.query(MediaPart).one())
+    state.compat_audio = {"added": True, "from": "dts"}
+    set_setting(compat_audio.REMAINING_KEY, {"films": 3, "episodes": 10})
+    db.session.commit()
+    monkeypatch.setattr(compat_audio, "enabled", lambda: True)
+    found = compat_audio.progress()
+    assert found["films"] == {"done": 1, "total": 4, "left": 3}
+    assert found["episodes"]["total"] == 10
+    assert "TV-friendly audio: films" in client.get("/chapters").text
