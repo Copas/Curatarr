@@ -148,6 +148,7 @@ What it does with the result:
 | *Optional:* audio heard clearly in another language, or subtitles labelled in another language | Removes them, once English audio is confirmed |
 
 - **Replace automatically** is off by default; with it on, films with no English audio are replaced without asking. Dry run is respected.
+- **TV-friendly audio** (Settings → Enhance, off by default). Rokus, many smart TVs and soundbars can't play DTS, TrueHD or FLAC, so Jellyfin converts it during playback, and some players then get stuck restarting at one spot. For films whose main audio is one of these, with no AC3, E-AC3 or AAC track in the same language, Curatarr adds an AC3 copy (5.1 at most) as the first, default track and keeps the original beside it. Only that track is encoded; everything else is copied. The copy is checked (same length, chapters, video and subtitles, one more audio track) before it replaces the file. Films are found from Radarr's media info, one or two at a time, never one being played and not in dry-run libraries. MKV only.
 - **Remove audio and subtitles in other languages** is off by default. The file is rewritten as a copy with `mkvmerge` (never re-encoded), checked (same length, chapters and video, and the expected tracks), and only then moved over the original. MKV only. Tracks it couldn't make out are kept.
 - A film's chapter job waits briefly for its dub check, so its transcript comes from the right track the first time.
 
