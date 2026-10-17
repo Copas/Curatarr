@@ -31,7 +31,7 @@ You need:
 - A Jellyfin account with the **Administrator** permission to sign in to Curatarr.
 - Optional: Jellyfin's **Webhook** plugin (Dashboard → Plugins → Catalog) for instant playback updates, the **Intro Skipper** plugin if you want recap and preview skip buttons, and **Seerr** (or Jellyseerr/Overseerr) so requested titles are kept until whoever asked has watched them.
 
-Always install a **tagged release** (the newest is `v0.2.0rc4`; see [CHANGELOG.md](../CHANGELOG.md)), not the `main` branch.
+Always install a **tagged release** (the newest is `v0.2.0rc5`; see [CHANGELOG.md](../CHANGELOG.md)), not the `main` branch.
 
 ---
 
@@ -44,7 +44,7 @@ Requirements: a systemd-based distribution, **Python 3.12 or newer** with the `v
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc4
+git checkout v0.2.0rc5
 sudo ./scripts/install.sh
 ```
 
@@ -119,7 +119,7 @@ sudo systemctl restart curatarr-web curatarr-worker
 ```bash
 cd curatarr-release
 git fetch --tags
-git checkout v0.2.0rc4                 # the new release
+git checkout v0.2.0rc5                 # the new release
 git status --short                     # must print nothing
 sudo ./scripts/install.sh              # add EXTRAS=… again if you use chapters
 sudo systemctl is-active curatarr-web curatarr-worker
@@ -158,7 +158,7 @@ Requirements: Docker Engine with the Compose plugin, and Git.
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 cd curatarr-deploy
-git checkout v0.2.0rc4
+git checkout v0.2.0rc5
 cp .env.example .env
 ```
 
@@ -225,7 +225,7 @@ Open **PowerShell** in a folder where you keep apps (for example `C:\Apps`) and 
 ```powershell
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 Set-Location curatarr-deploy
-git checkout v0.2.0rc4
+git checkout v0.2.0rc5
 Copy-Item .env.example .env
 notepad .env
 ```
@@ -248,6 +248,8 @@ docker compose ps
 ```
 
 The first build takes a few minutes. When `web` shows *healthy*, open **http://localhost:8787** and continue with [First run](#first-run).
+
+Out of the box Curatarr only answers on this PC. To use it from phones and other computers (household members, or Jellyfin's webhook from another machine), change `"127.0.0.1:8787:8787"` to `"8787:8787"` in `compose.yaml`, run `docker compose up -d`, allow port 8787 through Windows Firewall, and open `http://<this-pc>:8787`.
 
 ### Connecting to Jellyfin, Sonarr and Radarr on Windows
 
