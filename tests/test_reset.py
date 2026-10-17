@@ -531,3 +531,38 @@ def test_bulk_reset_requires_the_exact_phrase_and_an_unchanged_list(
         assert (
             len([c for c in sonarr.calls if c[0] == "delete"]) == 4
         )  # S1E4 and S2E1 of each
+
+
+def test_reset_doesnt_start_fetching_specials(app, monkeypatch):
+    """Specials are left alone, so they're kept; but monitoring one that was
+    never downloaded would have Sonarr fetch it for a show reset to a few."""
+    with app.app_context():
+        media, _parts = _show()
+        for episode, has_file in [(1, True), (2, False)]:
+            db.session.add(
+                MediaPart(
+                    media_identity_id=media.id,
+                    kind="episode",
+                    season_number=0,
+                    episode_number=episode,
+                    sonarr_episode_id=episode,
+                    arr_file_id=episode if has_file else None,
+                    has_file=has_file,
+                    size_bytes=100 if has_file else None,
+                )
+            )
+        db.session.commit()
+        sonarr = _clients(monkeypatch)
+        regular_episodes, regular_files = sonarr.episodes, sonarr.episode_files
+        sonarr.episodes = lambda series_id: [
+            {"id": 1, "hasFile": True, "episodeFileId": 1},
+            {"id": 2, "hasFile": False, "episodeFileId": 0},
+            *regular_episodes(series_id),
+        ]
+        sonarr.episode_files = lambda series_id: [
+            {"id": 1, "size": 100},
+            *regular_files(series_id),
+        ]
+        _candidate, result = reset_series(media)
+        assert result == "succeeded"
+        assert ("monitored", (1, 101, 102, 103), True) in sonarr.calls
