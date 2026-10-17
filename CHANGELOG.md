@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed: background jobs failing with "database is locked"** on SQLite. Smart Chapters and skip-marker checks on TV episodes left a change unsaved before reading the rest of the series, which then held the database's write lock through transcription and every Ollama call, often for minutes. File checks, dub checks and the web app's saves failed in the meantime. Changes are now saved before any slow step.
+- **TV-friendly audio no longer forgets a track it added** when the database is briefly busy: the record is retried once, since the file is already rewritten and Radarr then reports the new track.
+
 ## 0.2.0rc5 (2026-10-17)
 
 - **TV-friendly audio** (Settings → Enhance, off by default): films and episodes whose main audio is DTS, TrueHD or FLAC get an AC3 copy as the default track, beside the original, so Rokus and TVs that can't play those play the film directly instead of converting it (which can leave the Roku app restarting at one spot). Only that track is encoded; the file is replaced only after the copy checks out.
