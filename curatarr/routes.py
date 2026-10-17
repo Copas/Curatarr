@@ -867,8 +867,14 @@ def _library_care() -> dict | None:
     summary = maintenance_summary()
     if not summary["scanned"]:
         return None
+    from . import compat_audio
+
     activity = job_activity()
-    return {"summary": summary, "activity": activity}
+    return {
+        "summary": summary,
+        "activity": activity,
+        "compat": compat_audio.progress(),
+    }
 
 
 @bp.get("/operations")

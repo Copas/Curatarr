@@ -172,6 +172,7 @@ def chapter_maintenance():
         failed_groups=failed_groups(library_id),
         backlog=_backlog(library_id),
         summary=maintenance_summary(library_id),
+        compat=_compat_progress(),
         smart_blocked=smart_chapters_blocked(),
         activity=job_activity(),
         action_labels=ACTION_LABELS,
@@ -790,3 +791,9 @@ def transcript_search():
         results=search_transcripts(query, 25) if query else [],
         searchable=transcripts_searchable(),
     )
+
+
+def _compat_progress():
+    from . import compat_audio
+
+    return compat_audio.progress()
