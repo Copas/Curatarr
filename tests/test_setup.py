@@ -31,7 +31,10 @@ def test_setup_steps_follow_stored_state(app, client):
     done = _done()
     assert done["jellyfin"] and done["sonarr"] and not done["radarr"]
     assert done["webhook"] and done["discover"] and not done["policy"]
-    assert b"Continue setup" in client.get("/").data
+    # Sonarr alone is enough to finish setup; a Radarr that stopped answering
+    # is reported on its own.
+    page = client.get("/").data
+    assert b"Continue setup" not in page and b"Radarr isn" in page
     db.session.query(Integration).filter_by(
         kind="radarr"
     ).one().health_state = "healthy"
@@ -84,3 +87,26 @@ def test_unmanaged_libraries_are_named_not_shown_as_empty(app, client):
     assert 'title="Nothing is deleted in: Shows"' in page  # the header's dry-run pill
     status = client.get("/api/v1/status").get_json()
     assert status["dry_run_libraries"] == ["Shows"]
+
+
+def test_sonarr_or_radarr_is_enough(app, client):
+    db.session.add(
+        Integration(
+            kind="jellyfin", base_url="http://j", secret_ref="x", health_state="healthy"
+        )
+    )
+    db.session.commit()
+    steps = {step["key"]: step for step in setup_progress()}
+    assert not steps["sonarr"]["optional"] and not steps["radarr"]["optional"]
+    db.session.add(
+        Integration(
+            kind="radarr", base_url="http://r", secret_ref="x", health_state="healthy"
+        )
+    )
+    set_setting("webhook_token", "token")
+    db.session.add(Library(jellyfin_library_id="l", name="Films", media_type="movies"))
+    db.session.commit()
+    steps = {step["key"]: step for step in setup_progress()}
+    assert steps["sonarr"]["optional"] and not steps["sonarr"]["done"]
+    page = client.get("/").data
+    assert b"Continue setup" not in page and b"Sonarr isn" not in page
