@@ -18,7 +18,7 @@ background, never one that's being played, and not in libraries in dry run.
 import threading
 
 from flask import current_app
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 
 from . import db, throttle
 from .integrations import IntegrationError
@@ -150,11 +150,13 @@ def sweep(limit=PER_RUN) -> int:
         films, episodes = hard_files()
     except IntegrationError:
         return 0
-    if not films and not episodes:
+    due = _due(films, episodes) if films or episodes else None
+    _remember_remaining(due)
+    if due is None:
         return 0
     e = _enrichment()
     done = 0
-    for part in _due(films, episodes).limit(limit * 3).all():
+    for part in due.limit(limit * 3).all():
         if done >= limit:
             break
         path = e.local_path(part.file_path)
@@ -174,6 +176,52 @@ def sweep(limit=PER_RUN) -> int:
             _announce(state, part, path, result)
             done += 1
     return done
+
+
+REMAINING_KEY = "compat_audio_remaining"
+
+
+def _remember_remaining(due):
+    """How many files are still to do, for the progress bars (each sweep)."""
+    from .services import set_setting
+
+    remaining = {"films": 0, "episodes": 0, "at": utcnow().isoformat()}
+    if due is not None:
+        for kind, count in (
+            due.with_entities(MediaPart.kind, func.count())
+            .group_by(MediaPart.kind)
+            .order_by(None)
+        ):
+            remaining["films" if kind == "movie_file" else "episodes"] = count
+    set_setting(REMAINING_KEY, remaining)
+    db.session.commit()
+
+
+def progress() -> dict | None:
+    """Done and to-do counts for films and episodes, or None when it's off and
+    nothing was ever done."""
+    from .services import setting
+
+    done = {"films": 0, "episodes": 0}
+    rows = (
+        db.session.query(MediaPart.kind, ChapterState.compat_audio)
+        .join(ChapterState, ChapterState.media_part_id == MediaPart.id)
+        .filter(ChapterState.compat_audio.isnot(None))
+    )
+    for kind, result in rows:
+        if (result or {}).get("added"):
+            done["films" if kind == "movie_file" else "episodes"] += 1
+    on = enabled()
+    if not on and not any(done.values()):
+        return None
+    remaining = setting(REMAINING_KEY, {}) or {}
+    result = {"on": on}
+    for kind in ("films", "episodes"):
+        left = remaining.get(kind, 0) if on else 0
+        result[kind] = {"done": done[kind], "total": done[kind] + left, "left": left}
+    result["done"] = done["films"] + done["episodes"]
+    result["total"] = result["films"]["total"] + result["episodes"]["total"]
+    return result
 
 
 def _playing(part) -> bool:
