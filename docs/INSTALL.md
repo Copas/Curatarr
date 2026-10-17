@@ -27,7 +27,7 @@ Every install runs two parts: **web** (the interface, port 8787) and **worker** 
 
 You need:
 
-- **Jellyfin**, **Sonarr** and **Radarr**, reachable from the Curatarr machine, and an administrator login for each to create API keys.
+- **Jellyfin**, and **Sonarr** and/or **Radarr** (at least one: Sonarr for TV, Radarr for films), reachable from the Curatarr machine, and an administrator login for each to create API keys.
 - A Jellyfin account with the **Administrator** permission to sign in to Curatarr.
 - Optional: Jellyfin's **Webhook** plugin (Dashboard → Plugins → Catalog) for instant playback updates, and the **Intro Skipper** plugin if you want recap and preview skip buttons.
 
@@ -300,8 +300,10 @@ Logs: `docker compose logs --tail=100 web worker`. Don't use `docker compose dow
 1. **Sign in.** Open `http://<your-server>:8787` and sign in with a Jellyfin **administrator** account. On the very first sign-in, also enter your Jellyfin server's address (unless `CURATARR_JELLYFIN_URL` is set). Do this before exposing Curatarr beyond a trusted network: until then, anyone who can reach the page could bind it to a different server.
 2. **Connect your apps.** Follow the **Setup** checklist (Settings → Setup) and add the API keys in Settings → Integrations:
    - **Jellyfin:** Dashboard → API Keys → **+** (default port 8096)
-   - **Sonarr:** Settings → General → Security → API Key (default port 8989)
-   - **Radarr:** Settings → General → Security → API Key (default port 7878)
+   - **Sonarr** (for TV): Settings → General → Security → API Key (default port 8989)
+   - **Radarr** (for films): Settings → General → Security → API Key (default port 7878)
+
+   Connect one or both. Titles only Jellyfin knows about are shown but never managed: Curatarr deletes and downloads only through Sonarr and Radarr.
 3. **Set up the webhook** (recommended). Curatarr's Integrations page shows these steps with your exact address and a template to copy:
    - Jellyfin Dashboard → Plugins → Webhook → **Add Generic Destination**, URL `http://<your-server>:8787/api/v1/webhook/jellyfin`
    - Notification types **Playback Start**, **Playback Stop** and **User Data Saved**; item types **Movies**, **Episodes** and **Series**

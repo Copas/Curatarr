@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Sonarr or Radarr is enough.** A TV-only or film-only setup no longer needs the other: setup is complete with Jellyfin and either one, discovery skips the one that isn't set up, and Overview doesn't warn about it. One that's set up but stops answering still stops discovery, so nothing it manages is unmatched by mistake.
+- **A new README** leading with what Curatarr needs and what it does, with new screenshots.
 - **Replace checks there's something better first.** Replace (English dubs, Problems, wrong shows) used to blocklist the release, delete the file and then search, which could leave no copy at all when nothing better existed. Now the request is queued and the worker asks Radarr or Sonarr for releases first; the file is replaced only if one would be taken once the current file is gone (not the same release, and not one more part of a split film). Automatic replacement works the same way.
 - **Buttons show what they started.** After **Replace** the row says "Looking for a better copy…" with **Cancel**; if nothing better exists it says so, with the date checked, and **OK** drops it (Replace isn't offered again); a replaced file leaves the list. **Search once** shows "Searching…" and later "Still missing after searching", **Request now** on a show's page shows "Requested …, waiting for N episodes" until they arrive, and **Check skip markers** and a scan waiting on file discovery show a status until the worker picks them up.
 - **Changing a key or token asks first.** Revoking or regenerating the API key, and replacing the webhook token, ask in place before cutting off whatever uses them.
