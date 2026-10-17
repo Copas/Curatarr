@@ -59,6 +59,8 @@ The review queue offers **Delete**, **Keep**, **Snooze** and **Never Purge**.
 - Once viewers have watched the latest season (by the acquisition threshold), the next season is requested whenever it appears, without the recent-viewing limit. A show not continued although its next season was already out is treated as abandoned.
 - While viewers are on a season that's still airing, Curatarr makes sure Sonarr monitors it even when every episode so far is downloaded.
 - A show's title page has **Reset to minimum**, which trims it to its always-keep episodes as if nobody had watched it. The rest are deleted through Sonarr with the usual checks (except the grace period and recent viewing), all seasons are unmonitored, and viewing before the reset no longer drives acquisition. Dry run is respected.
+- **Request now** on a show's page applies these rules immediately. Until the requested episodes arrive (or two days pass) the button gives way to "Requested …, waiting for N episodes".
+- **Always-keep episodes that never arrived** (every release failed, or Sonarr unmonitored the show) are listed on Enhance → Problems and Overview. **Search once** monitors just those episodes and searches; the row then shows "Searching…", and after two days either disappears or says the episodes are still missing, with **OK** to stop listing them. **Leave them missing** stops listing them straight away.
 
 ---
 
@@ -105,6 +107,8 @@ With the Jellyfin **Intro Skipper** plugin installed, Curatarr improves the skip
 - **Bad markers hidden.** Intro Skipper sometimes guesses wrong: a short "credits" marker with lots of dialogue after it, credits in the first quarter of an episode, an "intro" that's mostly unique dialogue. Curatarr hides those, recording why.
 - **Movies keep only their credits marker** (on by default). Opening chapter names like "Chapter 1" made Intro Skipper mark recaps and intros at the start of movies; they're hidden. Credits stay, for *Skip Credits* and *Next*.
 
+- **Wrong episodes** (off by default: Settings → Enhance, *Check episodes against their summaries*). An episode whose transcript fits another episode's summary far better than its own, or whose default audio isn't English, is flagged on **Enhance → Wrong episodes** and Overview, to fix in Sonarr, **Make English the default** where the file has an English track, or dismiss.
+
 Everything is listed on **Enhance → Skip markers**, newest first, with the span, the reason and a link to the episode, and each change has **Undo**.
 
 Jellyfin decides per user whether to show a Skip button for each segment type (Settings → Playback → Media segments). Some clients, such as the Roku app, keep their own per-device setting.
@@ -146,7 +150,17 @@ On by default; settings in Settings → Enhance → File problems. A background 
 | **Goes quiet** (films) | Nobody speaks after the first 60% of a film that has a transcript. |
 | **Decoding errors** | Errors from the video or audio decoder at two or more of six points through the file. |
 
-Problem files are listed on **Enhance → Problems** and on Overview, to **Replace** (blocklist the release in Radarr or Sonarr, delete the file, search again), **Check again** or **Keep**. **Replace problem files automatically** is off by default; dry run is respected.
+Problem files are listed on **Enhance → Problems** and on Overview, to **Replace** (blocklist the release in Radarr or Sonarr, delete the file, search again), **Check again** or **Keep**. **Replace problem files automatically** is off by default; dry run is respected. A film that's one part of a split release ("Part.2", "CD1", "Part.II") is flagged as such, and replacing it has Radarr ignore split releases for that film.
+
+### Shows that are another show with the same name
+
+Sonarr sometimes grabs a namesake: a remake, or a foreign show with the same title. A show is flagged when most of its files' names carry a year that isn't the show's (title years and air years excepted), or most of its audio is in another language and no file has an English or original-language track. **Replace** blocklists those releases, deletes the files, searches again and adds a Sonarr release profile, for that show only, ignoring the wrong year. **It's right** stops listing it until its files change.
+
+### Replace checks first
+
+Every **Replace** (English dubs, Problems, wrong shows, and automatic replacement) is queued rather than done on the spot. The worker asks Radarr or Sonarr for the title's releases (a minute or two, across every indexer) and replaces the file only if one would be taken once the current file is gone: not the release already there, not one more part of a split film, and for a wrong show not the wrong year or the flagged releases. Otherwise the file stays.
+
+The row shows where the request is: "Looking for a better copy…" with **Cancel**; then either the row disappears (replaced; History has the details) or it says "No better copy was available, checked <date>" with **OK**, which stops listing it.
 
 ---
 
@@ -166,7 +180,7 @@ Below, **Suggested for you** takes Radarr's recommendations (films TMDB links to
 
 ## Fun facts
 
-**Library → Fun facts** (everyone, household accounts included) ranks films and shows by what's said in them, from the Smart Chapters transcripts: most swearing per hour, the f-bomb champions, squeaky-clean talkative films and the shows that swear least (handy for picking something for the kids), the most kill-and-blood talk, the most "help!" and "run!", the chattiest and quietest, the most "I love you"s, pleases and thank-yous, and questions. **Catchphrases** finds the phrase each show says in more of its episodes than other shows do. Each transcript is counted once in the background, with no GPU, and the page grows as more files are transcribed.
+**Library → Fun facts** (everyone, household accounts included) ranks films and shows by what's said in them, from the Smart Chapters transcripts. Every figure is a rate (per hour or per minute), so a show with hundreds of episodes doesn't win by size: swearing and f-bombs, squeaky-clean talkative films and the shows that swear least (handy for picking something for the kids), kill-and-blood talk, "help!" and "run!", the chattiest and quietest, "I love you", pleases and thank-yous, questions, shouting, the biggest vocabularies, the longest wait for the first word, the longest silence and the longest stretch of non-stop talk. **Who gets talked about** lists the names said most per hour. **Catchphrases** gives each show's longest phrase that recurs across its episodes (never the show's own name), shows people watch first. Theme songs, transcripts in other languages and generic phrases are left out. Each transcript is counted once in the background, with no GPU, and the page grows as more files are transcribed. Every title links to Jellyfin.
 
 ---
 

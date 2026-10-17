@@ -11,6 +11,7 @@
 | `GET /api/v1/review/summary` | Sign-in or API key | The review queue in brief |
 | `GET /api/v1/history` | Sign-in or API key | Newest actions, with title, library, Jellyfin item ID and links to Curatarr's pages |
 | `GET /api/v1/transcripts/search?q=…` | Sign-in or API key | Episodes and films where the words were said, with timestamps |
+| `GET /api/v1/identity-flags` | Sign-in or API key | Episodes flagged as possibly the wrong episode (filed as one, sounding like another), with the Sonarr series, whether the two are swapped and whether the other episode's file is confirmed. Empty while the episode check is off |
 | `POST /api/v1/webhook/jellyfin` | `X-Curatarr-Token` header | Jellyfin Webhook plugin events |
 
 `/api/v1/history?limit=20&exclude=admin_signed_in` returns the 20 newest actions without sign-ins. Repeat `type=` or `exclude=` to filter by action type (for example `type=dub_fixed`).
