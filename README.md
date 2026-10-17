@@ -78,8 +78,9 @@ Click **Replace** and Curatarr first checks that a better copy actually exists. 
 - **Skip "Previously on…" and "Next time on…"** with Jellyfin's own Skip button.
 - **Better skip markers**: Intro Skipper guesses that are plainly wrong are hidden, each one undoable.
 - **The right audio first**: tracks labelled in the wrong language are relabelled, and the real English track becomes the default.
+- **Audio every TV can play**: films with DTS, TrueHD or FLAC sound get an AC3 copy beside the original, so a Roku or TV plays them directly instead of stumbling over conversion.
 
-Nothing is re-encoded, and none of it happens until you switch it on.
+The picture is never re-encoded, the only thing ever encoded is that optional extra audio track, and none of it happens until you switch it on.
 
 ![Enhance: what Curatarr has done for your library so far](docs/images/chapters.png)
 
@@ -103,7 +104,7 @@ Curatarr was built on a real 8,000-file library and is careful by design:
 - **Dry run is on by default** for every library. Curatarr shows what it *would* remove and why, until you switch that off.
 - **Deletions only go through Sonarr or Radarr**, after Curatarr rechecks playback, grace periods, the download queue and connection health. If anything can't be verified, nothing is deleted.
 - **Replace never leaves you with nothing.** It confirms a better copy can be found before it deletes the one you have.
-- **File edits never re-encode.** Chapters and track flags are written in place with `mkvpropedit`. Removing language tracks writes a copy that's checked before it replaces the original.
+- **File edits never re-encode the picture.** Chapters and track flags are written in place with `mkvpropedit`. Removing language tracks, or adding a TV-friendly audio track (the one thing that encodes, and only that track), writes a copy that's checked before it replaces the original, which keeps every original track.
 - **Everything is undoable or recorded.** Markers it hid can be restored, chapters it wrote can be removed (your originals are kept), and every action is in History with the reason.
 - **It steps aside for viewers.** It measures CPU, GPU and who's watching, and backs off when someone starts a stream.
 

@@ -161,6 +161,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Starting the dub check failed")
     try:
+        from . import compat_audio
+
+        compat_audio.start()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Starting TV-friendly audio failed")
+    try:
         from . import filecheck_jobs
 
         filecheck_jobs.start()
