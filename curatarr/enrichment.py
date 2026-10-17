@@ -1019,6 +1019,10 @@ def run_job(state_id: str, *, llm=None) -> str:
         return state.chapter_status
     state.duration_seconds = info.duration
     state.container = info.format_name[:60]
+    # Saved now: left unsaved, the next query (the rest of the series, say)
+    # writes them and holds SQLite's write lock through transcription and
+    # every language-model call, minutes in which nothing else can write.
+    db.session.commit()
     fields |= {"duration": info.duration, "existing_chapters": len(info.chapters)}
 
     if action == "scan":
@@ -2659,6 +2663,7 @@ def _mark_segment(state, part, media, kind, *, clear_guesses=False):
     if not item_id:
         return
     plugin = IntroSkipper(client("jellyfin"))
+    _save_before_slow_work()
     segments = plugin.segments(item_id)
     if segments is None:
         return  # Intro Skipper isn't installed
@@ -2732,13 +2737,38 @@ def _series_without_recaps(state) -> bool:
     return _series_without(state, "recap")
 
 
+def _save_before_slow_work():
+    """Save what's been changed before transcribing or asking another server.
+
+    Left unsaved, the next query writes it and SQLite's write lock is held
+    until the job ends: through minutes of transcription and language-model
+    calls in which the web app and every other job can't save anything.
+    """
+    db.session.commit()
+
+
+class _SavingModel:
+    """A language model whose every question first saves pending changes."""
+
+    def __init__(self, llm):
+        self._llm = llm
+
+    def __getattr__(self, name):
+        return getattr(self._llm, name)
+
+    def ask(self, *args, **kwargs):
+        _save_before_slow_work()
+        return self._llm.ask(*args, **kwargs)
+
+
 class _Episode:
     """What the skip-marker checks need, each fetched once and only if needed."""
 
     def __init__(self, state, part, media, info, config, opts, llm):
         self.state, self.part, self.media, self.info = state, part, media, info
         self.config, self.opts = config, opts
-        self._llm, self._scenes, self._full = llm, None, False
+        self._llm = _SavingModel(llm) if llm else llm
+        self._scenes, self._full = None, False
         self.model_name = config["semantic"]["model"]
 
     def full(self):
@@ -2773,6 +2803,7 @@ class _Episode:
             window, opening_only = (int(start), int(end) + 1), False
         if not transcribe_missing:
             return None
+        _save_before_slow_work()
         segments, _details = transcribe(
             self.info,
             self.model_name,
@@ -2804,6 +2835,8 @@ class _Episode:
                 self._llm = _language_model(self.config, self.opts)
             except LanguageModelError:
                 self._llm = False  # the phrase and clip evidence don't need it
+            else:
+                self._llm = _SavingModel(self._llm)
         return self._llm or None
 
     def neighbours(self, *, later: bool, count: int):
@@ -3338,6 +3371,9 @@ def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
         ):
             if check is None:
                 continue
+            # Each check transcribes or asks Jellyfin: never with the last
+            # one's results unsaved, which would hold SQLite's write lock.
+            db.session.commit()
             try:
                 results.append(check())
             except (MediaToolError, RuntimeError) as exc:

@@ -19,6 +19,7 @@ import threading
 
 from flask import current_app
 from sqlalchemy import and_, func, or_
+from sqlalchemy.exc import OperationalError
 
 from . import db, throttle
 from .integrations import IntegrationError
@@ -166,16 +167,33 @@ def sweep(limit=PER_RUN) -> int:
             continue
         state = e.state_for(part)
         db.session.commit()  # never hold the write lock while a film is copied
+        state_id, part_id = state.id, part.id
         result = _add(state, part, path)
-        state.compat_audio_size = result.pop("size", part.size_bytes)
-        if result.get("added"):
-            part.size_bytes = state.compat_audio_size  # as Radarr will report it
-        state.compat_audio = result | {"at": utcnow().isoformat()}
-        db.session.commit()
+        synced = (state.chapter_file_size, state.chapter_file_mtime)
+        try:
+            _record(state, part, result)
+        except OperationalError:
+            # Busy past the timeout. The file is already rewritten, and once
+            # Radarr sees the new track it's never looked at again: try once more.
+            db.session.rollback()
+            state = db.session.get(ChapterState, state_id)
+            part = db.session.get(MediaPart, part_id)
+            if result.get("added"):
+                state.chapter_file_size, state.chapter_file_mtime = synced
+            _record(state, part, result)
         if result.get("added"):
             _announce(state, part, path, result)
             done += 1
     return done
+
+
+def _record(state, part, result):
+    state.compat_audio_size = result.get("size", part.size_bytes)
+    if result.get("added"):
+        part.size_bytes = state.compat_audio_size  # as Radarr will report it
+    record = {k: v for k, v in result.items() if k != "size"}
+    state.compat_audio = record | {"at": utcnow().isoformat()}
+    db.session.commit()
 
 
 REMAINING_KEY = "compat_audio_remaining"
