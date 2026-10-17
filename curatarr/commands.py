@@ -196,6 +196,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Checking shows for the wrong version failed")
     try:
+        from . import autofix
+
+        autofix.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Starting automatic fixes failed")
+    try:
         from . import better_copy
 
         better_copy.sweep()

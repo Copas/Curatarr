@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Automatic fixes** (Settings → Automatic, all off by default): replace problem files, films with no English audio and files of another show with the same name, and search once for always-keep episodes that never arrived, without asking. Each is tried once; when it doesn't work (no better copy, or still missing after the search) the item is dropped quietly and Activity says so. Overview shows one line about what was handled instead of a row per item.
+- **Needs you only lists what needs you.** Replacements being looked into and searches in progress stay on Enhance → Problems, off Overview.
 - **Cleanup listens to the household.** Settings → Household, with a note on each title's page and in Review saying why:
   - **Seerr requests** (optional integration): a requested title is kept until whoever asked has played it, for up to 90 days.
   - **Rewatched titles** (Jellyfin play counts) go to the back of the line, like favourites.
