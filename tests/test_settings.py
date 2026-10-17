@@ -102,7 +102,8 @@ def test_settings_show_webhook_setup_with_template(app, client):
 def test_webhook_setup_step_offers_and_shows_the_token(app, client):
     client.get("/settings")  # first visit creates and shows a token once
     page = client.get("/settings").text
-    assert "Generate a new token</button>" in page
+    assert "Generate a new token…</span>" in page
+    assert "Make a new token</button>" in page  # asks first: one is in use
     response = client.post("/settings", data={"kind": "webhook"}, follow_redirects=True)
     page = response.text
     token = setting("webhook_token")

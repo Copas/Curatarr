@@ -50,7 +50,7 @@ from .integrations import IntegrationError
 from .mediafile import MediaToolError
 from .models import ChapterState, Library, MediaIdentity, MediaPart
 from .routes import NAV_SECTIONS, bp
-from .services import request_reconciliation
+from .services import request_reconciliation, setting
 
 NAV_SECTIONS.update(
     {
@@ -177,6 +177,9 @@ def chapter_maintenance():
         action_labels=ACTION_LABELS,
         file_label=file_label,
         enabled_libraries=_enabled_libraries(),
+        # Asked for, not yet picked up by the worker: show that, not the button.
+        scan_requested=bool(setting("chapter_scan_requested")),
+        markers_requested=bool(setting("skip_markers_requested")),
     )
 
 
@@ -457,6 +460,12 @@ def chapter_identity_dismiss(state_id):
         abort(404)
     dismiss_identity(state)
     flash("Dismissed. This episode won't be flagged again.", "success")
+    return _identity_back()
+
+
+def _identity_back():
+    if request.form.get("back") == "overview":
+        return redirect(url_for("main.overview"))
     return redirect(url_for("main.chapter_identity"))
 
 
@@ -472,7 +481,7 @@ def chapter_identity_fix_audio(state_id):
         flash(f"Couldn't change the default audio: {exc}", "danger")
     else:
         flash(message, "success")
-    return redirect(url_for("main.chapter_identity"))
+    return _identity_back()
 
 
 @bp.get("/chapters/dubs")
