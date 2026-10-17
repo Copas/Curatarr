@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from '_replace_actions.html' import replace_actions with context %}
 {% block title %}English dubs · Curatarr{% endblock %}
 {% macro track_list(state) %}{% set r = state.dub_result %}<ul class="small mb-0 ps-3">{% for t in r.tracks %}<li>Track {{ t.index }}{% if t.default %} (default){% endif %}{% if t.removed %} <span class="text-secondary">(removed)</span>{% endif %}: labelled <strong>{{ language(t.label) if t.label else 'no language' }}</strong>{% if 'was' in t %} (was {{ language(t.was) if t.was else 'unlabelled' }}){% endif %}, sounds <strong>{{ language(t.heard) if t.heard else 'unclear' }}</strong></li>{% endfor %}</ul>{% endmacro %}
 {% macro film(state) %}<a class="h5" href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}<div class="small text-secondary text-break">{{ state.part.file_path }}</div>{% endmacro %}
@@ -12,11 +13,11 @@
 <div class="card p-3 mb-3">
   <div class="d-flex flex-wrap justify-content-between gap-2">
     <div>{{ film(state) }}</div>
-    <div class="d-flex gap-2">{{ button(state, 'replace', 'Replace with another release', 'btn-primary') }}{{ button(state, 'recheck', 'Listen again') }}{{ button(state, 'dismiss', 'Keep it') }}</div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">{% set listen_again = button(state, 'recheck', 'Listen again') %}{{ replace_actions('main.chapter_dub_action', {'state_id': state.id}, better_copy_status(state, 'dub'), better_copy_checked(state, 'dub'), replace_label='Replace with another release', replace_tip='Checks Radarr can find another copy first; only then blocklists this release, deletes the file and grabs it.', keep_label='Keep it', extra=listen_again) }}</div>
   </div>
   <p class="mt-2 mb-1">Made in {{ language(state.dub_result.original) }}, and none of its audio sounds English.{% if state.dub_result.applied %} Its labels now say what each track really is.{% endif %}</p>
   {{ track_list(state) }}
-  {% set dr = state.dub_result or {} %}{% if dr.replace_requested %}<p class="small text-info mt-2 mb-0">Looking for a copy with English audio; the file is replaced only if one is found.</p>{% elif dr.no_better %}<p class="small text-warning mt-2 mb-0">No copy Radarr would take was available on {{ dr.no_better.at|when('datetime') }} ({{ dr.no_better.checked }} release{{ '' if dr.no_better.checked == 1 else 's' }} looked at), so the file was kept.</p>{% endif %}
+  {% set dr = state.dub_result or {} %}{% if dr.replace_error %}<p class="small text-danger mt-2 mb-0">Replacing failed: {{ dr.replace_error }}</p>{% endif %}
   <p class="small text-secondary mt-2 mb-0">Replace first checks that Radarr can find another copy it would take; only then does it blocklist this release, delete the file and grab the new one. With English dubs allowed in your Radarr profile, that can be one.</p>
 </div>
 {% else %}<div class="empty-state mb-4"><p class="mb-0">None found.</p></div>{% endfor %}

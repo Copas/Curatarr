@@ -10,7 +10,7 @@ from test_enrichment import _movie
 from curatarr import better_copy, db, enrichment, filecheck, filecheck_jobs
 from curatarr.mediafile import MediaInfo, tool
 from curatarr.models import ChapterState, MediaIdentity, MediaPart
-from curatarr.services import set_setting
+from curatarr.services import set_setting, setting
 
 PATH = "/movies/Film (2020)/Film.mkv"
 
@@ -422,3 +422,33 @@ def test_split_release_pattern():
     assert not pattern.search("Party.Down.2009") and not pattern.search(
         "Part.Time.2010"
     )
+
+
+def test_the_row_shows_what_replace_is_doing(client, check_env):
+    """Clicking Replace must visibly change the row: no second Replace while it's
+    looked into, Cancel to take it back, and after "no better copy" just OK."""
+    arr, _found = check_env
+    _movie(PATH)
+    filecheck_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+    replace_url = f"/chapters/problems/{state.id}/replace"
+    assert replace_url in client.get("/").text
+    client.post(replace_url, data={"back": "overview"})
+    for page in (client.get("/").text, client.get("/chapters/problems").text):
+        assert "Looking for a better copy…" in page and replace_url not in page
+        assert f"/chapters/problems/{state.id}/cancel" in page
+    # A second click (an old tab) changes nothing.
+    page = client.post(replace_url, follow_redirects=True).text
+    assert "Already looking for a better copy" in page
+    assert len(setting("replace_queue")) == 1
+    client.post(f"/chapters/problems/{state.id}/cancel")
+    assert setting("replace_queue") == [] and replace_url in client.get("/").text
+    # Nothing better: say so, offer only OK, never Replace again.
+    arr.available = [{"title": "Film.2020.Swedish", "rejections": ["Not English"]}]
+    client.post(replace_url)
+    better_copy.sweep()
+    page = client.get("/").text
+    assert "No better copy was available" in page and replace_url not in page
+    client.post(f"/chapters/problems/{state.id}/dismiss", data={"back": "overview"})
+    assert replace_url not in client.get("/").text  # OK drops it
+    assert filecheck_jobs.review()["to_act"] == []

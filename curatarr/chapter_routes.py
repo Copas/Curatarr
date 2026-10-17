@@ -503,12 +503,15 @@ def chapter_dub_action(state_id, action):
     if (
         not state
         or not state.dub_result
-        or action not in ("replace", "dismiss", "recheck")
+        or action not in ("replace", "dismiss", "recheck", "cancel")
     ):
         abort(404)
     try:
         if action == "replace":
-            flash(better_copy.request(state, "dub"), "success")
+            flash(_request_replace(state, "dub"), "success")
+        elif action == "cancel":
+            better_copy.cancel(state, "dub")
+            flash("Cancelled. Nothing was changed.", "success")
         elif action == "dismiss":
             dub_jobs.dismiss(state)
             flash("Dismissed. This film won't be listed again.", "success")
@@ -637,17 +640,33 @@ def chapter_problems():
     )
 
 
+def _request_replace(target, kind) -> str:
+    """Queue a Replace once: a second click while it's being looked into, or
+    after no better copy was found, changes nothing."""
+    from . import better_copy
+
+    current = better_copy.status(target, kind)
+    if current == "pending":
+        return "Already looking for a better copy."
+    if current == "no_better":
+        return "No better copy was available when Curatarr last looked."
+    return better_copy.request(target, kind)
+
+
 @bp.post("/chapters/problems/version/<media_id>/<action>")
 def wrong_version_action(media_id, action):
     """Replace a show's files that are another show, or say it's the right one."""
-    from . import wrong_version
+    from . import better_copy, wrong_version
 
     media = db.session.get(MediaIdentity, media_id)
-    if not media or action not in ("replace", "dismiss"):
+    if not media or action not in ("replace", "dismiss", "cancel"):
         abort(404)
     try:
         if action == "replace":
-            flash(wrong_version.replace(media), "success")
+            flash(_request_replace(media, "version"), "success")
+        elif action == "cancel":
+            better_copy.cancel(media, "version")
+            flash("Cancelled. Nothing was changed.", "success")
         else:
             wrong_version.dismiss(media)
             flash(
@@ -703,12 +722,15 @@ def chapter_problem_action(state_id, action):
     if (
         not state
         or not state.file_check
-        or action not in ("replace", "dismiss", "recheck")
+        or action not in ("replace", "dismiss", "recheck", "cancel")
     ):
         abort(404)
     try:
         if action == "replace":
-            flash(better_copy.request(state, "file"), "success")
+            flash(_request_replace(state, "file"), "success")
+        elif action == "cancel":
+            better_copy.cancel(state, "file")
+            flash("Cancelled. Nothing was changed.", "success")
         elif action == "dismiss":
             filecheck_jobs.dismiss(state)
             flash("Kept. This file won't be listed again.", "success")

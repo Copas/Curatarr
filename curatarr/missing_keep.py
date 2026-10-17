@@ -85,6 +85,13 @@ def rows():
                 "unmonitored": media.arr_monitored is False,
                 "searched": searched,
                 "waiting": bool(searched and now - searched < WAITING),
+                # waiting: searched, give it time; still_missing: searched and
+                # nothing came (say so, then drop it); new: never searched.
+                "state": "waiting"
+                if searched and now - searched < WAITING
+                else "still_missing"
+                if searched
+                else "new",
             }
         )
     found.sort(key=lambda r: (r["waiting"], r["media"].title.lower()))

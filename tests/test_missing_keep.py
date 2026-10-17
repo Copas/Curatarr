@@ -140,3 +140,26 @@ def test_gone_shows_are_not_listed(app):
     db.session.get(MediaIdentity, media.id).missing_since = utcnow()
     db.session.commit()
     assert missing_keep.rows() == []
+
+
+def test_search_once_shows_searching_then_still_missing(app, client, monkeypatch):
+    sonarr = _Sonarr()
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: sonarr)
+    media, _ = _show("Gappy", [(1, 1, False), (1, 2, True)], monitored=False)
+    search_url = f"/chapters/problems/show/{media.id}/search"
+    assert search_url in client.get("/").text
+    client.post(search_url, data={"back": "overview"})
+    for page in (client.get("/").text, client.get("/chapters/problems").text):
+        assert "Searching… asked" in page and search_url not in page
+    # Two days on and still nothing: say so, offer only OK.
+    action = (
+        db.session.query(LifecycleAction)
+        .filter_by(media_identity_id=media.id, action_type="sonarr_season_search")
+        .one()
+    )
+    action.created_at = utcnow() - timedelta(days=3)
+    db.session.commit()
+    page = client.get("/").text
+    assert "Still missing after searching on" in page and search_url not in page
+    client.post(f"/chapters/problems/show/{media.id}/ignore", data={"back": "overview"})
+    assert missing_keep.rows() == []  # dropped

@@ -197,7 +197,7 @@ def test_a_film_with_no_english_copy_anywhere_is_kept(client, dub_env):
     client.post(f"/chapters/dubs/{state.id}/replace")
     better_copy.sweep()
     assert radarr.calls == []
-    assert "No copy Radarr would take was available" in client.get(
+    assert "No better copy was available" in client.get(
         "/chapters/dubs"
     ).get_data(as_text=True)
 

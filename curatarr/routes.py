@@ -21,7 +21,7 @@ from flask import (
 from markupsafe import Markup
 from sqlalchemy import func
 
-from . import db, icons, jellyfin_links
+from . import better_copy, db, icons, jellyfin_links
 from .auth import (
     SignInError,
     current_user,
@@ -421,6 +421,8 @@ def template_values():
         "jellyfin_link": jellyfin_links.link,
         "jellyfin_link_for": jellyfin_links.link_for,
         "action_name": action_name,
+        "better_copy_status": better_copy.status,
+        "better_copy_checked": better_copy.checked_at,
         "jellyfin_part_link": jellyfin_links.part_link,
         "jellyfin_url": jellyfin_links.item_url,
         "work_paused": _work_paused() if is_admin else None,
@@ -704,7 +706,7 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "href": url_for("main.settings"),
             },
         )
-    from . import dub_jobs
+    from . import better_copy, dub_jobs
     from .enrichment import file_label, maintenance_failed_count
 
     for state in dub_jobs.review()["to_act"][:NEEDS_SHOWN]:
@@ -716,6 +718,8 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "detail": "No English audio: replace it with another release?",
                 "dub": state.id,
                 "jellyfin_media": state.media.id,
+                "replace_status": better_copy.status(state, "dub"),
+                "checked_at": better_copy.checked_at(state, "dub"),
                 "href": url_for("main.chapter_dubs"),
             }
         )
@@ -732,6 +736,8 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "detail": filecheck_jobs.describe(state.file_check)[0] + ".",
                 "problem": state.id,
                 "jellyfin_media": state.media.id,
+                "replace_status": better_copy.status(state, "file"),
+                "checked_at": better_copy.checked_at(state, "file"),
                 "href": url_for("main.chapter_problems"),
             }
         )
@@ -747,10 +753,12 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 + "; ".join(row["evidence"])
                 + ".",
                 "wrong_version": row["media"].id,
+                "replace_status": row["status"],
+                "checked_at": row["checked_at"],
                 "href": url_for("main.chapter_problems"),
             }
         )
-    for row in [r for r in missing_keep.rows() if not r["waiting"]][:NEEDS_SHOWN]:
+    for row in missing_keep.rows()[:NEEDS_SHOWN]:
         needs.append(
             {
                 "icon": "tools",
@@ -763,6 +771,8 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                     else "."
                 ),
                 "missing_show": row["media"].id,
+                "search_state": row["state"],
+                "searched": row["searched"],
                 "href": url_for("main.chapter_problems"),
             }
         )
