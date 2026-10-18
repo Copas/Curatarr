@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The backdrop's Leaving Soon tag sits lower and further in**, below the header buttons phone apps draw over a title's backdrop and inside the sides they crop.
 - **Leaving Soon titles no longer sit in Overview's Needs you.** They're decided (they go unless someone watches), so Overview shows one line instead: how many, how much space, and when the first goes, linking to Review.
 - **Search results highlight what was searched**: the words of a quoted phrase, and the other search words in any form.
 - **Search by what was said: words in "quotes" are an exact phrase**, said as written (whole words, in order). Without quotes, lines with most of the words still match as before.
