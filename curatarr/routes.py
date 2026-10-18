@@ -323,6 +323,7 @@ NAV_SECTIONS = {
     "main.titles": "library",
     "main.title": "library",
     "main.title_reset": "library",
+    "main.title_remove": "library",
     "main.shows": "library",
     "main.reset_unwatched": "library",
     "main.search": "library",
@@ -1231,6 +1232,30 @@ def title_shrink(media_id, action):
     if request.form.get("back") == "review":
         return redirect(url_for("main.review"))
     return redirect(url_for("main.title", media_id=media.id))
+
+
+@bp.post("/titles/<media_id>/remove")
+def title_remove(media_id):
+    """Send a film to Leaving Soon (lifecycle.request_removal)."""
+    from .artwork import reconcile_artwork
+    from .lifecycle import request_removal
+
+    media = db.session.get(MediaIdentity, media_id)
+    if not media:
+        abort(404)
+    try:
+        candidate = request_removal(media)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    else:
+        reconcile_artwork()
+        flash(
+            f"{media.title} is Leaving Soon: its poster says so in Jellyfin, and "
+            f"it's deleted on {candidate.scheduled_delete_at:%B %-d} unless someone "
+            "plays it or you choose Keep. Approve deletion to remove it sooner.",
+            "info",
+        )
+    return redirect(url_for("main.title", media_id=media_id))
 
 
 @bp.route("/titles/<media_id>/reset", methods=["GET", "POST"])

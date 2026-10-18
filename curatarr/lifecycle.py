@@ -764,6 +764,10 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
         # Sonarr's series monitored flag do not apply; every other check does.
         if media.sonarr_id is None:
             return "Show is not matched to Sonarr"
+    elif candidate.reason_code == REQUESTED_REMOVAL:
+        # Chosen on the film's page: its grace period doesn't apply.
+        if not item.mapped or media.radarr_id is None:
+            return "Film is not matched to Radarr"
     elif not eligible(item, policy, now):
         return "Grace, mapping, snooze, or minimum-footprint guard failed"
     last = item.last_played_at
@@ -895,6 +899,49 @@ def _tv_file_targets(media, policy, arr):
 
 
 MANUAL_RESET = "manual_reset"
+REQUESTED_REMOVAL = "requested"
+
+
+def request_removal(media):
+    """A film someone chose to remove (title page), through Leaving Soon like
+    any other: its poster is badged, playing it or Keep cancels it, and it's
+    deleted after the notice period or when approved in Review."""
+    if media.media_type != "movie":
+        raise ValueError("Only films can be removed this way; shows have Reset.")
+    policy, _ = resolved_policy(media)
+    if policy["never_purge"]:
+        raise ValueError(f"Never Purge is on for {media.title}.")
+    if _active_candidate(media.id):
+        raise ValueError(f"{media.title} is already on its way out; see below.")
+    item = _candidate_input(media)
+    if not item.mapped or item.size_bytes <= 0:
+        raise ValueError(f"Radarr doesn't have a file for {media.title}.")
+    now = utcnow()
+    score, detail = weighted_score(item, now, policy["meaningful_threshold"])
+    reason = "Removal requested from its title page."
+    candidate = PurgeCandidate(
+        media_identity_id=media.id,
+        state="LEAVING_SOON",
+        reason_code=REQUESTED_REMOVAL,
+        reason_text=reason,
+        reclaimable_bytes=item.size_bytes,
+        score=score,
+        score_detail_json=detail,
+        last_activity_snapshot=item.last_played_at,
+        scheduled_delete_at=now + timedelta(days=policy["notice_days"]),
+    )
+    db.session.add(candidate)
+    db.session.flush()
+    audit(
+        "candidate_created",
+        media.id,
+        reason,
+        f"candidate:{candidate.id}",
+        candidate_id=candidate.id,
+        payload={"reclaimable_bytes": item.size_bytes, "effective_policy": policy},
+    )
+    db.session.commit()
+    return candidate
 
 
 def reset_series(media, *, run=True):
