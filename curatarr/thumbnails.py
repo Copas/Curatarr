@@ -79,6 +79,33 @@ def note_rebuilt(part, media, had_thumbnails: bool) -> None:
     db.session.commit()
 
 
+def before_rebuild(path):
+    """For a rebuild Curatarr makes while editing a file in place (see
+    mediafile._mkvpropedit): the file's part and whether it has thumbnails
+    now, or None when that can't be told (no app context, unknown file)."""
+    from . import db
+    from .models import MediaPart
+
+    try:
+        name = path.replace("\\", "/").rsplit("/", 1)[-1]
+        part = (
+            db.session.query(MediaPart)
+            .filter(MediaPart.has_file.is_(True), MediaPart.file_path.like(f"%/{name}"))
+            .first()
+        )
+        if part is None:
+            return None
+        return part, has_thumbnails(part, part.media)
+    except Exception:  # noqa: BLE001  outside the app (tools, tests): nothing to note
+        return None
+
+
+def after_rebuild(noted) -> None:
+    if noted:
+        part, had_thumbnails = noted
+        note_rebuilt(part, part.media, had_thumbnails)
+
+
 def waiting() -> list[dict]:
     """Rebuilt files still without thumbnails; checks with Jellyfin and
     forgets the ones that have them again, or waited too long."""

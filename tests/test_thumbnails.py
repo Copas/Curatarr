@@ -88,3 +88,39 @@ def test_has_thumbnails_reads_dashed_ids(app, monkeypatch):
     fake.with_thumbnails.add("ABC-DEF")
     assert thumbnails.has_thumbnails(Part("ABC-DEF"), None)
     assert not thumbnails.has_thumbnails(Part("other"), None)
+
+
+def test_a_rebuild_while_editing_in_place_counts_too(app, monkeypatch):
+    from test_enrichment import _movie
+
+    from curatarr import mediafile
+    from curatarr.models import MediaPart
+
+    _movie("/movies/Loud (2020)/Loud.mkv")
+    db.session.query(MediaPart).one().jellyfin_id = "loud"
+    db.session.commit()
+    fake = _jellyfin(monkeypatch)
+    fake.with_thumbnails.add("loud")
+    rebuilt = []
+    monkeypatch.setattr(mediafile, "seek_index_hidden", lambda path: True)
+    monkeypatch.setattr(mediafile, "rebuild_layout", rebuilt.append)
+
+    class Done:
+        returncode = 0
+        stdout = ""
+
+    monkeypatch.setattr(mediafile, "_run", lambda args, timeout: Done())
+    mediafile.set_default_audio(
+        "/local/Loud.mkv",
+        mediafile.MediaInfo(
+            "/local/Loud.mkv",
+            1,
+            1.0,
+            60.0,
+            "matroska",
+            streams=[{"index": 1, "codec_type": "audio"}],
+        ),
+        1,
+    )
+    assert rebuilt == ["/local/Loud.mkv"]
+    assert [w["item"] for w in setting(thumbnails.KEY)] == ["loud"]
