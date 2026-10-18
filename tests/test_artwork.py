@@ -522,3 +522,55 @@ def test_wide_cards_and_backdrops_get_the_tag_too(app, monkeypatch):
                 assert restore_badge(snapshot)
             for kind, source in images.items():
                 assert fake.images[kind] == _jpeg(source)
+
+
+def test_a_duplicate_snapshot_is_retired(app, monkeypatch):
+    source = _poster()
+
+    class FakeJellyfin:
+        current = source
+
+        def item(self, _item_id):
+            return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
+
+        def image(self, _item_id, _kind="Primary"):
+            return self.current
+
+        def put_image(self, _item_id, data, _kind="Primary"):
+            self.current = data
+
+    monkeypatch.setattr("curatarr.artwork.client", lambda _kind: FakeJellyfin())
+    with app.app_context():
+        library = Library(
+            jellyfin_library_id="art-x", name="Films", media_type="movies"
+        )
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id, media_type="movie", title="Film", jellyfin_id="f"
+        )
+        db.session.add(media)
+        db.session.flush()
+        candidate = PurgeCandidate(
+            media_identity_id=media.id,
+            state="LEAVING_SOON",
+            reason_code="requested",
+            reason_text="Asked",
+            reclaimable_bytes=100,
+        )
+        db.session.add(candidate)
+        db.session.commit()
+        assert apply_badge(candidate)
+        db.session.add(
+            PosterSnapshot(
+                media_identity_id=media.id,
+                jellyfin_item_id="f",
+                candidate_id=candidate.id,
+                original_image_tag="stale",
+                active=True,
+            )
+        )
+        db.session.commit()
+        assert apply_badge(candidate)
+        active = db.session.query(PosterSnapshot).filter_by(active=True).all()
+        assert len(active) == 1 and active[0].badged_image_tag
