@@ -506,7 +506,7 @@ class DemoClient:
     def delete_episode_file(self, _file_id):
         self._check()
 
-    def image(self, _item_id):
+    def image(self, _item_id, _kind="Primary"):
         row = (
             db.session.query(AppSetting).filter_by(key=f"demo_image:{_item_id}").first()
         )
@@ -516,7 +516,7 @@ class DemoClient:
         Image.new("RGB", (300, 450), "#456070").save(output, format="JPEG")
         return output.getvalue()
 
-    def put_image(self, _item_id, _image_bytes):
+    def put_image(self, _item_id, _image_bytes, _kind="Primary"):
         self._check()
         row = (
             db.session.query(AppSetting).filter_by(key=f"demo_image:{_item_id}").first()

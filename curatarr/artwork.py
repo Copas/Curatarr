@@ -32,32 +32,69 @@ def badge_label(candidate, today=None) -> str:
 
 BADGE_RED = "#E50914"
 # Part of each snapshot's recorded label: a new style redraws every poster.
-BADGE_STYLE = "red-tag"
+BADGE_STYLE = "red-tag-3"
 
 
-def badge_poster(source: bytes, label: str = "LEAVING SOON") -> bytes:
-    """A red tag in the top-left corner, like a streaming service's, so the
-    film's own title (usually at the bottom) stays visible."""
+def _fit(drawing, label, size, max_width):
+    while True:
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", size)
+        box = drawing.textbbox((0, 0), label, font=font)
+        if box[2] - box[0] <= max_width or size <= 10:  # longer labels fit too
+            return font, box
+        size -= 1
+
+
+def badge_poster(
+    source: bytes, label: str = "LEAVING SOON", kind: str = "Primary"
+) -> bytes:
+    """Posters get a red tag in the top-left corner, like a streaming
+    service's, so the film's own title (usually at the bottom) stays visible.
+    Wide cards (Thumb) get a shaded red ribbon along the bottom, and
+    backdrops, shown full screen behind a title's page, a smaller tag in the
+    top-right corner, clear of the menus and text apps draw over them."""
     image = Image.open(BytesIO(source)).convert("RGB")
     width, height = image.size
     drawing = ImageDraw.Draw(image)
-    size = max(12, round(width * 0.065))
-    font = ImageFont.truetype("DejaVuSans-Bold.ttf", size)
-    box = drawing.textbbox((0, 0), label, font=font)
-    while box[2] - box[0] > width * 0.8 and size > 10:  # longer labels fit too
-        size -= 1
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", size)
-        box = drawing.textbbox((0, 0), label, font=font)
-    text_width, text_height = box[2] - box[0], box[3] - box[1]
-    pad_x, pad_y = round(size * 0.55), round(size * 0.45)
-    top = round(height * 0.05)
-    drawing.rectangle(
-        (0, top, text_width + 2 * pad_x, top + text_height + 2 * pad_y),
-        fill=BADGE_RED,
-    )
-    drawing.text(
-        (pad_x - box[0], top + pad_y - box[1]), label, fill="#FFFFFF", font=font
-    )
+    if kind != "Thumb":
+        backdrop = kind == "Backdrop"
+        size = max(12, round(height * 0.045 if backdrop else width * 0.065))
+        font, box = _fit(drawing, label, size, width * (0.4 if backdrop else 0.8))
+        text_width, text_height = box[2] - box[0], box[3] - box[1]
+        pad_x, pad_y = round(size * 0.55), round(size * 0.45)
+        tag_width = text_width + 2 * pad_x
+        top = round(height * 0.05)
+        left = width - tag_width if backdrop else 0
+        drawing.rectangle(
+            (left, top, left + tag_width, top + text_height + 2 * pad_y),
+            fill=BADGE_RED,
+        )
+        drawing.text(
+            (left + pad_x - box[0], top + pad_y - box[1]),
+            label,
+            fill="#FFFFFF",
+            font=font,
+        )
+    else:
+        ribbon = max(24, round(height * 0.14))
+        top = height - ribbon
+        edge = max(2, round(height * 0.006))
+        for row in range(ribbon):  # bright red fading darker toward the bottom
+            shade = row / ribbon
+            drawing.line(
+                (0, top + row, width, top + row),
+                fill=(round(229 - 60 * shade), 9, round(20 - 8 * shade)),
+            )
+        drawing.rectangle((0, top - edge, width, top), fill="#111111")
+        font, box = _fit(drawing, label, round(ribbon * 0.55), width * 0.9)
+        drawing.text(
+            (
+                (width - (box[2] - box[0])) / 2 - box[0],
+                top + (ribbon - (box[3] - box[1])) / 2 - box[1],
+            ),
+            label,
+            fill="#FFFFFF",
+            font=font,
+        )
     output = BytesIO()
     image.save(output, format="JPEG", quality=90)
     return output.getvalue()
@@ -80,12 +117,21 @@ def _store_dir() -> Path:
     return path
 
 
-def _primary_tag(item):
-    return (item.get("ImageTags") or {}).get("Primary")
+def _tag(item, kind="Primary"):
+    if kind == "Backdrop":
+        return next(iter(item.get("BackdropImageTags") or []), None)
+    return (item.get("ImageTags") or {}).get(kind)
+
+
+def badge_kinds(item) -> list[str]:
+    """Where a title's artwork shows: its poster, its wide card (the Thumb
+    image) and its backdrop (behind its page, and the wide card when there's
+    no Thumb)."""
+    return [kind for kind in ("Primary", "Thumb", "Backdrop") if _tag(item, kind)]
 
 
 def _record_applied(snapshot, jellyfin):
-    current_tag = _primary_tag(jellyfin.item(snapshot.jellyfin_item_id))
+    current_tag = _tag(jellyfin.item(snapshot.jellyfin_item_id), snapshot.image_type)
     if current_tag and current_tag != snapshot.original_image_tag:
         snapshot.badged_image_tag = current_tag
     audit(
@@ -140,9 +186,18 @@ def _apply_badge(candidate):
     media = db.session.get(MediaIdentity, candidate.media_identity_id)
     if not media or not media.jellyfin_id:
         return False
+    try:
+        kinds = badge_kinds(client("jellyfin").item(media.jellyfin_id))
+    except (IntegrationError, ValueError):
+        return False
+    results = [_apply_one(candidate, media, kind) for kind in kinds]
+    return bool(results) and all(results)
+
+
+def _apply_one(candidate, media, kind):
     existing = (
         db.session.query(PosterSnapshot)
-        .filter_by(candidate_id=candidate.id, active=True)
+        .filter_by(candidate_id=candidate.id, active=True, image_type=kind)
         .first()
     )
     if existing:
@@ -150,7 +205,7 @@ def _apply_badge(candidate):
             return _keep_badged(existing, badge_label(candidate))
         try:
             jellyfin = client("jellyfin")
-            current = jellyfin.image(existing.jellyfin_item_id)
+            current = jellyfin.image(existing.jellyfin_item_id, kind)
             badged = Path(existing.badged_image_bytes_path).read_bytes()
             if current == badged:
                 _record_applied(existing, jellyfin)
@@ -158,7 +213,7 @@ def _apply_badge(candidate):
             original = Path(existing.original_image_bytes_path).read_bytes()
             if _jpeg(current) != original:
                 return False
-            jellyfin.put_image(existing.jellyfin_item_id, badged)
+            jellyfin.put_image(existing.jellyfin_item_id, badged, kind)
             _record_applied(existing, jellyfin)
             return True
         except (IntegrationError, OSError, ValueError):
@@ -166,10 +221,10 @@ def _apply_badge(candidate):
             return False
     try:
         jellyfin = client("jellyfin")
-        original_tag = _primary_tag(jellyfin.item(media.jellyfin_id))
-        original = _jpeg(jellyfin.image(media.jellyfin_id))
+        original_tag = _tag(jellyfin.item(media.jellyfin_id), kind)
+        original = _jpeg(jellyfin.image(media.jellyfin_id, kind))
         label = badge_label(candidate)
-        badged = badge_poster(original, label)
+        badged = badge_poster(original, label, kind)
         directory = _store_dir()
         snapshot = PosterSnapshot(
             media_identity_id=media.id,
@@ -177,6 +232,7 @@ def _apply_badge(candidate):
             candidate_id=candidate.id,
             original_image_tag=original_tag,
             badge_label=_recorded(label),
+            image_type=kind,
         )
         db.session.add(snapshot)
         db.session.flush()
@@ -189,12 +245,13 @@ def _apply_badge(candidate):
         snapshot.active = True
         # The original must be durable before an external image update can happen.
         db.session.commit()
-        jellyfin.put_image(media.jellyfin_id, badged)
+        jellyfin.put_image(media.jellyfin_id, badged, kind)
         _record_applied(snapshot, jellyfin)
         return True
     except (IntegrationError, OSError, ValueError) as exc:
         current_app.logger.warning(
-            "Poster application failed for candidate %s: %s",
+            "%s artwork application failed for candidate %s: %s",
+            kind,
             candidate.id,
             type(exc).__name__,
         )
@@ -209,21 +266,22 @@ def _keep_badged(snapshot, label):
     poster becomes the one to restore: someone chose it, or Jellyfin did."""
     try:
         jellyfin = client("jellyfin")
-        current_tag = _primary_tag(jellyfin.item(snapshot.jellyfin_item_id))
+        kind = snapshot.image_type
+        current_tag = _tag(jellyfin.item(snapshot.jellyfin_item_id), kind)
         if not current_tag:
             return True
         replaced = current_tag != snapshot.badged_image_tag
         if not replaced and snapshot.badge_label == _recorded(label):
             return True
         if replaced:
-            original = _jpeg(jellyfin.image(snapshot.jellyfin_item_id))
+            original = _jpeg(jellyfin.image(snapshot.jellyfin_item_id, kind))
             Path(snapshot.original_image_bytes_path).write_bytes(original)
             snapshot.original_image_tag = current_tag
             snapshot.badged_image_tag = None
         else:
             original = Path(snapshot.original_image_bytes_path).read_bytes()
         Path(snapshot.badged_image_bytes_path).write_bytes(
-            badge_poster(original, label)
+            badge_poster(original, label, kind)
         )
         snapshot.badge_label = _recorded(label)
         # What restoring needs must be durable before the upload replaces it.
@@ -231,6 +289,7 @@ def _keep_badged(snapshot, label):
         jellyfin.put_image(
             snapshot.jellyfin_item_id,
             Path(snapshot.badged_image_bytes_path).read_bytes(),
+            kind,
         )
         _record_applied(snapshot, jellyfin)
         if replaced:
@@ -257,8 +316,9 @@ def _keep_badged(snapshot, label):
 def restore_badge(snapshot):
     try:
         jellyfin = client("jellyfin")
+        kind = snapshot.image_type
         expected = Path(snapshot.badged_image_bytes_path).read_bytes()
-        current = jellyfin.image(snapshot.jellyfin_item_id)
+        current = jellyfin.image(snapshot.jellyfin_item_id, kind)
         original = Path(snapshot.original_image_bytes_path).read_bytes()
         if _jpeg(current) == original:
             _record_restored(snapshot, "Original poster is already present.")
@@ -267,14 +327,14 @@ def restore_badge(snapshot):
             hashlib.sha256(current).digest() == hashlib.sha256(expected).digest()
         )
         if not same_bytes:
-            current_tag = _primary_tag(jellyfin.item(snapshot.jellyfin_item_id))
+            current_tag = _tag(jellyfin.item(snapshot.jellyfin_item_id), kind)
             if (
                 not snapshot.badged_image_tag
                 or current_tag != snapshot.badged_image_tag
             ):
                 # External artwork changed; avoid overwriting someone else's edit.
                 return False
-        jellyfin.put_image(snapshot.jellyfin_item_id, original)
+        jellyfin.put_image(snapshot.jellyfin_item_id, original, kind)
         _record_restored(
             snapshot,
             "Original poster restored after cleanup was cancelled.",

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Leaving Soon shows on every picture apps use**: the poster (red tag, top left), the wide home-screen card (shaded red ribbon along the bottom) and the backdrop behind a title's page (a small tag, top right). Each is restored on its own when the title stays.
 - **Leaving Soon posters get a red countdown tag** in the top-left corner, like a streaming service's: "14 DAYS LEFT", then "1 DAY LEFT" and "LAST DAY", redrawn once a day. The film's own title stays visible. Titles awaiting review with no deletion date still say LEAVING SOON.
 - **Fixed: Leaving Soon banners vanished after a Jellyfin metadata refresh** that replaced images. Curatarr checked a poster once and then assumed the banner stayed. It now notices replaced artwork, badges the new poster, and restores to the new art when the title is kept.
 - **A film deleted while it's on one of Radarr's import lists no longer comes straight back.** Curatarr adds a Radarr import exclusion for it, so the list's next sync doesn't add and download it again. Adding it by hand or through Seerr still works.

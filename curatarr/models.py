@@ -243,6 +243,10 @@ class PosterSnapshot(db.Model, Timed):
     original_image_bytes_path = db.Column(db.String(512))
     badged_image_bytes_path = db.Column(db.String(512))
     badge_label = db.Column(db.String(40))  # the banner's words, e.g. days left
+    # Primary (poster), Thumb (wide card) or Backdrop: each badged separately.
+    image_type = db.Column(
+        db.String(20), nullable=False, default="Primary", server_default="Primary"
+    )
     candidate_id = db.Column(db.String(36), db.ForeignKey("purge_candidates.id"))
     active = db.Column(db.Boolean, default=False, nullable=False)
     restored_at = db.Column(db.DateTime(timezone=True))
