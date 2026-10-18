@@ -583,6 +583,13 @@ def _rescue(media, event):
     candidate = _active_candidate(media.id)
     if not candidate:
         return
+    occurred = _as_datetime(event.occurred_at)
+    created = _as_datetime(candidate.created_at)
+    if occurred and created and occurred <= created:
+        # Viewing from before it was marked: the hourly check reports plays it
+        # finds in Jellyfin, often ones already counted, and they mustn't undo
+        # a decision made after them.
+        return
     candidate.state = "RESCUED"
     candidate.scheduled_delete_at = None
     for action in (
