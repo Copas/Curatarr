@@ -30,31 +30,41 @@ def badge_label(candidate, today=None) -> str:
     return f"{days} DAY{'' if days == 1 else 'S'} LEFT"
 
 
+BADGE_RED = "#E50914"
+# Part of each snapshot's recorded label: a new style redraws every poster.
+BADGE_STYLE = "red-tag"
+
+
 def badge_poster(source: bytes, label: str = "LEAVING SOON") -> bytes:
+    """A red tag in the top-left corner, like a streaming service's, so the
+    film's own title (usually at the bottom) stays visible."""
     image = Image.open(BytesIO(source)).convert("RGB")
     width, height = image.size
-    ribbon_height = max(34, round(height * 0.12))
     drawing = ImageDraw.Draw(image)
-    drawing.rectangle((0, height - ribbon_height, width, height), fill="#172431")
-    size = max(15, round(width * 0.075))
+    size = max(12, round(width * 0.065))
     font = ImageFont.truetype("DejaVuSans-Bold.ttf", size)
     box = drawing.textbbox((0, 0), label, font=font)
-    while box[2] - box[0] > width * 0.92 and size > 10:  # longer labels fit too
+    while box[2] - box[0] > width * 0.8 and size > 10:  # longer labels fit too
         size -= 1
         font = ImageFont.truetype("DejaVuSans-Bold.ttf", size)
         box = drawing.textbbox((0, 0), label, font=font)
+    text_width, text_height = box[2] - box[0], box[3] - box[1]
+    pad_x, pad_y = round(size * 0.55), round(size * 0.45)
+    top = round(height * 0.05)
+    drawing.rectangle(
+        (0, top, text_width + 2 * pad_x, top + text_height + 2 * pad_y),
+        fill=BADGE_RED,
+    )
     drawing.text(
-        (
-            (width - (box[2] - box[0])) / 2,
-            height - ribbon_height + (ribbon_height - (box[3] - box[1])) / 2 - box[1],
-        ),
-        label,
-        fill="#FFFFFF",
-        font=font,
+        (pad_x - box[0], top + pad_y - box[1]), label, fill="#FFFFFF", font=font
     )
     output = BytesIO()
     image.save(output, format="JPEG", quality=90)
     return output.getvalue()
+
+
+def _recorded(label: str) -> str:
+    return f"{BADGE_STYLE}:{label}"
 
 
 def _jpeg(source: bytes) -> bytes:
@@ -166,7 +176,7 @@ def _apply_badge(candidate):
             jellyfin_item_id=media.jellyfin_id,
             candidate_id=candidate.id,
             original_image_tag=original_tag,
-            badge_label=label,
+            badge_label=_recorded(label),
         )
         db.session.add(snapshot)
         db.session.flush()
@@ -203,7 +213,7 @@ def _keep_badged(snapshot, label):
         if not current_tag:
             return True
         replaced = current_tag != snapshot.badged_image_tag
-        if not replaced and snapshot.badge_label == label:
+        if not replaced and snapshot.badge_label == _recorded(label):
             return True
         if replaced:
             original = _jpeg(jellyfin.image(snapshot.jellyfin_item_id))
@@ -215,7 +225,7 @@ def _keep_badged(snapshot, label):
         Path(snapshot.badged_image_bytes_path).write_bytes(
             badge_poster(original, label)
         )
-        snapshot.badge_label = label
+        snapshot.badge_label = _recorded(label)
         # What restoring needs must be durable before the upload replaces it.
         db.session.commit()
         jellyfin.put_image(

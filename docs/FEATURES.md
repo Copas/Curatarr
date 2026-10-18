@@ -38,7 +38,7 @@ Integration keys and the webhook token are encrypted in the database with a key 
 
 Titles nobody has played are not removed just for being unwatched. (A library can opt into that with *Clean up unwatched titles even when space is fine*.) When free space falls below a library's **low** threshold, Curatarr picks titles in purge-strategy order (longest unwatched first by default), and only enough to get back to the threshold.
 
-1. They show as **Leaving Soon** for the notice period (14 days by default), with a banner on their poster in Jellyfin that counts down the days left ("14 DAYS LEFT" … "LAST DAY"). If Jellyfin's artwork is replaced meanwhile (a metadata refresh), the banner is put back on the new poster, which is the one restored if the title is kept.
+1. They show as **Leaving Soon** for the notice period (14 days by default), with a red tag in the top-left corner of their poster in Jellyfin that counts down the days left ("14 DAYS LEFT" … "LAST DAY"). If Jellyfin's artwork is replaced meanwhile (a metadata refresh), the banner is put back on the new poster, which is the one restored if the title is kept.
 2. They're removed when the notice ends, unless someone watches them. **Any playback** resets inactivity and rescues pending cleanup.
 3. Below the **critical** threshold, removal happens without a notice.
 
