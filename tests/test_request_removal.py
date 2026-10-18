@@ -70,8 +70,14 @@ class FakeRadarr:
     def request(self, _method, _path):
         return {"tmdbId": 321}
 
-    def delete_movie(self, movie_id):
+    listed = ()
+
+    def list_movies(self):
+        return [{"tmdbId": tmdb} for tmdb in self.listed]
+
+    def delete_movie(self, movie_id, *, exclude=False):
         self.deleted.append(movie_id)
+        self.excluded = exclude
 
 
 class FakeJellyfin:
@@ -98,7 +104,7 @@ def test_a_just_watched_new_film_goes_leaving_soon_and_can_be_deleted(app, radar
         assert reconcile_candidates() == 0  # not a rule's choice: nothing undoes it
         review_candidate(candidate.id, "delete")
         assert execute_approved(candidate.id) == "succeeded"
-        assert radarr.deleted == [42]
+        assert radarr.deleted == [42] and radarr.excluded is False
         assert candidate.state == "COMPLETED"
 
 
@@ -272,3 +278,12 @@ def test_filtering_to_what_one_person_watched(app, client):
     assert "Kids Pick" in page and "Not Very Good" not in page
     page = client.get("/free-space?watched=user:viewer&sort=recent").text
     assert "Not Very Good" in page and "Kids Pick" not in page
+
+
+def test_a_film_on_an_import_list_is_excluded_so_it_doesnt_come_back(app, radarr):
+    radarr.listed = (321,)
+    with app.app_context():
+        candidate = request_removal(_film())
+        review_candidate(candidate.id, "delete")
+        assert execute_approved(candidate.id) == "succeeded"
+        assert radarr.deleted == [42] and radarr.excluded is True

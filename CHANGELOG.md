@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **A film deleted while it's on one of Radarr's import lists no longer comes straight back.** Curatarr adds a Radarr import exclusion for it, so the list's next sync doesn't add and download it again. Adding it by hand or through Seerr still works.
 - **Fixed: a Leaving Soon poster could be badged twice at once** when the web app and the worker reconciled artwork at the same moment, which could save the badged poster as the one to restore. Applying a badge now takes a short lease per title.
 - **Fixed: seeking on Roku started some episodes over.** When chapters (or a track change) didn't fit at the start of an MKV, mkvpropedit moved its seek index pointer to the end, where Roku players don't look. Curatarr now rebuilds such a file straight after editing it (a copy with mkvmerge; nothing re-encoded), and **Seeking on Roku** (Settings → Enhance, on by default) repairs files already like that in the background, what's being watched first.
 - **Free up space** remembers each person's last filter and sort, and can show what one person watched (everyone active in the last 90 days is listed), most recent first.

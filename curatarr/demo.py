@@ -492,8 +492,12 @@ class DemoClient:
     def season_search(self, _series_id, _season_number):
         self._check()
 
-    def delete_movie(self, _movie_id):
+    def delete_movie(self, _movie_id, *, exclude=False):
         self._check()
+
+    def list_movies(self):
+        self._check()
+        return []
 
     def unmonitor_episode(self, _episode_id):
         self._check()

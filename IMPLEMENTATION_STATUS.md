@@ -59,7 +59,7 @@ Phase 8 — Media enrichment (chapters and subtitles) running live; preparing v0
 
 ## Next
 - Compare chapter throughput at 2 and 3 concurrent jobs now that transcription is serialized; settle the default.
-- Confirm the cleanup checklist from the owner's side (Leaving Soon poster badge and restore, Sonarr and Radarr deletions, played-state restoration), then release v0.2.0.
+- Cleanup checklist confirmed on the owner's server: Leaving Soon poster badge and restore, Sonarr trims (37 shows) and a Radarr film deletion. TV played-state restoration is still unexercised (no watched episode has been deleted yet); films keep their played state in Jellyfin by provider id. Then release v0.2.0.
 - Lower priority: validate leases across hosts on a shared PostgreSQL (not needed for single-host installs). Leases compare each worker's own clock, so hosts need synchronized clocks.
 
 ## Known Issues

@@ -36,6 +36,10 @@ def test_validated_movie_delete_calls_radarr_once(app, monkeypatch):
         def request(self, _method, _path):
             return {"tmdbId": 321}
 
+        def list_movies(self):
+
+            return []
+
         def delete_movie(self, movie_id):
             calls.append(movie_id)
 
@@ -314,6 +318,10 @@ def test_playback_after_validation_stops_movie_delete(app, monkeypatch):
 
             def request(self, _method, _path):
                 return {"tmdbId": 321}
+
+            def list_movies(self):
+
+                return []
 
             def delete_movie(self, movie_id):
                 radarr_calls.append(movie_id)

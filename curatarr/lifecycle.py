@@ -1140,6 +1140,19 @@ def execute_approved(candidate_id):
     return execute_action(action.id)
 
 
+def _on_import_list(arr, media) -> bool:
+    """Whether one of Radarr's import lists has this film (if Radarr can't
+    say, it's deleted as before: an exclusion is the cautious extra)."""
+    if not media.tmdb_id:
+        return False
+    try:
+        return any(
+            row.get("tmdbId") == media.tmdb_id for row in arr.list_movies() or []
+        )
+    except IntegrationError:
+        return False
+
+
 def _snapshot_watch_state(media):
     from .models import EpisodeUserState
 
@@ -1425,7 +1438,11 @@ def _execute_action(action_id):
                         movie = arr.movie(media.radarr_id)
                     except IntegrationError:
                         pass
-                arr.delete_movie(media.radarr_id)
+                if _on_import_list(arr, media):
+                    # Else the list's next sync adds it back and downloads it.
+                    arr.delete_movie(media.radarr_id, exclude=True)
+                else:
+                    arr.delete_movie(media.radarr_id)
                 curation.remember_for_return(media, movie)
                 for part in media.parts:
                     part.has_file = False
