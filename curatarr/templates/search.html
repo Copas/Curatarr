@@ -2,7 +2,7 @@
 {% block title %}{{ query ~ ' · ' if query }}Search · Curatarr{% endblock %}
 {% macro moment(r) %}<li class="result-card">
   <div class="d-flex flex-wrap justify-content-between gap-2 align-items-baseline"><a class="result-title" href="{{ url_for('main.chapter_part', part_id=r.part_id) if is_admin else url_for('main.title', media_id=r.media_id) }}">{{ r.label }}</a>{{ jellyfin_link(r.jellyfin_id) if r.jellyfin_id }}<span class="chip">at {{ r.timestamp }}</span>{% if r.exact %}<span class="chip chip-accent">exact line</span>{% endif %}</div>
-  <blockquote class="result-quote mb-0">{% for line in r.lines %}<div>{{ line }}</div>{% endfor %}</blockquote>
+  <blockquote class="result-quote mb-0">{% for line in r.marked or r.lines %}<div>{{ line }}</div>{% endfor %}</blockquote>
 </li>{% endmacro %}
 {% block content %}
 <header class="page-heading"><div><div class="eyebrow">Library</div><h1>Search</h1><p class="text-secondary mb-0">Find a title by name, or an episode or film by something said in it. Put words in "quotes" to find exactly that phrase.</p></div></header>

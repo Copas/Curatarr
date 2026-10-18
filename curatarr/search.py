@@ -208,3 +208,24 @@ class TranscriptIndex:
 
 
 index = TranscriptIndex()
+
+
+def highlight(line: str, query: str):
+    """A result line with the searched words marked (HTML-safe): every word
+    of a quoted phrase, and the other words (not "the", "and"...) in any form
+    ("vote" marks "voted")."""
+    from markupsafe import Markup, escape
+
+    quoted = {stem(w) for q in QUOTED.findall(query) for w in words(q)}
+    loose = words(QUOTED.sub(" ", query))
+    wanted = {stem(w) for w in loose if w not in STOP} or {stem(w) for w in loose}
+    marked = quoted | wanted
+    out, last = [], 0
+    for match in re.finditer(r"[A-Za-z0-9'’]+", line):
+        word = match.group(0).lower().replace("’", "'")
+        if stem(word) in marked or stem(word.strip("'")) in marked:
+            out.append(escape(line[last : match.start()]))
+            out.append(Markup("<mark>") + escape(match.group(0)) + Markup("</mark>"))
+            last = match.end()
+    out.append(escape(line[last:]))
+    return Markup("").join(out)

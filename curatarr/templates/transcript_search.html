@@ -9,7 +9,7 @@
 <ul class="list-unstyled">
 {% for r in results %}<li class="card p-3 mb-2">
   <div class="d-flex flex-wrap justify-content-between gap-2"><a class="h6 mb-1" href="{{ url_for('main.chapter_part', part_id=r.part_id) }}">{{ r.label }}</a>{{ jellyfin_link(r.jellyfin_id, r.label) }}<span class="text-secondary small">at {{ r.timestamp }}{% if r.exact %} · exact line{% endif %}</span></div>
-  <div class="small">{% for line in r.lines %}<div>{{ line }}</div>{% endfor %}</div>
+  <div class="small">{% for line in r.marked or r.lines %}<div>{{ line }}</div>{% endfor %}</div>
 </li>{% endfor %}
 </ul>
 {% else %}<div class="empty-state"><h2 class="h5">No matches</h2><p class="mb-0">Nothing transcribed so far says that. Try fewer or different words.</p></div>{% endif %}
