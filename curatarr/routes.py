@@ -653,8 +653,22 @@ def overview():
         needs=_needs_you(status, data["scheduled"], setup_incomplete, admin),
         care=_library_care() if admin else None,
         handled=_handled_summary() if admin else None,
+        leaving=_leaving_summary(data["scheduled"]),
         **data,
     )
+
+
+def _leaving_summary(scheduled):
+    """How many titles are Leaving Soon, how much they free, and the first date."""
+    leaving = [c for c in scheduled if c.state == "LEAVING_SOON"]
+    if not leaving:
+        return None
+    dates = [c.scheduled_delete_at for c in leaving if c.scheduled_delete_at]
+    return {
+        "count": len(leaving),
+        "bytes": sum(c.reclaimable_bytes or 0 for c in leaving),
+        "first": min(dates) if dates else None,
+    }
 
 
 def _handled_summary():
@@ -663,33 +677,14 @@ def _handled_summary():
     return autofix.summary()
 
 
-NEEDS_SHOWN = 4  # titles leaving soon listed individually on Overview
+NEEDS_SHOWN = 4  # of each kind of problem listed individually on Overview
 
 
 def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
     """Everything waiting on someone, newest decisions first, for Overview."""
+    # Leaving Soon titles are decided (they go unless someone watches): they
+    # get a line of their own under the list (_leaving_summary), not a row here.
     needs = []
-    leaving = [c for c in scheduled if c.state == "LEAVING_SOON"]
-    for candidate in leaving[:NEEDS_SHOWN]:
-        needs.append(
-            {
-                "icon": "review",
-                "tone": "warning",
-                "title": candidate.media.title,
-                "media_id": candidate.media_identity_id,
-                "leaving": candidate.scheduled_delete_at,
-                "detail": candidate.reason_text,
-                "keep": candidate.id,
-            }
-        )
-    if len(leaving) > NEEDS_SHOWN:
-        needs.append(
-            {
-                "icon": "review",
-                "title": f"{len(leaving) - NEEDS_SHOWN} more leaving soon",
-                "href": url_for("main.review"),
-            }
-        )
     if status["review_count"]:
         needs.append(
             {

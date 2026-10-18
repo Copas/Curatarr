@@ -96,8 +96,9 @@ def test_overview_lists_what_needs_someone(app, client):
     waiting = db.session.query(PurgeCandidate).filter_by(state="REVIEW").count()
     assert leaving and waiting  # the demo library has both
     needs = client.get("/").text.split('id="needs-heading"')[1].split("</section>")[0]
-    assert leaving.media.title in needs
-    assert f"/review/{leaving.id}/keep" in needs and 'value="overview"' in needs
+    # Leaving Soon is decided: a summary line, not something that needs you.
+    assert f"/review/{leaving.id}/keep" not in needs
+    assert "Leaving soon:" in needs and "unless someone watches" in needs
     assert f"{waiting} titles waiting for a decision" in needs
     response = client.post(f"/review/{leaving.id}/keep", data={"back": "overview"})
     assert response.headers["Location"] == "/"
