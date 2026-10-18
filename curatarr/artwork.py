@@ -1,6 +1,7 @@
 """Reversible Leaving Soon posters, stored only under application data."""
 
 import hashlib
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -14,15 +15,34 @@ from .models import MediaIdentity, PosterSnapshot, PurgeCandidate, utcnow
 from .services import audit, client
 
 
-def badge_poster(source: bytes) -> bytes:
+def badge_label(candidate, today=None) -> str:
+    """The banner's words: days left when a deletion date is set (the poster
+    is redrawn as they count down), else Leaving Soon."""
+    when = candidate.scheduled_delete_at
+    if not when:
+        return "LEAVING SOON"
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    today = today or datetime.now().astimezone().date()
+    days = (when.astimezone().date() - today).days
+    if days <= 0:
+        return "LAST DAY"
+    return f"{days} DAY{'' if days == 1 else 'S'} LEFT"
+
+
+def badge_poster(source: bytes, label: str = "LEAVING SOON") -> bytes:
     image = Image.open(BytesIO(source)).convert("RGB")
     width, height = image.size
     ribbon_height = max(34, round(height * 0.12))
     drawing = ImageDraw.Draw(image)
     drawing.rectangle((0, height - ribbon_height, width, height), fill="#172431")
-    font = ImageFont.truetype("DejaVuSans-Bold.ttf", max(15, round(width * 0.075)))
-    label = "LEAVING SOON"
+    size = max(15, round(width * 0.075))
+    font = ImageFont.truetype("DejaVuSans-Bold.ttf", size)
     box = drawing.textbbox((0, 0), label, font=font)
+    while box[2] - box[0] > width * 0.92 and size > 10:  # longer labels fit too
+        size -= 1
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", size)
+        box = drawing.textbbox((0, 0), label, font=font)
     drawing.text(
         (
             (width - (box[2] - box[0])) / 2,
@@ -117,7 +137,7 @@ def _apply_badge(candidate):
     )
     if existing:
         if existing.badged_image_tag:
-            return _keep_badged(existing)
+            return _keep_badged(existing, badge_label(candidate))
         try:
             jellyfin = client("jellyfin")
             current = jellyfin.image(existing.jellyfin_item_id)
@@ -138,13 +158,15 @@ def _apply_badge(candidate):
         jellyfin = client("jellyfin")
         original_tag = _primary_tag(jellyfin.item(media.jellyfin_id))
         original = _jpeg(jellyfin.image(media.jellyfin_id))
-        badged = badge_poster(original)
+        label = badge_label(candidate)
+        badged = badge_poster(original, label)
         directory = _store_dir()
         snapshot = PosterSnapshot(
             media_identity_id=media.id,
             jellyfin_item_id=media.jellyfin_id,
             candidate_id=candidate.id,
             original_image_tag=original_tag,
+            badge_label=label,
         )
         db.session.add(snapshot)
         db.session.flush()
@@ -170,33 +192,47 @@ def _apply_badge(candidate):
         return False
 
 
-def _keep_badged(snapshot):
-    """Badge the poster again if Jellyfin's artwork was replaced since (a
-    metadata refresh that replaces images downloads a fresh one). The new
+def _keep_badged(snapshot, label):
+    """Keep the banner right: redraw it when its words change (days left),
+    and badge the poster again if Jellyfin's artwork was replaced since (a
+    metadata refresh that replaces images downloads a fresh one). A replaced
     poster becomes the one to restore: someone chose it, or Jellyfin did."""
     try:
         jellyfin = client("jellyfin")
         current_tag = _primary_tag(jellyfin.item(snapshot.jellyfin_item_id))
-        if not current_tag or current_tag == snapshot.badged_image_tag:
+        if not current_tag:
             return True
-        original = _jpeg(jellyfin.image(snapshot.jellyfin_item_id))
-        badged = badge_poster(original)
-        Path(snapshot.original_image_bytes_path).write_bytes(original)
-        Path(snapshot.badged_image_bytes_path).write_bytes(badged)
-        snapshot.original_image_tag = current_tag
-        snapshot.badged_image_tag = None
-        # The new original must be durable before the upload replaces it.
-        db.session.commit()
-        jellyfin.put_image(snapshot.jellyfin_item_id, badged)
-        _record_applied(snapshot, jellyfin)
-        audit(
-            "leaving_soon_reapplied",
-            snapshot.media_identity_id,
-            "Leaving Soon poster applied again: Jellyfin's artwork had been replaced.",
-            f"artwork-reapply:{snapshot.id}:{current_tag}",
-            candidate_id=snapshot.candidate_id,
+        replaced = current_tag != snapshot.badged_image_tag
+        if not replaced and snapshot.badge_label == label:
+            return True
+        if replaced:
+            original = _jpeg(jellyfin.image(snapshot.jellyfin_item_id))
+            Path(snapshot.original_image_bytes_path).write_bytes(original)
+            snapshot.original_image_tag = current_tag
+            snapshot.badged_image_tag = None
+        else:
+            original = Path(snapshot.original_image_bytes_path).read_bytes()
+        Path(snapshot.badged_image_bytes_path).write_bytes(
+            badge_poster(original, label)
         )
+        snapshot.badge_label = label
+        # What restoring needs must be durable before the upload replaces it.
         db.session.commit()
+        jellyfin.put_image(
+            snapshot.jellyfin_item_id,
+            Path(snapshot.badged_image_bytes_path).read_bytes(),
+        )
+        _record_applied(snapshot, jellyfin)
+        if replaced:
+            audit(
+                "leaving_soon_reapplied",
+                snapshot.media_identity_id,
+                "Leaving Soon poster applied again: Jellyfin's artwork had been "
+                "replaced.",
+                f"artwork-reapply:{snapshot.id}:{current_tag}",
+                candidate_id=snapshot.candidate_id,
+            )
+            db.session.commit()
         return True
     except (IntegrationError, OSError, ValueError) as exc:
         current_app.logger.warning(
