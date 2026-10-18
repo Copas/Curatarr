@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Search by what was said: words in "quotes" are an exact phrase**, said as written (whole words, in order). Without quotes, lines with most of the words still match as before.
 - **A replaced film is watched until its new copy arrives.** Replacing a film (no English audio, burned-in subtitles, a broken file) deleted it and asked Radarr once; when that download failed, or the film was unmonitored in Radarr, it was left with no file. Now the film is monitored first, searched again every 6 hours if nothing is downloading (3 searches), put back to how it was when a copy arrives, and Activity says so when none does.
 - **Favourites show who chose them**: a gold star with the names of everyone who favourited a title in Jellyfin, on its page, in Review, Free up space, Browse titles and Shows by size.
 - **Fixed: a Leaving Soon title could be cancelled by viewing from before it was marked.** The hourly check reports plays it finds in Jellyfin, including ones already counted; only viewing after a title was marked cancels its removal now.
