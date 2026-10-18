@@ -71,6 +71,9 @@ class FakeRadarr:
             }
         ]
 
+    def items_trickplay(self, ids):
+        return []
+
     def rescan_movie(self, movie_id):
         self.calls.append(("rescan", movie_id))
 

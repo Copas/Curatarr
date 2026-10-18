@@ -113,6 +113,9 @@ def test_the_sweep_rebuilds_hidden_files_once_and_checks_the_rest(app, monkeypat
     monkeypatch.setattr(enrichment, "_refresh_jellyfin", lambda part, media: None)
 
     class Radarr:
+        def items_trickplay(self, ids):
+            return []
+
         def rescan_movie(self, movie_id):
             pass
 
