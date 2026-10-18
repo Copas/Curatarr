@@ -117,7 +117,7 @@ def _apply_badge(candidate):
     )
     if existing:
         if existing.badged_image_tag:
-            return True
+            return _keep_badged(existing)
         try:
             jellyfin = client("jellyfin")
             current = jellyfin.image(existing.jellyfin_item_id)
@@ -164,6 +164,44 @@ def _apply_badge(candidate):
         current_app.logger.warning(
             "Poster application failed for candidate %s: %s",
             candidate.id,
+            type(exc).__name__,
+        )
+        db.session.rollback()
+        return False
+
+
+def _keep_badged(snapshot):
+    """Badge the poster again if Jellyfin's artwork was replaced since (a
+    metadata refresh that replaces images downloads a fresh one). The new
+    poster becomes the one to restore: someone chose it, or Jellyfin did."""
+    try:
+        jellyfin = client("jellyfin")
+        current_tag = _primary_tag(jellyfin.item(snapshot.jellyfin_item_id))
+        if not current_tag or current_tag == snapshot.badged_image_tag:
+            return True
+        original = _jpeg(jellyfin.image(snapshot.jellyfin_item_id))
+        badged = badge_poster(original)
+        Path(snapshot.original_image_bytes_path).write_bytes(original)
+        Path(snapshot.badged_image_bytes_path).write_bytes(badged)
+        snapshot.original_image_tag = current_tag
+        snapshot.badged_image_tag = None
+        # The new original must be durable before the upload replaces it.
+        db.session.commit()
+        jellyfin.put_image(snapshot.jellyfin_item_id, badged)
+        _record_applied(snapshot, jellyfin)
+        audit(
+            "leaving_soon_reapplied",
+            snapshot.media_identity_id,
+            "Leaving Soon poster applied again: Jellyfin's artwork had been replaced.",
+            f"artwork-reapply:{snapshot.id}:{current_tag}",
+            candidate_id=snapshot.candidate_id,
+        )
+        db.session.commit()
+        return True
+    except (IntegrationError, OSError, ValueError) as exc:
+        current_app.logger.warning(
+            "Poster re-application failed for snapshot %s: %s",
+            snapshot.id,
             type(exc).__name__,
         )
         db.session.rollback()
