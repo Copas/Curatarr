@@ -91,6 +91,9 @@ class Radarr:
             {"id": 2, "movieFile": {"mediaInfo": {"audioCodec": "EAC3"}}},
         ]
 
+    def items_trickplay(self, ids):
+        return []
+
     def rescan_movie(self, movie_id):
         pass
 
@@ -211,3 +214,23 @@ def test_a_busy_database_doesnt_lose_an_added_track(app, monkeypatch):
     db.session.expire_all()
     state = db.session.query(ChapterState).one()
     assert len(tries) == 2 and state.compat_audio["added"]
+
+
+def test_waits_while_jellyfin_remakes_thumbnails(app, monkeypatch):
+    from test_enrichment import _movie
+
+    from curatarr import thumbnails
+    from curatarr.models import MediaIdentity
+
+    _movie("/movies/Loud (2020)/Loud.mkv")
+    db.session.query(MediaIdentity).one().radarr_id = 1
+    db.session.commit()
+    monkeypatch.setattr("curatarr.services.client", lambda kind: Radarr())
+    monkeypatch.setattr(enrichment, "file_exists", lambda p: True)
+    monkeypatch.setattr(enrichment, "playback_sessions", list)
+    monkeypatch.setattr("curatarr.filecheck_jobs._dry_run", lambda media: False)
+    monkeypatch.setattr(thumbnails, "room", lambda: False)
+    monkeypatch.setattr(
+        compat_audio, "_add", lambda *a: pytest.fail("rebuilt while Jellyfin is behind")
+    )
+    assert compat_audio.sweep() == 0

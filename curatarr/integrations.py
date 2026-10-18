@@ -217,6 +217,14 @@ class JellyfinClient(Client):
             params["ParentId"] = parent_id
         return self.request("GET", f"/Users/{user_id}/Items", params=params)
 
+    def items_trickplay(self, item_ids):
+        """Items with their scrubbing thumbnail sets ("Trickplay", empty when
+        Jellyfin has none)."""
+        data = self.request(
+            "GET", "/Items", params={"Ids": ",".join(item_ids), "Fields": "Trickplay"}
+        )
+        return (data or {}).get("Items") or []
+
     def image(self, item_id, kind="Primary"):
         """One of an item's images: Primary (poster), Thumb (the wide card),
         or Backdrop (its first one)."""

@@ -323,11 +323,15 @@ def _remove_others(state, part, path, result):
     )
     heard = {t["index"]: t["heard"] for t in result["tracks"]}
     labels = {s["index"]: dubs.code(s.get("language")) for s in info.streams}
+    from . import thumbnails
+
+    had_thumbnails = thumbnails.has_thumbnails(part, part.media)
     try:
         after = remove_tracks(path, info, drop["audio"] + drop["subtitles"], default)
     except MediaToolError as exc:
         result["not_removed"] = str(exc)
         return None
+    thumbnails.note_rebuilt(part, part.media, had_thumbnails)
     if in_sync:
         state.chapter_file_size, state.chapter_file_mtime = after.size, after.mtime
         db.session.commit()  # before asking Jellyfin and Radarr

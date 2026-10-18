@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **File rebuilds wait for Jellyfin's scrubbing thumbnails.** A rebuilt file (TV-friendly audio, the Roku seek repair, removing other languages) is new to Jellyfin, which drops its thumbnails and makes them again, minutes per file. Curatarr was rebuilding far faster, leaving hundreds of titles without thumbnails and the nightly task running for a day. Now it starts another rebuild only while fewer than three rebuilt files are still waiting for theirs (Settings → Enhance → Jellyfin thumbnails, on by default).
 - **Leaving Soon shows on every picture apps use**: the poster (red tag, top left), the wide home-screen card (shaded red ribbon along the bottom) and the backdrop behind a title's page (a small tag, top right). Each is restored on its own when the title stays.
 - **Leaving Soon posters get a red countdown tag** in the top-left corner, like a streaming service's: "14 DAYS LEFT", then "1 DAY LEFT" and "LAST DAY", redrawn once a day. The film's own title stays visible. Titles awaiting review with no deletion date still say LEAVING SOON.
 - **Fixed: Leaving Soon banners vanished after a Jellyfin metadata refresh** that replaced images. Curatarr checked a poster once and then assumed the banner stayed. It now notices replaced artwork, badges the new poster, and restores to the new art when the title is kept.

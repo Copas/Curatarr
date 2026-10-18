@@ -21,7 +21,7 @@ from flask import current_app
 from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import OperationalError
 
-from . import db, throttle
+from . import db, throttle, thumbnails
 from .integrations import IntegrationError
 from .mediafile import MediaToolError, add_compatible_audio, can_write, probe
 from .mediafile import compatible_audio_source as source_track
@@ -165,10 +165,15 @@ def sweep(limit=PER_RUN) -> int:
             continue  # unreachable for now; try again later
         if _dry_run(part.media) or _playing(part):
             continue
+        if not thumbnails.room():
+            break  # Jellyfin is still making thumbnails for earlier ones
         state = e.state_for(part)
         db.session.commit()  # never hold the write lock while a film is copied
         state_id, part_id = state.id, part.id
+        had_thumbnails = thumbnails.has_thumbnails(part, part.media)
         result = _add(state, part, path)
+        if result.get("added"):
+            thumbnails.note_rebuilt(part, part.media, had_thumbnails)
         synced = (state.chapter_file_size, state.chapter_file_mtime)
         try:
             _record(state, part, result)
