@@ -380,3 +380,72 @@ def test_a_replaced_poster_is_badged_again_and_restores_to_the_new_art(
         assert snapshot.badged_image_tag == sha256(fake.current).hexdigest()
         assert restore_badge(snapshot)
         assert fake.current == _jpeg(fresh)
+
+
+def test_the_banner_counts_down_the_days(app, monkeypatch):
+    from datetime import date, datetime, timedelta
+
+    from curatarr import artwork
+    from curatarr.artwork import badge_label
+
+    due = datetime(2026, 11, 1, 20, 0).astimezone()
+    candidate = PurgeCandidate(scheduled_delete_at=due)
+    assert badge_label(candidate, date(2026, 10, 18)) == "14 DAYS LEFT"
+    assert badge_label(candidate, date(2026, 10, 31)) == "1 DAY LEFT"
+    assert badge_label(candidate, date(2026, 11, 1)) == "LAST DAY"
+    assert badge_label(PurgeCandidate()) == "LEAVING SOON"
+
+    source = _poster()
+
+    class FakeJellyfin:
+        current = source
+        puts = 0
+
+        def item(self, _item_id):
+            return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
+
+        def image(self, _item_id):
+            return self.current
+
+        def put_image(self, _item_id, data):
+            self.puts += 1
+            self.current = data
+
+    fake = FakeJellyfin()
+    monkeypatch.setattr("curatarr.artwork.client", lambda _kind: fake)
+    today = {"day": date(2026, 10, 18)}
+    real = artwork.badge_label
+    monkeypatch.setattr(
+        artwork, "badge_label", lambda c, t=None: real(c, t or today["day"])
+    )
+    with app.app_context():
+        library = Library(
+            jellyfin_library_id="art-d", name="Films", media_type="movies"
+        )
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id, media_type="movie", title="Film", jellyfin_id="f"
+        )
+        db.session.add(media)
+        db.session.flush()
+        candidate = PurgeCandidate(
+            media_identity_id=media.id,
+            state="LEAVING_SOON",
+            reason_code="requested",
+            reason_text="Asked",
+            reclaimable_bytes=100,
+            scheduled_delete_at=due,
+        )
+        db.session.add(candidate)
+        db.session.commit()
+        assert apply_badge(candidate)
+        assert fake.current == badge_poster(_jpeg(source), "14 DAYS LEFT")
+        assert apply_badge(candidate) and fake.puts == 1  # same day: left alone
+        today["day"] += timedelta(days=1)
+        assert apply_badge(candidate) and fake.puts == 2
+        assert fake.current == badge_poster(_jpeg(source), "13 DAYS LEFT")
+        snapshot = db.session.query(PosterSnapshot).one()
+        assert snapshot.badge_label == "13 DAYS LEFT"
+        assert restore_badge(snapshot)
+        assert fake.current == _jpeg(source)
