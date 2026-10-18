@@ -32,7 +32,7 @@ def badge_label(candidate, today=None) -> str:
 
 BADGE_RED = "#E50914"
 # Part of each snapshot's recorded label: a new style redraws every poster.
-BADGE_STYLE = "red-tag-3"
+BADGE_STYLE = "red-tag-4"
 
 
 def _fit(drawing, label, size, max_width):
@@ -62,8 +62,10 @@ def badge_poster(
         text_width, text_height = box[2] - box[0], box[3] - box[1]
         pad_x, pad_y = round(size * 0.55), round(size * 0.45)
         tag_width = text_width + 2 * pad_x
-        top = round(height * 0.05)
-        left = width - tag_width if backdrop else 0
+        # A backdrop's top strip sits under apps' header buttons, and phones
+        # crop its sides: its tag goes lower and in from the edge.
+        top = round(height * (0.24 if backdrop else 0.05))
+        left = width - tag_width - round(width * 0.14) if backdrop else 0
         drawing.rectangle(
             (left, top, left + tag_width, top + text_height + 2 * pad_y),
             fill=BADGE_RED,

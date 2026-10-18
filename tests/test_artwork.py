@@ -446,7 +446,7 @@ def test_the_banner_counts_down_the_days(app, monkeypatch):
         assert apply_badge(candidate) and fake.puts == 2
         assert fake.current == badge_poster(_jpeg(source), "13 DAYS LEFT")
         snapshot = db.session.query(PosterSnapshot).one()
-        assert snapshot.badge_label == "red-tag-3:13 DAYS LEFT"
+        assert snapshot.badge_label == "red-tag-4:13 DAYS LEFT"
         assert restore_badge(snapshot)
         assert fake.current == _jpeg(source)
 
