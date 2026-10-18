@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flask import current_app
 from PIL import Image, ImageDraw, ImageFont
+from sqlalchemy.exc import OperationalError
 
 from . import db
 from .integrations import IntegrationError
@@ -81,6 +82,31 @@ def _record_restored(snapshot, reason):
 
 
 def apply_badge(candidate):
+    """Badge one candidate's poster, keeping the original to restore.
+
+    The web app (after a decision) and the worker both reconcile artwork; a
+    lease per candidate stops them both making a snapshot at once, which could
+    save the other's badged poster as the "original"."""
+    from . import leases
+
+    scope = f"artwork:{candidate.id}"
+    try:
+        owner = leases.acquire(scope, 120)
+    except OperationalError:
+        db.session.rollback()
+        return False
+    if not owner:
+        return False  # being applied elsewhere right now
+    try:
+        return _apply_badge(candidate)
+    finally:
+        try:
+            leases.release(scope, owner)
+        except OperationalError:
+            db.session.rollback()  # it expires on its own
+
+
+def _apply_badge(candidate):
     media = db.session.get(MediaIdentity, candidate.media_identity_id)
     if not media or not media.jellyfin_id:
         return False

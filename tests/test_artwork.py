@@ -275,3 +275,53 @@ def test_dry_run_libraries_still_get_leaving_soon_badges(app, monkeypatch):
         reconcile_artwork()
         assert len(uploads) == 1
         assert db.session.query(PosterSnapshot).one().active
+
+
+def test_a_badge_being_applied_elsewhere_isnt_applied_twice(app, monkeypatch):
+    """The web app and the worker reconcile artwork at the same moment."""
+    from curatarr import leases
+
+    source = _poster()
+
+    class FakeJellyfin:
+        current = source
+        puts = 0
+
+        def item(self, _item_id):
+            return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
+
+        def image(self, _item_id):
+            return self.current
+
+        def put_image(self, _item_id, data):
+            self.puts += 1
+            self.current = data
+
+    fake = FakeJellyfin()
+    monkeypatch.setattr("curatarr.artwork.client", lambda _kind: fake)
+    with app.app_context():
+        library = Library(
+            jellyfin_library_id="art-m", name="Films", media_type="movies"
+        )
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id, media_type="movie", title="Film", jellyfin_id="f"
+        )
+        db.session.add(media)
+        db.session.flush()
+        candidate = PurgeCandidate(
+            media_identity_id=media.id,
+            state="LEAVING_SOON",
+            reason_code="requested",
+            reason_text="Asked",
+            reclaimable_bytes=100,
+        )
+        db.session.add(candidate)
+        db.session.commit()
+        other = leases.acquire(f"artwork:{candidate.id}", 120)  # the other process
+        assert not apply_badge(candidate)
+        assert db.session.query(PosterSnapshot).count() == 0 and fake.puts == 0
+        leases.release(f"artwork:{candidate.id}", other)
+        assert apply_badge(candidate) and apply_badge(candidate)
+        assert db.session.query(PosterSnapshot).count() == 1 and fake.puts == 1
