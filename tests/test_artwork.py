@@ -325,3 +325,58 @@ def test_a_badge_being_applied_elsewhere_isnt_applied_twice(app, monkeypatch):
         leases.release(f"artwork:{candidate.id}", other)
         assert apply_badge(candidate) and apply_badge(candidate)
         assert db.session.query(PosterSnapshot).count() == 1 and fake.puts == 1
+
+
+def test_a_replaced_poster_is_badged_again_and_restores_to_the_new_art(
+    app, monkeypatch
+):
+    """A Jellyfin metadata refresh that replaces images drops the banner."""
+    first, fresh = _poster(), None
+    output = BytesIO()
+    Image.new("RGB", (300, 450), "#aa2233").save(output, format="JPEG")
+    fresh = output.getvalue()
+
+    class FakeJellyfin:
+        current = first
+
+        def item(self, _item_id):
+            return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
+
+        def image(self, _item_id):
+            return self.current
+
+        def put_image(self, _item_id, data):
+            self.current = data
+
+    fake = FakeJellyfin()
+    monkeypatch.setattr("curatarr.artwork.client", lambda _kind: fake)
+    with app.app_context():
+        library = Library(
+            jellyfin_library_id="art-r", name="Films", media_type="movies"
+        )
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id, media_type="movie", title="Film", jellyfin_id="f"
+        )
+        db.session.add(media)
+        db.session.flush()
+        candidate = PurgeCandidate(
+            media_identity_id=media.id,
+            state="LEAVING_SOON",
+            reason_code="requested",
+            reason_text="Asked",
+            reclaimable_bytes=100,
+        )
+        db.session.add(candidate)
+        db.session.commit()
+        assert apply_badge(candidate)
+        badged_first = fake.current
+        assert apply_badge(candidate) and fake.current == badged_first  # unchanged
+        fake.current = fresh  # Jellyfin downloaded new artwork
+        assert apply_badge(candidate)
+        assert fake.current == badge_poster(_jpeg(fresh))
+        snapshot = db.session.query(PosterSnapshot).one()
+        assert snapshot.badged_image_tag == sha256(fake.current).hexdigest()
+        assert restore_badge(snapshot)
+        assert fake.current == _jpeg(fresh)
