@@ -235,10 +235,10 @@ def test_artwork_restore_retries_after_temporary_failure(app, monkeypatch):
         def item(self, _item_id):
             return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
 
-        def image(self, _item_id):
+        def image(self, _item_id, _kind="Primary"):
             return self.current
 
-        def put_image(self, _item_id, data):
+        def put_image(self, _item_id, data, _kind="Primary"):
             if data == _jpeg(source) and self.fail_restore:
                 self.fail_restore = False
                 raise IntegrationError("Jellyfin unavailable")

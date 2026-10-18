@@ -26,10 +26,10 @@ def test_badge_and_restore(app, monkeypatch):
         def item(self, _item_id):
             return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
 
-        def image(self, _item_id):
+        def image(self, _item_id, _kind="Primary"):
             return self.current
 
-        def put_image(self, _item_id, data):
+        def put_image(self, _item_id, data, _kind="Primary"):
             self.current = data
 
     fake = FakeJellyfin()
@@ -77,10 +77,10 @@ def test_restore_uses_image_tag_when_jellyfin_reencodes_badge(app, monkeypatch):
         def item(self, _item_id):
             return {"ImageTags": {"Primary": self.tag}}
 
-        def image(self, _item_id):
+        def image(self, _item_id, _kind="Primary"):
             return self.current
 
-        def put_image(self, _item_id, data):
+        def put_image(self, _item_id, data, _kind="Primary"):
             self.uploads += 1
             self.tag = f"upload-{self.uploads}"
             output = BytesIO()
@@ -130,10 +130,10 @@ def test_restore_preserves_artwork_changed_by_someone_else(app, monkeypatch):
         def item(self, _item_id):
             return {"ImageTags": {"Primary": self.tag}}
 
-        def image(self, _item_id):
+        def image(self, _item_id, _kind="Primary"):
             return self.current
 
-        def put_image(self, _item_id, data):
+        def put_image(self, _item_id, data, _kind="Primary"):
             self.uploads += 1
             self.current = data
             self.tag = f"upload-{self.uploads}"
@@ -183,10 +183,10 @@ def test_ambiguous_badge_upload_keeps_recoverable_snapshot(app, monkeypatch):
         def item(self, _item_id):
             return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
 
-        def image(self, _item_id):
+        def image(self, _item_id, _kind="Primary"):
             return self.current
 
-        def put_image(self, _item_id, data):
+        def put_image(self, _item_id, data, _kind="Primary"):
             self.current = data
             if self.fail_once:
                 self.fail_once = False
@@ -239,10 +239,10 @@ def test_dry_run_libraries_still_get_leaving_soon_badges(app, monkeypatch):
         def item(self, _item_id):
             return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
 
-        def image(self, _item_id):
+        def image(self, _item_id, _kind="Primary"):
             return self.current
 
-        def put_image(self, _item_id, data):
+        def put_image(self, _item_id, data, _kind="Primary"):
             uploads.append(data)
             self.current = data
 
@@ -290,10 +290,10 @@ def test_a_badge_being_applied_elsewhere_isnt_applied_twice(app, monkeypatch):
         def item(self, _item_id):
             return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
 
-        def image(self, _item_id):
+        def image(self, _item_id, _kind="Primary"):
             return self.current
 
-        def put_image(self, _item_id, data):
+        def put_image(self, _item_id, data, _kind="Primary"):
             self.puts += 1
             self.current = data
 
@@ -342,10 +342,10 @@ def test_a_replaced_poster_is_badged_again_and_restores_to_the_new_art(
         def item(self, _item_id):
             return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
 
-        def image(self, _item_id):
+        def image(self, _item_id, _kind="Primary"):
             return self.current
 
-        def put_image(self, _item_id, data):
+        def put_image(self, _item_id, data, _kind="Primary"):
             self.current = data
 
     fake = FakeJellyfin()
@@ -404,10 +404,10 @@ def test_the_banner_counts_down_the_days(app, monkeypatch):
         def item(self, _item_id):
             return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
 
-        def image(self, _item_id):
+        def image(self, _item_id, _kind="Primary"):
             return self.current
 
-        def put_image(self, _item_id, data):
+        def put_image(self, _item_id, data, _kind="Primary"):
             self.puts += 1
             self.current = data
 
@@ -446,6 +446,79 @@ def test_the_banner_counts_down_the_days(app, monkeypatch):
         assert apply_badge(candidate) and fake.puts == 2
         assert fake.current == badge_poster(_jpeg(source), "13 DAYS LEFT")
         snapshot = db.session.query(PosterSnapshot).one()
-        assert snapshot.badge_label == "red-tag:13 DAYS LEFT"
+        assert snapshot.badge_label == "red-tag-3:13 DAYS LEFT"
         assert restore_badge(snapshot)
         assert fake.current == _jpeg(source)
+
+
+def test_wide_cards_and_backdrops_get_the_tag_too(app, monkeypatch):
+    """Home-screen rows show the Thumb image (or the backdrop when there's no
+    Thumb) and a title's page shows its backdrop: each is badged in its own
+    style and restored on its own."""
+    poster = _poster()
+    output = BytesIO()
+    Image.new("RGB", (1280, 720), "#335544").save(output, format="JPEG")
+    wide = output.getvalue()
+
+    class FakeJellyfin:
+        def __init__(self, images):
+            self.images = dict(images)
+
+        def item(self, _item_id):
+            tags = {k: sha256(v).hexdigest() for k, v in self.images.items()}
+            backdrop = tags.pop("Backdrop", None)
+            return {
+                "ImageTags": tags,
+                "BackdropImageTags": [backdrop] if backdrop else [],
+            }
+
+        def image(self, _item_id, kind="Primary"):
+            return self.images[kind]
+
+        def put_image(self, _item_id, data, kind="Primary"):
+            self.images[kind] = data
+
+    with app.app_context():
+        library = Library(
+            jellyfin_library_id="art-w", name="Films", media_type="movies"
+        )
+        db.session.add(library)
+        db.session.flush()
+        for name, images in [
+            ("Thumbed", {"Primary": poster, "Thumb": wide, "Backdrop": wide}),
+            ("Backdrop only", {"Primary": poster, "Backdrop": wide}),
+        ]:
+            fake = FakeJellyfin(images)
+            monkeypatch.setattr("curatarr.artwork.client", lambda _kind, f=fake: f)
+            media = MediaIdentity(
+                library_id=library.id, media_type="movie", title=name, jellyfin_id=name
+            )
+            db.session.add(media)
+            db.session.flush()
+            candidate = PurgeCandidate(
+                media_identity_id=media.id,
+                state="LEAVING_SOON",
+                reason_code="requested",
+                reason_text="Asked",
+                reclaimable_bytes=100,
+            )
+            db.session.add(candidate)
+            db.session.commit()
+            assert apply_badge(candidate)
+            for kind, source in images.items():
+                assert fake.images[kind] == badge_poster(
+                    _jpeg(source), "LEAVING SOON", kind
+                )
+            assert badge_poster(_jpeg(wide), "X", "Thumb") != badge_poster(
+                _jpeg(wide), "X", "Backdrop"
+            )
+            snapshots = (
+                db.session.query(PosterSnapshot)
+                .filter_by(candidate_id=candidate.id)
+                .all()
+            )
+            assert sorted(s.image_type for s in snapshots) == sorted(images)
+            for snapshot in snapshots:
+                assert restore_badge(snapshot)
+            for kind, source in images.items():
+                assert fake.images[kind] == _jpeg(source)
