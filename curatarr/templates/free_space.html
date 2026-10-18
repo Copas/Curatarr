@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% from '_confirm.html' import confirm_submit %}
+{% block content %}
+<div class="eyebrow">Library</div><h1>Free up space</h1>
+<p class="text-secondary">Pick films and shows to send on their way. Marking one <strong>Leaving Soon</strong> puts the banner on its poster in Jellyfin; if nobody plays any of it during the notice period it goes: a film is deleted through Radarr, and a show is trimmed to its always-keep episodes (Curatarr fetches more once someone watches again). Playing it, or Keep, cancels.</p>
+{% if leaving_count %}<p class="small text-secondary">{{ leaving_count }} title{{ '' if leaving_count == 1 else 's' }} Leaving Soon now, {{ leaving_bytes|size }} in all. <a href="{{ url_for('main.review') }}">See them in Review</a>.</p>{% endif %}
+{% set here = request.full_path.rstrip('?') %}
+<form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+  <label class="form-label mb-0">Show
+    <select class="form-select" name="type">
+      {% for value, label in [('all', 'Films and shows'), ('movie', 'Films'), ('series', 'Shows')] %}<option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="form-label mb-0">Watched
+    <select class="form-select" name="watched">
+      {% for value, label in [('any', 'Watched or not'), ('watched', 'Watched by anyone'), ('unwatched', 'Nobody has watched')] %}<option value="{{ value }}" {% if watched == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="form-label mb-0">Library
+    <select class="form-select" name="library">
+      <option value="">All libraries</option>
+      {% for library in libraries %}<option value="{{ library.id }}" {% if library.id == library_id %}selected{% endif %}>{{ library.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="form-label mb-0">Sort by
+    <select class="form-select" name="sort">
+      {% for value, label in sorts.items() %}<option value="{{ value }}" {% if sort == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="btn btn-outline-secondary">Show</button>
+</form>
+<form id="leaving-form" method="post" action="{{ url_for('main.free_space_mark') }}" class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ here }}">
+  <div class="text-secondary small">{{ count }} title{{ '' if count == 1 else 's' }} · {{ total_frees|size }} could be freed{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}</div>
+  {{ confirm_submit('Mark ticked Leaving Soon', 'Mark the ticked titles Leaving Soon? Nothing is deleted until their notice period ends.', 'Mark Leaving Soon', tip='Starts each one’s notice period and badges its poster.') }}
+</form>
+<div class="table-responsive"><table class="table align-middle">
+<thead><tr><th class="text-center" style="width:2.5rem"><span class="visually-hidden">Select</span></th><th>Title</th><th class="text-end">Frees</th><th>Added</th><th>Last watched</th><th>Status</th></tr></thead>
+<tbody>
+{% for row in rows %}{% set c = row.candidate %}{% set leaving = c and c.state in ('LEAVING_SOON', 'APPROVED', 'EXECUTING') %}<tr>
+  <td class="text-center">{% if not leaving and not row.never_purge and not row.held %}<input class="form-check-input" type="checkbox" name="media_id" value="{{ row.media.id }}" form="leaving-form" aria-label="Mark {{ row.media.title }}">{% endif %}</td>
+  <td><div class="d-flex align-items-center gap-2"><img src="{{ url_for('main.poster', media_id=row.media.id) }}" width="44" height="66" loading="lazy" alt="">
+    <div><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}<div class="small text-secondary">{{ 'Show' if row.media.media_type == 'series' else 'Film' }} · {{ row.library }}{% if row.media.media_type == 'series' and row.frees < row.on_disk %} · keeps {{ (row.on_disk - row.frees)|size }}{% endif %}</div>{% if row.daily %}<div class="small text-warning">Daily show: trimming deletes every episode and Curatarr won't fetch it again</div>{% endif %}</div></div></td>
+  <td class="text-end text-nowrap">{{ row.frees|size }}</td>
+  <td class="text-nowrap">{% if row.added %}{{ row.added|when('date') }}{% else %}<span class="text-secondary">—</span>{% endif %}</td>
+  <td>{% if row.last_played %}{{ row.last_played|when('date') }}<div class="small text-secondary">{{ row.viewers|join(', ') }}{% if row.plays > 1 %} · {{ row.plays }} plays{% endif %}</div>{% else %}<span class="text-secondary">Nobody yet</span>{% endif %}</td>
+  <td>{% if leaving %}<span class="text-warning text-nowrap">{% if c.state == 'LEAVING_SOON' %}Leaving {{ c.scheduled_delete_at|when('date') }}{% else %}Going now{% endif %}</span>
+      {% if c.state == 'LEAVING_SOON' %}<form method="post" action="{{ url_for('main.review_action', candidate_id=c.id, choice='keep') }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ here }}"><button class="btn btn-sm btn-outline-secondary ms-1" data-tip="Cancels it and restores the poster.">Keep</button></form>{% endif %}
+    {% elif row.never_purge %}<span class="text-secondary">Never purge</span>
+    {% elif row.held %}<span class="text-secondary small">{{ row.held }}</span>
+    {% elif c and c.state in ('REVIEW', 'ELIGIBLE', 'SNOOZED') %}<span class="text-secondary small">Suggested in Review</span>
+    {% endif %}{% if row.dry_run and not row.never_purge %}<div class="small text-secondary">dry run</div>{% endif %}</td>
+</tr>{% else %}<tr><td colspan="6" class="text-secondary">Nothing here to free up{% if watched != 'any' or kind != 'all' or library_id %} with these choices{% endif %}.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if pages > 1 %}<nav class="d-flex justify-content-between mt-3" aria-label="Pages">
+  {% if page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.free_space', type=kind, watched=watched, sort=sort, library=library_id, page=page - 1) }}">Previous</a>{% else %}<span></span>{% endif %}
+  {% if page < pages %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.free_space', type=kind, watched=watched, sort=sort, library=library_id, page=page + 1) }}">Next</a>{% endif %}
+</nav>{% endif %}
+{% endblock %}
