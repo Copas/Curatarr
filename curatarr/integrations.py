@@ -217,13 +217,15 @@ class JellyfinClient(Client):
             params["ParentId"] = parent_id
         return self.request("GET", f"/Users/{user_id}/Items", params=params)
 
-    def image(self, item_id):
-        return self.request("GET", f"/Items/{item_id}/Images/Primary")
+    def image(self, item_id, kind="Primary"):
+        """One of an item's images: Primary (poster), Thumb (the wide card),
+        or Backdrop (its first one)."""
+        return self.request("GET", f"/Items/{item_id}/Images/{_image_path(kind)}")
 
-    def put_image(self, item_id, image_bytes):
+    def put_image(self, item_id, image_bytes, kind="Primary"):
         return self.request(
             "POST",
-            f"/Items/{item_id}/Images/Primary",
+            f"/Items/{item_id}/Images/{_image_path(kind)}",
             data=base64.b64encode(image_bytes).decode("ascii"),
             headers={"Content-Type": "image/jpeg"},
         )
@@ -250,6 +252,10 @@ class JellyfinClient(Client):
                 "ReplaceAllImages": "false",
             },
         )
+
+
+def _image_path(kind):
+    return "Backdrop/0" if kind == "Backdrop" else kind
 
 
 class IntroSkipper:
