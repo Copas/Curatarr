@@ -2424,3 +2424,132 @@ def _chapter_rows(media):
         key=lambda p: (p.season_number or 0, p.episode_number or 0),
     )
     return [(part, describe(states.get(part.id))) for part in parts]
+
+
+FREE_SPACE_SORTS = {
+    "size": "Frees the most",
+    "idle": "Untouched longest",
+    "added": "Oldest first",
+    "recent": "Watched most recently",
+    "title": "Title",
+}
+
+
+def free_space_rows(*, kind="all", watched="any", sort="size", library_id=None):
+    """Films and shows to mark Leaving Soon by hand (the Free up space page).
+
+    "Frees" is what going would regain: the whole film, or a show's episodes
+    outside its always-keep ones. Watched means anyone has played any of it.
+    Built from a few aggregate queries: a library has thousands of titles."""
+    from .policy import effective_policy, retained
+
+    query = (
+        db.session.query(MediaIdentity)
+        .join(Library, MediaIdentity.library_id == Library.id)
+        .filter(
+            Library.media_type.in_(("tv", "movies")),
+            MediaIdentity.missing_since.is_(None),
+            or_(
+                MediaIdentity.radarr_id.isnot(None), MediaIdentity.sonarr_id.isnot(None)
+            ),
+        )
+    )
+    if kind in {"movie", "series"}:
+        query = query.filter(MediaIdentity.media_type == kind)
+    if library_id:
+        query = query.filter(MediaIdentity.library_id == library_id)
+    media_rows = {m.id: m for m in query.all()}
+    if not media_rows:
+        return []
+    files = {}
+    for media_id, kind_, season, episode, size in db.session.query(
+        MediaPart.media_identity_id,
+        MediaPart.kind,
+        MediaPart.season_number,
+        MediaPart.episode_number,
+        MediaPart.size_bytes,
+    ).filter(MediaPart.has_file.is_(True), MediaPart.size_bytes > 0):
+        if media_id in media_rows:
+            files.setdefault(media_id, []).append((kind_, season, episode, size))
+    plays = {}
+    for media_id, user_id, last, count in db.session.query(
+        UserMediaState.media_identity_id,
+        UserMediaState.jellyfin_user_id,
+        UserMediaState.last_played_at,
+        UserMediaState.play_count,
+    ).filter(UserMediaState.last_played_at.isnot(None)):
+        if media_id in media_rows:
+            plays.setdefault(media_id, []).append((last, user_id, count or 0))
+    candidates = {
+        c.media_identity_id: c
+        for c in db.session.query(PurgeCandidate).filter(
+            PurgeCandidate.state.in_(ACTIVE_CANDIDATE_STATES)
+        )
+    }
+    names = setting("jellyfin_user_names", {})
+    global_values = setting("global_policy", {})
+
+    class _Part:  # what policy.retained reads
+        def __init__(self, season, episode):
+            self.season_number, self.episode_number = season, episode
+
+    rows = []
+    for media_id, media in media_rows.items():
+        parts = files.get(media_id)
+        if not parts:
+            continue
+        policy, _sources = effective_policy(
+            media.media_type,
+            global_values,
+            media.library.policy.policy_json if media.library.policy else {},
+            media.override.override_json if media.override else {},
+        )
+        on_disk = sum(p[3] for p in parts)
+        if media.media_type == "series":
+            frees = sum(
+                p[3]
+                for p in parts
+                if p[0] == "episode" and not retained(_Part(p[1], p[2]), policy)
+            )
+        else:
+            frees = on_disk
+        if not frees:
+            continue  # a show already at its always-keep episodes
+        seen = sorted(plays.get(media_id, []), key=lambda p: p[0], reverse=True)
+        if watched == "watched" and not seen:
+            continue
+        if watched == "unwatched" and seen:
+            continue
+        last = seen[0] if seen else None
+        rows.append(
+            {
+                "media": media,
+                "library": media.library.name,
+                "on_disk": on_disk,
+                "frees": frees,
+                "added": media.added_at,
+                "last_played": _as_datetime(last[0]) if last else None,
+                "last_watcher": names.get(last[1], last[1]) if last else None,
+                "viewers": sorted({names.get(p[1], p[1]) for p in seen}),
+                "plays": sum(p[2] for p in seen),
+                "candidate": candidates.get(media_id),
+                "never_purge": policy["never_purge"],
+                "dry_run": policy["dry_run"],
+                "notice_days": policy["notice_days"],
+                "daily": media.series_type == "daily",
+            }
+        )
+    oldest = datetime(1970, 1, 1, tzinfo=UTC)
+
+    def when(value):
+        return _as_datetime(value) or oldest
+
+    keys = {
+        "size": lambda r: -r["frees"],
+        "idle": lambda r: when(r["last_played"] or r["added"]),
+        "added": lambda r: when(r["added"]),
+        "recent": lambda r: -when(r["last_played"]).timestamp(),
+        "title": lambda r: (r["media"].sort_title or r["media"].title).lower(),
+    }
+    rows.sort(key=keys.get(sort, keys["size"]))
+    return rows

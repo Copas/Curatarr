@@ -902,29 +902,52 @@ MANUAL_RESET = "manual_reset"
 REQUESTED_REMOVAL = "requested"
 
 
-def request_removal(media):
-    """A film someone chose to remove (title page), through Leaving Soon like
-    any other: its poster is badged, playing it or Keep cancels it, and it's
-    deleted after the notice period or when approved in Review."""
-    if media.media_type != "movie":
-        raise ValueError("Only films can be removed this way; shows have Reset.")
+def request_removal(media, *, where="its title page"):
+    """Mark a title Leaving Soon on request (title page, Free up space page),
+    then the usual path: its poster is badged, playing any of it or Keep
+    cancels it, and when the notice period ends (or it's approved in Review)
+    a film is deleted through Radarr and a show is trimmed to its always-keep
+    episodes like Reset to minimum. Every check applies but the grace period."""
+    if media.media_type not in {"movie", "series"}:
+        raise ValueError(f"{media.title} isn't a film or a TV show.")
     policy, _ = resolved_policy(media)
     if policy["never_purge"]:
         raise ValueError(f"Never Purge is on for {media.title}.")
-    if _active_candidate(media.id):
-        raise ValueError(f"{media.title} is already on its way out; see below.")
+    existing = _active_candidate(media.id)
+    if existing and existing.state in {"LEAVING_SOON", "APPROVED", "EXECUTING"}:
+        raise ValueError(f"{media.title} is already on its way out.")
     item = _candidate_input(media)
-    if not item.mapped or item.size_bytes <= 0:
-        raise ValueError(f"Radarr doesn't have a file for {media.title}.")
+    if media.media_type == "series":
+        if media.sonarr_id is None:
+            raise ValueError(f"{media.title} isn't matched to Sonarr.")
+        size = reclaimable_bytes(media.parts, policy)
+        if size <= 0:
+            raise ValueError(
+                f"{media.title} is already down to its always-keep episodes."
+            )
+        reason_code = MANUAL_RESET
+        reason = (
+            f"Marked Leaving Soon from {where}: trimmed to its always-keep "
+            "episodes unless someone plays it."
+        )
+    elif media.media_type == "movie":
+        if not item.mapped or item.size_bytes <= 0:
+            raise ValueError(f"Radarr doesn't have a file for {media.title}.")
+        size = item.size_bytes
+        reason_code = REQUESTED_REMOVAL
+        reason = f"Marked Leaving Soon from {where}."
+    if existing:
+        # A rule's proposal (Review, snoozed) gives way to the request.
+        existing.state = "SUPERSEDED"
+        existing.scheduled_delete_at = None
     now = utcnow()
     score, detail = weighted_score(item, now, policy["meaningful_threshold"])
-    reason = "Removal requested from its title page."
     candidate = PurgeCandidate(
         media_identity_id=media.id,
         state="LEAVING_SOON",
-        reason_code=REQUESTED_REMOVAL,
+        reason_code=reason_code,
         reason_text=reason,
-        reclaimable_bytes=item.size_bytes,
+        reclaimable_bytes=size,
         score=score,
         score_detail_json=detail,
         last_activity_snapshot=item.last_played_at,
@@ -938,10 +961,22 @@ def request_removal(media):
         reason,
         f"candidate:{candidate.id}",
         candidate_id=candidate.id,
-        payload={"reclaimable_bytes": item.size_bytes, "effective_policy": policy},
+        payload={"reclaimable_bytes": size, "effective_policy": policy},
     )
     db.session.commit()
     return candidate
+
+
+def request_removals(media_rows, *, where):
+    """request_removal for each; returns (marked, [(media, why it wasn't)])."""
+    marked, failed = [], []
+    for media in media_rows:
+        try:
+            marked.append(request_removal(media, where=where))
+        except ValueError as exc:
+            db.session.rollback()
+            failed.append((media, str(exc)))
+    return marked, failed
 
 
 def reset_series(media, *, run=True):

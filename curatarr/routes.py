@@ -324,6 +324,7 @@ NAV_SECTIONS = {
     "main.title": "library",
     "main.title_reset": "library",
     "main.title_remove": "library",
+    "main.free_space": "library",
     "main.shows": "library",
     "main.reset_unwatched": "library",
     "main.search": "library",
@@ -1102,6 +1103,94 @@ def shows():
     )
 
 
+FREE_SPACE_PAGE = 50
+
+
+@bp.get("/free-space")
+def free_space():
+    """Mark films and shows Leaving Soon by hand, sorted and filtered."""
+    from . import curation
+    from .services import FREE_SPACE_SORTS, free_space_rows
+
+    args = request.args
+    kind = args.get("type") if args.get("type") in {"movie", "series"} else "all"
+    watched = (
+        args.get("watched")
+        if args.get("watched") in {"watched", "unwatched"}
+        else "any"
+    )
+    sort = args.get("sort") if args.get("sort") in FREE_SPACE_SORTS else "size"
+    library_id = args.get("library") or None
+    rows = free_space_rows(kind=kind, watched=watched, sort=sort, library_id=library_id)
+    pages = max((len(rows) + FREE_SPACE_PAGE - 1) // FREE_SPACE_PAGE, 1)
+    page = min(max(args.get("page", 1, type=int), 1), pages)
+    shown = rows[(page - 1) * FREE_SPACE_PAGE : page * FREE_SPACE_PAGE]
+    for row in shown:
+        found = curation.signals(row["media"])
+        row["held"] = _held_note(found) if found["request"] or found["season"] else None
+    leaving = (
+        db.session.query(PurgeCandidate)
+        .filter(PurgeCandidate.state == "LEAVING_SOON")
+        .all()
+    )
+    return render_template(
+        "free_space.html",
+        rows=shown,
+        count=len(rows),
+        total_frees=sum(r["frees"] for r in rows),
+        page=page,
+        pages=pages,
+        kind=kind,
+        watched=watched,
+        sort=sort,
+        sorts=FREE_SPACE_SORTS,
+        library_id=library_id,
+        libraries=db.session.query(Library)
+        .filter(Library.media_type.in_(("tv", "movies")))
+        .order_by(Library.name)
+        .all(),
+        leaving_count=len(leaving),
+        leaving_bytes=sum(c.reclaimable_bytes or 0 for c in leaving),
+    )
+
+
+def _held_note(found):
+    if found["request"]:
+        who = found["request"].get("user") or "Someone"
+        return f"{who} requested it and hasn't watched it yet"
+    return f"Held for {found['season']} season"
+
+
+@bp.post("/free-space/leaving-soon")
+def free_space_mark():
+    from .artwork import reconcile_artwork
+    from .lifecycle import request_removals
+
+    ids = request.form.getlist("media_id")
+    media_rows = [m for m in (db.session.get(MediaIdentity, i) for i in ids) if m]
+    back = request.form.get("back") or url_for("main.free_space")
+    if not media_rows:
+        flash("Tick the titles to mark Leaving Soon first.", "warning")
+        return redirect(_safe_next(back))
+    marked, failed = request_removals(media_rows, where="the Free up space page")
+    if marked:
+        reconcile_artwork()
+        freed = sum(c.reclaimable_bytes or 0 for c in marked)
+        first = min(c.scheduled_delete_at for c in marked)
+        flash(
+            f"Marked {len(marked)} title{'' if len(marked) == 1 else 's'} Leaving Soon "
+            f"({size_label(freed)}). Their posters say so in Jellyfin; each goes on "
+            f"{first:%B %-d} unless someone plays any of it or you choose Keep.",
+            "info",
+        )
+    if failed:
+        flash(
+            "Not marked: " + "; ".join(why for _media, why in failed),
+            "warning",
+        )
+    return redirect(_safe_next(back))
+
+
 def _reset_plan_signature(plan, skip_days):
     """Fingerprint of the exact shows on the confirmation page, so a list that changed
     between viewing and confirming is refused instead of resetting something unseen."""
@@ -1209,6 +1298,8 @@ def review_action(candidate_id, choice):
             return redirect(url_for("main.title", media_id=candidate.media_identity_id))
     if request.form.get("back") == "overview":
         return redirect(url_for("main.overview"))
+    if (request.form.get("back") or "").startswith("/free-space"):
+        return redirect(_safe_next(request.form["back"]))
     return redirect(url_for("main.review"))
 
 
