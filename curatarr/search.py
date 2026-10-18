@@ -14,6 +14,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 WINDOW = 3  # consecutive transcript lines searched together
+# "Exact words" in straight or curly double quotes.
+QUOTED = re.compile(r'["\u201c\u201d]([^"\u201c\u201d]+)["\u201c\u201d]')
 MIN_SHARE = 0.75  # of the query's words, when the exact phrase isn't said
 STOP = frozenset(
     [
@@ -155,21 +157,31 @@ class TranscriptIndex:
         return len(self._entries)
 
     def search(self, query: str, limit: int = 10) -> list[dict]:
+        """Best moment per episode. Text in quotes must be said exactly as
+        written (whole words, in order); the rest ranks as usual."""
+        quoted = [" ".join(words(q)) for q in QUOTED.findall(query) if words(q)]
+        loose = QUOTED.sub(" ", query) if quoted else query
         phrase = " ".join(words(query))
-        wanted = [stem(w) for w in words(query) if w not in STOP] or [
-            stem(w) for w in words(query)
+        wanted = [stem(w) for w in words(loose) if w not in STOP] or [
+            stem(w) for w in words(loose)
         ]
-        if not wanted:
+        if not wanted and not quoted:
             return []
+        quoted_stems = {stem(w) for q in quoted for w in q.split()}
         hits = []
-        need = max(1, math.ceil(MIN_SHARE * len(wanted)))
+        need = max(1, math.ceil(MIN_SHARE * len(wanted))) if wanted else 0
         for entry in list(self._entries.values()):
             # Skip episodes that never say enough of the words (most of them).
+            if not quoted_stems <= entry.vocabulary:
+                continue
             if sum(w in entry.vocabulary for w in wanted) < need:
                 continue
             best = None
             for index, window in enumerate(entry.normalized):
-                if phrase and phrase in window:
+                padded = f" {window} "
+                if quoted and not all(f" {q} " in padded for q in quoted):
+                    continue
+                if quoted and not wanted or phrase and f" {phrase} " in padded:
                     score = 2.0
                 else:
                     present = {stem(w) for w in window.split()}
