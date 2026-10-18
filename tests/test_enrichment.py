@@ -1914,7 +1914,7 @@ def test_search_what_was_said(app, client, media_env):
         client.get("/api/v1/transcripts/search?q=spaceship").get_json()["results"] == []
     )
     page = client.get("/transcripts?q=red+stapler").get_data(as_text=True)
-    assert "Has anyone seen my red stapler?" in page
+    assert "Has anyone seen my <mark>red</mark> <mark>stapler</mark>?" in page
 
 
 def test_old_transcripts_get_linked_so_search_finds_them(app, client, media_env):
