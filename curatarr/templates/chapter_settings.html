@@ -98,6 +98,11 @@
     {{ option('compat_audio', 'Add a TV-friendly audio track to films and episodes', 'Rokus and many TVs can\'t play DTS, TrueHD or FLAC, so Jellyfin converts it while you watch, and some players get stuck restarting. Adds an AC3 copy as the default track and keeps the original. Only that track is encoded; MKV only, one film at a time, never while it\'s playing.') }}
   </div>
 {% endcall %}
+{% call card('seek-repair', 'tools', 'Seeking on Roku', 'Repairs files Roku can\'t seek in' if opts.seek_repair else 'Off', opts.seek_repair) %}
+  <div class="setting-grid">
+    {{ option('seek_repair', 'Repair files Roku players can\'t seek in', 'Adding chapters or fixing tracks can leave an MKV\'s seek index where Roku players don\'t look, so jumping ahead starts the episode over. Curatarr rebuilds those files (a copy, never a re-encode; everything is kept) one at a time, never while one is playing.') }}
+  </div>
+{% endcall %}
 {% call card('problems', 'tools', 'File problems', ('Checking films and episodes' if opts.file_check else 'Off') ~ (' · replaces automatically' if opts.file_check and opts.file_replace_automatically else ''), opts.file_check) %}
   <div class="setting-grid">
     {{ option('file_check', 'Check files for problems', 'Looks for subtitles burned into the picture (films), and for files that are cut short, go quiet partway through or have decoding errors. Reads a few frames and seconds of each file; nothing is changed.') }}

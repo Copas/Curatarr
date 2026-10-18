@@ -27,6 +27,7 @@
   {{ coverage('Episodes checked for skip markers', 0, summary.markers_checked, summary.markers_possible, 'episodes', None, 'checked') }}
   {% if compat %}{{ coverage('TV-friendly audio: films', 0, compat.films.done, compat.films.total, 'films', None, 'given an AC3 track') }}
   {{ coverage('TV-friendly audio: episodes', 0, compat.episodes.done, compat.episodes.total, 'episodes', None, 'given an AC3 track') }}{% endif %}
+  {% if seek %}{{ coverage('Seeking on Roku', 0, seek.checked, seek.total, 'files', None, 'checked, ' ~ seek.rebuilt ~ ' repaired') }}{% endif %}
 </section>
 <div class="row g-3 mb-4">
   <section class="col-lg-7" aria-labelledby="todo-heading"><div class="card p-3 h-100">

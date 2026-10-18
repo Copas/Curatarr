@@ -173,6 +173,7 @@ def chapter_maintenance():
         backlog=_backlog(library_id),
         summary=maintenance_summary(library_id),
         compat=_compat_progress(),
+        seek=_seek_progress(),
         smart_blocked=smart_chapters_blocked(),
         activity=job_activity(),
         action_labels=ACTION_LABELS,
@@ -791,6 +792,12 @@ def transcript_search():
         results=search_transcripts(query, 25) if query else [],
         searchable=transcripts_searchable(),
     )
+
+
+def _seek_progress():
+    from . import seek_repair
+
+    return seek_repair.progress()
 
 
 def _compat_progress():

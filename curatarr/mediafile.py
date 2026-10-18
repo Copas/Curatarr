@@ -228,7 +228,138 @@ def _mkvpropedit(args):
             "mkvpropedit failed: "
             + (result.stdout.strip().splitlines() or ["unknown error"])[-1][:200]
         )
+    if seek_index_hidden(args[1]):
+        rebuild_layout(args[1])
     return result
+
+
+# --- Seek index layout -------------------------------------------------------
+# Matroska's seek head lists where the seek index (Cues) and the rest are.
+# When an edit doesn't fit at the start, mkvpropedit moves the seek head to the
+# end and leaves one at the start that only points there. That's valid, but
+# Roku players don't follow it: without the index they can't seek, and play
+# from the beginning instead. Rebuilding the file (mkvmerge, a copy, never a
+# re-encode) puts a full seek head back at the start.
+
+SEGMENT_ID = 0x18538067
+SEEK_HEAD_ID = 0x114D9B74
+SEEK_ID = 0x4DBB
+SEEK_ID_ID = 0x53AB
+VOID_ID = 0xEC
+CUES_ID = 0x1C53BB6B
+EBML_ID = 0x1A45DFA3
+
+
+def _element_id(data, i):
+    first = data[i]
+    length = next((n for n in range(1, 5) if first & (0x80 >> (n - 1))), None)
+    if length is None:
+        raise ValueError("bad element id")
+    return int.from_bytes(data[i : i + length], "big"), i + length
+
+
+def _element_size(data, i):
+    first = data[i]
+    length = next((n for n in range(1, 9) if first & (0x80 >> (n - 1))), None)
+    if length is None:
+        raise ValueError("bad element size")
+    value = first & (0xFF >> length)
+    for byte in data[i + 1 : i + length]:
+        value = (value << 8) | byte
+    return value, i + length
+
+
+def front_seek_ids(path: str) -> set[int] | None:
+    """Element ids the first seek head points to, or None when there's none
+    (or the file isn't Matroska)."""
+    with open(path, "rb") as handle:
+        data = handle.read(256 * 1024)
+    try:
+        element, i = _element_id(data, 0)
+        if element != EBML_ID:
+            return None
+        size, i = _element_size(data, i)
+        i += size
+        element, i = _element_id(data, i)
+        if element != SEGMENT_ID:
+            return None
+        _size, i = _element_size(data, i)
+        while i < len(data):
+            element, i = _element_id(data, i)
+            size, i = _element_size(data, i)
+            if element == VOID_ID:
+                i += size
+                continue
+            if element != SEEK_HEAD_ID:
+                return None  # no seek head before the rest
+            ids, end = set(), i + size
+            while i < end:
+                child, i = _element_id(data, i)
+                child_size, i = _element_size(data, i)
+                if child == SEEK_ID:
+                    j, child_end = i, i + child_size
+                    while j < child_end:
+                        inner, j = _element_id(data, j)
+                        inner_size, j = _element_size(data, j)
+                        if inner == SEEK_ID_ID:
+                            ids.add(int.from_bytes(data[j : j + inner_size], "big"))
+                        j += inner_size
+                i += child_size
+            return ids
+    except (ValueError, IndexError):
+        return None
+    return None
+
+
+def file_identity_of(path: str) -> tuple[int, float]:
+    stat = os.stat(path)
+    return stat.st_size, stat.st_mtime
+
+
+def seek_index_hidden(path: str) -> bool:
+    """Whether the seek head at the start only points to another one (see above)."""
+    try:
+        ids = front_seek_ids(path)
+    except OSError:
+        return False
+    return bool(ids) and CUES_ID not in ids and SEEK_HEAD_ID in ids
+
+
+def rebuild_layout(path: str) -> MediaInfo:
+    """Rewrite a Matroska file with mkvmerge so its seek head is whole again.
+
+    Every track, chapter, tag and attachment is copied as it is. The copy is
+    checked (same tracks, chapters and length, index reachable) before it
+    replaces the original; on any doubt the original is left alone."""
+    before = probe(path)
+    target = Path(path)
+    partial = target.with_name(f".{target.name}.curatarr-partial")
+    try:
+        result = _run(
+            [required_tool("mkvmerge"), "-q", "-o", str(partial), path], 4 * 3600
+        )
+        # mkvmerge exits 1 for warnings with a good file, 2 for errors.
+        if result.returncode not in (0, 1):
+            raise MediaToolError(
+                "mkvmerge failed: "
+                + (result.stdout.strip().splitlines() or ["unknown error"])[-1][:200]
+            )
+        after = probe(str(partial))
+        same_tracks = [
+            (s.get("codec_type"), s.get("codec_name")) for s in after.streams
+        ] == [(s.get("codec_type"), s.get("codec_name")) for s in before.streams]
+        if (
+            not same_tracks
+            or after.chapters != before.chapters
+            or abs(after.duration - before.duration) > 1.0
+            or seek_index_hidden(str(partial))
+        ):
+            raise MediaToolError("The rebuilt copy didn't match the original")
+        os.replace(partial, path)
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
+    return probe(path)
 
 
 def write_chapters(path: str, chapters: list[Chapter]) -> None:
