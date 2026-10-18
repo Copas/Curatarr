@@ -287,3 +287,32 @@ def test_a_film_on_an_import_list_is_excluded_so_it_doesnt_come_back(app, radarr
         review_candidate(candidate.id, "delete")
         assert execute_approved(candidate.id) == "succeeded"
         assert radarr.deleted == [42] and radarr.excluded is True
+
+
+def test_only_viewing_after_it_was_marked_cancels(app, radarr):
+    """The hourly check reports plays it finds in Jellyfin, often ones from
+    before the title was marked: those mustn't undo the decision."""
+    from curatarr.services import ingest_event, process_pending_events
+
+    with app.app_context():
+        media = _film()
+        candidate = request_removal(media)
+
+        def played(event_id, when):
+            ingest_event(
+                {
+                    "event_id": event_id,
+                    "event_type": "item_played",
+                    "item_external_id": media.jellyfin_id,
+                    "user_external_id": "viewer",
+                    "played": True,
+                    "occurred_at": when.isoformat(),
+                }
+            )
+            process_pending_events()
+            db.session.refresh(candidate)
+
+        played("earlier", utcnow() - timedelta(hours=1))
+        assert candidate.state == "LEAVING_SOON"
+        played("later", utcnow() + timedelta(seconds=1))
+        assert candidate.state == "RESCUED"
