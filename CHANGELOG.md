@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fixed: a Leaving Soon poster could be badged twice at once** when the web app and the worker reconciled artwork at the same moment, which could save the badged poster as the one to restore. Applying a badge now takes a short lease per title.
 - **Fixed: seeking on Roku started some episodes over.** When chapters (or a track change) didn't fit at the start of an MKV, mkvpropedit moved its seek index pointer to the end, where Roku players don't look. Curatarr now rebuilds such a file straight after editing it (a copy with mkvmerge; nothing re-encoded), and **Seeking on Roku** (Settings → Enhance, on by default) repairs files already like that in the background, what's being watched first.
 - **Free up space** remembers each person's last filter and sort, and can show what one person watched (everyone active in the last 90 days is listed), most recent first.
 - **Library → Free up space**: mark films and shows Leaving Soon by hand, sorted by space freed, untouched longest, oldest or most recently watched, and filtered to watched or unwatched titles. Nobody plays it in the notice period and it goes (shows are trimmed to their always-keep episodes).
