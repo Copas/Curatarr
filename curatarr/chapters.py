@@ -72,6 +72,7 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "file_replace_automatically": False,
     "compat_audio": False,
     "seek_repair": True,
+    "pace_rebuilds": True,
     "settle_minutes": 10,
     "scene_threshold": 0.3,
     "ollama_url": "http://127.0.0.1:11434",
@@ -249,6 +250,8 @@ def validate_global_options(values: dict) -> dict:
         raise ChapterConfigError("Invalid TV-friendly audio setting")
     if type(merged["seek_repair"]) is not bool:
         raise ChapterConfigError("Invalid seek repair setting")
+    if type(merged["pace_rebuilds"]) is not bool:
+        raise ChapterConfigError("Invalid rebuild pacing setting")
     if merged["whisper_device"] not in WHISPER_DEVICES:
         raise ChapterConfigError("Transcription device must be auto, cuda, or cpu")
     if not str(merged["ollama_url"]).startswith(("http://", "https://")):

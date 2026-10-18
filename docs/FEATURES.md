@@ -227,3 +227,7 @@ Matroska files carry a seek head that says where the seek index is. When an in-p
 
 Curatarr checks the file after every edit and, if the index is out of reach, rebuilds the file with mkvmerge: every track, chapter, tag and attachment is copied as it is, the copy is checked against the original, and only then replaces it. **Seeking on Roku** (Settings → Enhance, on by default) does the same for files already affected: it reads the start of each MKV once (again only if the file changes), titles being watched first, and rebuilds one or two files per worker cycle, never one that's playing. Enhance shows how many files were checked and repaired.
 
+## Jellyfin thumbnails
+
+Adding TV-friendly audio, repairing seeking and removing other languages each rebuild the file (the picture is copied untouched). Jellyfin can't tell, so it drops that title's scrubbing thumbnails (trickplay) and makes them again, one file at a time, a few minutes each. **Jellyfin thumbnails** (Settings → Enhance, on by default) keeps Curatarr from getting ahead of it: another rebuild starts only while fewer than three rebuilt files that had thumbnails are still waiting for new ones. Files that had none (or whose library has thumbnails off) don't count, and a file waits at most two days. Enhance says when rebuilds are waiting.
+

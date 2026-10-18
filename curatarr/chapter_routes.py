@@ -174,6 +174,7 @@ def chapter_maintenance():
         summary=maintenance_summary(library_id),
         compat=_compat_progress(),
         seek=_seek_progress(),
+        thumbs=_thumbnail_status(),
         smart_blocked=smart_chapters_blocked(),
         activity=job_activity(),
         action_labels=ACTION_LABELS,
@@ -792,6 +793,12 @@ def transcript_search():
         results=search_transcripts(query, 25) if query else [],
         searchable=transcripts_searchable(),
     )
+
+
+def _thumbnail_status():
+    from . import thumbnails
+
+    return thumbnails.status()
 
 
 def _seek_progress():

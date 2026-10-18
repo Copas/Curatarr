@@ -18,7 +18,7 @@ from flask import current_app
 from sqlalchemy import case, func, or_
 from sqlalchemy.exc import OperationalError
 
-from . import db, throttle
+from . import db, throttle, thumbnails
 from .mediafile import MediaToolError, rebuild_layout, seek_index_hidden
 from .models import ChapterState, MediaIdentity, MediaPart, UserMediaState, utcnow
 
@@ -123,12 +123,15 @@ def sweep(checks=CHECKS_PER_RUN, rebuilds=REBUILDS_PER_RUN) -> int:
             state.seek_layout = {"ok": True, "at": utcnow().isoformat()}
             db.session.commit()
             continue
-        if done >= rebuilds or _playing(part):
+        if done >= rebuilds or _playing(part) or not thumbnails.room():
             db.session.commit()
-            continue  # next cycle
+            continue  # next cycle (or once Jellyfin has caught up on thumbnails)
         db.session.commit()  # never hold the write lock while a file is copied
         state_id, part_id = state.id, part.id
+        had_thumbnails = thumbnails.has_thumbnails(part, part.media)
         result = _rebuild(part, path)
+        if result.get("rebuilt"):
+            thumbnails.note_rebuilt(part, part.media, had_thumbnails)
         try:
             _record(state, part, result)
         except OperationalError:

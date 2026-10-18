@@ -1,0 +1,90 @@
+"""File rebuilds wait for Jellyfin to remake scrubbing thumbnails."""
+
+from datetime import timedelta
+
+from curatarr import db, thumbnails
+from curatarr.models import utcnow
+from curatarr.services import set_setting, setting
+
+
+class Part:
+    def __init__(self, item):
+        self.jellyfin_id, self.kind = item, "episode"
+
+
+class Jellyfin:
+    def __init__(self):
+        self.with_thumbnails = set()
+        self.asked = []
+
+    def items_trickplay(self, ids):
+        self.asked.append(list(ids))
+        return [
+            {
+                "Id": i,
+                "Trickplay": {i: {"320": {}}} if i in self.with_thumbnails else {},
+            }
+            for i in ids
+        ]
+
+
+def _jellyfin(monkeypatch):
+    fake = Jellyfin()
+    monkeypatch.setattr("curatarr.services.client", lambda kind: fake)
+    return fake
+
+
+def test_rebuilds_wait_while_three_files_await_thumbnails(app, monkeypatch):
+    fake = _jellyfin(monkeypatch)
+    for n in range(3):
+        assert thumbnails.room()
+        thumbnails.note_rebuilt(Part(f"item{n}"), None, had_thumbnails=True)
+    assert not thumbnails.room()
+    assert thumbnails.status() == {"waiting": 3, "paused": True}
+    fake.with_thumbnails.add("item1")  # Jellyfin made one file's again
+    assert thumbnails.room()
+    assert [w["item"] for w in setting(thumbnails.KEY)] == ["item0", "item2"]
+
+
+def test_files_without_thumbnails_before_dont_count(app, monkeypatch):
+    _jellyfin(monkeypatch)
+    for n in range(5):
+        thumbnails.note_rebuilt(Part(f"item{n}"), None, had_thumbnails=False)
+    assert thumbnails.room() and setting(thumbnails.KEY, []) == []
+
+
+def test_a_file_waits_two_days_at_most(app, monkeypatch):
+    _jellyfin(monkeypatch)
+    old = (utcnow() - timedelta(days=3)).isoformat()
+    set_setting(thumbnails.KEY, [{"item": f"i{n}", "at": old} for n in range(3)])
+    db.session.commit()
+    assert thumbnails.room()
+
+
+def test_jellyfin_unreachable_waits(app, monkeypatch):
+    from curatarr.integrations import IntegrationError
+
+    class Down:
+        def items_trickplay(self, ids):
+            raise IntegrationError("down")
+
+    monkeypatch.setattr("curatarr.services.client", lambda kind: Down())
+    thumbnails.note_rebuilt(Part("item"), None, had_thumbnails=True)
+    assert not thumbnails.room()
+
+
+def test_can_be_turned_off(app, monkeypatch):
+    monkeypatch.setattr(thumbnails, "enabled", lambda: False)
+    set_setting(
+        thumbnails.KEY,
+        [{"item": f"i{n}", "at": utcnow().isoformat()} for n in range(9)],
+    )
+    db.session.commit()
+    assert thumbnails.room()
+
+
+def test_has_thumbnails_reads_dashed_ids(app, monkeypatch):
+    fake = _jellyfin(monkeypatch)
+    fake.with_thumbnails.add("ABC-DEF")
+    assert thumbnails.has_thumbnails(Part("ABC-DEF"), None)
+    assert not thumbnails.has_thumbnails(Part("other"), None)

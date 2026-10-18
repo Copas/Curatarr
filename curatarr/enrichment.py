@@ -256,6 +256,7 @@ def parse_options(form) -> dict:
         "file_replace_automatically",
         "compat_audio",
         "seek_repair",
+        "pace_rebuilds",
     ):
         if f"{key}_shown" in form:
             values[key] = form.get(key) in {"true", "on", "1"}
