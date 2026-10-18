@@ -2435,11 +2435,15 @@ FREE_SPACE_SORTS = {
 }
 
 
-def free_space_rows(*, kind="all", watched="any", sort="size", library_id=None):
+def free_space_rows(
+    *, kind="all", watched="any", sort="size", library_id=None, viewer=None
+):
     """Films and shows to mark Leaving Soon by hand (the Free up space page).
 
     "Frees" is what going would regain: the whole film, or a show's episodes
-    outside its always-keep ones. Watched means anyone has played any of it.
+    outside its always-keep ones. Watched means anyone has played any of it;
+    with ``viewer`` (a Jellyfin user id), only what they played, by when they
+    last did.
     Built from a few aggregate queries: a library has thousands of titles."""
     from .policy import effective_policy, retained
 
@@ -2520,7 +2524,10 @@ def free_space_rows(*, kind="all", watched="any", sort="size", library_id=None):
             continue
         if watched == "unwatched" and seen:
             continue
-        last = seen[0] if seen else None
+        theirs = [p for p in seen if p[1] == viewer] if viewer else seen
+        if viewer and not theirs:
+            continue
+        last = theirs[0] if theirs else None
         rows.append(
             {
                 "media": media,
@@ -2553,3 +2560,38 @@ def free_space_rows(*, kind="all", watched="any", sort="size", library_id=None):
     }
     rows.sort(key=keys.get(sort, keys["size"]))
     return rows
+
+
+def active_viewers(days=90):
+    """[(Jellyfin user id, name)] of everyone who played anything in the last
+    ``days``, most recently active first (the Free up space filter)."""
+    from datetime import timedelta
+
+    names = setting("jellyfin_user_names", {})
+    rows = (
+        db.session.query(
+            UserMediaState.jellyfin_user_id, func.max(UserMediaState.last_played_at)
+        )
+        .filter(UserMediaState.last_played_at >= utcnow() - timedelta(days=days))
+        .group_by(UserMediaState.jellyfin_user_id)
+        .order_by(func.max(UserMediaState.last_played_at).desc())
+        .all()
+    )
+    return [(user_id, names.get(user_id, user_id)) for user_id, _last in rows]
+
+
+FREE_SPACE_VIEW_KEY = "free_space_view"
+
+
+def free_space_view(user_id, args=None):
+    """The page's choices: from the address when given (and remembered for
+    this person), else what they had last."""
+    key = f"{FREE_SPACE_VIEW_KEY}:{user_id or 'anyone'}"
+    fields = ("type", "watched", "library", "sort")
+    if args is not None and any(name in args for name in fields):
+        view = {name: args.get(name) or "" for name in fields}
+        if view != setting(key, None):
+            set_setting(key, view)
+            db.session.commit()
+        return view
+    return setting(key, {}) or {}
