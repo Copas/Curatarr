@@ -229,7 +229,11 @@ def _mkvpropedit(args):
             + (result.stdout.strip().splitlines() or ["unknown error"])[-1][:200]
         )
     if seek_index_hidden(args[1]):
+        from . import thumbnails
+
+        noted = thumbnails.before_rebuild(args[1])
         rebuild_layout(args[1])
+        thumbnails.after_rebuild(noted)  # Jellyfin remakes its thumbnails
     return result
 
 
