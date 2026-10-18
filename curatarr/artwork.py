@@ -197,11 +197,20 @@ def _apply_badge(candidate):
 
 
 def _apply_one(candidate, media, kind):
-    existing = (
+    snapshots = (
         db.session.query(PosterSnapshot)
         .filter_by(candidate_id=candidate.id, active=True, image_type=kind)
-        .first()
+        .order_by(PosterSnapshot.badged_image_tag.is_(None), PosterSnapshot.created_at)
+        .all()
     )
+    existing = snapshots[0] if snapshots else None
+    for extra in snapshots[1:]:
+        # A second snapshot of the same picture (two processes once badged it at
+        # the same moment): the first one restores it, so retire the others.
+        extra.active = False
+        extra.restored_at = utcnow()
+    if snapshots[1:]:
+        db.session.commit()
     if existing:
         if existing.badged_image_tag:
             return _keep_badged(existing, badge_label(candidate))
