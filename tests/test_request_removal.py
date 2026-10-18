@@ -235,3 +235,40 @@ def test_the_page_marks_ticked_titles_and_keep_comes_back(
     assert response.headers["Location"].endswith("/free-space?sort=added")
     with app.app_context():
         assert db.session.get(PurgeCandidate, candidate_id).state == "RESCUED"
+
+
+def test_the_page_remembers_the_last_choices(app, client):
+    with app.app_context():
+        _film()
+        _old_unwatched_film()
+    page = client.get("/free-space?watched=unwatched&sort=added&type=movie").text
+    assert "Never Watched" in page and "Not Very Good" not in page
+    page = client.get("/free-space").text  # opened again, no choices given
+    assert "Never Watched" in page and "Not Very Good" not in page
+    assert '<option value="added" selected>' in page
+    page = client.get("/free-space?watched=any&sort=size&type=all").text
+    assert "Not Very Good" in page
+
+
+def test_filtering_to_what_one_person_watched(app, client):
+    from curatarr.services import set_setting
+
+    with app.app_context():
+        film = _film()
+        other = _old_unwatched_film("Kids Pick", days=30)
+        db.session.add(
+            UserMediaState(
+                media_identity_id=other.id,
+                jellyfin_user_id="kid",
+                last_played_at=utcnow() - timedelta(days=1),
+                play_count=1,
+            )
+        )
+        set_setting("jellyfin_user_names", {"viewer": "Us", "kid": "Kid"})
+        db.session.commit()
+        assert film.title
+    page = client.get("/free-space?watched=user:kid&sort=recent").text
+    assert ">Kid</option>" in page and ">Us</option>" in page
+    assert "Kids Pick" in page and "Not Very Good" not in page
+    page = client.get("/free-space?watched=user:viewer&sort=recent").text
+    assert "Not Very Good" in page and "Kids Pick" not in page

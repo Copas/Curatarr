@@ -1110,18 +1110,32 @@ FREE_SPACE_PAGE = 50
 def free_space():
     """Mark films and shows Leaving Soon by hand, sorted and filtered."""
     from . import curation
-    from .services import FREE_SPACE_SORTS, free_space_rows
+    from .services import (
+        FREE_SPACE_SORTS,
+        active_viewers,
+        free_space_rows,
+        free_space_view,
+    )
 
     args = request.args
-    kind = args.get("type") if args.get("type") in {"movie", "series"} else "all"
-    watched = (
-        args.get("watched")
-        if args.get("watched") in {"watched", "unwatched"}
-        else "any"
+    view = free_space_view((current_user() or {}).get("id"), args)
+    viewers = active_viewers()
+    kind = view.get("type") if view.get("type") in {"movie", "series"} else "all"
+    watched = view.get("watched") or "any"
+    viewer = watched.removeprefix("user:") if watched.startswith("user:") else None
+    if viewer and viewer not in {user_id for user_id, _name in viewers}:
+        viewer = None  # no longer active: fall back to everyone
+    if not viewer and watched not in {"watched", "unwatched"}:
+        watched = "any"
+    sort = view.get("sort") if view.get("sort") in FREE_SPACE_SORTS else "size"
+    library_id = view.get("library") or None
+    rows = free_space_rows(
+        kind=kind,
+        watched="any" if viewer else watched,
+        sort=sort,
+        library_id=library_id,
+        viewer=viewer,
     )
-    sort = args.get("sort") if args.get("sort") in FREE_SPACE_SORTS else "size"
-    library_id = args.get("library") or None
-    rows = free_space_rows(kind=kind, watched=watched, sort=sort, library_id=library_id)
     pages = max((len(rows) + FREE_SPACE_PAGE - 1) // FREE_SPACE_PAGE, 1)
     page = min(max(args.get("page", 1, type=int), 1), pages)
     shown = rows[(page - 1) * FREE_SPACE_PAGE : page * FREE_SPACE_PAGE]
@@ -1141,7 +1155,8 @@ def free_space():
         page=page,
         pages=pages,
         kind=kind,
-        watched=watched,
+        watched=f"user:{viewer}" if viewer else watched,
+        viewers=viewers,
         sort=sort,
         sorts=FREE_SPACE_SORTS,
         library_id=library_id,
