@@ -263,6 +263,9 @@ def replace(state) -> str:
             radarr.mark_failed(grabs[0]["id"])
             blocklisted = grabs[0].get("sourceTitle")
         file_id = (movie.get("movieFile") or {}).get("id")
+        from . import replacements
+
+        replacements.watch(media, radarr, movie)  # until the new copy arrives
         if file_id:
             radarr.delete_movie_file(file_id)
         radarr.search_movie(media.radarr_id)

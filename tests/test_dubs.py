@@ -96,6 +96,9 @@ class FakeRadarr:
     def delete_movie_file(self, file_id):
         self.calls.append(("delete", file_id))
 
+    def set_monitored(self, movie_id, monitored):
+        self.calls.append(("monitored", movie_id, monitored))
+
     def search_movie(self, movie_id):
         self.calls.append(("search", movie_id))
 
@@ -172,7 +175,12 @@ def test_a_fake_english_dub_is_relabelled_listed_and_replaced(app, client, dub_e
     assert radarr.calls == []  # replacing waits for approval by default
     client.post(f"/chapters/dubs/{state.id}/replace")
     better_copy.sweep()  # a copy Radarr would take exists
-    assert radarr.calls == [("failed", 300), ("delete", 55), ("search", 7)]
+    assert radarr.calls == [
+        ("failed", 300),
+        ("monitored", 7, True),  # so a failed download is tried again
+        ("delete", 55),
+        ("search", 7),
+    ]
     assert dub_jobs.review()["to_act"] == []
 
 
