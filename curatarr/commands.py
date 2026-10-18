@@ -210,6 +210,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Checking shows for the wrong version failed")
     try:
+        from . import replacements
+
+        replacements.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Following up replaced films failed")
+    try:
         from . import autofix
 
         autofix.sweep()
