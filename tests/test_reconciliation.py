@@ -14,7 +14,8 @@ from curatarr.services import reconcile_user_state
 
 
 def test_missed_playback_and_favorite_recovered(app, monkeypatch):
-    when = datetime(2026, 1, 1, tzinfo=UTC).isoformat()
+    # After the cleanup proposal below: only viewing since then cancels it.
+    when = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
 
     class FakeJellyfin:
         def users(self):
