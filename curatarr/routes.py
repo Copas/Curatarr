@@ -1093,9 +1093,12 @@ def shows():
         .order_by(Library.name)
         .all()
     )
+    from .services import favorited_by
+
     return render_template(
         "shows.html",
         rows=rows,
+        favorites=favorited_by(r["media"].id for r in rows),
         libraries=libraries,
         library_id=library_id,
         total_on_disk=sum(r["on_disk"] for r in rows),
@@ -1732,9 +1735,12 @@ def titles():
     rows = (
         rows_query.order_by(MediaIdentity.title).offset((page - 1) * 48).limit(48).all()
     )
+    from .services import favorited_by
+
     return render_template(
         "titles.html",
         rows=rows,
+        favorites=favorited_by(m.id for m in rows),
         query=query,
         media_type=media_type,
         page=page,
