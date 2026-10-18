@@ -168,6 +168,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Starting TV-friendly audio failed")
     try:
+        from . import seek_repair
+
+        seek_repair.start()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Starting the seek index repair failed")
+    try:
         from . import filecheck_jobs
 
         filecheck_jobs.start()

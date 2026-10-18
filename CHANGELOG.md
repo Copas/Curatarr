@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fixed: seeking on Roku started some episodes over.** When chapters (or a track change) didn't fit at the start of an MKV, mkvpropedit moved its seek index pointer to the end, where Roku players don't look. Curatarr now rebuilds such a file straight after editing it (a copy with mkvmerge; nothing re-encoded), and **Seeking on Roku** (Settings → Enhance, on by default) repairs files already like that in the background, what's being watched first.
 - **Library → Free up space**: mark films and shows Leaving Soon by hand, sorted by space freed, untouched longest, oldest or most recently watched, and filtered to watched or unwatched titles. Nobody plays it in the notice period and it goes (shows are trimmed to their always-keep episodes).
 - **Remove this film** on a film's title page: marks it Leaving Soon on request, with the poster badge and notice period, then deletes it through Radarr unless someone plays it or you choose Keep.
 - **Fixed: background jobs failing with "database is locked"** on SQLite. Smart Chapters and skip-marker checks on TV episodes left a change unsaved before reading the rest of the series, which then held the database's write lock through transcription and every Ollama call, often for minutes. File checks, dub checks and the web app's saves failed in the meantime. Changes are now saved before any slow step.

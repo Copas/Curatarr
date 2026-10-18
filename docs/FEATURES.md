@@ -220,3 +220,10 @@ Chapter work is heavy (scene detection, transcription, a language model), and th
 - With **Make room for people watching** on, if someone is watching and the machine stays well over the target for 30 seconds, running jobs are suspended for at least two minutes and resume once there's room.
 
 **Chapter jobs at once** (1–8) is only the ceiling. The Activity card on Enhance → Progress says what was measured and decided, for example *Up to 3 chapter jobs right now · CPU 42%, 1 watching (aiming under 70%)*.
+
+## Seeking on Roku
+
+Matroska files carry a seek head that says where the seek index is. When an in-place edit (Curatarr's chapters, a track's language or default flag) doesn't fit at the start of the file, mkvpropedit moves the seek head to the end and leaves a stub at the start that only points there. That's valid Matroska, but Roku players don't follow the stub: they can't find the index, so jumping ahead starts the video over.
+
+Curatarr checks the file after every edit and, if the index is out of reach, rebuilds the file with mkvmerge: every track, chapter, tag and attachment is copied as it is, the copy is checked against the original, and only then replaces it. **Seeking on Roku** (Settings → Enhance, on by default) does the same for files already affected: it reads the start of each MKV once (again only if the file changes), titles being watched first, and rebuilds one or two files per worker cycle, never one that's playing. Enhance shows how many files were checked and repaired.
+
