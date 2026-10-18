@@ -53,3 +53,17 @@ def test_without_quotes_close_matches_still_count():
 def test_quoted_and_loose_words_together():
     hits = _index().search('"fucking place" out')
     assert [h["key"] for h in hits] == ["said_it"]
+
+
+def test_searched_words_are_highlighted_safely():
+    from curatarr.search import highlight
+
+    line = "Fuck this fucking place, <b>I'm</b> out."
+    assert str(highlight(line, '"fuck this fucking place"')) == (
+        "<mark>Fuck</mark> <mark>this</mark> <mark>fucking</mark> "
+        "<mark>place</mark>, &lt;b&gt;I&#39;m&lt;/b&gt; out."
+    )
+    # Loose words in any form; "the" and "and" aren't marked.
+    assert str(highlight("They voted and the votes counted", "the vote")) == (
+        "They <mark>voted</mark> and the <mark>votes</mark> counted"
+    )

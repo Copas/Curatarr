@@ -538,9 +538,10 @@ def api_transcript_search():
         limit = max(1, min(int(request.args.get("limit", 10)), 50))
     except ValueError:
         limit = 10
-    return jsonify(
-        {"query": query, "results": search_transcripts(query, limit) if query else []}
-    )
+    results = search_transcripts(query, limit) if query else []
+    for row in results:
+        row.pop("marked", None)  # the page's highlighting; plain lines suffice here
+    return jsonify({"query": query, "results": results})
 
 
 @bp.get("/api/v1/identity-flags")

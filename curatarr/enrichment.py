@@ -3826,6 +3826,8 @@ def search_transcripts(query: str, limit: int = 10) -> list[dict]:
     )
     index.refresh(rows, _transcript)
     results = []
+    from .search import highlight
+
     for hit in index.search(query, limit):
         state = db.session.get(ChapterState, hit["key"])
         if state is None or state.part is None:
@@ -3841,6 +3843,7 @@ def search_transcripts(query: str, limit: int = 10) -> list[dict]:
                 "timestamp": timestamp(hit["at"])[:8],
                 "exact": hit["exact"],
                 "lines": hit["lines"],
+                "marked": [highlight(line, query) for line in hit["lines"]],
                 "part_id": part.id,
                 "media_id": media.id,
                 "jellyfin_id": jellyfin_item_id(part, media),
