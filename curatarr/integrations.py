@@ -588,11 +588,16 @@ class RadarrClient(Client):
     def add_movie(self, movie):
         return self.request("POST", "/api/v3/movie", json=movie)
 
-    def delete_movie(self, movie_id):
+    def delete_movie(self, movie_id, *, exclude=False):
+        """Delete a film and its files; ``exclude`` keeps Radarr's import
+        lists from adding it straight back."""
         return self.request(
             "DELETE",
             f"/api/v3/movie/{movie_id}",
-            params={"deleteFiles": "true", "addImportExclusion": "false"},
+            params={
+                "deleteFiles": "true",
+                "addImportExclusion": "true" if exclude else "false",
+            },
             destructive=True,
         )
 
