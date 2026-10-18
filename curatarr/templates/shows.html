@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
+{% from '_signals.html' import favorite_star with context %}
 <div class="eyebrow">Library</div><h1>Shows by size</h1>
 <p class="text-secondary">Every TV show on disk, largest first. <strong>Reset frees</strong> is the space a Reset to minimum would regain: everything except the always-keep episodes.{% if is_admin %} Reset opens a confirmation page first, and Curatarr fetches more again when someone watches.{% endif %}</p>
 <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
@@ -20,7 +21,7 @@
 <tbody>
 {% for row in rows %}<tr>
   <td><div class="d-flex align-items-center gap-2"><img src="{{ url_for('main.poster', media_id=row.media.id) }}" width="44" height="66" loading="lazy" alt="">
-    <div><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}<div class="small text-secondary">{{ row.library }} · {{ row.episodes }} episode{{ '' if row.episodes == 1 else 's' }}</div>{% if row.daily %}<div class="small text-warning">Daily show: a reset deletes every episode and Curatarr won't fetch it again</div>{% endif %}</div></div></td>
+    <div><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}{% if favorites.get(row.media.id) %}<div>{{ favorite_star(favorites[row.media.id]) }}</div>{% endif %}<div class="small text-secondary">{{ row.library }} · {{ row.episodes }} episode{{ '' if row.episodes == 1 else 's' }}</div>{% if row.daily %}<div class="small text-warning">Daily show: a reset deletes every episode and Curatarr won't fetch it again</div>{% endif %}</div></div></td>
   <td class="text-end text-nowrap">{{ row.on_disk|size }}</td>
   <td class="text-end text-nowrap">{% if row.frees %}{{ row.frees|size }}{% else %}<span class="text-secondary">—</span>{% endif %}</td>
   <td>{% if row.last_played %}{{ row.last_played|when('date') }}{% if is_admin and row.last_watcher %}<div class="small text-secondary">by {{ row.last_watcher }}</div>{% endif %}{% else %}<span class="text-secondary">Never observed</span>{% endif %}</td>

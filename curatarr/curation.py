@@ -449,6 +449,15 @@ def _load_context():
     }
 
 
+def _favorite_names(states):
+    from .services import setting
+
+    names = setting("jellyfin_user_names", {})
+    return sorted(
+        names.get(s.jellyfin_user_id, s.jellyfin_user_id) for s in states if s.favorite
+    )
+
+
 def signals(media, states=None, now=None):
     """How the household's choices bear on one title (for cleanup and pages)."""
     now = _aware(now or utcnow())
@@ -472,5 +481,6 @@ def signals(media, states=None, now=None):
         "rewatched": rewatched(media, states, ctx["episodes"].get(media.id)),
         "from_list": media.id in ctx["lists"] and not played,
         "requests": requests,
+        "favorites": _favorite_names(states),
         "list_grace_days": opts["list_grace_days"],
     }

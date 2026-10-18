@@ -1,5 +1,7 @@
 {# Why the household's choices change how cleanup treats a title (curation.py). #}
+{% macro favorite_star(people) %}{% if people %}<span class="fav-star" title="Favourite in Jellyfin">{{ icon('star', 12) }} {{ people|join(', ') }}</span>{% endif %}{% endmacro %}
 {% macro household_notes(signals, names=True) %}
+{% if signals.favorites %}<span class="chip chip-star" title="Favourite in Jellyfin">{{ icon('star', 12) }} Favorited by {{ signals.favorites|join(', ') }}</span>{% endif %}
 {% set first = signals.requests[0] if signals.requests else none %}
 {% if first %}<span class="chip chip-accent" title="From Seerr">{{ icon('user', 12) }} Requested by {{ first.user or 'someone' }}{% if first.at %} {{ first.at|when('date') }}{% endif %}{% if signals.request_until %}: kept until they watch it, up to {{ signals.request_until|when('date') }}{% endif %}</span>{% endif %}
 {% if signals.season %}<span class="chip chip-accent" title="Seasonal shelf">{{ icon('calendar', 12) }} {{ signals.season }}: kept until {{ signals.season_until|when('date') }}</span>{% endif %}
