@@ -90,6 +90,10 @@ def test_radarr_timeout_after_delete_is_reconciled_without_second_delete(
         def request(self, _method, _path):
             return {"tmdbId": 123}
 
+        def list_movies(self):
+
+            return []
+
         def delete_movie(self, movie_id):
             deleted.append(movie_id)
             raise IntegrationError("Ambiguous timeout")
