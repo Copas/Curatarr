@@ -137,6 +137,9 @@ class FakeArr:
     def delete_episode_file(self, file_id):
         self.calls.append(("delete episode", file_id))
 
+    def set_monitored(self, movie_id, monitored):
+        self.calls.append(("monitored", movie_id, monitored))
+
     def search_movie(self, movie_id):
         self.calls.append(("search", movie_id))
 
@@ -189,7 +192,12 @@ def test_burned_in_subtitles_are_listed_and_replaced(client, check_env):
     client.post(f"/chapters/problems/{state.id}/replace")
     assert arr.calls == []  # it looks for a better copy first, in the worker
     assert better_copy.sweep() == 1
-    assert arr.calls == [("failed", 300), ("delete", 55), ("search", 7)]
+    assert arr.calls == [
+        ("failed", 300),
+        ("monitored", 7, True),  # so a failed download is tried again
+        ("delete", 55),
+        ("search", 7),
+    ]
     assert filecheck_jobs.counts() == {"problems_to_act": 0, "files_checked": 1}
     assert filecheck_jobs.sweep() == 0  # not checked again until it's replaced
     part.size_bytes = 2000
