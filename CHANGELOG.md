@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Leaving Soon titles no longer sit in Overview's Needs you.** They're decided (they go unless someone watches), so Overview shows one line instead: how many, how much space, and when the first goes, linking to Review.
 - **Search results highlight what was searched**: the words of a quoted phrase, and the other search words in any form.
 - **Search by what was said: words in "quotes" are an exact phrase**, said as written (whole words, in order). Without quotes, lines with most of the words still match as before.
 - **A replaced film is watched until its new copy arrives.** Replacing a film (no English audio, burned-in subtitles, a broken file) deleted it and asked Radarr once; when that download failed, or the film was unmonitored in Radarr, it was left with no file. Now the film is monitored first, searched again every 6 hours if nothing is downloading (3 searches), put back to how it was when a copy arrives, and Activity says so when none does.
