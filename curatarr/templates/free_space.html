@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% from '_confirm.html' import confirm_submit %}
+{% from '_confirm.html' import confirm_submit %}{% from '_signals.html' import favorite_star with context %}
 {% block content %}
 <div class="eyebrow">Library</div><h1>Free up space</h1>
 <p class="text-secondary">Pick films and shows to send on their way. Marking one <strong>Leaving Soon</strong> puts the banner on its poster in Jellyfin; if nobody plays any of it during the notice period it goes: a film is deleted through Radarr, and a show is trimmed to its always-keep episodes (Curatarr fetches more once someone watches again). Playing it, or Keep, cancels.</p>
@@ -41,7 +41,7 @@
 {% for row in rows %}{% set c = row.candidate %}{% set leaving = c and c.state in ('LEAVING_SOON', 'APPROVED', 'EXECUTING') %}<tr>
   <td class="text-center">{% if not leaving and not row.never_purge and not row.held %}<input class="form-check-input" type="checkbox" name="media_id" value="{{ row.media.id }}" form="leaving-form" aria-label="Mark {{ row.media.title }}">{% endif %}</td>
   <td><div class="d-flex align-items-center gap-2"><img src="{{ url_for('main.poster', media_id=row.media.id) }}" width="44" height="66" loading="lazy" alt="">
-    <div><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}<div class="small text-secondary">{{ 'Show' if row.media.media_type == 'series' else 'Film' }} · {{ row.library }}{% if row.media.media_type == 'series' and row.frees < row.on_disk %} · keeps {{ (row.on_disk - row.frees)|size }}{% endif %}</div>{% if row.daily %}<div class="small text-warning">Daily show: trimming deletes every episode and Curatarr won't fetch it again</div>{% endif %}</div></div></td>
+    <div><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media) }}{% if row.favorites %}<div>{{ favorite_star(row.favorites) }}</div>{% endif %}<div class="small text-secondary">{{ 'Show' if row.media.media_type == 'series' else 'Film' }} · {{ row.library }}{% if row.media.media_type == 'series' and row.frees < row.on_disk %} · keeps {{ (row.on_disk - row.frees)|size }}{% endif %}</div>{% if row.daily %}<div class="small text-warning">Daily show: trimming deletes every episode and Curatarr won't fetch it again</div>{% endif %}</div></div></td>
   <td class="text-end text-nowrap">{{ row.frees|size }}</td>
   <td class="text-nowrap">{% if row.added %}{{ row.added|when('date') }}{% else %}<span class="text-secondary">—</span>{% endif %}</td>
   <td>{% if row.last_played %}{{ row.last_played|when('date') }}<div class="small text-secondary">{{ row.viewers|join(', ') }}{% if row.plays > 1 %} · {{ row.plays }} plays{% endif %}</div>{% else %}<span class="text-secondary">Nobody yet</span>{% endif %}</td>

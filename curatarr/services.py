@@ -2497,6 +2497,7 @@ def free_space_rows(
             PurgeCandidate.state.in_(ACTIVE_CANDIDATE_STATES)
         )
     }
+    favorites = favorited_by(media_rows)
     names = setting("jellyfin_user_names", {})
     global_values = setting("global_policy", {})
 
@@ -2547,6 +2548,7 @@ def free_space_rows(
                 "viewers": sorted({names.get(p[1], p[1]) for p in seen}),
                 "plays": sum(p[2] for p in seen),
                 "candidate": candidates.get(media_id),
+                "favorites": favorites.get(media_id, []),
                 "never_purge": policy["never_purge"],
                 "dry_run": policy["dry_run"],
                 "notice_days": policy["notice_days"],
@@ -2602,3 +2604,19 @@ def free_space_view(user_id, args=None):
             db.session.commit()
         return view
     return setting(key, {}) or {}
+
+
+def favorited_by(media_ids) -> dict:
+    """{media id: [names of people who favourited it in Jellyfin]}."""
+    ids = list(media_ids)
+    if not ids:
+        return {}
+    names = setting("jellyfin_user_names", {})
+    found = {}
+    for media_id, user_id in db.session.query(
+        UserMediaState.media_identity_id, UserMediaState.jellyfin_user_id
+    ).filter(
+        UserMediaState.media_identity_id.in_(ids), UserMediaState.favorite.is_(True)
+    ):
+        found.setdefault(media_id, []).append(names.get(user_id, user_id))
+    return {media_id: sorted(people) for media_id, people in found.items()}
