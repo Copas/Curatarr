@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Remove this film** on a film's title page: marks it Leaving Soon on request, with the poster badge and notice period, then deletes it through Radarr unless someone plays it or you choose Keep.
 - **Fixed: background jobs failing with "database is locked"** on SQLite. Smart Chapters and skip-marker checks on TV episodes left a change unsaved before reading the rest of the series, which then held the database's write lock through transcription and every Ollama call, often for minutes. File checks, dub checks and the web app's saves failed in the meantime. Changes are now saved before any slow step.
 - **Fixed: "Reset to minimum" monitored specials that were never downloaded.** Specials are left alone, so they're kept, but monitoring them had Sonarr fetch them for a show that was meant to stay at a few episodes. Only specials already downloaded are monitored again now.
 - **TV-friendly audio no longer forgets a track it added** when the database is briefly busy: the record is retried once, since the file is already rewritten and Radarr then reports the new track.
