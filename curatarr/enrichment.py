@@ -89,7 +89,7 @@ MAX_ATTEMPTS = 3
 RETRY_MINUTES = 30
 DEFER_MINUTES = 15
 LEASE_SECONDS = 600
-RECAP_BATCH = 100  # recap checks run back to back in one slot, like scans
+RECAP_BATCH = 100  # recap checks run back to back in a slot, a batch per slot
 SCAN_BATCH = 200
 IMPORT_COMMANDS = {
     "DownloadedEpisodesScan",
@@ -1604,6 +1604,7 @@ def _part_label(part):
 # --- Dispatch ---------------------------------------------------------------
 
 _threads: dict[str, threading.Thread] = {}
+_batches: dict[str, set] = {}  # the jobs each running thread was given
 _threads_lock = threading.Lock()
 
 
@@ -1611,6 +1612,7 @@ def _alive():
     with _threads_lock:
         for key in [k for k, t in _threads.items() if not t.is_alive()]:
             del _threads[key]
+            _batches.pop(key, None)
         return dict(_threads)
 
 
@@ -1882,32 +1884,59 @@ def dispatch(*, synchronous=False, llm=None) -> int:
     free = decision.limit - busy
     if free <= 0:
         return started
-    if "recap" not in running:
-        # Recap checks often finish in milliseconds (a series without recaps is
-        # skipped), so one at a time per 15-second cycle would crawl. They run
-        # back to back in one slot, leaving the rest to chapter jobs.
-        recaps = [row.id for row in _due_jobs(RECAP_BATCH, scans=False, recaps=True)]
-        if recaps:
-            started += len(recaps)
-            free -= 1
+    recap_slots = [key for key in running if key.startswith("recap")]
+    taken = set().union(*(_batches.get(key, set()) for key in recap_slots))
+
+    def start_recaps(slot_count) -> int:
+        # Skip-marker checks run back to back in batches, one batch per slot;
+        # each batch has episodes of its own so slots never wait on each other.
+        nonlocal started
+        opened = 0
+        while opened < slot_count:
+            ids = [
+                row.id
+                for row in _due_jobs(RECAP_BATCH + len(taken), scans=False, recaps=True)
+                if row.id not in taken
+            ][:RECAP_BATCH]
+            if not ids:
+                break
+            key = next(
+                f"recap-{n}" for n in range(1, 100) if f"recap-{n}" not in running
+            )
+            running[key] = None
+            recap_slots.append(key)
+            taken.update(ids)
+            started += len(ids)
+            opened += 1
             if synchronous:
-                _run_leased(app, recaps, llm)
+                _run_leased(app, ids, llm)
             else:
-                _start("recap", app, recaps, llm)
+                _start(key, app, ids, llm)
+        return opened
+
+    if not recap_slots:
+        # Always one slot for skip-marker checks, so they never stall behind
+        # a long run of chapter jobs.
+        free -= start_recaps(1)
     if free <= 0:
         return started
     for row in _due_jobs(free, scans=False):
         if row.id in running:
             continue
         started += 1
+        free -= 1
         if synchronous:
             _run_leased(app, [row.id], llm)
         else:
             _start(row.id, app, [row.id], llm)
+    if free > 0:
+        # Room left over (nobody watching, few chapter jobs): more batches.
+        start_recaps(free)
     return started
 
 
 def _start(key, app, state_ids, llm):
+    _batches[key] = set(state_ids)
     thread = threading.Thread(
         target=_run_leased,
         args=(app, state_ids, llm),

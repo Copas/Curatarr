@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Skip-marker checks use every free job slot.** They ran in a single slot whatever the job limit, so with thousands queued and few chapter jobs, "up to 5 at a time" meant one. Now one slot is always theirs, chapter jobs come next, and any slots left over take more batches (each with episodes of its own).
 - **Overview's Library care matches Enhance**: the same rows with the same names, TV-friendly audio split into films and episodes (it was one combined figure), Seeking on Roku added, and the queue labelled as jobs.
 - **The backdrop's Leaving Soon tag sits lower and further in**, below the header buttons phone apps draw over a title's backdrop and inside the sides they crop.
 - **Leaving Soon titles no longer sit in Overview's Needs you.** They're decided (they go unless someone watches), so Overview shows one line instead: how many, how much space, and when the first goes, linking to Review.
