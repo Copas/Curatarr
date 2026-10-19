@@ -2473,3 +2473,33 @@ def test_skip_marker_checks_use_every_free_slot(app, media_env, monkeypatch):
     assert len(batches) == 3  # every free slot, not just one
     flat = [i for ids in batches for i in ids]
     assert len(flat) == len(set(flat))  # no episode in two batches
+
+
+def test_a_film_radarr_no_longer_has_closes_instead_of_waiting(media_env, monkeypatch):
+    """Radarr answering 404 means the film was removed, not that the share is
+    offline: the job closes rather than waiting a day."""
+    files, arr = media_env
+    part, state = _queued_missing(arr, files, {"id": 7})
+
+    def gone(movie_id):
+        raise IntegrationError("Not found", status_code=404)
+
+    monkeypatch.setattr(arr, "movie", gone)
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.get(ChapterState, state.id)
+    assert state.job_state == "idle" and state.chapter_error is None
+    assert db.session.get(MediaPart, part.id).has_file is False
+
+
+def test_a_chapter_job_waiting_to_retry_doesnt_hold_back_checks(media_env, monkeypatch):
+    """A job waiting on an unreachable file counted as a chapter backlog, so
+    checks that need a transcript never started while it waited."""
+    files, arr = media_env
+    _part, waiting = _queued_missing(arr, files, None)
+    waiting.next_attempt_at = utcnow() + timedelta(minutes=10)
+    db.session.commit()
+    assert not enrichment._chapter_backlog()
+    waiting.next_attempt_at = None
+    db.session.commit()
+    assert enrichment._chapter_backlog()
