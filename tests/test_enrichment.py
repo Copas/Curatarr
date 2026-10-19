@@ -2520,3 +2520,18 @@ def test_scan_reads_only_new_files_unless_asked_for_all(app, client, media_env):
     client.post("/chapters/scan", data={"all": "1"})
     db.session.expire_all()
     assert db.session.query(ChapterState).one().job_state == "queued"
+
+
+def test_skip_marker_checks_have_a_progress_bar(app, client, media_env):
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    for part in parts:
+        enrichment.request(part, "recap")
+    first = db.session.query(ChapterState).filter_by(media_part_id=parts[0].id).one()
+    first.job_state, first.requested_action = "idle", None
+    first.markers_checked_at = utcnow()
+    db.session.commit()
+    forecast = enrichment.marker_forecast()
+    assert forecast["done"] == 1 and forecast["remaining"] == len(parts) - 1
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "skip-marker checks done since" in page
