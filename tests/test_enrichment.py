@@ -2535,3 +2535,16 @@ def test_skip_marker_checks_have_a_progress_bar(app, client, media_env):
     assert forecast["done"] == 1 and forecast["remaining"] == len(parts) - 1
     page = client.get("/chapters").get_data(as_text=True)
     assert "skip-marker checks done since" in page
+
+
+def test_overview_shows_the_skip_marker_progress(app, client, media_env):
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    for part in parts:
+        enrichment.request(part, "recap")
+    for part in parts:
+        enrichment.state_for(part).duration_seconds = 1800.0  # scanned
+    db.session.commit()
+    page = client.get("/").get_data(as_text=True)
+    care = page.split('id="care-heading"')[1].split("</section>")[0]
+    assert f"{len(parts)} skip-marker checks to go" in care
