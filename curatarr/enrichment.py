@@ -754,7 +754,11 @@ def _arr_file(part, media):
                 or {}
             )
             return True, file.get("path")
-    except (IntegrationError, KeyError):
+    except IntegrationError as exc:
+        if exc.status_code == 404:
+            return False, None  # removed from Radarr or Sonarr: gone, not offline
+        return None
+    except KeyError:
         return None
     return None
 
@@ -1703,7 +1707,10 @@ def _due_jobs(limit, *, scans, recaps=False):
 
 
 def _chapter_backlog() -> bool:
-    """Chapter jobs (not checks or subtitles) are waiting or running."""
+    """Chapter jobs (not checks or subtitles) are running or ready to. One
+    waiting to retry later (a file that can't be reached) doesn't count: it
+    would hold every check back for as long as it waits."""
+    now = utcnow()
     return (
         db.session.query(ChapterState.id)
         .filter(
@@ -1711,6 +1718,11 @@ def _chapter_backlog() -> bool:
             or_(
                 ChapterState.requested_action.is_(None),
                 ChapterState.requested_action.in_(("auto", "generate", "regenerate")),
+            ),
+            or_(
+                ChapterState.job_state == "running",
+                ChapterState.next_attempt_at.is_(None),
+                ChapterState.next_attempt_at <= now,
             ),
         )
         .first()
