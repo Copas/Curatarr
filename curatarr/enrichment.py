@@ -2066,6 +2066,53 @@ FORECAST_LONG_WINDOW = timedelta(hours=72)
 FORECAST_MIN_SAMPLES = 3
 
 
+def marker_forecast(now=None) -> dict | None:
+    """Progress and estimated finish for queued skip-marker checks. The pace
+    is the last hour's (they now run in several slots, so older rates mislead),
+    or the last day's when the last hour has too few to tell."""
+    now = now or utcnow()
+    pending = db.session.query(ChapterState).filter(
+        ChapterState.job_state.in_(("queued", "running")),
+        ChapterState.requested_action == "recap",
+    )
+    remaining = pending.count()
+    if not remaining:
+        return None
+    started = (
+        _as_datetime(
+            pending.with_entities(func.min(ChapterState.requested_at)).scalar()
+        )
+        or now
+    )
+
+    def checked_since(moment):
+        return (
+            db.session.query(func.count(ChapterState.id))
+            .filter(ChapterState.markers_checked_at >= moment)
+            .scalar()
+        )
+
+    done = checked_since(started)
+    rate = None
+    for window in (timedelta(hours=1), FORECAST_WINDOW):
+        since = max(now - window, started)
+        hours = (now - since).total_seconds() / 3600
+        count = checked_since(since)
+        if count >= FORECAST_MIN_SAMPLES and hours > 0:
+            rate = count / hours
+            break
+    eta = now + timedelta(hours=remaining / rate) if rate else None
+    return {
+        "remaining": remaining,
+        "done": done,
+        "percent": round(100 * done / (done + remaining), 1),
+        "per_hour": rate,
+        "finishes_at": eta,
+        "left": _duration_words(eta - now) if eta else None,
+        "started": started,
+    }
+
+
 def job_forecast(now=None) -> dict | None:
     """Progress and estimated finish for the queued chapter jobs, from the recent pace.
 
@@ -2231,6 +2278,7 @@ def job_activity(recent=10) -> dict:
         "waiting": waiting,
         "finished": finished,
         "forecast": job_forecast(),
+        "marker_forecast": marker_forecast(),
     }
 
 
