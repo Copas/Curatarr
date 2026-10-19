@@ -2066,6 +2066,12 @@ FORECAST_LONG_WINDOW = timedelta(hours=72)
 FORECAST_MIN_SAMPLES = 3
 
 
+def _overall():
+    from .progress import overall
+
+    return overall()
+
+
 def marker_forecast(now=None) -> dict | None:
     """Progress and estimated finish for queued skip-marker checks. The pace
     is the last hour's (they now run in several slots, so older rates mislead),
@@ -2279,6 +2285,7 @@ def job_activity(recent=10) -> dict:
         "finished": finished,
         "forecast": job_forecast(),
         "marker_forecast": marker_forecast(),
+        "overall": _overall(),
     }
 
 
