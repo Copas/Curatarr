@@ -16,21 +16,19 @@ from .models import LifecycleAction, utcnow
 PACE_WINDOW = timedelta(hours=24)
 
 
-def _per_hour(action_type, now) -> float | None:
-    """How many of an Activity entry were logged an hour over the last day,
-    or the last three when the last day has too few to tell."""
-    for window in (PACE_WINDOW, 3 * PACE_WINDOW):
-        count = (
-            db.session.query(func.count(LifecycleAction.id))
-            .filter(
-                LifecycleAction.action_type == action_type,
-                LifecycleAction.created_at >= now - window,
-            )
-            .scalar()
+def _per_hour(action_types, now) -> float | None:
+    """How many of these Activity entries were logged an hour over the last
+    day. None when there were too few: an older pace would describe work that
+    has since sped up or stopped."""
+    count = (
+        db.session.query(func.count(LifecycleAction.id))
+        .filter(
+            LifecycleAction.action_type.in_(action_types),
+            LifecycleAction.created_at >= now - PACE_WINDOW,
         )
-        if count >= 3:
-            return count / (window.total_seconds() / 3600)
-    return None
+        .scalar()
+    )
+    return count / (PACE_WINDOW.total_seconds() / 3600) if count >= 3 else None
 
 
 def overall(now=None) -> dict | None:
@@ -53,36 +51,31 @@ def overall(now=None) -> dict | None:
                     "approximate": False,
                 }
             )
+    # TV-friendly audio and the seek repair share one limit (rebuilds wait for
+    # Jellyfin's thumbnails), so they get one estimate from their joint pace.
+    rebuilds_left, rebuild_parts = 0.0, []
     audio = compat_audio.progress()
     if audio and audio["on"]:
         left = audio["films"]["left"] + audio["episodes"]["left"]
         if left:
-            rate = _per_hour("compat_audio_added", now)
-            parts.append(
-                {
-                    "name": "TV-friendly audio",
-                    "done": audio["done"],
-                    "left": left,
-                    "finishes_at": now + timedelta(hours=left / rate) if rate else None,
-                    "approximate": True,  # paced by Jellyfin's thumbnails
-                }
+            rebuilds_left += left
+            rebuild_parts.append(
+                {"name": "TV-friendly audio", "done": audio["done"], "left": left}
             )
     seek = seek_repair.progress()
     if seek and seek["on"] and seek["left"]:
         # Checking a file takes a moment; the time is in rebuilding the share
-        # of them that need it, at the pace rebuilds have been going.
+        # of them that need it.
         share = seek["rebuilt"] / seek["checked"] if seek["checked"] else 0.25
-        rate = _per_hour("seek_index_repaired", now)
-        rebuilds = seek["left"] * share
-        parts.append(
-            {
-                "name": "Seeking on Roku",
-                "done": seek["checked"],
-                "left": seek["left"],
-                "finishes_at": now + timedelta(hours=rebuilds / rate) if rate else None,
-                "approximate": True,
-            }
+        rebuilds_left += seek["left"] * share
+        rebuild_parts.append(
+            {"name": "Seeking on Roku", "done": seek["checked"], "left": seek["left"]}
         )
+    if rebuild_parts:
+        rate = _per_hour(("compat_audio_added", "seek_index_repaired"), now)
+        finishes = now + timedelta(hours=rebuilds_left / rate) if rate else None
+        for part in rebuild_parts:
+            parts.append(part | {"finishes_at": finishes, "approximate": True})
     if not parts:
         return None
     done = sum(p["done"] for p in parts)
