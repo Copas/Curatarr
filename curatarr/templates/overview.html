@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% from '_replace_actions.html' import replace_actions, search_actions with context %}
 {% block content %}
+{% from '_overall_progress.html' import overall_bar with context %}
 <div class="page-heading">
   <div><div class="eyebrow">Home</div><h1>Overview</h1></div>
   {% if is_admin %}
@@ -22,6 +23,7 @@
 {% else %}No reconciliation has run yet. Click Discover after adding API keys.{% endif %}
 </div>
 {% endif %}
+{% if care and care.activity.overall %}<a class="card p-3 mb-3 d-block text-reset text-decoration-none" href="{{ url_for('main.chapter_maintenance') }}" aria-label="Ongoing work, on Enhance">{{ overall_bar(care.activity.overall) }}{% set a = care.activity %}<span class="small text-secondary">{% if a.paused_since %}Paused, making room for people watching{% elif a.running %}{{ a.running|length }} job{{ '' if a.running|length == 1 else 's' }} running now{% endif %}</span></a>{% endif %}
 <div class="row g-3 mb-4">
   <section class="{{ 'col-lg-7' if care else 'col-12' }}" aria-labelledby="needs-heading"><div class="card p-3 h-100">
     <div class="d-flex justify-content-between align-items-baseline mb-2"><h2 class="section-label mb-0" id="needs-heading">Needs you</h2>{% if needs %}<span class="chip chip-accent">{{ needs|length }}</span>{% endif %}</div>
