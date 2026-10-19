@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Overview's Library care shows the progress bars too**: chapter jobs and skip-marker checks still to go, with about how long.
 - **Skip-marker checks get a progress bar** on Enhance with a finish estimate from the last hour's pace. The existing bar only counted chapter jobs, so it vanished once those were done although thousands of checks were still queued.
 - **Enhance's To do buttons say what they'd do.** "Scan N new files" scans only files not scanned yet (new files are scanned on their own anyway), with a separate "Rescan all files" that asks first; "Generate subtitles for N" and "Check skip markers on N more" show how many they'd add and appear only when there's something to add; "already queued" is plain text, not a button-like chip.
 - **Fixed: skip-marker checks could stop entirely.** A chapter job waiting on a file that couldn't be found counted as chapter work in progress, which holds back checks that need new transcription, all of them here, for as long as it waited. Waiting jobs no longer count. And a film or episode Radarr or Sonarr answer "not found" for (removed) closes its job instead of waiting a day for a share that isn't offline.

@@ -51,7 +51,10 @@
     {% for label, have, total in rows %}{% if total %}
     <div class="care-row"><div class="d-flex justify-content-between small"><span>{{ label }}</span><span class="text-secondary">{{ (have * 100 / total)|round|int }}%</span></div><progress class="care-bar" value="{{ have }}" max="{{ total }}">{{ (have * 100 / total)|round|int }}%</progress></div>
     {% endif %}{% endfor %}
-    <p class="care-now small mb-0">{% if a.paused_since %}<span class="chip">Paused</span> making room for people watching{% elif a.running %}<span class="chip chip-on">{{ a.running|length }} running</span>{% if a.forecast and a.forecast.left %} · about {{ a.forecast.left }} to go{% endif %}{% elif a.queued_total %}<span class="chip">{{ a.queued_total|commas }} jobs queued</span>{% else %}<span class="chip">Idle</span>{% endif %}{% if c.generated %} · {{ c.generated|commas }} chapters added so far{% endif %}</p>
+    {% for f, what in [(a.forecast, 'chapter jobs'), (a.marker_forecast, 'skip-marker checks')] %}{% if f %}
+    <div class="care-row"><div class="d-flex justify-content-between small"><span>{{ f.remaining|commas }} {{ what }} to go</span><span class="text-secondary">{% if f.left %}about {{ f.left }} left{% else %}measuring the pace…{% endif %}</span></div><progress class="care-bar" value="{{ f.done }}" max="{{ f.done + f.remaining }}">{{ f.percent }}%</progress></div>
+    {% endif %}{% endfor %}
+    <p class="care-now small mb-0">{% if a.paused_since %}<span class="chip">Paused</span> making room for people watching{% elif a.running %}<span class="chip chip-on">{{ a.running|length }} running</span>{% elif a.queued_total %}<span class="chip">{{ a.queued_total|commas }} jobs queued</span>{% else %}<span class="chip">Idle</span>{% endif %}{% if c.generated %} · {{ c.generated|commas }} chapters added so far{% endif %}</p>
   </a></section>
   {% endif %}
 </div>
