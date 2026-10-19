@@ -2445,3 +2445,31 @@ def test_slow_episode_work_never_holds_the_write_lock(
     enrichment.dispatch(synchronous=True, llm=Model())
     assert seen
     assert [what for what, free in seen if not free] == []
+
+
+def test_skip_marker_checks_use_every_free_slot(app, media_env, monkeypatch):
+    """With few chapter jobs and nobody watching, skip-marker checks shouldn't
+    be held to one slot while the rest sit idle."""
+    from curatarr import adaptive
+
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    for part in parts:
+        enrichment.request(part, "recap")
+    monkeypatch.setattr(enrichment, "RECAP_BATCH", 1)
+    monkeypatch.setattr(
+        adaptive.controller,
+        "decide",
+        lambda *a, **k: adaptive.Decision(3, False, 0.85, "test"),
+    )
+    monkeypatch.setattr(enrichment, "playback_sessions", list)
+    started = {}
+    monkeypatch.setattr(
+        enrichment, "_start", lambda key, app, ids, llm: started.update({key: ids})
+    )
+    enrichment._threads.clear()
+    enrichment.dispatch()
+    batches = [ids for key, ids in started.items() if key.startswith("recap")]
+    assert len(batches) == 3  # every free slot, not just one
+    flat = [i for ids in batches for i in ids]
+    assert len(flat) == len(set(flat))  # no episode in two batches
