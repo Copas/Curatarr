@@ -228,11 +228,11 @@ def chapter_activity_fragment():
 @bp.post("/chapters/scan")
 def chapter_scan():
     library_id = request.form.get("library") or None
-    count = queue_scan(library_id)
+    count = queue_scan(library_id, everything=request.form.get("all") == "1")
     if count:
         flash(
-            f"Queued {count} files for a read-only chapter scan. The worker "
-            "inspects them in the background; reload to see the counts.",
+            f"Queued {count} file{'' if count == 1 else 's'} for a read-only scan. "
+            "The worker reads them in the background; reload to see the counts.",
             "success",
         )
     elif not file_locations_known():
@@ -247,7 +247,7 @@ def chapter_scan():
             "info",
         )
     else:
-        flash("Every file is already scanned or has a chapter job queued.", "info")
+        flash("Every file is already scanned or has a job queued.", "info")
     return redirect(url_for("main.chapter_maintenance", library=library_id))
 
 

@@ -879,7 +879,10 @@ def test_process_all_libraries_queues_only_enabled_ones(app, client, media_env):
     assert [state.media_part_id for state in queued] == [part.id]
     # Everything is queued now: nothing to add, so no button, just a note.
     files_page = client.get("/chapters/files").text
-    assert "Process all…" not in files_page and "All 1 already queued" in files_page
+    assert (
+        "Process all…" not in files_page
+        and "The 1 file needing chapters is already queued" in files_page
+    )
     confirm = client.get("/chapters/libraries/all/process").text
     assert "Queue 0 files" in confirm and "1 more is already queued" in confirm
 
@@ -1410,10 +1413,10 @@ def test_find_recaps_button_hides_while_everything_is_queued(app, client, media_
     files, _arr = media_env
     _series_with_recaps(files)
     page = client.get("/chapters").get_data(as_text=True)
-    assert "Check skip markers</button>" in page
+    assert "Check skip markers on 4 more</button>" in page
     assert enrichment.queue_recaps() == 4
     page = client.get("/chapters").get_data(as_text=True)
-    assert "Check skip markers</button>" not in page
+    assert "Check skip markers on" not in page
     assert "4 queued" in page
 
 
@@ -2503,3 +2506,17 @@ def test_a_chapter_job_waiting_to_retry_doesnt_hold_back_checks(media_env, monke
     waiting.next_attempt_at = None
     db.session.commit()
     assert enrichment._chapter_backlog()
+
+
+def test_scan_reads_only_new_files_unless_asked_for_all(app, client, media_env):
+    files, _arr = media_env
+    _library, _media, part = _movie()
+    files.add(part.file_path)
+    assert enrichment.queue_scan() == 1
+    enrichment.dispatch(synchronous=True)
+    page = client.get("/chapters").get_data(as_text=True)
+    assert "new file" not in page and "Rescan all 1 files" in page
+    assert enrichment.queue_scan() == 0  # already scanned
+    client.post("/chapters/scan", data={"all": "1"})
+    db.session.expire_all()
+    assert db.session.query(ChapterState).one().job_state == "queued"

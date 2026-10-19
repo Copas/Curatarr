@@ -199,7 +199,8 @@ def preview_command(target, library_name, mode, llm_model, whisper_model, as_jso
 @chapters_group.command("scan")
 @click.option("--library", "library_name", help="Only this library")
 @click.option("--now", is_flag=True, help="Run the scan here instead of the worker")
-def scan_command(library_name, now):
+@click.option("--all", "everything", is_flag=True, help="Every file, not only new ones")
+def scan_command(library_name, now, everything):
     """Inspect files for existing chapters (read-only; nothing is generated)."""
     library_id = None
     if library_name:
@@ -207,7 +208,7 @@ def scan_command(library_name, now):
         if not library:
             raise click.ClickException(f"No library named {library_name}")
         library_id = library.id
-    count = queue_scan(library_id)
+    count = queue_scan(library_id, everything=everything)
     click.echo(f"Queued {count} files for a chapter scan")
     if now:
         while dispatch(synchronous=True):
