@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fixed: TV-friendly audio stalled behind the Roku seek repair.** Both wait for Jellyfin's thumbnails under one limit, and the repair (thousands of files) took every free spot. It now leaves the last spot for audio while audio has work. The overall estimate also treats the two as one queue with a joint pace from the last day, and names work that finished nothing in a day instead of using an older, slower pace (which had said 4 days).
 - **One overall progress bar** for everything Curatarr is working through (chapter jobs, skip-marker checks, TV-friendly audio, the Roku seek repair): items done and left, and when the slowest should finish, saying which one that is and when its time is rough (rebuilds wait for Jellyfin's thumbnails). It sits at the top of Overview and of Enhance's Activity; the separate bars stay below.
 - **Overview's Library care shows the progress bars too**: chapter jobs and skip-marker checks still to go, with about how long.
 - **Skip-marker checks get a progress bar** on Enhance with a finish estimate from the last hour's pace. The existing bar only counted chapter jobs, so it vanished once those were done although thousands of checks were still queued.
