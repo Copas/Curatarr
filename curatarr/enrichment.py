@@ -1980,12 +1980,15 @@ def _parts_query(library_id=None):
     return query
 
 
-def queue_scan(library_id=None) -> int:
+def queue_scan(library_id=None, *, everything=False) -> int:
+    """Queue a read-only scan of files not scanned yet, or of every file."""
     count = 0
     for part in _parts_query(library_id):
         state = state_for(part)
         if state.job_state != "idle":
             continue
+        if not everything and state.duration_seconds is not None:
+            continue  # scanned already
         state.job_state = "queued"
         state.requested_action = "scan"
         state.requested_at = utcnow()
