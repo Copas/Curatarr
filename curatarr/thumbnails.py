@@ -125,12 +125,13 @@ def waiting() -> list[dict]:
     return still
 
 
-def room() -> bool:
-    """Whether another rebuild may start now."""
+def room(*, leave: int = 0) -> bool:
+    """Whether another rebuild may start now; ``leave`` keeps that many spots
+    for others (the seek repair leaves one for TV-friendly audio)."""
     if not enabled():
         return True
     try:
-        return len(waiting()) < MAX_WAITING
+        return len(waiting()) < MAX_WAITING - leave
     except IntegrationError:
         return False  # Jellyfin is unreachable: its refresh would fail too
 

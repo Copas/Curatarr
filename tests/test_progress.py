@@ -92,3 +92,37 @@ def test_overview_puts_ongoing_work_at_the_top(app, client, monkeypatch):
     assert page.index("Everything Curatarr is working through") < page.index(
         'id="needs-heading"'
     )
+
+
+def test_rebuilds_share_one_estimate_from_their_joint_pace(app, monkeypatch):
+    from curatarr import db
+    from curatarr.models import LifecycleAction
+
+    now = utcnow()
+    for n in range(24):  # one rebuild an hour over the last day, all seek repairs
+        db.session.add(
+            LifecycleAction(
+                idempotency_key=f"k{n}",
+                action_type="seek_index_repaired",
+                state="SUCCEEDED",
+                reason_text="Rebuilt",
+                created_at=now - timedelta(hours=n, minutes=1),
+            )
+        )
+    db.session.commit()
+    monkeypatch.setattr(enrichment, "job_forecast", lambda now=None: None)
+    monkeypatch.setattr(enrichment, "marker_forecast", lambda now=None: None)
+    monkeypatch.setattr(
+        compat_audio,
+        "progress",
+        lambda: {"on": True, "done": 1, "films": {"left": 0}, "episodes": {"left": 4}},
+    )
+    monkeypatch.setattr(
+        seek_repair,
+        "progress",
+        lambda: {"on": True, "checked": 100, "rebuilt": 10, "left": 60},
+    )
+    result = progress.overall(now)
+    # 4 audio rebuilds + 60 files x 10% needing one = 10 rebuilds at 1 an hour.
+    assert result["time_left"] == "10 h" and result["approximate"]
+    assert result["unknown"] == []

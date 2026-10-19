@@ -124,3 +124,19 @@ def test_a_rebuild_while_editing_in_place_counts_too(app, monkeypatch):
     )
     assert rebuilt == ["/local/Loud.mkv"]
     assert [w["item"] for w in setting(thumbnails.KEY)] == ["loud"]
+
+
+def test_the_seek_repair_leaves_the_last_spot_for_tv_friendly_audio(app, monkeypatch):
+    from curatarr import compat_audio, seek_repair
+
+    _jellyfin(monkeypatch)
+    for n in range(2):
+        thumbnails.note_rebuilt(Part(f"item{n}"), None, had_thumbnails=True)
+    monkeypatch.setattr(compat_audio, "enabled", lambda: True)
+    set_setting(compat_audio.REMAINING_KEY, {"films": 0, "episodes": 5})
+    db.session.commit()
+    assert thumbnails.room()  # audio may take the third spot
+    assert not thumbnails.room(leave=seek_repair._audio_waiting())
+    set_setting(compat_audio.REMAINING_KEY, {"films": 0, "episodes": 0})
+    db.session.commit()
+    assert thumbnails.room(leave=seek_repair._audio_waiting())

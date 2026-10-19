@@ -2,5 +2,5 @@
 {% macro overall_bar(o) %}{% if o %}<div class="overall-progress mb-1">
   <div class="d-flex flex-wrap justify-content-between gap-2 mb-1"><span><strong>Everything Curatarr is working through</strong> · {{ o.left|commas }} to go</span><span>{% if o.time_left %}{{ 'Roughly' if o.approximate else 'About' }} <strong>{{ o.time_left }}</strong> left · done around {{ o.finishes_at|when('datetime') }}{% else %}Measuring the pace…{% endif %}</span></div>
   <progress class="w-100 d-block" value="{{ o.done }}" max="{{ o.done + o.left }}" aria-label="Overall progress">{{ o.percent }}%</progress>
-  {% if o.slowest %}<div class="small text-secondary mt-1">The last to finish is {{ o.slowest|lower }}{% if o.approximate %}, which waits for Jellyfin to remake thumbnails, so the time is rough{% endif %}.{% if o.unknown %} No pace yet for {{ o.unknown|join(', ')|lower }}.{% endif %}</div>{% endif %}
+  {% if o.slowest or o.unknown %}<div class="small text-secondary mt-1">{% if o.slowest %}The last to finish is {{ o.slowest|lower }}{% if o.approximate %}, which waits for Jellyfin to remake thumbnails, so the time is rough{% endif %}.{% endif %}{% if o.unknown %} Nothing finished in the last day for {{ o.unknown|join(', ')|lower }}, so it isn't in the estimate.{% endif %}</div>{% endif %}
 </div>{% endif %}{% endmacro %}

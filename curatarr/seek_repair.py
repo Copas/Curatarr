@@ -123,7 +123,11 @@ def sweep(checks=CHECKS_PER_RUN, rebuilds=REBUILDS_PER_RUN) -> int:
             state.seek_layout = {"ok": True, "at": utcnow().isoformat()}
             db.session.commit()
             continue
-        if done >= rebuilds or _playing(part) or not thumbnails.room():
+        if (
+            done >= rebuilds
+            or _playing(part)
+            or not thumbnails.room(leave=_audio_waiting())
+        ):
             db.session.commit()
             continue  # next cycle (or once Jellyfin has caught up on thumbnails)
         db.session.commit()  # never hold the write lock while a file is copied
@@ -147,6 +151,18 @@ def sweep(checks=CHECKS_PER_RUN, rebuilds=REBUILDS_PER_RUN) -> int:
             done += 1
     _remember_remaining()
     return done
+
+
+def _audio_waiting() -> int:
+    """1 when TV-friendly audio has files to do: it then gets the last spot
+    under the thumbnail limit, or this repair (far more files) takes them all."""
+    from . import compat_audio
+    from .services import setting
+
+    if not compat_audio.enabled():
+        return 0
+    left = setting(compat_audio.REMAINING_KEY, {}) or {}
+    return 1 if left.get("films") or left.get("episodes") else 0
 
 
 def _rebuild(part, path) -> dict:
