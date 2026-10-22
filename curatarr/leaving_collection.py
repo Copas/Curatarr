@@ -48,7 +48,11 @@ def sync() -> dict | None:
     wanted = _wanted()
     if not wanted and not stored.get("id"):
         return None  # nothing to show, and no collection yet
-    if stored.get("id") and set(stored.get("items", [])) == wanted:
+    if (
+        stored.get("id")
+        and set(stored.get("items", [])) == wanted
+        and stored.get("poster")
+    ):
         return stored
     jellyfin = client("jellyfin")
     try:
@@ -70,7 +74,66 @@ def sync() -> dict | None:
                 jellyfin.remove_from_collection(collection, sorted(have - wanted))
     except IntegrationError:
         return stored  # try again next pass
-    stored = {"id": collection, "items": sorted(wanted)}
+    stored = {
+        "id": collection,
+        "items": sorted(wanted),
+        "poster": _set_poster(jellyfin, collection, sorted(wanted)),
+    }
     set_setting(KEY, stored)
     db.session.commit()
     return stored
+
+
+def poster(images: list[bytes]) -> bytes:
+    """The collection's poster: up to four of its titles' posters in a grid,
+    under a red LEAVING SOON band like the one on their own posters."""
+    from io import BytesIO
+
+    from PIL import Image, ImageDraw
+
+    from .artwork import BADGE_RED, _fit
+
+    width, height = 1000, 1500
+    canvas = Image.new("RGB", (width, height), "#111418")
+    tiles = []
+    for data in images[:4]:
+        try:
+            tiles.append(Image.open(BytesIO(data)).convert("RGB"))
+        except OSError:
+            continue
+    cells = [(0, 0), (1, 0), (0, 1), (1, 1)]
+    for tile, (col, row) in zip(tiles, cells, strict=False):
+        tile = tile.resize((width // 2, height // 2))
+        canvas.paste(tile, (col * width // 2, row * height // 2))
+    drawing = ImageDraw.Draw(canvas)
+    band = round(height * 0.16)
+    top = (height - band) // 2
+    drawing.rectangle((0, top, width, top + band), fill=BADGE_RED)
+    font, box = _fit(drawing, "LEAVING SOON", round(band * 0.5), width * 0.9)
+    drawing.text(
+        (
+            (width - (box[2] - box[0])) / 2 - box[0],
+            top + (band - (box[3] - box[1])) / 2 - box[1],
+        ),
+        "LEAVING SOON",
+        fill="#FFFFFF",
+        font=font,
+    )
+    output = BytesIO()
+    canvas.save(output, format="JPEG", quality=90)
+    return output.getvalue()
+
+
+def _set_poster(jellyfin, collection, items) -> bool:
+    """Jellyfin draws nothing for a collection made through its API."""
+    images = []
+    for item in items[:4]:
+        try:
+            images.append(jellyfin.image(item))
+        except IntegrationError:
+            continue
+    try:
+        jellyfin.put_image(collection, poster(images))
+    except IntegrationError:
+        return False  # tried again next pass
+    return True

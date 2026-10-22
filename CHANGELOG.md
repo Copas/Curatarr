@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The Leaving Soon collection has a poster**: four of its titles' posters under a red LEAVING SOON band, redrawn when the titles change (Jellyfin draws nothing for a collection made through its API).
 - **A Leaving Soon collection in Jellyfin** (Settings → Household, on by default): titles join when they're marked Leaving Soon and leave when kept, watched or deleted. It's created as "Leaving Soon" and known by its id afterwards, so renaming it is fine.
 - **Fixed: TV-friendly audio and the seek repair skipped every unlinked episode** whenever any Jellyfin app was open. An episode not yet linked to Jellyfin has no item id, and an app playing nothing has no now-playing id, so they matched and each looked like it was playing. Idle apps are ignored now, and an unlinked file is matched by its file name.
 - **Fixed: Leaving Soon pictures were re-uploaded again and again** (1,430 times in a day). Jellyfin's tag for an uploaded image changes a while after the upload, which read as the artwork having been replaced, so the badged picture was saved as the original and badged again. The picture itself is compared now. Pictures this affected are repaired by having Jellyfin download the artwork afresh, and restored that way if the title is kept first.
