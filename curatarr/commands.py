@@ -72,6 +72,7 @@ def worker_cycle():
     resume_approved()
     expire_notices()
     reconcile_artwork()
+    _sync_leaving_collection()
     _dispatch_chapters()
     now = utcnow()
     if not _reconcile_due(now):
@@ -126,6 +127,16 @@ def _curate():
         except Exception:
             db.session.rollback()
             current_app.logger.exception("Curation step %s failed", step.__name__)
+
+
+def _sync_leaving_collection():
+    try:
+        from . import leaving_collection
+
+        leaving_collection.sync()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Updating the Leaving Soon collection failed")
 
 
 def _dispatch_chapters():
