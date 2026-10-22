@@ -247,6 +247,12 @@ class PosterSnapshot(db.Model, Timed):
     image_type = db.Column(
         db.String(20), nullable=False, default="Primary", server_default="Primary"
     )
+    # The saved original may itself be badged (an old bug): restore and repair
+    # by having Jellyfin download the artwork afresh instead.
+    original_suspect = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false()
+    )
+    repair_requested_at = db.Column(db.DateTime(timezone=True))
     candidate_id = db.Column(db.String(36), db.ForeignKey("purge_candidates.id"))
     active = db.Column(db.Boolean, default=False, nullable=False)
     restored_at = db.Column(db.DateTime(timezone=True))
