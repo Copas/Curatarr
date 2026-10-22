@@ -234,3 +234,24 @@ def test_waits_while_jellyfin_remakes_thumbnails(app, monkeypatch):
         compat_audio, "_add", lambda *a: pytest.fail("rebuilt while Jellyfin is behind")
     )
     assert compat_audio.sweep() == 0
+
+
+def test_an_idle_jellyfin_app_doesnt_count_as_playing(app, monkeypatch):
+    """An episode not yet linked to Jellyfin has no item id, and an app that's
+    open but playing nothing has no now-playing id: they used to match, so
+    every unlinked episode looked like it was playing and was never done."""
+    from test_enrichment import _movie
+
+    from curatarr.models import MediaPart
+
+    _movie("/movies/Loud (2020)/Loud.mkv")
+    part = db.session.query(MediaPart).one()
+    part.kind, part.jellyfin_id = "episode", None
+    db.session.commit()
+    sessions = [{"DeviceName": "Living room", "NowPlayingItem": None}]
+    monkeypatch.setattr(enrichment, "playback_sessions", lambda: sessions)
+    assert not compat_audio._playing(part)
+    sessions.append(
+        {"NowPlayingItem": {"Id": "x", "Path": "/Movies/Loud (2020)/Loud.mkv"}}
+    )
+    assert compat_audio._playing(part)  # matched by file name

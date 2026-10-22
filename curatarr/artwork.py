@@ -282,13 +282,24 @@ def _keep_badged(snapshot, label):
         if not current_tag:
             return True
         replaced = current_tag != snapshot.badged_image_tag
+        if replaced:
+            current = jellyfin.image(snapshot.jellyfin_item_id, kind)
+            ours = Path(snapshot.badged_image_bytes_path).read_bytes()
+            if current == ours:
+                # Our own upload: Jellyfin's tag for it only settles a while
+                # after the upload. Not replaced; note the tag it has now.
+                snapshot.badged_image_tag = current_tag
+                db.session.commit()
+                replaced = False
         if not replaced and snapshot.badge_label == _recorded(label):
             return True
         if replaced:
-            original = _jpeg(jellyfin.image(snapshot.jellyfin_item_id, kind))
+            original = _jpeg(current)
             Path(snapshot.original_image_bytes_path).write_bytes(original)
             snapshot.original_image_tag = current_tag
             snapshot.badged_image_tag = None
+            # Artwork Jellyfin downloaded afresh: a clean original again.
+            snapshot.original_suspect = False
         else:
             original = Path(snapshot.original_image_bytes_path).read_bytes()
         Path(snapshot.badged_image_bytes_path).write_bytes(
@@ -325,6 +336,8 @@ def _keep_badged(snapshot, label):
 
 
 def restore_badge(snapshot):
+    if snapshot.original_suspect:
+        return _restore_from_providers(snapshot)
     try:
         jellyfin = client("jellyfin")
         kind = snapshot.image_type
@@ -361,7 +374,66 @@ def restore_badge(snapshot):
         return False
 
 
+def _restore_from_providers(snapshot):
+    """The saved original may be badged: have Jellyfin download the artwork
+    afresh instead (once per title; the others share the refresh)."""
+    try:
+        others = db.session.query(PosterSnapshot).filter(
+            PosterSnapshot.jellyfin_item_id == snapshot.jellyfin_item_id,
+            PosterSnapshot.active.is_(True),
+            PosterSnapshot.original_suspect.is_(True),
+        )
+        client("jellyfin").refresh_images(snapshot.jellyfin_item_id)
+        for other in others:
+            _record_restored(
+                other, "Artwork downloaded afresh after cleanup was cancelled."
+            )
+        return True
+    except IntegrationError as exc:
+        current_app.logger.warning(
+            "Artwork refresh failed for snapshot %s: %s",
+            snapshot.id,
+            type(exc).__name__,
+        )
+        db.session.rollback()
+        return False
+
+
+REPAIR_RETRY = 6  # hours before asking Jellyfin again for the same title
+
+
+def _repair_suspect_originals():
+    """Ask Jellyfin to download fresh artwork for titles whose saved original
+    may be badged; the next pass sees genuinely new pictures, saves them as
+    the originals and badges them."""
+    now = utcnow()
+    rows = (
+        db.session.query(PosterSnapshot)
+        .filter(
+            PosterSnapshot.active.is_(True),
+            PosterSnapshot.original_suspect.is_(True),
+        )
+        .all()
+    )
+    asked = set()
+    for snapshot in rows:
+        last = snapshot.repair_requested_at
+        if last is not None and last.tzinfo is None:
+            last = last.replace(tzinfo=UTC)
+        if last and (now - last).total_seconds() < REPAIR_RETRY * 3600:
+            continue
+        if snapshot.jellyfin_item_id not in asked:
+            try:
+                client("jellyfin").refresh_images(snapshot.jellyfin_item_id)
+            except IntegrationError:
+                continue
+            asked.add(snapshot.jellyfin_item_id)
+        snapshot.repair_requested_at = now
+    db.session.commit()
+
+
 def reconcile_artwork():
+    _repair_suspect_originals()
     active = (
         db.session.query(PurgeCandidate)
         .filter(PurgeCandidate.state.in_(["REVIEW", "LEAVING_SOON"]))

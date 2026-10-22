@@ -251,9 +251,19 @@ def _playing(part) -> bool:
     from .enrichment import jellyfin_item_id, playback_sessions
 
     item = jellyfin_item_id(part, part.media)
-    return any(
-        (s.get("NowPlayingItem") or {}).get("Id") == item for s in playback_sessions()
-    )
+    name = (part.file_path or "").replace("\\", "/").rsplit("/", 1)[-1]
+    for session in playback_sessions():
+        playing = session.get("NowPlayingItem") or {}
+        if not playing:
+            continue  # an app that's open but not playing anything
+        if item and playing.get("Id") == item:
+            return True
+        # Not linked to Jellyfin yet: the file name of what's playing will do.
+        if name and str(playing.get("Path") or "").replace("\\", "/").endswith(
+            "/" + name
+        ):
+            return True
+    return False
 
 
 def _add(state, part, path) -> dict:
