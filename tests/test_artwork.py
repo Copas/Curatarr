@@ -574,3 +574,88 @@ def test_a_duplicate_snapshot_is_retired(app, monkeypatch):
         assert apply_badge(candidate)
         active = db.session.query(PosterSnapshot).filter_by(active=True).all()
         assert len(active) == 1 and active[0].badged_image_tag
+
+
+class _SettlingJellyfin:
+    """Jellyfin whose tag for an uploaded image changes a while after the
+    upload, as the real one's does."""
+
+    def __init__(self, image):
+        self.current, self.suffix, self.puts, self.refreshed = image, "", 0, []
+
+    def item(self, _item_id):
+        return {
+            "ImageTags": {"Primary": sha256(self.current).hexdigest() + self.suffix}
+        }
+
+    def image(self, _item_id, _kind="Primary"):
+        return self.current
+
+    def put_image(self, _item_id, data, _kind="Primary"):
+        self.puts += 1
+        self.current = data
+
+    def refresh_images(self, item_id):
+        self.refreshed.append(item_id)
+
+
+def _leaving_film(title="Film"):
+    library = Library(
+        jellyfin_library_id=f"art-{title}", name="Films", media_type="movies"
+    )
+    db.session.add(library)
+    db.session.flush()
+    media = MediaIdentity(
+        library_id=library.id, media_type="movie", title=title, jellyfin_id=title
+    )
+    db.session.add(media)
+    db.session.flush()
+    candidate = PurgeCandidate(
+        media_identity_id=media.id,
+        state="LEAVING_SOON",
+        reason_code="requested",
+        reason_text="Asked",
+        reclaimable_bytes=100,
+    )
+    db.session.add(candidate)
+    db.session.commit()
+    return candidate
+
+
+def test_a_settling_tag_isnt_mistaken_for_replaced_artwork(app, monkeypatch):
+    source = _poster()
+    fake = _SettlingJellyfin(source)
+    monkeypatch.setattr("curatarr.artwork.client", lambda _kind: fake)
+    with app.app_context():
+        candidate = _leaving_film()
+        assert apply_badge(candidate)
+        assert fake.puts == 1
+        fake.suffix = "-settled"  # Jellyfin's tag for our upload changes later
+        assert apply_badge(candidate) and apply_badge(candidate)
+        assert fake.puts == 1  # not uploaded again
+        snapshot = db.session.query(PosterSnapshot).one()
+        assert Path(snapshot.original_image_bytes_path).read_bytes() == _jpeg(source)
+        assert restore_badge(snapshot) and fake.current == _jpeg(source)
+
+
+def test_a_suspect_original_is_repaired_and_restored_from_providers(app, monkeypatch):
+    from curatarr.artwork import reconcile_artwork
+
+    source = _poster()
+    fake = _SettlingJellyfin(source)
+    monkeypatch.setattr("curatarr.artwork.client", lambda _kind: fake)
+    with app.app_context():
+        candidate = _leaving_film()
+        assert apply_badge(candidate)
+        snapshot = db.session.query(PosterSnapshot).one()
+        snapshot.original_suspect = True
+        db.session.commit()
+        reconcile_artwork()
+        assert fake.refreshed == ["Film"]  # asked once for fresh artwork
+        reconcile_artwork()
+        assert fake.refreshed == ["Film"]  # not again straight away
+        candidate.state = "RESCUED"
+        db.session.commit()
+        reconcile_artwork()
+        db.session.refresh(snapshot)
+        assert not snapshot.active and fake.refreshed == ["Film", "Film"]

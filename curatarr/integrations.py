@@ -244,6 +244,19 @@ class JellyfinClient(Client):
     def sessions(self):
         return self.request("GET", "/Sessions")
 
+    def refresh_images(self, item_id):
+        """Download an item's artwork afresh from its metadata providers."""
+        return self.request(
+            "POST",
+            f"/Items/{item_id}/Refresh",
+            params={
+                "MetadataRefreshMode": "Default",
+                "ImageRefreshMode": "FullRefresh",
+                "ReplaceAllMetadata": "false",
+                "ReplaceAllImages": "true",
+            },
+        )
+
     def refresh_item(self, item_id):
         """Re-read one item's file so Jellyfin picks up changed chapters.
 
