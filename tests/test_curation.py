@@ -262,6 +262,7 @@ def test_household_choices_page_saves(app, client):
         "season_lead_days": 7,
         "seasonal": False,
         "seasonal_return": False,
+        "leaving_collection": False,  # an unticked box
     }
 
 
