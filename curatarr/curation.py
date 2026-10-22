@@ -31,6 +31,7 @@ DEFAULTS = {
     "seasonal": True,
     "seasonal_return": False,
     "season_lead_days": 14,
+    "leaving_collection": True,
 }
 BOUNDS = {
     "request_hold_days": (0, 3650),
@@ -90,6 +91,7 @@ def save_options(form):
         values[key] = number
     values["seasonal"] = form.get("seasonal") == "on"
     values["seasonal_return"] = form.get("seasonal_return") == "on"
+    values["leaving_collection"] = form.get("leaving_collection") == "on"
     set_setting(SETTINGS_KEY, values)
     db.session.commit()
 
