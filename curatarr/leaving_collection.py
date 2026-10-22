@@ -1,9 +1,8 @@
 """A Jellyfin collection of the titles Leaving Soon, kept in step by Curatarr.
 
 Titles join when they're marked Leaving Soon and leave when they're kept,
-watched or deleted. The collection is created once (named so it sorts first,
-like the household's other pinned collections) and then known by its id, so
-renaming it in Jellyfin is fine. Settings → Household turns it off; the
+watched or deleted. The collection is created once and then known by its id,
+so renaming it in Jellyfin is fine. Settings → Household turns it off; the
 collection is then emptied.
 """
 
@@ -11,7 +10,7 @@ from . import db
 from .integrations import IntegrationError
 from .models import MediaIdentity, PurgeCandidate
 
-NAME = "! Leaving Soon"
+NAME = "Leaving Soon"
 KEY = "leaving_collection"
 
 
