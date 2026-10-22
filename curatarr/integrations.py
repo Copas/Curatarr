@@ -244,6 +244,45 @@ class JellyfinClient(Client):
     def sessions(self):
         return self.request("GET", "/Sessions")
 
+    def create_collection(self, name, item_ids):
+        """A new collection holding these items; returns its id."""
+        data = self.request(
+            "POST", "/Collections", params={"Name": name, "Ids": ",".join(item_ids)}
+        )
+        return (data or {}).get("Id")
+
+    def collection_exists(self, collection_id):
+        data = self.request("GET", "/Items", params={"Ids": collection_id})
+        return bool((data or {}).get("Items"))
+
+    def collection_items(self, collection_id):
+        # Recursive is what makes an API key (no user) see a collection's
+        # titles; the types keep a show's seasons and episodes out.
+        data = self.request(
+            "GET",
+            "/Items",
+            params={
+                "ParentId": collection_id,
+                "Recursive": "true",
+                "IncludeItemTypes": "Movie,Series",
+            },
+        )
+        return [item["Id"] for item in (data or {}).get("Items") or []]
+
+    def add_to_collection(self, collection_id, item_ids):
+        return self.request(
+            "POST",
+            f"/Collections/{collection_id}/Items",
+            params={"Ids": ",".join(item_ids)},
+        )
+
+    def remove_from_collection(self, collection_id, item_ids):
+        return self.request(
+            "DELETE",
+            f"/Collections/{collection_id}/Items",
+            params={"Ids": ",".join(item_ids)},
+        )
+
     def refresh_images(self, item_id):
         """Download an item's artwork afresh from its metadata providers."""
         return self.request(
