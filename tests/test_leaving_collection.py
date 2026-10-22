@@ -55,7 +55,7 @@ def test_titles_join_and_leave_the_collection(app, monkeypatch):
         first = request_removal(film)
         request_removal(other)
         leaving_collection.sync()
-        assert jellyfin.collections["c1"]["name"] == "! Leaving Soon"
+        assert jellyfin.collections["c1"]["name"] == "Leaving Soon"
         assert jellyfin.collections["c1"]["items"] == {
             N("film-1"),
             N("jf-Never Watched"),
