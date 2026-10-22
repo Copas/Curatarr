@@ -31,6 +31,21 @@ class Jellyfin:
     def remove_from_collection(self, collection_id, ids):
         self.collections[collection_id]["items"] -= set(ids)
 
+    posters = 0
+
+    def image(self, _item_id, _kind="Primary"):
+        from io import BytesIO
+
+        from PIL import Image
+
+        out = BytesIO()
+        Image.new("RGB", (200, 300), "#335577").save(out, format="JPEG")
+        return out.getvalue()
+
+    def put_image(self, _item_id, data, _kind="Primary"):
+        self.posters += 1
+        self.poster = data
+
 
 class Radarr:
     def queue(self):
@@ -56,6 +71,7 @@ def test_titles_join_and_leave_the_collection(app, monkeypatch):
         request_removal(other)
         leaving_collection.sync()
         assert jellyfin.collections["c1"]["name"] == "Leaving Soon"
+        assert jellyfin.posters == 1 and jellyfin.poster[:2] == b"\xff\xd8"  # a JPEG
         assert jellyfin.collections["c1"]["items"] == {
             N("film-1"),
             N("jf-Never Watched"),
