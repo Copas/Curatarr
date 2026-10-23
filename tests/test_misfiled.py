@@ -139,6 +139,8 @@ def test_a_file_both_clues_place_elsewhere_is_moved(app, monkeypatch):
     assert imported[1]["files"][0]["episodeIds"] == [103]
     assert ("search", [102]) in sonarr.calls  # the real E2 is looked for
     assert misfiled.rows() == []
+    # Looked at again straight away: the move may free another episode's slot.
+    assert "checked_at" not in setting(misfiled.KEY)
 
 
 def test_when_what_is_said_fits_where_it_is_filed_nothing_is_listed(app, monkeypatch):
