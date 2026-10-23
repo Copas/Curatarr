@@ -3,6 +3,7 @@
 import pytest
 
 from curatarr import db, jellyfin_plugin
+from curatarr.commands import worker_cycle
 from curatarr.integrations import IntegrationError
 from curatarr.services import set_setting, setting
 
@@ -20,6 +21,8 @@ class Jellyfin:
         self.saves = 0
         self.restarts = 0
         self.missing = False
+        self.reachable = {"http://127.0.0.1:8787"}  # where Jellyfin reaches Curatarr
+        self.tested = []
 
     def plugins(self):
         others = [{"Id": "webhook", "Status": "Active"}]
@@ -44,6 +47,11 @@ class Jellyfin:
         self.saves += 1
         self.config = config
 
+    def test_plugin(self, url, token):
+        self.tested.append(url)
+        ok = url in self.reachable and token == setting("webhook_token")
+        return {"Ok": ok, "Message": "ok" if ok else "couldn't be reached"}
+
     def sessions(self):
         return [{"NowPlayingItem": {"Name": "A film"}}, {}]
 
@@ -64,79 +72,88 @@ def jellyfin(app, monkeypatch):
     return fake
 
 
-def test_install_adds_the_repository_once_and_installs(app, jellyfin):
+ADDRESSES = ["http://curatarr.example", "http://127.0.0.1:8787"]
+
+
+def test_one_click_installs_restarts_and_then_sets_it_up(app, jellyfin):
     with app.app_context():
-        jellyfin_plugin.install("http://curatarr.local:8787/")
-        jellyfin.status = None
-        jellyfin_plugin.install("http://curatarr.local:8787")
-        assert [r["Url"] for r in jellyfin.repos].count(
-            jellyfin_plugin.REPOSITORY["Url"]
-        ) == 1
-        assert jellyfin.repos[0]["Url"] == "https://repo"  # the others are kept
+        assert jellyfin_plugin.set_up(ADDRESSES) == "restarting"
         assert jellyfin.installed[0][:2] == ("Curatarr", jellyfin_plugin.PLUGIN_ID)
-        assert (
-            setting(jellyfin_plugin.KEY)["curatarr_url"] == "http://curatarr.local:8787"
-        )
-        with pytest.raises(ValueError):
-            jellyfin_plugin.install("curatarr.local")
-
-
-def test_a_release_jellyfin_cant_find_yet_says_so(app, jellyfin):
-    jellyfin.missing = True
-    with app.app_context(), pytest.raises(ValueError, match="couldn't find"):
-        jellyfin_plugin.install("http://curatarr.local:8787")
-
-
-def test_once_loaded_the_plugin_is_given_the_address_and_token(app, jellyfin):
-    with app.app_context():
-        jellyfin_plugin.install("http://curatarr.local:8787")
-        assert jellyfin_plugin.status()["state"] == "restart"
-        assert jellyfin.saves == 0  # not loaded yet
-        jellyfin.status = "Active"
-        view = jellyfin_plugin.status()
-        assert view["state"] == "active" and view["configured"]
+        assert jellyfin.restarts == 1
+        assert [r["Url"] for r in jellyfin.repos] == [
+            "https://repo",
+            jellyfin_plugin.REPOSITORY["Url"],
+        ]
+        jellyfin_plugin.tick()  # Jellyfin hasn't loaded it yet
+        assert jellyfin.saves == 0
+        jellyfin.status = "Active"  # back from the restart
+        jellyfin_plugin.tick()
+        # The first address Jellyfin could reach is the one given.
+        assert jellyfin.tested == ADDRESSES
         assert jellyfin.config == {
-            "CuratarrUrl": "http://curatarr.local:8787",
+            "CuratarrUrl": "http://127.0.0.1:8787",
             "Token": "the-token",
             "InterceptDeletes": True,  # the plugin's own settings are kept
         }
+        assert not setting(jellyfin_plugin.KEY)["pending"]
+        assert jellyfin_plugin.active()
+
+
+def test_a_hand_installed_plugin_is_connected_without_a_restart(app, jellyfin):
+    jellyfin.status = "Active"
+    with app.app_context():
+        assert jellyfin_plugin.set_up(ADDRESSES) == "connected"
+        assert jellyfin.restarts == 0 and not jellyfin.installed
+        assert jellyfin.config["CuratarrUrl"] == "http://127.0.0.1:8787"
+        # Its repository is added, so Jellyfin offers updates.
+        assert jellyfin_plugin.REPOSITORY["Url"] in [r["Url"] for r in jellyfin.repos]
+
+
+def test_when_no_address_works_it_says_so_and_takes_one_by_hand(app, jellyfin):
+    jellyfin.status = "Active"
+    jellyfin.reachable = set()
+    with app.app_context():
+        assert jellyfin_plugin.set_up(ADDRESSES) == "unconnected"
+        assert "couldn't be reached" in jellyfin_plugin.status()["problem"]
+        with pytest.raises(ValueError):
+            jellyfin_plugin.set_address("http://nas:8787")
+        jellyfin.reachable = {"http://nas:8787"}
+        jellyfin_plugin.set_address("http://nas:8787/")
+        assert jellyfin.config["CuratarrUrl"] == "http://nas:8787"
+        with pytest.raises(ValueError):
+            jellyfin_plugin.set_address("nas:8787")
+
+
+def test_a_new_token_reaches_the_plugin(app, jellyfin):
+    jellyfin.status = "Active"
+    with app.app_context():
+        jellyfin_plugin.set_up(ADDRESSES)
+        saves = jellyfin.saves
         jellyfin_plugin.sync()
-        assert jellyfin.saves == 1  # unchanged: not saved again
+        assert jellyfin.saves == saves  # unchanged: not saved again
         set_setting("webhook_token", "a-new-token")
         db.session.commit()
         jellyfin_plugin.sync()
         assert jellyfin.config["Token"] == "a-new-token"
 
 
-def test_settings_page_walks_through_install_and_restart(app, client, jellyfin):
+def test_a_release_jellyfin_cant_find_yet_says_so(app, jellyfin):
+    jellyfin.missing = True
+    with app.app_context(), pytest.raises(ValueError, match="couldn't find"):
+        jellyfin_plugin.set_up(ADDRESSES)
+
+
+def test_settings_page_walks_through_it(app, client, jellyfin):
     page = client.get("/settings").text
-    assert "Install in Jellyfin" in page and 'value="http://localhost"' in page
-    client.post(
-        "/settings", data={"kind": "plugin_install", "curatarr_url": "http://c:8787"}
-    )
-    page = client.get("/settings").text
-    assert "Restart Jellyfin" in page and "1 person is watching" in page
-    client.post("/settings", data={"kind": "plugin_restart"})
+    assert "Install in Jellyfin" in page and "1 person is watching" in page
+    client.post("/settings", data={"kind": "plugin_setup", "restart": "1"})
     assert jellyfin.restarts == 1
+    assert "Setting up…" in client.get("/settings").text
     jellyfin.status = "Active"
-    page = client.get("/settings").text
-    assert (
-        "deletes in Jellyfin go through Curatarr at <code>http://c:8787</code>" in page
-    )
-    client.post(
-        "/settings",
-        data={"kind": "plugin_address", "curatarr_url": "http://other:8787"},
-    )
-    assert jellyfin.config["CuratarrUrl"] == "http://other:8787"
-
-
-def test_unreachable_jellyfin_shows_a_note(app, client, monkeypatch):
-    def down(_kind):
-        raise IntegrationError("down")
-
-    monkeypatch.setattr("curatarr.services.client", down)
     with app.app_context():
-        assert jellyfin_plugin.status() == {"state": "unreachable"}
+        worker_cycle()  # the worker finishes once Jellyfin is back
+    page = client.get("/settings").text
+    assert "deletes in Jellyfin go through Curatarr at <code>http://127.0.0.1:" in page
 
 
 def test_the_setup_checklist_offers_the_plugin(app, client, jellyfin):
@@ -149,3 +166,12 @@ def test_the_setup_checklist_offers_the_plugin(app, client, jellyfin):
     page = client.get("/setup").text
     item = page[page.index("Install the Curatarr plugin") :]
     assert "Done" in item[: item.index("</li>")]
+
+
+def test_unreachable_jellyfin_shows_a_note(app, monkeypatch):
+    def down(_kind):
+        raise IntegrationError("down")
+
+    monkeypatch.setattr("curatarr.services.client", down)
+    with app.app_context():
+        assert jellyfin_plugin.status()["state"] == "unreachable"
