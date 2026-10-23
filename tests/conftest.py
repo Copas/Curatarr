@@ -35,6 +35,17 @@ def client(app):
 
 
 @pytest.fixture(autouse=True)
+def fixes_wait_for_a_person(monkeypatch):
+    """Automatic fixes are on by default; most tests look at what's listed
+    for a person, so they start switched off (test_autofix turns them on)."""
+    from curatarr import autofix, chapters
+
+    monkeypatch.setattr(autofix, "ON_BY_DEFAULT", False)
+    for option in autofix.ENHANCE_OPTION.values():
+        monkeypatch.setitem(chapters.GLOBAL_DEFAULTS, option, False)
+
+
+@pytest.fixture(autouse=True)
 def quiet_machine(monkeypatch):
     """Job dispatch reads the real CPU and GPU; tests get an idle machine and a
     fresh controller so they don't depend on what this computer is doing."""

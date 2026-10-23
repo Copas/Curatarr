@@ -650,10 +650,13 @@ def chapter_failed_action(state_id, action):
 @bp.get("/chapters/problems")
 def chapter_problems():
     """Burned-in subtitles and broken files (filecheck.py)."""
-    from . import filecheck_jobs, missing_keep, wrong_version
+    from . import autofix, filecheck_jobs, misfiled, missing_keep, wrong_version
 
     return render_template(
         "chapter_problems.html",
+        misfiled=[r for r in misfiled.rows() if r["plan"] != "wait"],
+        misfiled_waiting=[r for r in misfiled.rows() if r["plan"] == "wait"],
+        misfiled_auto=autofix.automatic("misfiled"),
         missing_shows=missing_keep.rows(),
         wrong_shows=wrong_version.rows(),
         found=filecheck_jobs.review(),
@@ -674,6 +677,30 @@ def _request_replace(target, kind) -> str:
     if current == "no_better":
         return "No better copy was available when Curatarr last looked."
     return better_copy.request(target, kind)
+
+
+@bp.post("/chapters/problems/misfiled/<int:file_id>/<action>")
+def misfiled_action(file_id, action):
+    """Move a misfiled episode in Sonarr, or say it's filed right."""
+    from . import misfiled
+
+    if action not in ("fix", "dismiss"):
+        abort(404)
+    try:
+        if action == "fix":
+            mode = request.form.get("mode") or None
+            if mode not in (None, "move", "replace", "discard"):
+                abort(400)
+            flash(misfiled.fix(file_id, mode=mode), "success")
+        else:
+            misfiled.dismiss(file_id)
+            flash("Kept where it is. It won't be listed again.", "success")
+    except (IntegrationError, ValueError) as exc:
+        db.session.rollback()
+        flash(f"Couldn't do that: {exc}", "danger")
+    if request.form.get("back") == "overview":
+        return redirect(url_for("main.overview"))
+    return redirect(url_for("main.chapter_problems") + "#misfiled")
 
 
 @bp.post("/chapters/problems/version/<media_id>/<action>")
