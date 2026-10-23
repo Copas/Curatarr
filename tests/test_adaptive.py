@@ -1,5 +1,5 @@
 from curatarr import adaptive
-from curatarr.adaptive import Controller, Reading
+from curatarr.adaptive import Controller, Reading, _describe
 
 
 def decide(controller, reading, *, running, most=4, now):
@@ -81,3 +81,34 @@ def test_reason_says_what_it_saw():
         Reading(0.40, 0.50, 1, 0), most=4, running=1, waiting=True, now=0
     )
     assert "CPU 40%" in d.reason and "GPU 50%" in d.reason and "1 watching" in d.reason
+
+
+def test_jellyfins_video_decoder_is_not_counted():
+    """Two transcodes kept the decoder at 97% while compute was at 15%: that
+    paused all work for as long as anyone watched, though Curatarr's jobs
+    don't use the decoder then (scene detection decodes on the CPU)."""
+    reading = Reading(cpu=0.14, gpu=0.15, viewers=3, transcodes=2, decoder=0.97)
+    assert reading.load == 0.15
+    assert "video decoder 97% (Jellyfin's)" in _describe(reading, 0.15, 0.35)
+    assert not decide(Controller(), reading, running=1, now=0).suspend
+
+
+def test_scene_detection_leaves_the_decoder_to_jellyfin(monkeypatch):
+    from types import SimpleNamespace
+
+    from curatarr import mediafile
+
+    calls = []
+    monkeypatch.setattr(mediafile, "required_tool", lambda name: name)
+    monkeypatch.setattr(
+        mediafile,
+        "_run",
+        lambda args, timeout=None: (
+            calls.append(args) or SimpleNamespace(returncode=0, stdout="", stderr="")
+        ),
+    )
+    monkeypatch.setattr(adaptive, "leave_decoder", True)
+    mediafile.detect_scenes("/x.mkv", 0.3)
+    monkeypatch.setattr(adaptive, "leave_decoder", False)
+    mediafile.detect_scenes("/x.mkv", 0.3)
+    assert "-hwaccel" not in calls[0] and "-hwaccel" in calls[1]

@@ -180,8 +180,11 @@ def detect_scenes(path: str, threshold: float, timeout: int = 4 * 3600):
             timeout=timeout,
         )
 
-    result = run(hardware=True)
-    if result.returncode != 0:
+    from . import adaptive
+
+    # While Jellyfin transcodes, the video decoder is its: decode on the CPU.
+    result = run(hardware=not adaptive.leave_decoder)
+    if result.returncode != 0 and not adaptive.leave_decoder:
         result = run(hardware=False)
     if result.returncode != 0:
         raise MediaToolError(
