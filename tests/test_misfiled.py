@@ -78,6 +78,12 @@ class FakeSonarr:
     def episode_search(self, ids):
         self.calls.append(("search", list(ids)))
 
+    def episode_grabs(self, episode_id):
+        return [{"id": 900, "sourceTitle": "Show.S01E02.Volcano.1080p.WEB"}]
+
+    def mark_failed(self, history_id):
+        self.calls.append(("blocklist", history_id))
+
     def set_episodes_monitored(self, ids, monitored):
         self.calls.append(("monitor", list(ids), monitored))
 
@@ -138,6 +144,11 @@ def test_a_file_both_clues_place_elsewhere_is_moved(app, monkeypatch):
     imported = next(c for c in sonarr.calls if c[0] == "ManualImport")
     assert imported[1]["files"][0]["episodeIds"] == [103]
     assert ("search", [102]) in sonarr.calls  # the real E2 is looked for
+    # The release itself said S01E02: blocklisted first, or the search brings
+    # the same file straight back.
+    assert sonarr.calls.index(("blocklist", 900)) < sonarr.calls.index(
+        ("search", [102])
+    )
     assert misfiled.rows() == []
     # Looked at again straight away: the move may free another episode's slot.
     assert "checked_at" not in setting(misfiled.KEY)
