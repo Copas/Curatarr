@@ -423,6 +423,17 @@ def dismiss(file_id) -> None:
     db.session.commit()
 
 
+def _blocklist_release(sonarr, finding) -> bool:
+    """Blocklist the grab behind a misnumbered download, so searching for the
+    episode it was filed under can't download it again."""
+    wanted = norm(os.path.splitext(finding["download"])[0])
+    for grab in sonarr.episode_grabs(finding["from_id"]) or []:
+        if norm(grab.get("sourceTitle")) == wanted:
+            sonarr.mark_failed(grab["id"])
+            return True
+    return False
+
+
 def fix(file_id, *, automatic=False, mode=None) -> str:
     """Move (or de-duplicate) one misfiled file in Sonarr. ``mode`` lets a
     person choose what the evidence couldn't settle ("move", "replace",
@@ -521,6 +532,13 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
                     "the same mix-up back"
                 )
             else:
+                # The release itself is numbered wrong (its "S03E03" is
+                # S03E02): a search would download it straight back.
+                misnumbered = (
+                    release_number(finding["download"]) == finding["from_code"]
+                )
+                if misnumbered and _blocklist_release(sonarr, finding):
+                    steps.append("blocklisted the release, which is numbered wrong")
                 sonarr.episode_search([finding["from_id"]])
                 steps.append(f"searched for the real {finding['from_code']}")
     except _Changed as exc:
