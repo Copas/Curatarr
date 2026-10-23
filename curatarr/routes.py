@@ -88,11 +88,16 @@ def security_headers(response):
     return response
 
 
+# Calls from Jellyfin (the Webhook plugin, the Curatarr plugin) carry the
+# webhook token instead of a sign-in.
+JELLYFIN_PATHS = {"/api/v1/webhook/jellyfin", "/api/v1/jellyfin/delete"}
+
+
 @bp.before_app_request
 def guard_request():
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return
-    if request.path == "/api/v1/webhook/jellyfin":
+    if request.path in JELLYFIN_PATHS:
         token = setting("webhook_token")
         if not token or not hmac.compare_digest(
             request.headers.get("X-Curatarr-Token", ""), token
@@ -119,6 +124,7 @@ PUBLIC_ENDPOINTS = {
     "main.health",
     "main.api_status",
     "main.webhook",
+    "main.jellyfin_delete",
     "static",
 }
 
@@ -1063,6 +1069,25 @@ def webhook():
         abort(400)
     record_webhook("accepted", event=event)
     return jsonify({"event_id": event.id, "accepted": created}), 202
+
+
+@bp.route("/api/v1/jellyfin/delete", methods=["POST"])
+def jellyfin_delete():
+    """The Curatarr plugin for Jellyfin asks before Jellyfin deletes a title
+    (token checked in guard_request)."""
+    from . import jellyfin_delete as deletes
+
+    payload = request.get_json(force=True, silent=True)
+    if not isinstance(payload, dict):
+        abort(400)
+    if payload.get("check"):
+        return jsonify({"ok": True})  # the plugin's Test button: address and token work
+    status, body = deletes.handle(payload.get("itemId"), payload.get("userName"))
+    if body.get("result") == "leaving_soon":
+        from .artwork import reconcile_artwork
+
+        reconcile_artwork()  # badge the poster now, not on the next worker pass
+    return jsonify(body), status
 
 
 @bp.get("/review")
