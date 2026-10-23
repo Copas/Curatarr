@@ -10,7 +10,7 @@ from test_enrichment import _movie
 from curatarr import better_copy, db, enrichment, filecheck, filecheck_jobs
 from curatarr.integrations import IntegrationError
 from curatarr.mediafile import MediaInfo, tool
-from curatarr.models import ChapterState, MediaIdentity, MediaPart
+from curatarr.models import ChapterState, MediaIdentity, MediaPart, utcnow
 from curatarr.services import set_setting, setting
 
 PATH = "/movies/Film (2020)/Film.mkv"
@@ -117,6 +117,12 @@ class FakeArr:
 
     def episode(self, episode_id):
         return {"id": episode_id}
+
+    # Episodes' own runtimes; the show is listed at 22 minutes.
+    episode_runtimes: ClassVar[dict] = {81: 41}
+
+    def episodes(self, _series_id):
+        return [{"id": i, "runtime": r} for i, r in self.episode_runtimes.items()]
 
     # What the indexers have: one whole, acceptable copy unless a test says otherwise.
     available: ClassVar[list] = [
@@ -253,7 +259,17 @@ def test_a_broken_episode_is_replaced_through_sonarr(check_env):
     )
     db.session.add(episode)
     db.session.commit()
-    filecheck_jobs.sweep()
+    listed = []
+    real_health = filecheck.health
+    filecheck.health = lambda path, duration, runtime, *a, **k: (
+        listed.append(runtime) or list(found["issues"])
+    )
+    try:
+        filecheck_jobs.sweep()
+    finally:
+        filecheck.health = real_health
+    # Judged by the episode's own runtime, not the show's.
+    assert 41 in listed
     state = db.session.query(ChapterState).filter_by(media_part_id=episode.id).one()
     assert "subtitles" not in state.file_check  # burned-in subtitles: films only
     filecheck_jobs.replace(state)
@@ -545,3 +561,37 @@ def test_a_retry_after_the_file_was_replaced_blocklists_nothing(check_env):
     state = db.session.query(ChapterState).one()
     assert "already has a new file" in filecheck_jobs.replace(state)
     assert not [c for c in arr.calls if c[0] in ("failed", "delete")]
+
+
+def test_episodes_flagged_short_by_the_show_runtime_are_checked_again(check_env):
+    from curatarr.services import set_setting
+
+    _arr, _found = check_env
+    library, _media, _part = _movie(PATH)
+    show = MediaIdentity(
+        library_id=library.id, media_type="series", title="Show", sonarr_id=3
+    )
+    db.session.add(show)
+    db.session.flush()
+    episode = MediaPart(
+        media_identity_id=show.id,
+        kind="episode",
+        has_file=True,
+        file_path="/tv/Show/S01E01.mkv",
+        sonarr_episode_id=81,
+    )
+    db.session.add(episode)
+    db.session.flush()
+    state = enrichment.state_for(episode)
+    state.file_problem = True
+    state.file_checked_at = utcnow()
+    state.file_check = {
+        "issues": [{"kind": "short", "text": "Runs 22 min, but it's listed as 44 min"}],
+        "replace_requested": "2026-10-23T00:00:00",
+        "replace_auto": True,
+    }
+    set_setting(filecheck_jobs.RECHECKED, None)
+    db.session.commit()
+    filecheck_jobs._recheck_short_episodes()
+    assert not state.file_problem and state.file_checked_at is None
+    assert "replace_requested" not in state.file_check
