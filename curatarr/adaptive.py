@@ -126,7 +126,10 @@ def _describe(reading: Reading, load: float, target: float) -> str:
     if reading.cpu is not None:
         parts.append(f"CPU {reading.cpu:.0%}")
     if reading.gpu is not None:
-        parts.append(f"GPU {reading.gpu:.0%}")
+        # Only Jellyfin's transcoding competes with Curatarr for the graphics
+        # card, so without one the GPU isn't counted (it's mostly Curatarr's).
+        counted = "" if reading.transcodes else " (not counted: nothing is transcoding)"
+        parts.append(f"GPU {reading.gpu:.0%}{counted}")
     if reading.viewers:
         who = f"{reading.viewers} watching"
         if reading.transcodes:
