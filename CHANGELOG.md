@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Fixed: the finish estimate read 20 days after an hour of playback.** Subtitle and skip-marker estimates used the last hour's pace, and an hour mostly paused for people watching (3 subtitles done) made 1,486 left look like 20 days. They use the best of the last hour's, six hours' and day's pace now.
+- **Fixed: a chapter job failed when the database was busy.** A lock hit during an autoflush (a reconcile holds the write lock for a couple of minutes) surfaced as a different error and was recorded as a failure; the job is put back in the queue instead.
 - **Dates and times read the way people say them**, everywhere they're shown: "today at 5:55 PM", "tomorrow at 4 PM", "Wednesday at 3:21 AM", "last Monday", "Oct 31" (with the year only when it isn't this year's), in the viewer's own time zone and 12- or 24-hour style. Hovering shows the full date and time.
 - **Work no longer stops for as long as anyone is transcoding.** The graphics card's load was read as the busier of its compute and its video decoder; two Jellyfin transcodes kept the decoder at 97% (compute 15%, CPU 14%), so all work stayed paused though Curatarr's jobs weren't what kept it busy. While Jellyfin transcodes, scene detection now decodes on the processor and the decoder isn't counted; Activity shows it as Jellyfin's.
 - **A search for a show deleted from Sonarr stops instead of retrying every hour** (it had failed 96 times). Sonarr's "not found" ends it, and History says the show isn't in Sonarr any more.

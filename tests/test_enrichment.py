@@ -2583,3 +2583,26 @@ def test_overview_shows_the_skip_marker_progress(app, client, media_env):
     page = client.get("/").get_data(as_text=True)
     care = page.split('id="care-heading"')[1].split("</section>")[0]
     assert f"{len(parts)} skip-marker checks to go" in care
+
+
+def test_a_locked_database_puts_the_job_back_instead_of_failing_it(
+    app, media_env, monkeypatch
+):
+    """A reconcile held SQLite's write lock for two minutes; the chapter job's
+    autoflush hit it, and the job was recorded as failed."""
+    import pytest
+    from sqlalchemy.exc import PendingRollbackError
+
+    _library, _media, part = _movie()
+    enrichment.request(part, "generate")
+    state = enrichment.state_for(part)
+
+    def locked(*_args, **_kwargs):
+        raise PendingRollbackError("database is locked")
+
+    monkeypatch.setattr(enrichment, "run_job", locked)
+    with pytest.raises(enrichment.DatabaseBusy):
+        enrichment._run_one(app, state.id, None)
+    db.session.expire_all()
+    state = enrichment.state_for(part)
+    assert state.job_state == "queued" and state.chapter_status != "failed"
