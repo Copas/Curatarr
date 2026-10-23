@@ -228,6 +228,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Following up replaced films failed")
     try:
+        from . import poster_language
+
+        poster_language.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Checking poster languages failed")
+    try:
         from . import autofix
 
         autofix.sweep()
