@@ -1019,6 +1019,8 @@ def test_quick_jobs_run_before_the_backlog(media_env):
         state = enrichment.state_for(other)
         state.job_state, state.requested_action = "queued", action
         state.requested_at = utcnow()  # later requests, higher priority
+        if action == "subtitles":
+            state.transcript_key = "saved"  # quick: the transcript is there
         rows.append(state)
     db.session.commit()
     due = enrichment._due_jobs(4, scans=False)
