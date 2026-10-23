@@ -63,6 +63,10 @@ _SOURCE_RANK = {
 }
 
 
+class _Changed(ValueError):
+    """Sonarr's episodes aren't as they were when the problem was found."""
+
+
 # Release names -------------------------------------------------------------
 
 
@@ -454,7 +458,7 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
         if int(source.get("episodeFileId") or 0) != int(file_id) or int(
             target.get("episodeFileId") or 0
         ) != int(finding["target_file_id"]):
-            raise ValueError("The episodes changed in Sonarr since this was found")
+            raise _Changed("The episodes changed in Sonarr since this was found")
         if plan == "discard":
             sonarr.delete_episode_file(file_id)
             steps.append(
@@ -519,6 +523,12 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
             else:
                 sonarr.episode_search([finding["from_id"]])
                 steps.append(f"searched for the real {finding['from_code']}")
+    except _Changed as exc:
+        # Not a failure: look again on the next pass, with Sonarr as it is now.
+        stored.pop("checked_at", None)
+        set_setting(KEY, stored)
+        db.session.commit()
+        raise ValueError(str(exc)) from exc
     except (IntegrationError, ValueError, KeyError) as exc:
         found[str(file_id)] = {**finding, "failed": str(exc)}
         stored["findings"] = found
@@ -528,6 +538,9 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
     at = utcnow().isoformat()
     found[str(file_id)] = {**finding, "fixed": at}
     stored["findings"] = found
+    # A fix frees an episode another misfiled file may be waiting for: look
+    # again on the next pass instead of in half an hour.
+    stored.pop("checked_at", None)
     set_setting(KEY, stored)
     summary = (
         f"{finding['series_title']} {finding['from_code']} was really "
