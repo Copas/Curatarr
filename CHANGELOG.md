@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fixed: Overview's Leaving Soon line never said more than 5 titles.** It was counted from the upcoming list, which stops at five; it counts every title Leaving Soon now (14 here, not 5).
 - **Fixed: new imports waited behind a subtitle backfill, and the overall bar didn't count subtitles.** Subtitle jobs always ran first, which suited ones that reuse a saved transcript (seconds each) but not the picture-subtitle recheck's, which need transcribing (minutes each): 20 new imports sat a day behind 1,500 of them, and the bar showed only those 20, "measuring the pace". Subtitle jobs that need transcribing now run after chapter jobs, and subtitles are part of the overall bar with their own pace.
 - **Episodes Sonarr filed under the wrong episode are put right.** Every half hour the last two weeks of imports are checked for files whose download name carries another episode's title; what's said in the file is compared with each episode's summary. When both agree, the file is moved to the right episode in Sonarr and renamed, and the episode it vacated is searched for again (or unmonitored when scene numbering would repeat the mix-up). A slot that already has a file must hold the same episode before the worse copy goes, and a season shifted by one is fixed one slot at a time, each as soon as the slot before it is free. Anything less certain is listed on Problems.
 - **Automatic fixes are on by default** (Settings → Automatic), since each acts only when it can be confident. Installs that saved the page keep their choices.

@@ -145,3 +145,30 @@ def test_subtitle_jobs_are_part_of_the_bar(app, monkeypatch):
     monkeypatch.setattr(seek_repair, "progress", lambda: None)
     result = progress.overall(now)
     assert result["left"] == 1500 and result["slowest"] == "Subtitles"
+
+
+def test_overview_counts_every_title_leaving_soon(app, client):
+    from curatarr import db
+    from curatarr.models import Library, MediaIdentity, PurgeCandidate
+
+    library = Library(jellyfin_library_id="ls", name="Films", media_type="movies")
+    db.session.add(library)
+    db.session.flush()
+    for number in range(7):  # more than Overview's upcoming list shows
+        media = MediaIdentity(
+            library_id=library.id, media_type="movie", title=f"Film {number}"
+        )
+        db.session.add(media)
+        db.session.flush()
+        db.session.add(
+            PurgeCandidate(
+                media_identity_id=media.id,
+                state="LEAVING_SOON",
+                reason_code="requested",
+                reason_text="Asked",
+                reclaimable_bytes=1,
+                scheduled_delete_at=utcnow() + timedelta(days=number + 1),
+            )
+        )
+    db.session.commit()
+    assert "Leaving soon: 7 titles" in client.get("/").text
