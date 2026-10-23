@@ -31,6 +31,7 @@ That's all you need to get started. Add these when you want more:
 | Optional | Unlocks |
 |---|---|
 | Jellyfin **Webhook** plugin | Instant reactions to playback (otherwise Curatarr catches up hourly) |
+| The **Curatarr plugin for Jellyfin** ([jellyfin-plugin](jellyfin-plugin/README.md)) | Delete in any Jellyfin app marks a title Leaving Soon instead of deleting its files |
 | **FFmpeg** and **MKVToolNix** | Chapters, English-dub checks, file problem checks |
 | **Local AI**: Whisper (installed with the `chapters` extra) and **Ollama** with a model (e.g. `qwen3:14b`), ideally on an NVIDIA GPU | Smart Chapters, subtitles, recap and preview detection, Fun facts, search by what was said |
 | Jellyfin **Intro Skipper** plugin | Skip buttons for recaps and previews, and clean-up of bad skip markers |

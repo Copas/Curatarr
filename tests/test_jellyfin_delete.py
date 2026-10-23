@@ -6,8 +6,8 @@ from curatarr import db
 from curatarr.models import LibraryPolicy, PurgeCandidate
 from curatarr.services import set_setting
 
-ITEM = "0123456789abcdef0123456789abcdef"
 DASHED = "01234567-89ab-cdef-0123-456789abcdef"
+ITEM = DASHED.replace("-", "")  # Jellyfin's usual form
 
 
 def _post(client, body, token="plugin-token"):

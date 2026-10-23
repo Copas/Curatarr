@@ -12,3 +12,4 @@ __pycache__/
 curatarr.egg-info/
 tests/
 docs/
+jellyfin-plugin/
