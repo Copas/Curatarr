@@ -61,6 +61,10 @@ def test_english_detection_in_the_file_and_beside_it(tmp_path):
     (tmp_path / "Show - S01E01.en.Curatarr.srt").touch()
     (tmp_path / "Show - S01E011.en.srt").touch()  # another episode
     assert sidecar_english(str(video)) == []
+    (tmp_path / "Show - S01E01.en.sup").touch()  # Blu-ray pictures
+    assert sidecar_english(str(video)) == ["Show - S01E01.en.sup"]
+    assert sidecar_english(str(video), text_only=True) == []
+    (tmp_path / "Show - S01E01.en.sup").unlink()
     (tmp_path / "Show - S01E01.eng.sdh.srt").touch()
     assert sidecar_english(str(video)) == ["Show - S01E01.eng.sdh.srt"]
     assert generated_path(str(video)).name == "Show - S01E01.en.Curatarr.srt"
@@ -137,6 +141,70 @@ def test_existing_english_is_respected_and_others_files_untouched(subtitle_env):
     enrichment.request(part, "remove_subtitles")
     enrichment.dispatch(synchronous=True)
     assert target.exists() and "left alone" in _state(part).subtitle_error
+
+
+PGS = {"codec_type": "subtitle", "codec_name": "hdmv_pgs_subtitle", "language": "eng"}
+
+
+def _with_picture_subtitles(files, monkeypatch):
+    plain = files.probe
+
+    def probe(path):
+        info = plain(path)
+        info.streams.append(dict(PGS))
+        return info
+
+    monkeypatch.setattr(enrichment, "probe", probe)
+
+
+def test_picture_subtitles_get_a_text_track(subtitle_env, monkeypatch):
+    files, _arr, _library, _media, part, calls = subtitle_env
+    _with_picture_subtitles(files, monkeypatch)
+    assert embedded_english([PGS]) and not embedded_english([PGS], text_only=True)
+    enrichment.request(part, "subtitles")
+    enrichment.dispatch(synchronous=True)
+    assert _state(part).subtitle_status == "generated" and calls
+
+
+def test_picture_subtitles_can_be_left_as_they_are(subtitle_env, monkeypatch):
+    from curatarr import picture_subtitles
+
+    files, _arr, library, _media, part, calls = subtitle_env
+    _with_picture_subtitles(files, monkeypatch)
+    settings = {
+        "enabled": True,
+        "mode": "navigation",
+        "subtitles": {"enabled": True, "replace_pictures": False},
+    }
+    set_setting("chapter_library_settings", {library.id: settings})
+    enrichment.request(part, "subtitles")
+    enrichment.dispatch(synchronous=True)
+    assert _state(part).subtitle_status == "pictures" and calls == []
+    assert enrichment.maintenance_summary()["subtitles_have"] == 1
+    assert picture_subtitles.sweep() == 0
+    # Switched on: queued for a text track.
+    settings["subtitles"]["replace_pictures"] = True
+    set_setting("chapter_library_settings", {library.id: settings})
+    assert picture_subtitles.sweep() == 1
+    assert _state(part).requested_action == "subtitles"
+
+
+def test_files_checked_before_are_looked_at_again(subtitle_env, monkeypatch):
+    from curatarr import picture_subtitles
+
+    files, _arr, _library, _media, part, _calls = subtitle_env
+    enrichment.request(part, "subtitles")
+    state = _state(part)
+    state.job_state, state.subtitle_status = "idle", "existing"
+    db.session.commit()
+    assert picture_subtitles.sweep() == 0  # text-only check: nothing to do yet
+    _with_picture_subtitles(files, monkeypatch)
+    set_setting("picture_subtitles", {})
+    assert picture_subtitles.sweep() == 1
+    assert _state(part).job_state == "queued"
+    enrichment.dispatch(synchronous=True)
+    assert _state(part).subtitle_status == "generated"
+    assert picture_subtitles.sweep() == 0  # finished
 
 
 def test_non_english_audio_is_skipped(subtitle_env, monkeypatch):

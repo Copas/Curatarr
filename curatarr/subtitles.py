@@ -35,9 +35,17 @@ def generated_path(video_path: str) -> Path:
     return path.with_name(path.stem + GENERATED_SUFFIX)
 
 
-def embedded_english(streams: list[dict]) -> bool:
+# Subtitles stored as pictures: TV apps can't draw them, so Jellyfin burns
+# them into the video.
+PICTURE_CODECS = {"hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub"}
+PICTURE_SUFFIXES = {".sup", ".idx", ".sub"}
+
+
+def embedded_english(streams: list[dict], text_only=False) -> bool:
     for stream in streams:
         if stream.get("codec_type") != "subtitle" or stream.get("forced"):
+            continue
+        if text_only and stream.get("codec_name") in PICTURE_CODECS:
             continue
         language = (stream.get("language") or "").lower()
         if language in ENGLISH or language in UNTAGGED:
@@ -45,8 +53,9 @@ def embedded_english(streams: list[dict]) -> bool:
     return False
 
 
-def sidecar_english(video_path: str) -> list[str]:
-    """Subtitle files beside the video that are English or untagged.
+def sidecar_english(video_path: str, text_only=False) -> list[str]:
+    """Subtitle files beside the video that are English or untagged (with
+    ``text_only``, not pictures: VobSub .idx/.sub, Blu-ray .sup).
 
     ``Show.S01E01.en.srt``, ``Show.S01E01.eng.forced.srt`` (forced excluded),
     ``Show.S01E01.srt``. Curatarr's own generated file is not counted.
@@ -63,6 +72,8 @@ def sidecar_english(video_path: str) -> list[str]:
             continue
         if candidate.suffix.lower() not in TEXT_SUFFIXES:
             continue
+        if text_only and _picture_file(candidate):
+            continue
         if name.endswith(GENERATED_SUFFIX):
             continue
         tags = name[len(video.stem) + 1 : -len(candidate.suffix)].lower().split(".")
@@ -72,6 +83,13 @@ def sidecar_english(video_path: str) -> list[str]:
         if not tags or any(tag in ENGLISH for tag in tags):
             found.append(name)
     return found
+
+
+def _picture_file(path: Path) -> bool:
+    suffix = path.suffix.lower()
+    if suffix == ".sub":  # VobSub pictures beside an .idx; else MicroDVD text
+        return path.with_suffix(".idx").exists()
+    return suffix in PICTURE_SUFFIXES
 
 
 @dataclass

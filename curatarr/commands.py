@@ -251,6 +251,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Following up replaced films failed")
     try:
+        from . import picture_subtitles
+
+        picture_subtitles.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Checking for picture-only subtitles failed")
+    try:
         from . import poster_language
 
         poster_language.sweep()
