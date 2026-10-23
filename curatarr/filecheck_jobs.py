@@ -96,12 +96,10 @@ def _run(app):
 
 
 def _runtimes() -> dict:
-    """Listed runtimes in minutes: ("movie", Radarr id) and ("series", Sonarr id)."""
+    """Listed film runtimes in minutes, by ("movie", Radarr id). Episodes are
+    looked up per show as they're checked (_episode_runtime)."""
     found = {}
-    for kind, name, fetch in (
-        ("movie", "radarr", lambda c: c.movies()),
-        ("series", "sonarr", lambda c: c.series()),
-    ):
+    for kind, name, fetch in (("movie", "radarr", lambda c: c.movies()),):
         try:
             for row in fetch(client(name)) or []:
                 if row.get("runtime"):
@@ -109,6 +107,25 @@ def _runtimes() -> dict:
         except IntegrationError:
             continue  # checked without a runtime; the rest still applies
     return found
+
+
+def _episode_runtime(part, media, runtimes):
+    """The episode's own listed runtime. Not the show's: episodes of one show
+    vary a lot (a 22-minute episode of a show listed at 44), and comparing
+    with the show's had good copies replaced as "cut short" over and over.
+    None when Sonarr has no runtime for the episode: then length isn't judged."""
+    if not media.sonarr_id or not part.sonarr_episode_id:
+        return None
+    key = ("episodes", media.sonarr_id)
+    if key not in runtimes:
+        try:
+            runtimes[key] = {
+                e["id"]: e.get("runtime")
+                for e in client("sonarr").episodes(media.sonarr_id) or []
+            }
+        except IntegrationError:
+            runtimes[key] = {}
+    return runtimes[key].get(part.sonarr_episode_id) or None
 
 
 def _segments(part, info):
@@ -124,7 +141,40 @@ def _segments(part, info):
     return hit[0] if hit else []
 
 
+RECHECKED = "short_episodes_rechecked"
+
+
+def _recheck_short_episodes():
+    """Once: episodes flagged "cut short" by the show's runtime are checked
+    again by their own (and any Replace waiting on that verdict is dropped)."""
+    if setting(RECHECKED):
+        return
+    from .services import set_setting
+
+    rows = (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .filter(MediaPart.kind == "episode", ChapterState.file_problem.is_(True))
+        .all()
+    )
+    for state in rows:
+        if any(
+            i.get("kind") == "short"
+            for i in (state.file_check or {}).get("issues") or []
+        ):
+            state.file_checked_at = None
+            state.file_problem = False
+            state.file_check = {
+                k: v
+                for k, v in (state.file_check or {}).items()
+                if k not in ("replace_requested", "replace_auto", "blocklisting")
+            }
+    set_setting(RECHECKED, utcnow().isoformat())
+    db.session.commit()
+
+
 def sweep(limit=PER_RUN) -> int:
+    _recheck_short_episodes()
     # Look further than `limit`: files that can't be reached are skipped.
     parts = _due().limit(limit * 10).all()
     if not parts:
@@ -168,12 +218,15 @@ def check(state, part, runtimes=None) -> dict:
         raise ValueError("The file has no length")
     media = part.media
     film = part.kind == "movie_file"
-    key = ("movie", media.radarr_id) if film else ("series", media.sonarr_id)
+    runtimes = {} if runtimes is None else runtimes
+    listed = (
+        runtimes.get(("movie", media.radarr_id))
+        if film
+        else _episode_runtime(part, media, runtimes)
+    )
     segments = _segments(part, info)
     result = {
-        "issues": filecheck.health(
-            path, info.duration, (runtimes or {}).get(key), segments, film=film
-        ),
+        "issues": filecheck.health(path, info.duration, listed, segments, film=film),
         "transcript": bool(segments),
     }
     _trust_agreeing_lengths(state, result, info.duration)
