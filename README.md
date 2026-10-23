@@ -43,7 +43,7 @@ Everything runs on your own server. No cloud service, no account, no tracking. F
 ## Why you'll want it
 
 ### 💾 Never run out of space, and never lose what someone's in the middle of
-When a disk runs low, Curatarr picks the titles nobody has touched for longest and puts them on a **Leaving Soon** shelf, with a badge on the poster in Jellyfin. Anyone who presses play saves it. New arrivals get a grace period, favourites go to the back of the line, and you can keep, snooze or protect anything for good.
+When a disk runs low, Curatarr picks the titles nobody has touched for longest and puts them on a **Leaving Soon** shelf: a red countdown tag on the poster in Jellyfin ("14 DAYS LEFT"), and a Leaving Soon collection everyone can browse. Anyone who presses play saves it. New arrivals get a grace period, favourites go to the back of the line, and you can keep, snooze or protect anything for good.
 
 It knows what your household cares about, too:
 
@@ -79,6 +79,8 @@ Click **Replace** and Curatarr first checks that a better copy actually exists. 
 - **Better skip markers**: Intro Skipper guesses that are plainly wrong are hidden, each one undoable.
 - **The right audio first**: tracks labelled in the wrong language are relabelled, and the real English track becomes the default.
 - **Audio every TV can play**: films and episodes with DTS, TrueHD or FLAC sound get an AC3 copy beside the original, so a Roku or TV plays them directly instead of stumbling over conversion.
+- **Seeking that works on Roku**: files whose seek index sits where Roku players don't look are rebuilt (nothing re-encoded), so skipping ahead doesn't start the episode over.
+- **Posters in your language**: a new release that arrived with only a foreign poster gets one in your language once TMDB has it.
 
 The picture is never re-encoded, the only thing ever encoded is that optional extra audio track, and none of it happens until you switch it on.
 
@@ -90,7 +92,7 @@ Which film swears most per hour? Which show says "I love you" most? Who talks lo
 ![Fun facts: superlatives from what's said in your films and shows](docs/images/fun.png)
 
 ### 🔎 Find the episode where someone said *that line*
-Search every transcript for a quote or a topic and jump straight to the episode, with the lines around it and the timestamp.
+Search every transcript for a quote or a topic and jump straight to the episode, with the lines around it and the timestamp. Put words in "quotes" for the exact line; matches are highlighted.
 
 ### 📱 On your phone, for the whole household
 Everything works on a phone. Household members sign in with their own Jellyfin accounts and can browse, search and say *Keep*; only administrators can approve deletions or change settings.
