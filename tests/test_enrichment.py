@@ -395,6 +395,34 @@ def test_new_media_is_queued_only_after_enabling(media_env):
     assert enrichment.queue_new_media() == 1
 
 
+def test_files_a_scan_settled_still_get_subtitles(media_env):
+    """A scan marks files with chapters of their own as handled, so no
+    chapter job runs, and subtitles used to follow only chapter jobs."""
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(part.file_path, chapters=[{"start": 0.0, "name": "Disc"}])
+    enrichment.save_settings(
+        library,
+        {
+            "chapter_mode": "navigation",
+            "existing_library": "true",
+            "subtitles_enabled": "true",
+        },
+    )
+    state = _run(part, "scan")
+    assert state.chapter_status == "existing" and state.subtitle_status is None
+    assert enrichment.queue_new_media() == 1
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+    assert (state.job_state, state.requested_action) == ("queued", "subtitles")
+    assert enrichment.queue_new_media() == 0  # already queued
+    # Once checked, nothing more is queued for it.
+    state.job_state, state.requested_action = "idle", None
+    state.subtitle_status = "existing"
+    db.session.commit()
+    assert enrichment.queue_new_media() == 0
+
+
 def test_failed_semantic_step_falls_back_to_scene_alignment(media_env, monkeypatch):
     files, _arr = media_env
     library, _media, part = _movie()
