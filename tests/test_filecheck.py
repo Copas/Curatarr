@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 from test_enrichment import _movie
 
 from curatarr import better_copy, db, enrichment, filecheck, filecheck_jobs
+from curatarr.integrations import IntegrationError
 from curatarr.mediafile import MediaInfo, tool
 from curatarr.models import ChapterState, MediaIdentity, MediaPart
 from curatarr.services import set_setting, setting
@@ -462,3 +463,42 @@ def test_the_row_shows_what_replace_is_doing(client, check_env):
     client.post(f"/chapters/problems/{state.id}/dismiss", data={"back": "overview"})
     assert replace_url not in client.get("/").text  # OK drops it
     assert filecheck_jobs.review()["to_act"] == []
+
+
+def test_a_slow_delete_retried_never_blocklists_the_new_copy(check_env, monkeypatch):
+    """Sonarr deleting from a network share took over a minute: the replace
+    gave up, Sonarr grabbed a new copy, and every retry blocklisted that one."""
+    arr, _found = check_env
+    _library, _media, part = _movie(PATH)
+    part.size_bytes = 1000
+    db.session.commit()
+    filecheck_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+
+    def slow(_file_id):
+        raise IntegrationError("Read timed out")
+
+    monkeypatch.setattr(arr, "delete_movie_file", slow)
+    with pytest.raises(IntegrationError):
+        filecheck_jobs.replace(state)
+    assert arr.calls.count(("failed", 300)) == 1
+    # Meanwhile Sonarr/Radarr grabbed a new copy, and the delete went through.
+    monkeypatch.setattr(
+        arr, "grabs", lambda _movie_id: [{"id": 301, "sourceTitle": "New.Copy"}]
+    )
+    monkeypatch.setattr(arr, "delete_movie_file", lambda _file_id: None)
+    filecheck_jobs.replace(state)
+    assert ("failed", 301) not in arr.calls
+    assert state.file_check["replaced"]["blocklisted"] == "Film.2020.1080p.HC.WEBRip"
+
+
+def test_a_file_already_deleted_counts_as_deleted(app, monkeypatch):
+    from curatarr.integrations import SonarrClient
+
+    sonarr = SonarrClient.__new__(SonarrClient)
+
+    def gone(*_args, **_kwargs):
+        raise IntegrationError("Not found", status_code=404)
+
+    monkeypatch.setattr(sonarr, "request", gone, raising=False)
+    assert sonarr.delete_episode_file(13350) is None

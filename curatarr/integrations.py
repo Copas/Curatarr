@@ -17,6 +17,18 @@ class IntegrationError(RuntimeError):
         self.status_code = status_code
 
 
+def _gone_is_fine(delete):
+    """A delete answered "not found" has nothing left to do: an earlier try
+    that timed out may have finished after all. Retrying it as a failure kept
+    a replace going round, blocklisting each new copy as it was grabbed."""
+    try:
+        return delete()
+    except IntegrationError as exc:
+        if exc.status_code == 404:
+            return None
+        raise
+
+
 def normalized_url(value: str) -> str:
     parsed = urlparse(value.strip())
     if (
@@ -665,8 +677,13 @@ class SonarrClient(Client):
         )
 
     def delete_episode_file(self, file_id):
-        return self.request(
-            "DELETE", f"/api/v3/episodefile/{file_id}", destructive=True
+        return _gone_is_fine(
+            lambda: self.request(
+                "DELETE",
+                f"/api/v3/episodefile/{file_id}",
+                destructive=True,
+                read_timeout=300,  # deleting from a network share can be slow
+            )
         )
 
     def imports_since(self, since):
@@ -756,7 +773,14 @@ class RadarrClient(Client):
         )
 
     def delete_movie_file(self, file_id):
-        return self.request("DELETE", f"/api/v3/moviefile/{file_id}", destructive=True)
+        return _gone_is_fine(
+            lambda: self.request(
+                "DELETE",
+                f"/api/v3/moviefile/{file_id}",
+                destructive=True,
+                read_timeout=300,  # deleting from a network share can be slow
+            )
+        )
 
     def search_movie(self, movie_id):
         return self.request(
