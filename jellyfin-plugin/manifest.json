@@ -6,6 +6,7 @@
     "description": "Delete in any Jellyfin app asks Curatarr first: a film or show Curatarr manages is marked Leaving Soon instead of deleted.",
     "owner": "Copas",
     "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/logo.png",
     "versions": [
       {
         "version": "0.1.0.0",
