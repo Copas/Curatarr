@@ -741,7 +741,8 @@ def _finish(state, status, *, error=None, info=None, source=None, count=None):
 
 TRANSCRIBER_MISSING = (
     "Smart Chapters is installed without faster-whisper, so it can't transcribe. "
-    "Reinstall Curatarr with EXTRAS=chapters-gpu"
+    "Reinstall Curatarr with EXTRAS=chapters-gpu (or EXTRAS=chapters on a "
+    "machine without an NVIDIA graphics card)"
 )
 
 
@@ -2658,7 +2659,7 @@ def _dub_label(result) -> tuple[str, str] | None:
 def environment_status() -> dict:
     """Which tools this host has, for the settings page."""
     from .mediafile import tool
-    from .transcribe import available
+    from .transcribe import available, cuda_libraries, nvidia_gpu, recommended_extras
 
     status = {
         "ffprobe": tool("ffprobe"),
@@ -2666,6 +2667,9 @@ def environment_status() -> dict:
         "mkvpropedit": tool("mkvpropedit"),
         "mkvextract": tool("mkvextract"),
         "faster_whisper": available(),
+        "gpu": nvidia_gpu(),
+        "cuda": cuda_libraries(),
+        "extras": recommended_extras(),
         "ollama": None,
         "ollama_models": [],
     }
