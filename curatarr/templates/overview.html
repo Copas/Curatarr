@@ -24,6 +24,8 @@
 </div>
 {% endif %}
 {% if care and care.activity.overall %}<a class="card p-3 mb-3 d-block text-reset text-decoration-none" href="{{ url_for('main.chapter_maintenance') }}" aria-label="Ongoing work, on Enhance">{{ overall_bar(care.activity.overall) }}{% set a = care.activity %}<span class="small text-secondary">{% if a.paused_since %}Paused, making room for people watching{% elif a.running %}{{ a.running|length }} job{{ '' if a.running|length == 1 else 's' }} running now{% endif %}</span></a>{% endif %}
+{% if leaving %}<section class="card p-3 mb-3 leaving-card" aria-labelledby="leaving-heading"><div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2"><h2 class="section-label mb-0" id="leaving-heading">{{ icon('calendar', 14) }} Leaving soon</h2><a class="small" href="{{ url_for('main.review') }}">See them</a></div>
+  <p class="mb-0 mt-2">{{ leaving.count }} title{{ '' if leaving.count == 1 else 's' }} ({{ leaving.bytes|size }}) go{{ 'es' if leaving.count == 1 else '' }} unless someone watches{% if leaving.first %}, the first on {{ leaving.first|when('date') }}{% endif %}.</p></section>{% endif %}
 <div class="row g-3 mb-4">
   <section class="{{ 'col-lg-7' if care else 'col-12' }}" aria-labelledby="needs-heading"><div class="card p-3 h-100">
     <div class="d-flex justify-content-between align-items-baseline mb-2"><h2 class="section-label mb-0" id="needs-heading">Needs you</h2>{% if needs %}<span class="chip chip-accent">{{ needs|length }}</span>{% endif %}</div>
@@ -43,8 +45,7 @@
     </li>{% endfor %}
     </ul>
     {% else %}<div class="needs-empty">{{ icon('review', 28) }}<div><strong>Nothing needs you.</strong><br><span class="text-secondary small">Decisions, replacements and problems show up here.</span></div></div>{% endif %}
-    {% if leaving %}<p class="small text-secondary mb-0 mt-3">{{ icon('calendar', 14) }} Leaving soon: {{ leaving.count }} title{{ '' if leaving.count == 1 else 's' }} ({{ leaving.bytes|size }}){% if leaving.first %}, the first on {{ leaving.first|when('date') }}{% endif %} unless someone watches. <a href="{{ url_for('main.review') }}">See them</a></p>{% endif %}
-    {% if handled %}<p class="small text-secondary mb-0 mt-3">{{ icon('tools', 14) }} Handled in the last {{ handled.days }} days:{% set bits = [] %}{% if handled.replaced %}{% set _ = bits.append(handled.replaced ~ ' file' ~ ('s' if handled.replaced != 1 else '') ~ ' replaced') %}{% endif %}{% if handled.searched %}{% set _ = bits.append(handled.searched ~ ' search' ~ ('es' if handled.searched != 1 else '') ~ ' for missing episodes') %}{% endif %}{% if handled.gave_up %}{% set _ = bits.append(handled.gave_up ~ " couldn't be fixed") %}{% endif %} {{ bits|join(' · ') }}. <a href="{{ url_for('main.history') }}">Activity</a></p>{% endif %}
+    {% if handled %}<p class="small text-secondary mb-0 mt-3 pt-3 border-top border-secondary-subtle">{{ icon('tools', 14) }} Handled in the last {{ handled.days }} days:{% set bits = [] %}{% if handled.replaced %}{% set _ = bits.append(handled.replaced ~ ' file' ~ ('s' if handled.replaced != 1 else '') ~ ' replaced') %}{% endif %}{% if handled.searched %}{% set _ = bits.append(handled.searched ~ ' search' ~ ('es' if handled.searched != 1 else '') ~ ' for missing episodes') %}{% endif %}{% if handled.gave_up %}{% set _ = bits.append(handled.gave_up ~ " couldn't be fixed") %}{% endif %} {{ bits|join(' · ') }}. <a href="{{ url_for('main.history') }}">Activity</a></p>{% endif %}
   </div></section>
   {% if care %}{% set c = care.summary %}{% set a = care.activity %}
   <section class="col-lg-5" aria-labelledby="care-heading"><a class="card p-3 h-100 care-card text-reset text-decoration-none" href="{{ url_for('main.chapter_maintenance') }}">
