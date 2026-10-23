@@ -238,6 +238,58 @@ class JellyfinClient(Client):
             headers={"Content-Type": "image/jpeg"},
         )
 
+    def configuration(self):
+        return self.request("GET", "/System/Configuration")
+
+    def released_since(self, since, start=0, limit=200):
+        """Films and shows first released on or after ``since`` (a date).
+
+        Jellyfin's MinPremiereDate filter misses most titles (and returns
+        collections), so this asks by year and compares the dates here."""
+        years = ",".join(str(y) for y in range(since.year, since.year + 3))
+        data = self.request(
+            "GET",
+            "/Items",
+            params={
+                "Recursive": "true",
+                "IncludeItemTypes": "Movie,Series",
+                "Years": years,
+                "Fields": "ProviderIds,PremiereDate",
+                "StartIndex": start,
+                "Limit": limit,
+            },
+        )
+        data = data or {}
+        data["Returned"] = len(data.get("Items") or [])  # before the filter
+        data["Items"] = [
+            item
+            for item in data.get("Items") or []
+            if (item.get("PremiereDate") or "")[:10] >= since.isoformat()
+        ]
+        return data
+
+    def remote_images(self, item_id, kind="Primary"):
+        """The pictures its metadata providers offer, in every language, in
+        Jellyfin's order of preference (the metadata language first)."""
+        data = self.request(
+            "GET",
+            f"/Items/{item_id}/RemoteImages",
+            params={"Type": kind, "IncludeAllLanguages": "true"},
+        )
+        return (data or {}).get("Images") or []
+
+    def download_remote_image(self, item_id, image, kind="Primary"):
+        """Make one of ``remote_images`` the item's picture."""
+        return self.request(
+            "POST",
+            f"/Items/{item_id}/RemoteImages/Download",
+            params={
+                "Type": kind,
+                "ImageUrl": image["Url"],
+                "ProviderName": image.get("ProviderName") or "",
+            },
+        )
+
     def mark_played(self, user_id, item_id):
         return self.request("POST", f"/Users/{user_id}/PlayedItems/{item_id}")
 

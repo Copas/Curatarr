@@ -263,6 +263,7 @@ def test_household_choices_page_saves(app, client):
         "seasonal": False,
         "seasonal_return": False,
         "leaving_collection": False,  # an unticked box
+        "poster_language": False,
     }
 
 
