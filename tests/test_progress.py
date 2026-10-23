@@ -173,3 +173,15 @@ def test_overview_counts_every_title_leaving_soon(app, client):
     db.session.commit()
     page = client.get("/").text
     assert "7 titles" in page and "Leaving soon</h2>" in page
+
+
+def test_a_paused_hour_does_not_set_the_pace():
+    now = utcnow()
+    done = {1: 3, 6: 380, 24: 507}  # watching paused most of the last hour
+
+    def finished_since(moment):
+        hours = round((now - moment).total_seconds() / 3600)
+        return done[hours]
+
+    rate = enrichment._recent_pace(finished_since, now - timedelta(days=2), now)
+    assert round(rate) == 63  # the six hours' pace, not 3 an hour
