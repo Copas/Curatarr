@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fixed: the English subtitles bar read 100% while subtitle jobs were still waiting.** Files with a subtitle job queued or running were counted neither as done nor as to do, so 700 waiting files dropped out of the total. They count as still to go now, and Enhance's Needing subtitles shows them with how many are queued.
 - **Curatarr says when a graphics card goes unused.** Settings → Enhance names the NVIDIA card it finds and whether transcription uses it; Enhance shows a notice when an install has faster-whisper but not the CUDA libraries (`EXTRAS=chapters` on a machine with a card), which transcribes several times slower on the processor. Reinstall hints suggest `chapters-gpu` only where there's a card, and `chapters` otherwise. The installer says so too when it finds a card.
 - **The job limit's GPU reading says when it isn't counted.** GPU use only limits jobs while Jellyfin is transcoding; otherwise Activity showed, say, "GPU 92% … aiming under 85%: room for 4", which read like a mistake.
 - **Fixed: files a library scan had settled never got subtitles or skip-marker checks.** Both are chained after a file's chapter job, and a scan marks files with chapters of their own, too short for chapters, or not MKV as handled, so no chapter job ever ran for them: 825 files here were left "needing subtitles" with nothing queued. The hourly pass that queues new files now queues those follow-ups directly (when subtitles are on for the library, and for the existing library only when that's switched on).
