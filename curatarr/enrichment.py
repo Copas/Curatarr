@@ -21,7 +21,7 @@ from pathlib import Path
 
 from flask import current_app
 from sqlalchemy import and_, case, func, or_, update
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, PendingRollbackError
 
 from . import db, leases, throttle
 from .chapters import (
@@ -1801,9 +1801,10 @@ def _run_one(app, state_id, llm):
         # All work was paused on request: start this job again on resume.
         db.session.rollback()
         _best_effort(lambda: _requeue(state_id))
-    except OperationalError as exc:
+    except (OperationalError, PendingRollbackError) as exc:
         # SQLite allows one writer; discovery holds a long write transaction.
-        # Put the job back rather than failing it.
+        # Put the job back rather than failing it. (A lock hit during an
+        # autoflush surfaces as PendingRollbackError on the next query.)
         db.session.rollback()
         _best_effort(lambda: _requeue(state_id))
         raise DatabaseBusy from exc
@@ -2125,6 +2126,24 @@ def _overall():
     return overall()
 
 
+PACE_WINDOWS = (timedelta(hours=1), timedelta(hours=6), timedelta(hours=24))
+
+
+def _recent_pace(finished_since, started, now) -> float | None:
+    """Items an hour at the best of the last hour's, six hours' and day's pace.
+    The best, not the latest: work pauses while people watch, and an hour
+    spent mostly paused (3 done) had 1,486 subtitle jobs reading as 20 days,
+    where the last six hours ran at 60 an hour."""
+    best = None
+    for window in PACE_WINDOWS:
+        since = max(now - window, started)
+        hours = (now - since).total_seconds() / 3600
+        count = finished_since(since)
+        if count >= FORECAST_MIN_SAMPLES and hours > 0:
+            best = max(best or 0.0, count / hours)
+    return best
+
+
 def subtitle_forecast(now=None) -> dict | None:
     """Progress and estimated finish for queued subtitle jobs, from the last
     hour's pace (or the last day's when the last hour has too few)."""
@@ -2150,14 +2169,7 @@ def subtitle_forecast(now=None) -> dict | None:
             .scalar()
         )
 
-    rate = None
-    for window in (timedelta(hours=1), FORECAST_WINDOW):
-        since = max(now - window, started)
-        hours = (now - since).total_seconds() / 3600
-        count = finished_since(since)
-        if count >= FORECAST_MIN_SAMPLES and hours > 0:
-            rate = count / hours
-            break
+    rate = _recent_pace(finished_since, started, now)
     return {
         "remaining": remaining,
         "done": finished_since(started),
@@ -2192,14 +2204,7 @@ def marker_forecast(now=None) -> dict | None:
         )
 
     done = checked_since(started)
-    rate = None
-    for window in (timedelta(hours=1), FORECAST_WINDOW):
-        since = max(now - window, started)
-        hours = (now - since).total_seconds() / 3600
-        count = checked_since(since)
-        if count >= FORECAST_MIN_SAMPLES and hours > 0:
-            rate = count / hours
-            break
+    rate = _recent_pace(checked_since, started, now)
     eta = now + timedelta(hours=remaining / rate) if rate else None
     return {
         "remaining": remaining,
