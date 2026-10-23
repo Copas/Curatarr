@@ -42,6 +42,10 @@ Titles nobody has played are not removed just for being unwatched. (A library ca
 
    With the **Curatarr plugin for Jellyfin** installed (Settings → **Install in Jellyfin** does it, and sets it up; see [jellyfin-plugin](../jellyfin-plugin/README.md)), Delete in any Jellyfin app marks a film or show Leaving Soon instead of deleting its files, so it leaves through Radarr or Sonarr like everything else, and can still be saved. A title Curatarr has to keep (Never Purge) makes the delete fail. Episodes, seasons and anything Curatarr doesn't manage are deleted by Jellyfin as usual.
 
+   ![Leaving Soon in Jellyfin: the poster, home-screen card and backdrop](images/leaving-soon.png)
+
+   ![The Leaving Soon collection and the countdown](images/leaving-soon-collection.png)
+
 2. They're removed when the notice ends, unless someone watches them. **Any playback** after a title was marked resets inactivity and rescues it (viewing from before it was marked doesn't count).
 3. Below the **critical** threshold, removal happens without a notice.
 
