@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fixed: good copies of a short episode were replaced one after another.** Sonarr lists one runtime for a whole show, so a 32-minute finale listed at 43 looked cut short; with automatic replacement each new copy was flagged and replaced too (six times in a day, every release blocklisted). A copy that runs as long as one already replaced for being short is now accepted (the listing is wrong), and a Replace whose file was already replaced finishes without blocklisting.
 - **Fixed: a slow delete made a Replace blocklist each new copy.** Sonarr took over a minute to delete a file from a network share, so the Replace gave up; retried every cycle, it blocklisted whatever had been grabbed most recently (by then the new copy) and failed again, because the file was gone. A file already gone now counts as deleted, deletes may take five minutes, and a retried Replace never blocklists twice.
 - **Overview's Leaving Soon summary has a card of its own**, above Needs you. At the foot of the Needs you list it read as part of the row above it (a show listed for misfiled episodes looked like it was leaving).
 - **Fixed: Overview's Leaving Soon line never said more than 5 titles.** It was counted from the upcoming list, which stops at five; it counts every title Leaving Soon now (14 here, not 5).

@@ -115,6 +115,9 @@ class FakeArr:
     def episode_grabs(self, episode_id):
         return [{"id": 400, "sourceTitle": "Show.S01E01.HDTV"}]
 
+    def episode(self, episode_id):
+        return {"id": episode_id}
+
     # What the indexers have: one whole, acceptable copy unless a test says otherwise.
     available: ClassVar[list] = [
         {"title": "Film.2020.1080p.BluRay-GOOD", "rejections": []}
@@ -502,3 +505,43 @@ def test_a_file_already_deleted_counts_as_deleted(app, monkeypatch):
 
     monkeypatch.setattr(sonarr, "request", gone, raising=False)
     assert sonarr.delete_episode_file(13350) is None
+
+
+def test_a_copy_as_long_as_the_one_replaced_is_not_short(check_env):
+    """Sonarr lists one runtime for a whole show; a 32-minute finale looked cut
+    short, and every copy of it was replaced in turn."""
+    from curatarr.services import audit
+
+    _arr, found = check_env
+    _library, _media, part = _movie(PATH)
+    part.size_bytes = 1000
+    db.session.commit()
+    found["subtitles"] = "clean"
+    short = {"kind": "short", "text": "Runs 100 min, but it's listed as 130 min"}
+    found["issues"] = [short]
+    filecheck_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+    assert state.file_problem  # the first copy: maybe cut short
+    audit(
+        "file_replaced",
+        part.media_identity_id,
+        "Replaced the movie file: runs 100 min, but it's listed as 130 min.",
+        f"file-replaced:{state.id}:earlier",
+    )
+    db.session.commit()
+    filecheck_jobs.recheck(state)
+    filecheck_jobs.sweep()
+    assert not state.file_problem  # the new copy runs as long: the listing is wrong
+    assert "listed length is wrong" in state.file_check["length_note"]
+
+
+def test_a_retry_after_the_file_was_replaced_blocklists_nothing(check_env):
+    arr, _found = check_env
+    _library, _media, part = _movie(PATH)
+    part.size_bytes = 1000
+    part.arr_file_id = 54  # Radarr's file is 55 now: replaced since
+    db.session.commit()
+    filecheck_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+    assert "already has a new file" in filecheck_jobs.replace(state)
+    assert not [c for c in arr.calls if c[0] in ("failed", "delete")]
