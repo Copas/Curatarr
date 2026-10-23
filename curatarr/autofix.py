@@ -1,13 +1,15 @@
 """Automatic fixes: do the safe thing instead of asking, once.
 
-Each kind of fix can be switched on in Settings → Automatic (all off by
-default). When it's on, Curatarr starts the fix itself as soon as it finds the
+Each kind of fix can be switched off in Settings → Automatic. All are on by
+default: each only acts when it can be confident (a better copy is checked to
+exist first, or two independent pieces of evidence agree). When it's on, Curatarr starts the fix itself as soon as it finds the
 problem, and also for problems found before it was switched on:
 
 - **files**: replace problem files (filecheck_jobs);
 - **dubs**: replace films with no English audio (dub_jobs);
 - **wrong_show**: replace files of another show with the same name (wrong_version);
-- **missing**: search once for always-keep episodes that never arrived (missing_keep).
+- **missing**: search once for always-keep episodes that never arrived (missing_keep);
+- **misfiled**: move episodes Sonarr filed under the wrong episode (misfiled).
 
 Replacing is safe to do unattended because it checks a better copy exists
 before anything is deleted (better_copy). A fix is tried once: when nothing
@@ -21,11 +23,14 @@ from datetime import timedelta
 from . import db
 
 KEY = "auto_fixes"
+ON_BY_DEFAULT = True
 KINDS = {
     "files": "Replace problem files (cut short, broken, burned-in subtitles)",
     "dubs": "Replace films with no English audio",
     "wrong_show": "Replace files that are another show with the same name",
     "missing": "Search once for always-keep episodes that never arrived",
+    "misfiled": "Move episodes Sonarr filed under the wrong episode, when what's "
+    "said in them agrees with their download's name",
 }
 # The first two were Enhance options before this page existed; they stay there.
 ENHANCE_OPTION = {
@@ -49,7 +54,7 @@ def enabled() -> dict:
     return {
         kind: bool(enhance.get(ENHANCE_OPTION[kind]))
         if kind in ENHANCE_OPTION
-        else bool(stored.get(kind))
+        else bool(stored.get(kind, ON_BY_DEFAULT))
         for kind in KINDS
     }
 

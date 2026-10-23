@@ -669,6 +669,43 @@ class SonarrClient(Client):
             "DELETE", f"/api/v3/episodefile/{file_id}", destructive=True
         )
 
+    def imports_since(self, since):
+        """Files imported from downloads since ``since`` (an ISO time), with
+        the download's name (data.droppedPath) and the episode they went to."""
+        return self.request(
+            "GET",
+            "/api/v3/history/since",
+            params={"date": since, "eventType": 3, "includeEpisode": "true"},
+        )
+
+    def episode(self, episode_id):
+        return self.request("GET", f"/api/v3/episode/{episode_id}")
+
+    def episode_file(self, file_id):
+        return self.request("GET", f"/api/v3/episodefile/{file_id}")
+
+    def command(self, name, wait_seconds=0, **fields):
+        """Start a command; with ``wait_seconds``, wait for it to finish
+        (its last state, with status "timeout" if it didn't)."""
+        state = self.request(
+            "POST", "/api/v3/command", json={"name": name, **fields}, destructive=True
+        )
+        deadline = time.monotonic() + wait_seconds
+        while (
+            wait_seconds
+            and isinstance(state, dict)
+            and str(state.get("status", "")).lower()
+            not in {"completed", "failed", "aborted", "cancelled", "orphaned"}
+        ):
+            if time.monotonic() >= deadline:
+                return {**state, "status": "timeout"}
+            time.sleep(1)
+            state = self.request("GET", f"/api/v3/command/{state['id']}")
+        return state
+
+    def rename_candidates(self, series_id):
+        return self.request("GET", "/api/v3/rename", params={"seriesId": series_id})
+
 
 class RadarrClient(Client):
     status_path = "/api/v3/system/status"

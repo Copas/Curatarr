@@ -474,12 +474,13 @@ def _nav_counts(signed_in_user, is_admin) -> dict:
         from .enrichment import maintenance_failed_count
 
         counts["dubs"] = dub_jobs.counts()["dubs_to_act"]
-        from . import filecheck_jobs, missing_keep, wrong_version
+        from . import filecheck_jobs, misfiled, missing_keep, wrong_version
 
         counts["problems"] = (
             filecheck_jobs.counts()["problems_to_act"]
             + missing_keep.count()
             + wrong_version.count()
+            + misfiled.count()
         )
         counts["failed"] = maintenance_failed_count()
         from .enrichment import identity_issues
@@ -826,6 +827,27 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "search_state": row["state"],
                 "searched": row["searched"],
                 "href": url_for("main.chapter_problems"),
+            }
+        )
+    from . import misfiled
+
+    shows = {}
+    for row in misfiled.rows():
+        # Fixed by itself (now or once its episode is freed): nothing to do.
+        if row["plan"] == "wait" or (row["plan"] and auto["misfiled"]):
+            continue
+        shows.setdefault(row["series_title"], []).append(row)
+    for title, rows_ in list(shows.items())[:NEEDS_SHOWN]:
+        codes = ", ".join(r["from_code"] for r in rows_)
+        needs.append(
+            {
+                "icon": "tools",
+                "tone": "warning",
+                "title": title,
+                "detail": f"{codes} look{'s' if len(rows_) == 1 else ''} filed under "
+                "the wrong episode in Sonarr.",
+                "jellyfin_media": rows_[0]["media"].id if rows_[0]["media"] else None,
+                "href": url_for("main.chapter_problems") + "#misfiled",
             }
         )
     from .enrichment import identity_issues
