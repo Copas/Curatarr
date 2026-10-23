@@ -33,13 +33,19 @@ def _per_hour(action_types, now) -> float | None:
 
 def overall(now=None) -> dict | None:
     from . import compat_audio, seek_repair
-    from .enrichment import _duration_words, job_forecast, marker_forecast
+    from .enrichment import (
+        _duration_words,
+        job_forecast,
+        marker_forecast,
+        subtitle_forecast,
+    )
 
     now = now or utcnow()
     parts = []
     for name, forecast in (
         ("Chapter jobs", job_forecast(now)),
         ("Skip-marker checks", marker_forecast(now)),
+        ("Subtitles", subtitle_forecast(now)),
     ):
         if forecast:
             parts.append(

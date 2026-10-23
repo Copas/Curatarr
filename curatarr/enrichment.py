@@ -1715,13 +1715,22 @@ def _due_jobs(limit, *, scans, recaps=False):
                 ChapterState.requested_action.notin_(("scan", "recap")),
             )
         )
-    # Subtitles reuse a saved transcript and take seconds, and a redo reuses
+    # Subtitles that reuse a saved transcript take seconds, and a redo reuses
     # its transcript too; neither should wait behind a backlog of thousands.
+    # Subtitles that need transcribing first (a backfill, such as files whose
+    # only English subtitles are pictures) go last: new imports come first.
     priority = case(
-        (ChapterState.requested_action == "subtitles", 0),
+        (
+            and_(
+                ChapterState.requested_action == "subtitles",
+                ChapterState.transcript_key.isnot(None),
+            ),
+            0,
+        ),
         (ChapterState.requested_action == "regenerate", 1),
         (ChapterState.requested_action == "recap", 1),
         (ChapterState.requested_action == "auto", 2),
+        (ChapterState.requested_action == "subtitles", 4),
         else_=3,
     )
     rows = (
@@ -2109,6 +2118,46 @@ def _overall():
     from .progress import overall
 
     return overall()
+
+
+def subtitle_forecast(now=None) -> dict | None:
+    """Progress and estimated finish for queued subtitle jobs, from the last
+    hour's pace (or the last day's when the last hour has too few)."""
+    now = now or utcnow()
+    pending = db.session.query(ChapterState).filter(
+        ChapterState.job_state.in_(("queued", "running")),
+        ChapterState.requested_action == "subtitles",
+    )
+    remaining = pending.count()
+    if not remaining:
+        return None
+    started = (
+        _as_datetime(
+            pending.with_entities(func.min(ChapterState.requested_at)).scalar()
+        )
+        or now
+    )
+
+    def finished_since(moment):
+        return (
+            db.session.query(func.count(ChapterState.id))
+            .filter(ChapterState.subtitle_processed_at >= moment)
+            .scalar()
+        )
+
+    rate = None
+    for window in (timedelta(hours=1), FORECAST_WINDOW):
+        since = max(now - window, started)
+        hours = (now - since).total_seconds() / 3600
+        count = finished_since(since)
+        if count >= FORECAST_MIN_SAMPLES and hours > 0:
+            rate = count / hours
+            break
+    return {
+        "remaining": remaining,
+        "done": finished_since(started),
+        "finishes_at": now + timedelta(hours=remaining / rate) if rate else None,
+    }
 
 
 def marker_forecast(now=None) -> dict | None:

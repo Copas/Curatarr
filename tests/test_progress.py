@@ -126,3 +126,22 @@ def test_rebuilds_share_one_estimate_from_their_joint_pace(app, monkeypatch):
     # 4 audio rebuilds + 60 files x 10% needing one = 10 rebuilds at 1 an hour.
     assert result["time_left"] == "10 h" and result["approximate"]
     assert result["unknown"] == []
+
+
+def test_subtitle_jobs_are_part_of_the_bar(app, monkeypatch):
+    now = utcnow()
+    monkeypatch.setattr(enrichment, "job_forecast", lambda now=None: None)
+    monkeypatch.setattr(enrichment, "marker_forecast", lambda now=None: None)
+    monkeypatch.setattr(
+        enrichment,
+        "subtitle_forecast",
+        lambda now=None: {
+            "done": 100,
+            "remaining": 1500,
+            "finishes_at": now + timedelta(hours=30),
+        },
+    )
+    monkeypatch.setattr(compat_audio, "progress", lambda: None)
+    monkeypatch.setattr(seek_repair, "progress", lambda: None)
+    result = progress.overall(now)
+    assert result["left"] == 1500 and result["slowest"] == "Subtitles"
