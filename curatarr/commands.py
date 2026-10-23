@@ -251,6 +251,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Following up replaced films failed")
     try:
+        from . import misfiled
+
+        misfiled.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Checking for misfiled episodes failed")
+    try:
         from . import picture_subtitles
 
         picture_subtitles.sweep()

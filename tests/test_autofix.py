@@ -12,7 +12,16 @@ from curatarr.models import ChapterState, LifecycleAction, utcnow
 from curatarr.services import setting
 
 
-def test_everything_is_off_until_switched_on(app, client):
+def test_everything_is_on_by_default(app, monkeypatch):
+    from curatarr import chapters
+
+    monkeypatch.setattr(autofix, "ON_BY_DEFAULT", True)
+    for option in autofix.ENHANCE_OPTION.values():
+        monkeypatch.setitem(chapters.GLOBAL_DEFAULTS, option, True)
+    assert all(autofix.enabled().values())
+
+
+def test_each_can_be_switched_off(app, client):
     assert not any(autofix.enabled().values())
     page = client.get("/rules/automatic").text
     assert "Automatic fixes" in page and "checked" not in page
@@ -22,6 +31,7 @@ def test_everything_is_off_until_switched_on(app, client):
         "dubs": False,
         "wrong_show": False,
         "missing": True,
+        "misfiled": False,
     }
     assert setting("chapter_options")["file_replace_automatically"] is True
 
