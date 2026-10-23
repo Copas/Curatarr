@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# Jellyfin saves this beside the plugin when it installs it, for its card.
+IMAGE = "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/logo.png"
 
 
 def main():
@@ -36,6 +38,7 @@ def main():
                 "versions": [],
             }
         )
+    plugins[0]["imageUrl"] = IMAGE
     versions = [v for v in plugins[0]["versions"] if v["version"] != args.version]
     versions.insert(
         0,
