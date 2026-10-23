@@ -1,0 +1,21 @@
+name: Jellyfin plugin
+
+on:
+  push:
+    branches: [main]
+    paths: ["jellyfin-plugin/**", ".github/workflows/jellyfin-plugin.yml"]
+  pull_request:
+    paths: ["jellyfin-plugin/**", ".github/workflows/jellyfin-plugin.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jellyfin-plugin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet test Jellyfin.Plugin.Curatarr.Tests -c Release
