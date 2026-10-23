@@ -165,6 +165,7 @@ FIELD_PATHS = {
     "existing_library": ("processing", "existing_library"),
     "dry_run": ("processing", "dry_run"),
     "subtitles_enabled": ("subtitles", "enabled"),
+    "subtitles_pictures": ("subtitles", "replace_pictures"),
 }
 
 
@@ -1536,11 +1537,13 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
             fields=fields,
         )
     if not ours:
-        if embedded_english(info.streams):
+        if embedded_english(info.streams, text_only=True):
             return _subtitles_done(state, "existing", fields=fields)
-        sidecars = sidecar_english(path)
-        if sidecars:
+        if sidecar_english(path, text_only=True):
             return _subtitles_done(state, "existing", fields=fields)
+        pictures = embedded_english(info.streams) or sidecar_english(path)
+        if pictures and not config["subtitles"].get("replace_pictures", True):
+            return _subtitles_done(state, "pictures", fields=fields)
     busy = import_activity(part, media, info, opts["settle_minutes"])
     if busy and "playing" not in busy:  # a file beside the video is fine to add
         state.job_state = "queued"
@@ -2487,7 +2490,10 @@ def maintenance_summary(library_id=None) -> dict:
     to_check = recaps_to_check(library_id)
     checked = markers_checked(library_id)
     existing = by_status.get("existing", 0)
-    with_subtitles = subtitles.get("existing", 0) + subtitles.get("generated", 0)
+    # Picture subtitles count when they're wanted as they are.
+    with_subtitles = sum(
+        subtitles.get(status, 0) for status in ("existing", "pictures", "generated")
+    )
     from . import dub_jobs
 
     dub_counts = dub_jobs.counts() if not library_id else {}
@@ -2501,7 +2507,8 @@ def maintenance_summary(library_id=None) -> dict:
         "markers_checked": checked,
         "markers_possible": checked + to_check,
         "subtitles_generated": subtitles.get("generated", 0),
-        "subtitles_existing": subtitles.get("existing", 0),
+        "subtitles_existing": subtitles.get("existing", 0)
+        + subtitles.get("pictures", 0),
         "subtitles_checked": sum(subtitles.values()),
         "files": parts,
         "scanned": scanned,
@@ -2632,6 +2639,7 @@ def describe(state: ChapterState | None) -> dict:
             None: "Not checked",
             "generated": "Generated",
             "existing": "Already has English subtitles",
+            "pictures": "English subtitles only as pictures",
             "skipped_language": "Not English audio",
             "no_speech": "No speech found",
             "removed": "Removed",

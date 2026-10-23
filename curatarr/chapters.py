@@ -51,6 +51,10 @@ DEFAULTS: dict[str, Any] = {
     },
     "subtitles": {
         "enabled": False,
+        # Picture subtitles (Blu-ray PGS, DVD VobSub) can't be shown by most
+        # TV apps, so Jellyfin burns them into the video: a restart, a
+        # transcode, slow seeking. A text track beside them avoids that.
+        "replace_pictures": True,
     },
 }
 

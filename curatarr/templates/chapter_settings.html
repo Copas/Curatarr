@@ -65,7 +65,8 @@
   </div>
 {% endcall %}
 {% call card('subtitles', 'subtitles', 'Subtitles', 'English subtitles for files that have none, from the same transcript', effective.subtitles.enabled) %}
-  <div class="setting-grid">{{ yes_no('subtitles_enabled', 'Add English subtitles when a file has none', 'Written beside the video as “.en.Curatarr.srt”. Never added when English subtitles exist, never over someone else\'s file. MP4 too.') }}</div>
+  <div class="setting-grid">{{ yes_no('subtitles_enabled', 'Add English subtitles when a file has none', 'Written beside the video as “.en.Curatarr.srt”. Never added when English subtitles exist, never over someone else\'s file. MP4 too.') }}
+    {{ yes_no('subtitles_pictures', 'Also when the English ones are only pictures', 'Blu-ray and DVD subtitles are pictures, which TV apps such as Roku can\'t show: Jellyfin burns them into the video, restarting it and slowing seeking. A text track beside them plays like any other. The picture track stays.') }}</div>
 {% endcall %}
 {% call card('processing', 'files', 'When to run', ('New imports' if effective.processing.new_media else 'Only when you start it') ~ (' · existing library too' if effective.processing.existing_library else '') ~ (' · dry run' if effective.processing.dry_run else '')) %}
   <div class="setting-grid">
