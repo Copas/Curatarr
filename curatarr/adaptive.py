@@ -29,9 +29,10 @@ PAUSE_SECONDS = 120  # and a pause lasts at least this long, so it doesn't flap
 @dataclass
 class Reading:
     cpu: float | None  # 0-1 across all cores
-    gpu: float | None  # 0-1, the busier of the GPU and its video decoder
+    gpu: float | None  # 0-1, the GPU's compute (what transcription uses)
     viewers: int
     transcodes: int
+    decoder: float | None = None  # 0-1, its video decoder: shown, not counted
 
     @property
     def load(self) -> float:
@@ -130,6 +131,8 @@ def _describe(reading: Reading, load: float, target: float) -> str:
         # card, so without one the GPU isn't counted (it's mostly Curatarr's).
         counted = "" if reading.transcodes else " (not counted: nothing is transcoding)"
         parts.append(f"GPU {reading.gpu:.0%}{counted}")
+    if reading.decoder is not None and reading.transcodes:
+        parts.append(f"video decoder {reading.decoder:.0%} (Jellyfin's)")
     if reading.viewers:
         who = f"{reading.viewers} watching"
         if reading.transcodes:
@@ -168,8 +171,19 @@ def _load_fallback() -> float | None:
         return None
 
 
+# While Jellyfin transcodes, its video decoder is Jellyfin's: Curatarr's
+# scene detection decodes on the processor instead (mediafile.detect_scenes),
+# so the decoder's load isn't counted against Curatarr. Counting it kept all
+# work paused for as long as anyone was transcoding: Jellyfin's own streams
+# kept the decoder near 100%, which no pause of Curatarr's could change.
+leave_decoder = False
+last_decoder: float | None = None
+
+
 def gpu_use() -> float | None:
-    """The busier of the NVIDIA GPU and its video decoder, or None without one."""
+    """The NVIDIA GPU's compute use, or None without one (its video decoder's
+    is kept in last_decoder)."""
+    global last_decoder
     try:
         result = subprocess.run(
             [
@@ -187,10 +201,13 @@ def gpu_use() -> float | None:
     if result.returncode != 0:
         return None
     try:
-        values = [float(x) for x in result.stdout.splitlines()[0].split(",")]
+        compute, decoder = (
+            float(x) / 100 for x in result.stdout.splitlines()[0].split(",")
+        )
     except (IndexError, ValueError):
         return None
-    return max(values) / 100
+    last_decoder = decoder
+    return compute
 
 
 def viewers(sessions: list[dict]) -> tuple[int, int]:
