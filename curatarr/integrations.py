@@ -230,6 +230,28 @@ class JellyfinClient(Client):
         or Backdrop (its first one)."""
         return self.request("GET", f"/Items/{item_id}/Images/{_image_path(kind)}")
 
+    def image_list(self, item_id):
+        """Every image an item has, with its type, index and tag."""
+        return self.request("GET", f"/Items/{item_id}/Images") or []
+
+    def image_at(self, item_id, kind, index, max_width=None):
+        params = {"maxWidth": max_width} if max_width else None
+        return self.request(
+            "GET", f"/Items/{item_id}/Images/{kind}/{index}", params=params
+        )
+
+    def delete_image(self, item_id, kind, index):
+        return self.request(
+            "DELETE", f"/Items/{item_id}/Images/{kind}/{index}", destructive=True
+        )
+
+    def move_image(self, item_id, kind, index, new_index):
+        return self.request(
+            "POST",
+            f"/Items/{item_id}/Images/{kind}/{index}/Index",
+            params={"newIndex": new_index},
+        )
+
     def put_image(self, item_id, image_bytes, kind="Primary"):
         return self.request(
             "POST",

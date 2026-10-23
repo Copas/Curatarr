@@ -516,6 +516,9 @@ class DemoClient:
         Image.new("RGB", (300, 450), "#456070").save(output, format="JPEG")
         return output.getvalue()
 
+    def image_list(self, _item_id):
+        return []
+
     def put_image(self, _item_id, _image_bytes, _kind="Primary"):
         self._check()
         row = (
