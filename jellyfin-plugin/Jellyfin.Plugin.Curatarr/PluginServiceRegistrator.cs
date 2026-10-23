@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jellyfin.Plugin.Curatarr;
 
 /// <summary>
-/// Adds the delete filter to Jellyfin's API.
+/// Adds the delete filter to Jellyfin's API, and Leaving Soon to the web app's menus.
 /// </summary>
 public class PluginServiceRegistrator : IPluginServiceRegistrator
 {
@@ -17,5 +17,6 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ICuratarrClient, CuratarrClient>();
         serviceCollection.AddScoped<DeleteFilter>();
         serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<DeleteFilter>());
+        serviceCollection.AddHostedService<WebMenu>();
     }
 }

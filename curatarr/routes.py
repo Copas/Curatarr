@@ -1134,8 +1134,10 @@ def jellyfin_delete():
         abort(400)
     if payload.get("check"):
         return jsonify({"ok": True})  # the plugin's Test button: address and token work
-    status, body = deletes.handle(payload.get("itemId"), payload.get("userName"))
-    if body.get("result") == "leaving_soon":
+    status, body = deletes.handle(
+        payload.get("itemId"), payload.get("userName"), payload.get("mode")
+    )
+    if body.get("result") in {"leaving_soon", "deleting"}:
         from .artwork import reconcile_artwork
 
         reconcile_artwork()  # badge the poster now, not on the next worker pass

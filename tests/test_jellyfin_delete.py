@@ -38,9 +38,37 @@ def test_a_deleted_film_is_marked_leaving_soon_instead(app, client, monkeypatch)
         )
         assert candidate.state == "LEAVING_SOON"
         assert "a delete in Jellyfin by Sam" in candidate.reason_text
-    # Deleting it again changes nothing.
+    # Deleting it again deletes it now, through Radarr (the worker's next pass).
     again = _post(client, {"itemId": ITEM, "userName": "Sam"}).get_json()
-    assert again["handled"] and again["result"] == "already"
+    assert again["handled"] and again["result"] == "deleting"
+    with app.app_context():
+        assert db.session.get(PurgeCandidate, candidate.id).state == "APPROVED"
+    third = _post(client, {"itemId": ITEM, "userName": "Sam"}).get_json()
+    assert third["result"] == "already"
+
+
+def test_the_web_apps_delete_deletes_now(app, client, monkeypatch):
+    media_id = _setup(app, monkeypatch)
+    body = _post(client, {"itemId": ITEM, "userName": "Sam", "mode": "now"}).get_json()
+    assert body["handled"] and body["result"] == "deleting"
+    with app.app_context():
+        candidate = (
+            db.session.query(PurgeCandidate).filter_by(media_identity_id=media_id).one()
+        )
+        assert candidate.state == "APPROVED"
+
+
+def test_the_web_apps_leaving_soon_never_deletes(app, client, monkeypatch):
+    _setup(app, monkeypatch)
+    status = _post(client, {"itemId": ITEM, "mode": "status"}).get_json()
+    assert status["handled"] and not status["leavingSoon"]
+    first = _post(client, {"itemId": ITEM, "mode": "leaving_soon"}).get_json()
+    assert first["result"] == "leaving_soon"
+    again = _post(client, {"itemId": ITEM, "mode": "leaving_soon"}).get_json()
+    assert again["result"] == "already"
+    status = _post(client, {"itemId": ITEM, "mode": "status"}).get_json()
+    assert status["leavingSoon"] and not status["deleting"]
+    assert _post(client, {"itemId": ITEM, "mode": "other"}).status_code == 400
 
 
 def test_unknown_items_are_left_to_jellyfin(app, client, monkeypatch):

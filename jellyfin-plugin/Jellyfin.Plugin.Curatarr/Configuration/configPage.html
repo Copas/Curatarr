@@ -9,7 +9,7 @@
         <div data-role="content">
             <div class="content-primary">
                 <h2>Curatarr</h2>
-                <p>With this plugin, Delete in any Jellyfin app asks Curatarr first. A film or show Curatarr looks after is marked Leaving Soon instead of deleted: its poster counts down, playing it or Keep in Curatarr saves it, and at the end of the notice period Curatarr deletes it through Radarr or Sonarr. Episodes, seasons and anything Curatarr doesn't know are deleted by Jellyfin as usual.</p>
+                <p>With this plugin, Delete in any Jellyfin app asks Curatarr first. A film or show Curatarr looks after is marked Leaving Soon instead of deleted: its poster counts down, playing it or Keep in Curatarr saves it, and at the end of the notice period Curatarr deletes it through Radarr or Sonarr. Deleting it again deletes it now. Episodes, seasons and anything Curatarr doesn't know are deleted by Jellyfin as usual.</p>
                 <form id="CuratarrConfigForm">
                     <div class="inputContainer">
                         <input is="emby-input" type="url" id="CuratarrUrl" label="Curatarr address" placeholder="http://127.0.0.1:8787" />
@@ -33,6 +33,13 @@
                         </label>
                         <div class="fieldDescription checkboxFieldDescription">Otherwise Jellyfin deletes the files itself while Curatarr is down.</div>
                     </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="WebMenu" type="checkbox" is="emby-checkbox" />
+                            <span>Add Leaving Soon to the web app's menus</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Beside Delete, which then deletes straight away in the web app. Needs the File Transformation plugin; takes effect when Jellyfin restarts. Other apps can't be given menu items: there, Delete marks a title Leaving Soon and deleting it again deletes it.</div>
+                    </div>
                     <div>
                         <button is="emby-button" type="button" id="CuratarrTest" class="raised button-alt block emby-button"><span>Test</span></button>
                         <p id="CuratarrTestResult"></p>
@@ -54,6 +61,7 @@
                         field('Token').value = config.Token || '';
                         field('InterceptDeletes').checked = config.InterceptDeletes;
                         field('BlockWhenUnreachable').checked = config.BlockWhenUnreachable;
+                        field('WebMenu').checked = config.WebMenu;
                         Dashboard.hideLoadingMsg();
                     });
                 });
@@ -82,6 +90,7 @@
                         config.Token = field('Token').value.trim();
                         config.InterceptDeletes = field('InterceptDeletes').checked;
                         config.BlockWhenUnreachable = field('BlockWhenUnreachable').checked;
+                        config.WebMenu = field('WebMenu').checked;
                         ApiClient.updatePluginConfiguration(pluginId, config).then(Dashboard.processPluginConfigurationUpdateResult);
                     });
                     return false;

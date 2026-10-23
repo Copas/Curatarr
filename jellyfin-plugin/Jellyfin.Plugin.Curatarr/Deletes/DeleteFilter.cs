@@ -10,13 +10,18 @@ namespace Jellyfin.Plugin.Curatarr.Deletes;
 /// <summary>
 /// Runs before Jellyfin's own delete (DELETE /Items/{id} and DELETE /Items?ids=),
 /// which every Jellyfin app uses. Each item the user may delete is put to Curatarr:
-/// a film or show it looks after becomes Leaving Soon and isn't deleted; anything
-/// else is deleted by Jellyfin as usual.
+/// a film or show it looks after becomes Leaving Soon and isn't deleted, or, if it
+/// already is, is deleted through Radarr or Sonarr; anything else is deleted by
+/// Jellyfin as usual. The web app, which has a Leaving Soon menu item of its own,
+/// deletes straight away.
 /// </summary>
 public sealed class DeleteFilter : IAsyncActionFilter
 {
     /// <summary>The claim Jellyfin's authentication puts the user's id in.</summary>
     internal const string UserIdClaim = "Jellyfin-UserId";
+
+    /// <summary>The claim with the app's name, e.g. "Jellyfin Web".</summary>
+    internal const string ClientClaim = "Jellyfin-Client";
 
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
@@ -75,6 +80,8 @@ public sealed class DeleteFilter : IAsyncActionFilter
             return;
         }
 
+        var web = WebMenu.Active && context.HttpContext.User.FindFirst(ClientClaim)?.Value == WebMenu.Client;
+        var mode = web ? Modes.Now : Modes.Delete;
         var toJellyfin = new List<Guid>();
         string? refused = null;
         foreach (var id in ids)
@@ -86,7 +93,7 @@ public sealed class DeleteFilter : IAsyncActionFilter
                 continue;
             }
 
-            var answer = await _curatarr.AskAsync(config, id, user.Username, context.HttpContext.RequestAborted).ConfigureAwait(false);
+            var answer = await _curatarr.AskAsync(config, id, user.Username, mode, context.HttpContext.RequestAborted).ConfigureAwait(false);
             if (answer is null)
             {
                 if (config.BlockWhenUnreachable)
@@ -106,6 +113,10 @@ public sealed class DeleteFilter : IAsyncActionFilter
             {
                 refused ??= answer.Refused;
                 _logger.LogInformation("Curatarr kept {Item} ({Name}) deleted by {User}: {Reason}", id, item.Name, user.Username, answer.Refused);
+            }
+            else if (answer.Result == "deleting")
+            {
+                _logger.LogInformation("{Item} ({Name}) deleted by {User} is being deleted by Curatarr", id, item.Name, user.Username);
             }
             else
             {
