@@ -13,6 +13,7 @@
 | `GET /api/v1/transcripts/search?q=…` | Sign-in or API key | Episodes and films where the words were said, with timestamps |
 | `GET /api/v1/identity-flags` | Sign-in or API key | Episodes flagged as possibly the wrong episode (filed as one, sounding like another), with the Sonarr series, whether the two are swapped and whether the other episode's file is confirmed. Empty while the episode check is off |
 | `POST /api/v1/webhook/jellyfin` | `X-Curatarr-Token` header | Jellyfin Webhook plugin events |
+| `POST /api/v1/jellyfin/delete` | `X-Curatarr-Token` header | Used by the Curatarr plugin for Jellyfin before Jellyfin deletes an item. Body `{"itemId", "userName"}`. A film or show Curatarr manages is marked Leaving Soon: `{"handled": true, "result": "leaving_soon" or "already"}`. One it must keep (Never Purge, no file in Radarr) gives `{"handled": true, "refused": "why"}`, and the delete should fail. Anything else gives `{"handled": false}`, and Jellyfin deletes it as usual. `{"check": true}` answers `{"ok": true}` |
 
 `/api/v1/history?limit=20&exclude=admin_signed_in` returns the 20 newest actions without sign-ins. Repeat `type=` or `exclude=` to filter by action type (for example `type=dub_fixed`).
 
