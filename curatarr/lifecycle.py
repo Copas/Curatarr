@@ -1340,13 +1340,20 @@ def _execute_action(action_id):
                         arr.season_search(series_id, season)
                     else:
                         arr.episode_search(sorted(episode_ids))
-        except IntegrationError:
-            action.state = "FAILED_RETRYABLE"
+        except IntegrationError as exc:
             action.attempts += 1
-            action.next_retry_at = utcnow() + timedelta(
-                minutes=min(60, 2**action.attempts)
-            )
-            action.last_error = "Sonarr acquisition request failed"
+            if exc.status_code == 404:
+                # The show (or an episode) is gone from Sonarr, deleted there:
+                # retrying can't succeed, and kept failing every hour.
+                action.state = "FAILED_FINAL"
+                action.next_retry_at = None
+                action.last_error = f"{media.title} isn't in Sonarr any more"
+            else:
+                action.state = "FAILED_RETRYABLE"
+                action.next_retry_at = utcnow() + timedelta(
+                    minutes=min(60, 2**action.attempts)
+                )
+                action.last_error = "Sonarr acquisition request failed"
             acquisition = (
                 db.session.query(AcquisitionState)
                 .filter_by(media_identity_id=media.id)

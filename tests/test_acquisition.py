@@ -240,6 +240,17 @@ def test_sonarr_timeout_after_accepted_command_does_not_search_twice(app, monkey
         assert execute_action(action.id) == "succeeded"
         assert searches == [(21, 2)]
 
+        # A show deleted from Sonarr: give up rather than retry every hour.
+        class GoneSonarr(FakeSonarr):
+            def queue(self):
+                raise IntegrationError("Not found", status_code=404)
+
+        action.state, action.payload_json = "PENDING", dict(action.payload_json)
+        db.session.commit()
+        monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: GoneSonarr())
+        assert execute_action(action.id) == "failed"
+        assert action.state == "FAILED_FINAL" and "isn't in Sonarr" in action.last_error
+
 
 def test_specials_and_unaired_future_episodes_do_not_trigger_search(app):
     with app.app_context():
