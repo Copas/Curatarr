@@ -1904,8 +1904,13 @@ def dispatch(*, synchronous=False, llm=None) -> int:
     if not opts["pause_during_playback"]:
         playing = transcoding = 0  # "make room for people watching" is off
     reading = adaptive.Reading(
-        adaptive.cpu_use(), adaptive.gpu_use(), playing, transcoding
+        adaptive.cpu_use(),
+        adaptive.gpu_use(),
+        playing,
+        transcoding,
+        adaptive.last_decoder,
     )
+    adaptive.leave_decoder = bool(transcoding)
     busy = (
         db.session.query(func.count(ChapterState.id))
         .filter(

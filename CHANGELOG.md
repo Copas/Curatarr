@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Work no longer stops for as long as anyone is transcoding.** The graphics card's load was read as the busier of its compute and its video decoder; two Jellyfin transcodes kept the decoder at 97% (compute 15%, CPU 14%), so all work stayed paused though Curatarr's jobs weren't what kept it busy. While Jellyfin transcodes, scene detection now decodes on the processor and the decoder isn't counted; Activity shows it as Jellyfin's.
 - **A search for a show deleted from Sonarr stops instead of retrying every hour** (it had failed 96 times). Sonarr's "not found" ends it, and History says the show isn't in Sonarr any more.
 - **A misnumbered release is blocklisted before the vacated episode is searched for.** When the release itself carries the number of the slot it was filed under (a group's "S03E03" that is really S03E02), searching for that episode downloaded the same file straight back.
 - **Fixed: episodes were judged "cut short" against the whole show's runtime.** Sonarr lists one runtime per show, but episodes vary (a 22-minute episode of a show listed at 44, a 7-minute Love, Death & Robots short). With automatic replacement on, good copies were replaced over and over: 404 replacements in a week across 101 files, one episode 29 times, each blocklisting a good release. Episodes are now judged by their own listed runtime (not at all when Sonarr has none), and episodes flagged by the old rule are checked again, dropping any Replace waiting on it.
