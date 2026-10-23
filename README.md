@@ -55,6 +55,17 @@ It knows what your household cares about, too:
 - **Shrink instead of delete:** swap a 25 GB copy of a film you keep for a 6 GB one, only if one exists.
 - **A disk forecast** says when you'll run low at this week's pace, and what would go first.
 
+#### How Leaving Soon works
+
+1. **A title is picked**: the disk is running low and nobody has touched it for longest, or you chose **Remove** in Curatarr, or someone pressed **Delete** in a Jellyfin app (with the [Curatarr plugin for Jellyfin](jellyfin-plugin/README.md)).
+2. **Everyone can see it's going.** For the notice period (14 days by default) its poster, home-screen card and backdrop in Jellyfin count down the days, and it joins a **Leaving Soon** collection.
+3. **Anyone can save it** by pressing play. You can also **Keep** it, snooze it or protect it for good in Curatarr. The original pictures come back within seconds.
+4. **Otherwise it goes** through Radarr or Sonarr when the notice ends, so nothing downloads it straight back. In dry run (where every library starts), Curatarr only records what it would have removed.
+
+![Leaving Soon in Jellyfin: a red countdown tag on the poster, a ribbon on the home-screen card, and a smaller tag on the backdrop](docs/images/leaving-soon.png)
+
+![The Leaving Soon collection in Jellyfin, with its own poster, beside posters counting down from 12 days left to the last day](docs/images/leaving-soon-collection.png)
+
 ![The review queue: why each title was picked, and what happens next](docs/images/review.png)
 
 ### 📺 The next episode is already there
