@@ -42,6 +42,7 @@ def quiet_machine(monkeypatch):
 
     monkeypatch.setattr(adaptive, "cpu_use", lambda: 0.05)
     monkeypatch.setattr(adaptive, "gpu_use", lambda: None)
+    monkeypatch.setattr("curatarr.transcribe.nvidia_gpu", lambda: None)
     monkeypatch.setattr(adaptive, "controller", adaptive.Controller(limit=4))
 
 

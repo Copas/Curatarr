@@ -68,6 +68,16 @@ NAV_SECTIONS.update(
 )
 
 
+def _gpu_hint():
+    """For Enhance: the extra to install, and a graphics card going unused
+    (an install with faster-whisper but without the CUDA libraries)."""
+    from .transcribe import available, cuda_libraries, nvidia_gpu, recommended_extras
+
+    card = nvidia_gpu()
+    unused = card if card and available() and not cuda_libraries() else None
+    return {"recommended_extras": recommended_extras(), "gpu_unused": unused}
+
+
 @bp.app_template_filter("chapter_time")
 def chapter_time(seconds):
     return timestamp(seconds or 0)[:8]
@@ -176,6 +186,7 @@ def chapter_maintenance():
         seek=_seek_progress(),
         thumbs=_thumbnail_status(),
         smart_blocked=smart_chapters_blocked(),
+        **_gpu_hint(),
         activity=job_activity(),
         action_labels=ACTION_LABELS,
         file_label=file_label,

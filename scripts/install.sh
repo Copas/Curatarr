@@ -264,6 +264,12 @@ say "Curatarr is running. Open http://<this-host>:8787 and sign in with a Jellyf
 fi
 
 completed=1
+# Smart Chapters transcribes several times faster on an NVIDIA card, but only
+# with the CUDA libraries of the chapters-gpu extra.
+if [ "$EXTRAS" != chapters-gpu ] && command -v nvidia-smi >/dev/null 2>&1 \
+    && nvidia-smi -L >/dev/null 2>&1; then
+    say "Found an NVIDIA graphics card. For Smart Chapters and subtitles, install with EXTRAS=chapters-gpu so transcription uses it."
+fi
 # Keep the new release and the one before it for rollback, only after success.
 for old in "$PREFIX"/releases/*; do
     if [ "$old" != "$release" ] && [ "$old" != "$previous" ]; then
