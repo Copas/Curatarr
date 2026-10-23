@@ -670,6 +670,8 @@ def queue_new_media() -> int:
             if state is None:
                 state = state_for(part)
             elif not _due_automatically(state, part, now):
+                if _queue_follow_up(state, part, config, now):
+                    queued += 1
                 continue
             state.job_state = "queued"
             state.requested_action = "auto"
@@ -677,6 +679,32 @@ def queue_new_media() -> int:
             queued += 1
     db.session.commit()
     return queued
+
+
+def _queue_follow_up(state, part, config, now) -> bool:
+    """Subtitles and skip-marker checks are chained after a file's chapter
+    job. A library scan settles files without one (chapters of their own,
+    too short, not MKV), so they never got them; queue them here instead.
+    Each follows the other as usual (a subtitle job chains the check)."""
+    if state.job_state != "idle":
+        return False
+    subtitles = config["subtitles"]["enabled"]
+    if subtitles and state.subtitle_status is None:
+        action = "subtitles"
+    elif (
+        part.kind == "episode"
+        and state.markers_checked_at is None
+        and config["mode"] == "smart"
+        and config["semantic"]["enabled"]
+        and (state.subtitle_status is not None or not subtitles)
+    ):
+        action = "recap"
+    else:
+        return False
+    state.job_state = "queued"
+    state.requested_action = action
+    state.requested_at = now
+    return True
 
 
 def _due_automatically(state, part, now) -> bool:
