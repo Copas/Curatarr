@@ -176,6 +176,7 @@ def check(state, part, runtimes=None) -> dict:
         ),
         "transcript": bool(segments),
     }
+    _trust_agreeing_lengths(state, result, info.duration)
     if film:
         result["subtitles"] = filecheck.burned_subtitles(path, info.duration, segments)
     state.file_checked_at = utcnow()
@@ -192,6 +193,43 @@ def check(state, part, runtimes=None) -> dict:
                 state, "file", auto=True
             )  # only if a better copy exists
     return result
+
+
+SAME_LENGTH_MINUTES = 2
+
+
+def _replaced_lengths(state) -> list[int]:
+    """How long earlier copies of this file ran, in minutes, from the "runs N
+    min" of each time one was replaced for being short."""
+    from .models import LifecycleAction
+
+    texts = db.session.query(LifecycleAction.reason_text).filter(
+        LifecycleAction.action_type == "file_replaced",
+        LifecycleAction.idempotency_key.like(f"file-replaced:{state.id}:%"),
+    )
+    return [
+        int(found.group(1))
+        for (text,) in texts
+        if (found := re.search(r"runs (\d+) min", text or "", re.IGNORECASE))
+    ]
+
+
+def _trust_agreeing_lengths(state, result, duration):
+    """A copy that runs as long as one already replaced for being short isn't
+    cut short: the listed length is wrong (Sonarr lists one runtime for a
+    whole show, and a finale may be shorter). Replacing it again only throws
+    away good copies, one release after another."""
+    minutes = round(duration / 60)
+    earlier = _replaced_lengths(state)
+    if not any(abs(minutes - m) <= SAME_LENGTH_MINUTES for m in earlier):
+        return
+    kept = [i for i in result["issues"] if i.get("kind") != "short"]
+    if len(kept) != len(result["issues"]):
+        result["issues"] = kept
+        result["length_note"] = (
+            f"Runs {minutes} min, like the copy it replaced, so the listed "
+            "length is wrong"
+        )
 
 
 def _kinds(result) -> list[str]:
@@ -243,6 +281,19 @@ def _note_blocklisted(state, title):
     db.session.commit()
 
 
+def _already_replaced(state, media) -> str:
+    """The file was replaced since the problem was found (a retry after a slow
+    delete, or by hand): nothing to blocklist or delete; the new file is
+    checked on its own."""
+    state.file_check = {
+        **{k: v for k, v in (state.file_check or {}).items() if k != "blocklisting"},
+        "replaced": {"at": utcnow().isoformat(), "blocklisted": None},
+    }
+    state.file_problem = False
+    db.session.commit()
+    return f"{media.title} already has a new file; nothing more to do."
+
+
 def replace(state) -> str:
     """Blocklist the release, delete the file, and search again."""
     e = _enrichment()
@@ -270,6 +321,9 @@ def replace(state) -> str:
         if split:
             radarr.ignore_for_movie(media.radarr_id, label, SPLIT_RELEASE, name)
         movie = radarr.movie(media.radarr_id)
+        current = (movie.get("movieFile") or {}).get("id")
+        if part.arr_file_id and current and current != part.arr_file_id:
+            return _already_replaced(state, media)
         grabs = radarr.grabs(media.radarr_id)
         if grabs and not _blocklisted_before(state):
             radarr.mark_failed(grabs[0]["id"])
@@ -289,6 +343,9 @@ def replace(state) -> str:
         sonarr = client("sonarr")
         if split and media.sonarr_id:
             sonarr.ignore_for_series(media.sonarr_id, label, SPLIT_RELEASE, name)
+        current = (sonarr.episode(part.sonarr_episode_id) or {}).get("episodeFileId")
+        if part.arr_file_id and current and current != part.arr_file_id:
+            return _already_replaced(state, media)
         grabs = sonarr.episode_grabs(part.sonarr_episode_id)
         if grabs and not _blocklisted_before(state):
             sonarr.mark_failed(grabs[0]["id"])
