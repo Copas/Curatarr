@@ -324,6 +324,14 @@ class JellyfinClient(Client):
     def restart(self):
         return self.request("POST", "/System/Restart")
 
+    def test_plugin(self, url, token):
+        """The Curatarr plugin's Test: can Jellyfin reach Curatarr at this
+        address with this token? {"Ok": bool, "Message": str}."""
+        return (
+            self.request("POST", "/Curatarr/Test", json={"Url": url, "Token": token})
+            or {}
+        )
+
     def create_collection(self, name, item_ids):
         """A new collection holding these items; returns its id."""
         data = self.request(

@@ -73,6 +73,7 @@ def worker_cycle():
     expire_notices()
     reconcile_artwork()
     _sync_leaving_collection()
+    _finish_jellyfin_plugin()
     _dispatch_chapters()
     now = utcnow()
     if not _reconcile_due(now):
@@ -128,6 +129,17 @@ def _curate():
         except Exception:
             db.session.rollback()
             current_app.logger.exception("Curation step %s failed", step.__name__)
+
+
+def _finish_jellyfin_plugin():
+    """Set the plugin up as soon as Jellyfin is back from its restart."""
+    try:
+        from . import jellyfin_plugin
+
+        jellyfin_plugin.tick()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Setting up the Jellyfin plugin failed")
 
 
 def _sync_jellyfin_plugin():

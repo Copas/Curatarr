@@ -939,30 +939,18 @@ def settings():
                     # Shown once on the next page; redirecting means a reload
                     # can never resubmit the form and create another token.
                     session["new_webhook_token"] = token
-            elif kind == "plugin_install":
+            elif kind == "plugin_setup":
                 from . import jellyfin_plugin
 
-                jellyfin_plugin.install(request.form.get("curatarr_url"))
-                flash(
-                    "Jellyfin is installing the Curatarr plugin. Restart Jellyfin "
-                    "to load it; Curatarr then sets it up.",
-                    "success",
+                outcome = jellyfin_plugin.set_up(
+                    _plugin_addresses(), restart=request.form.get("restart") == "1"
                 )
+                flash(PLUGIN_OUTCOMES[outcome], "success")
             elif kind == "plugin_address":
                 from . import jellyfin_plugin
 
                 jellyfin_plugin.set_address(request.form.get("curatarr_url"))
-                jellyfin_plugin.configure()
-                flash("The plugin now reaches Curatarr at that address.", "success")
-            elif kind == "plugin_restart":
-                from . import jellyfin_plugin
-
-                jellyfin_plugin.restart()
-                flash(
-                    "Jellyfin is restarting; it's back in a minute or so. "
-                    "Reload this page then.",
-                    "success",
-                )
+                flash("The plugin reaches Curatarr at that address now.", "success")
             elif kind == "api_key":
                 session["new_api_key"] = rotate_api_key()
             elif kind == "api_key_revoke":
@@ -1032,12 +1020,38 @@ def settings():
     )
 
 
+PLUGIN_OUTCOMES = {
+    "connected": "Done: deletes in Jellyfin go through Curatarr now.",
+    "unconnected": "The plugin is installed, but Jellyfin couldn't reach Curatarr "
+    "at any address tried. Enter the address below.",
+    "restarting": "Jellyfin is installing the plugin and restarting. Curatarr "
+    "sets it up as soon as Jellyfin is back, in a minute or so.",
+    "installed": "Jellyfin installed the plugin. Restart Jellyfin when it suits "
+    "you; Curatarr sets the plugin up as soon as it's back.",
+}
+
+
+def _plugin_addresses():
+    """Where Jellyfin might reach Curatarr: as this browser does, and locally
+    (each is tried through the plugin, from Jellyfin's side)."""
+    import socket
+    from urllib.parse import urlsplit
+
+    here = request.host_url.rstrip("/")
+    port = urlsplit(here).port or 8787
+    return [
+        here,
+        f"http://127.0.0.1:{port}",
+        f"http://{socket.gethostname()}:{port}",
+    ]
+
+
 def _plugin_view():
     from . import jellyfin_plugin
 
     view = jellyfin_plugin.status()
     view["suggested_url"] = view.get("curatarr_url") or request.host_url.rstrip("/")
-    if view["state"] == "restart":
+    if view["state"] in {"not_installed", "restart"}:
         view["watching"] = jellyfin_plugin.watching()
     return view
 
