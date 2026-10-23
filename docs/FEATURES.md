@@ -38,11 +38,11 @@ Integration keys and the webhook token are encrypted in the database with a key 
 
 Titles nobody has played are not removed just for being unwatched. (A library can opt into that with *Clean up unwatched titles even when space is fine*.) When free space falls below a library's **low** threshold, Curatarr picks titles in purge-strategy order (longest unwatched first by default), and only enough to get back to the threshold.
 
-1. They show as **Leaving Soon** for the notice period (14 days by default), with a red tag in the top-left corner of their poster in Jellyfin that counts down the days left ("14 DAYS LEFT" … "LAST DAY"). The wide home-screen card gets a shaded red ribbon with the same words, and the backdrop behind the title's page a small tag on its right, below where apps put their header buttons. Curatarr also keeps a "Leaving Soon" collection in Jellyfin with exactly those titles (Settings → Household). Playing any of it, or Keep, puts the original pictures back within about 15 seconds (Jellyfin apps may show their cached copy a little longer). If Jellyfin's artwork is replaced meanwhile (a metadata refresh), the banner is put back on the new poster, which is the one restored if the title is kept.
+1. They show as **Leaving Soon** for the notice period (14 days by default), with a red tag in the top-left corner of their poster in Jellyfin that counts down the days left ("14 DAYS LEFT" … "LAST DAY"). The wide home-screen card gets a shaded red ribbon with the same words, and the backdrop behind the title's page a small tag on its right, below where apps put their header buttons. Curatarr also keeps a "Leaving Soon" collection in Jellyfin with exactly those titles (Settings → Household), with a poster of four of them under a red LEAVING SOON band. Overview gives them one line (how many, how much space, and when the first goes, linking to Review) rather than listing them under Needs you, since nothing is needed: they go unless someone watches. Playing any of it, or Keep, puts the original pictures back within about 15 seconds (Jellyfin apps may show their cached copy a little longer). If Jellyfin's artwork is replaced meanwhile (a metadata refresh), the banner is put back on the new poster, which is the one restored if the title is kept.
 
    With the **Curatarr plugin for Jellyfin** installed (Settings → **Install in Jellyfin** does it, and sets it up; see [jellyfin-plugin](../jellyfin-plugin/README.md)), Delete in any Jellyfin app marks a film or show Leaving Soon instead of deleting its files, so it leaves through Radarr or Sonarr like everything else, and can still be saved. A title Curatarr has to keep (Never Purge) makes the delete fail. Episodes, seasons and anything Curatarr doesn't manage are deleted by Jellyfin as usual.
 
-2. They're removed when the notice ends, unless someone watches them. **Any playback** resets inactivity and rescues pending cleanup.
+2. They're removed when the notice ends, unless someone watches them. **Any playback** after a title was marked resets inactivity and rescues it (viewing from before it was marked doesn't count).
 3. Below the **critical** threshold, removal happens without a notice.
 
 The default grace period after adding a title is 30 days, and the inactivity period is 90 days. Movie cleanup is retention only: deleted movies are never automatically re-acquired (except seasonal films, below, when you switch that on).
@@ -54,6 +54,7 @@ Settings → Household. Each of these shows on a title's page, and in Review, as
 - **Requested.** With Seerr (or Jellyseerr/Overseerr) connected, a title someone asked for isn't cleaned up until that person has played it, for up to 90 days. Declined requests don't count.
 - **Rewatched.** A film played twice or more (by one person or several), or a show someone has rewatched three episodes of or two people each follow, goes to the back of the line, like a favourite. Play counts come from Jellyfin.
 - **Added by an import list.** Titles Sonarr or Radarr added from a list rather than a person get a shorter grace period (7 days) and go first, until someone plays one. Radarr's lists are recognised from Radarr itself; for Sonarr's, give the list a tag (Sonarr puts it on every show the list adds).
+- **Favourites.** A title someone favourited in Jellyfin goes to the back of the line. A gold star with the names of everyone who favourited it shows on its page, in Review, Free up space, Browse titles and Shows by size.
 - **Seasonal shelves.** Halloween and Christmas titles, by their TMDB keywords or because they were watched mostly in that season in earlier years, are kept through their season and the two weeks before it. Optionally (off by default), a seasonal film Curatarr removed is added back to Radarr, with its old quality profile and folder, two weeks before its season.
 
 ### Shrink instead of delete
@@ -114,7 +115,11 @@ Chapters are written into MKV files in place with `mkvpropedit`, which re-encode
 - **Existing chapters are preserved.** Curatarr regenerates or removes only chapters it can show it wrote, and keeps the originals of any it replaced.
 - **Your existing library is never processed by surprise.** Enhance → Files scans it read-only, shows what's done and what's left, and processes only the files or libraries you confirm. Each file's page shows a preview: the scene changes, the plan from each method, and the exact write command, before anything is modified.
 - **Subtitles.** The same transcript can produce English subtitles (`<video>.en.Curatarr.srt`), a separate per-library setting. They're added only when a file has no English subtitles of its own, never written over another file, and removable from the file's page.
-- **Progress.** Enhance → Progress leads with what Curatarr has done (chapters and subtitles added, recaps and previews marked, bad markers hidden) and how much of the library is covered, then what's left to do, with an estimated finish based on the last day's pace.
+- **Progress.** Enhance → Progress leads with what Curatarr has done (chapters and subtitles added, recaps and previews marked, bad markers hidden) and how much of the library is covered, then what's left to do. **One overall bar**, at the top of Overview and of Enhance's Activity, counts everything still queued (chapter jobs, skip-marker checks, TV-friendly audio, the Roku seek repair) and says when the slowest should finish, from the last day's pace. It says which one that is, and when the estimate is rough (rebuilds wait for Jellyfin's thumbnails). Separate bars for chapter jobs and skip-marker checks sit below it, and Overview's Library care shows the same rows as Enhance.
+- **To do buttons say what they'd do**: *Scan N new files* scans only files not scanned yet, *Rescan all files* asks first, and *Generate subtitles for N* and *Check skip markers on N more* show how many they'd add and appear only when there's something to add.
+
+- **Each title's page has an Enhancements panel**: per file (episodes grouped by season), its chapters, generated subtitles, the recap and preview Curatarr marked, skip markers it fixed, and its English-audio check.
+- **A network share that drops doesn't fail the queue.** When a file can't be found but Radarr or Sonarr still have it (or can't be reached either), its job waits and retries every ten minutes, failing only after a day. Jobs that failed this way are retried by themselves once the file can be read again, and Progress's Failed list has **Try all again**.
 
 Smart Chapters needs the `chapters` or `chapters-gpu` extra, Ollama with a model, and write access to the media files for the worker (see [Installing](INSTALL.md#optional-chapter-generation)). `flask --app curatarr chapters preview <file>` prints the full analysis for one file without changing it. Design notes: [decision 009](decisions/009-chapter-enrichment.md).
 
@@ -122,7 +127,7 @@ Smart Chapters needs the `chapters` or `chapters-gpu` extra, Ollama with a model
 
 ## Recaps, previews and skip markers
 
-With the Jellyfin **Intro Skipper** plugin installed, Curatarr improves the skip buttons Jellyfin shows. It works on episodes in libraries with Smart Chapters. Press **Check skip markers** on Enhance → Progress to check every episode not yet checked (press it again later for newly added ones), or check one episode from its page. Checks reuse Smart Chapters transcripts where they exist and wait while a chapter backlog is running.
+With the Jellyfin **Intro Skipper** plugin installed, Curatarr improves the skip buttons Jellyfin shows. It works on episodes in libraries with Smart Chapters. Press **Check skip markers** on Enhance → Progress to check every episode not yet checked (press it again later for newly added ones), or check one episode from its page. Checks reuse Smart Chapters transcripts where they exist. One job slot is always theirs, and they take any slots chapter jobs leave free, a batch of episodes each; checks that need new transcription wait while a chapter backlog is running.
 
 - **Recaps.** A *"Previously on…"* segment is found from the opening transcript: a known opener phrase ("previously on", "last time on", "here's what you missed", …), and an end found from the series' own closing line or from where the quoted clips of earlier episodes stop. It's marked as an Intro Skipper **Recap** segment and, if the chapters are Curatarr's, a *Previously On* chapter.
 - **Previews.** A *"Next time on…"* segment at the end is marked as a **Preview** segment.
@@ -187,13 +192,15 @@ Settings → Automatic switches on, one by one, fixes Curatarr then starts by it
 
 Every **Replace** (English dubs, Problems, wrong shows, and automatic replacement) is queued rather than done on the spot. The worker asks Radarr or Sonarr for the title's releases (a minute or two, across every indexer) and replaces the file only if one would be taken once the current file is gone: not the release already there, not one more part of a split film, and for a wrong show not the wrong year or the flagged releases. Otherwise the file stays.
 
+A film replaced this way is monitored in Radarr until its new copy arrives. If nothing is downloading, it's searched again every 6 hours, up to 3 times. When a copy arrives, monitoring goes back to how it was; when none does, Activity says so.
+
 The row shows where the request is: "Looking for a better copy…" with **Cancel**; then either the row disappears (replaced; History has the details) or it says "No better copy was available, checked <date>" with **OK**, which stops listing it.
 
 ---
 
 ## Search what was said
 
-**Search** (the box in the header, or Library → Search) (and `GET /api/v1/transcripts/search?q=…`) finds an episode or film by a line or what's talked about in it, across every transcript Smart Chapters has made. An exact phrase ranks first, then short windows holding most of the words; each result shows the moment's lines and timestamp, linked to the episode. Words are matched by rough stem ("frying" finds "fry"). Household accounts can use it too.
+**Search** (the box in the header, or Library → Search) (and `GET /api/v1/transcripts/search?q=…`) finds an episode or film by a line or what's talked about in it, across every transcript Smart Chapters has made. An exact phrase ranks first, then short windows holding most of the words; each result shows the moment's lines and timestamp, linked to the episode. Words are matched by rough stem ("frying" finds "fry"). Put words in "quotes" for an exact phrase, said as written (whole words, in order). What was searched is highlighted in each result. Household accounts can use it too.
 
 ---
 

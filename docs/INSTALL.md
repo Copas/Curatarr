@@ -313,6 +313,8 @@ Logs: `docker compose logs --tail=100 web worker`. Don't use `docker compose dow
    - Add the request header `X-Curatarr-Token` with the token shown once on the Integrations page (generate a new one there if you missed it)
 
    Without the webhook, the hourly reconciliation still picks up playback, just later.
+
+   **Optional: the Curatarr plugin for Jellyfin.** With it, Delete in any Jellyfin app marks a film or show Leaving Soon instead of deleting its files behind Radarr's and Sonarr's backs. In Settings → Integrations, under *Curatarr plugin for Jellyfin*, click **Install in Jellyfin**, then **Restart Jellyfin**. Curatarr installs it and gives it its address and the webhook token, so there's nothing to copy. See [jellyfin-plugin](../jellyfin-plugin/README.md).
 4. **Discover.** Click **Discover** on Overview. It runs in the background; a large library takes about a minute. Settings → Operations shows when it's done.
 5. **Review the rules.** Look over Settings → Acquisition and Settings → Retention. Every library starts in **dry run**: Curatarr goes through the whole process and records what it *would* remove in History, but deletes nothing. Turn dry run off globally or per library when you're happy.
 6. **Optional:** switch on chapters per library in Settings → Enhance, allow household members in Settings → Integrations → Household access, connect Seerr on the same page, and look over Settings → Household (requests, import lists, seasonal shelves).
