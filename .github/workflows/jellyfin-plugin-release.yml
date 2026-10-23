@@ -1,0 +1,54 @@
+name: Jellyfin plugin release
+
+# Push a tag like plugin-v0.1.0.0 (matching <Version> in
+# jellyfin-plugin/Directory.Build.props): the plugin is built, attached to a
+# GitHub release, and added to jellyfin-plugin/manifest.json, which Jellyfin
+# reads as a plugin repository. Curatarr's own releases use v* tags.
+on:
+  push:
+    tags: ["plugin-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jellyfin-plugin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet test Jellyfin.Plugin.Curatarr.Tests -c Release
+      - name: Package
+        id: package
+        run: |
+          version="${GITHUB_REF_NAME#plugin-v}"
+          dotnet publish Jellyfin.Plugin.Curatarr -c Release -o out -p:Version="$version"
+          zip="curatarr-jellyfin-plugin_${version}.zip"
+          (cd out && zip "../$zip" Jellyfin.Plugin.Curatarr.dll)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          echo "md5=$(md5sum "$zip" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" \
+            --title "Jellyfin plugin ${{ steps.package.outputs.version }}" \
+            --notes "The Curatarr plugin for Jellyfin. Install it from the plugin repository in jellyfin-plugin/README.md."
+      - name: Add to manifest.json
+        run: |
+          python3 scripts/manifest.py \
+            --version "${{ steps.package.outputs.version }}" \
+            --checksum "${{ steps.package.outputs.md5 }}" \
+            --url "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${{ steps.package.outputs.zip }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Add Jellyfin plugin ${{ steps.package.outputs.version }} to manifest.json"
+          git push origin main
