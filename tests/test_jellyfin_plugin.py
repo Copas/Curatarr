@@ -137,3 +137,15 @@ def test_unreachable_jellyfin_shows_a_note(app, client, monkeypatch):
     monkeypatch.setattr("curatarr.services.client", down)
     with app.app_context():
         assert jellyfin_plugin.status() == {"state": "unreachable"}
+
+
+def test_the_setup_checklist_offers_the_plugin(app, client, jellyfin):
+    page = client.get("/setup").text
+    assert "Install the Curatarr plugin for Jellyfin" in page
+    assert "/settings#jellyfin-plugin" in page
+    jellyfin.status = "Active"
+    with app.app_context():
+        jellyfin_plugin.sync()
+    page = client.get("/setup").text
+    item = page[page.index("Install the Curatarr plugin") :]
+    assert "Done" in item[: item.index("</li>")]
