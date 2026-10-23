@@ -578,7 +578,15 @@ def _tidy_existing_backdrops():
             current_app.logger.info(
                 "Deleted %s leftover backdrop copies of %s", removed, item
             )
-        except (IntegrationError, OSError, ValueError) as exc:
+        except IntegrationError as exc:
+            if exc.status_code == 404:
+                continue  # no longer in Jellyfin: nothing left to tidy
+            failed += 1
+            current_app.logger.warning(
+                "Tidying the backdrops of %s failed: %s", item, exc
+            )
+            db.session.rollback()
+        except (OSError, ValueError) as exc:
             failed += 1
             current_app.logger.warning(
                 "Tidying the backdrops of %s failed: %s", item, type(exc).__name__

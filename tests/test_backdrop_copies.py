@@ -17,6 +17,7 @@ from curatarr.artwork import (
     badge_poster,
     restore_badge,
 )
+from curatarr.integrations import IntegrationError
 from curatarr.models import (
     Library,
     MediaIdentity,
@@ -48,7 +49,9 @@ class AppendingJellyfin:
     def _tag(self, index):
         return sha256(self.backdrops[index]).hexdigest()
 
-    def image_list(self, _item_id):
+    def image_list(self, item_id):
+        if item_id == "gone":
+            raise IntegrationError("Not found", status_code=404)
         return [
             {"ImageType": "Backdrop", "ImageIndex": i, "ImageTag": self._tag(i)}
             for i in range(len(self.backdrops))
@@ -124,10 +127,20 @@ def test_one_tagged_backdrop_however_often_it_is_redrawn(app, monkeypatch):
         assert _delete_tagged(fake, "b", original) == 3
         assert fake.backdrops == [original, other]
 
-        # The one-off pass over titles badged before this was fixed.
+        # The one-off pass over titles badged before this was fixed, one of
+        # them since removed from Jellyfin.
+        db.session.add(
+            PosterSnapshot(
+                media_identity_id=media.id,
+                jellyfin_item_id="gone",
+                image_type="Backdrop",
+                active=False,
+            )
+        )
+        db.session.commit()
         fake.backdrops = [saved, nine, other, nine]
         _tidy_existing_backdrops()
         assert fake.backdrops == [saved, other]
         fake.backdrops = [saved, nine]
-        _tidy_existing_backdrops()  # only once
+        _tidy_existing_backdrops()  # only once (a title gone from Jellyfin is done)
         assert fake.backdrops == [saved, nine]
