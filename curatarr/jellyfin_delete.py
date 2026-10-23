@@ -117,7 +117,8 @@ def handle(item_id, user_name=None, mode=None) -> tuple[int, dict]:
             }
         return _delete_now(media, existing, who)
     try:
-        candidate = request_removal(media, where=f"a delete in Jellyfin by {who}")
+        where = "Leaving Soon" if mode == "leaving_soon" else "a delete"
+        candidate = request_removal(media, where=f"{where} in Jellyfin by {who}")
     except ValueError as exc:
         return _refused(media, who, str(exc))
     if mode == "now":
