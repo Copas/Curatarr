@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Dates and times read the way people say them**, everywhere they're shown: "today at 5:55 PM", "tomorrow at 4 PM", "Wednesday at 3:21 AM", "last Monday", "Oct 31" (with the year only when it isn't this year's), in the viewer's own time zone and 12- or 24-hour style. Hovering shows the full date and time.
 - **Work no longer stops for as long as anyone is transcoding.** The graphics card's load was read as the busier of its compute and its video decoder; two Jellyfin transcodes kept the decoder at 97% (compute 15%, CPU 14%), so all work stayed paused though Curatarr's jobs weren't what kept it busy. While Jellyfin transcodes, scene detection now decodes on the processor and the decoder isn't counted; Activity shows it as Jellyfin's.
 - **A search for a show deleted from Sonarr stops instead of retrying every hour** (it had failed 96 times). Sonarr's "not found" ends it, and History says the show isn't in Sonarr any more.
 - **A misnumbered release is blocklisted before the vacated episode is searched for.** When the release itself carries the number of the slot it was filed under (a group's "S03E03" that is really S03E02), searching for that episode downloaded the same file straight back.

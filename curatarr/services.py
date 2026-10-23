@@ -1514,7 +1514,9 @@ def unwatched_reset_plan(skip_recent_days=30, library_id=None):
             # minimum), so listing them only made them vanish after confirming.
             reason = _missing_minimum_reason(media)
         elif added and added > cutoff:
-            reason = f"Added {added.strftime('%Y-%m-%d')}, within the last {skip_recent_days} days"
+            reason = (
+                f"Added {added:%b} {added.day}, within the last {skip_recent_days} days"
+            )
         else:
             reason = None
         (skipped if reason else plan).append(row | {"reason": reason})
