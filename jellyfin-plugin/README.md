@@ -7,8 +7,11 @@ Makes Jellyfin and Curatarr play nicely together. It lives in Curatarr's reposit
 **Delete goes through Curatarr.** Without the plugin, Delete in a Jellyfin app removes the files behind Radarr's and Sonarr's backs: Radarr may download the film again, and Curatarr's notice period, Keep and Never Purge are skipped. With it, Delete in any Jellyfin app (web, phone, TV) asks Curatarr first:
 
 - A **film or show Curatarr manages** is marked **Leaving Soon** instead of deleted. Its poster counts down, playing it or Keep in Curatarr saves it, and at the end of the notice period Curatarr deletes it through Radarr, or trims the show through Sonarr.
+- **Deleting it again** (a title already Leaving Soon) deletes it now, the same way, as Delete in Curatarr's Review does.
 - A title Curatarr **has to keep** (Never Purge, no file in Radarr) makes the delete fail, and the reason is in Jellyfin's log and Curatarr's Activity.
 - **Episodes, seasons, music and anything Curatarr doesn't know** are deleted by Jellyfin as usual.
+
+**Leaving Soon in the web app's menus.** Jellyfin's apps build their menus themselves, so a plugin can't add to the Roku, phone or TV apps' menus. The web app can be changed, through the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin: with it installed, the web app's menu for a film or show Curatarr manages has **Leaving Soon** beside **Delete**, and **Delete** there deletes straight away (through Radarr or Sonarr). Without it, the web app works like the other apps. It can be switched off in the plugin's settings.
 
 Only people Jellyfin already lets delete an item can do any of this. Deletes made with an API key (by other tools) aren't changed.
 

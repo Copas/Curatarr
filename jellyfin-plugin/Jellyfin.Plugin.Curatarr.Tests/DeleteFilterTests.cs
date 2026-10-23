@@ -24,6 +24,7 @@ public class DeleteFilterTests
     private readonly Dictionary<Guid, FakeMovie> _items = new();
     private readonly Dictionary<Guid, DeleteAnswer?> _answers = new();
     private readonly List<Guid> _asked = new();
+    private readonly List<string> _modes = new();
     private readonly PluginConfiguration _config = new() { CuratarrUrl = "http://curatarr", Token = "t" };
 
     private DeleteFilter Filter()
@@ -34,10 +35,11 @@ public class DeleteFilterTests
         users.Setup(u => u.GetUserById(UserId)).Returns(_user);
         var curatarr = new Mock<ICuratarrClient>();
         curatarr
-            .Setup(c => c.AskAsync(It.IsAny<PluginConfiguration>(), It.IsAny<Guid>(), "Sam", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((PluginConfiguration _, Guid id, string _, CancellationToken _) =>
+            .Setup(c => c.AskAsync(It.IsAny<PluginConfiguration>(), It.IsAny<Guid>(), "Sam", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PluginConfiguration _, Guid id, string _, string mode, CancellationToken _) =>
             {
                 _asked.Add(id);
+                _modes.Add(mode);
                 return _answers.GetValueOrDefault(id);
             });
         return new DeleteFilter(library.Object, users.Object, curatarr.Object, NullLogger<DeleteFilter>.Instance, () => _config);
@@ -51,11 +53,12 @@ public class DeleteFilterTests
         return id;
     }
 
-    private static ActionExecutingContext Context(string action, string argument, object ids)
+    private static ActionExecutingContext Context(string action, string argument, object ids, string app = "Jellyfin Roku")
     {
         var http = new DefaultHttpContext
         {
-            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(DeleteFilter.UserIdClaim, UserId.ToString())], "test")),
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(DeleteFilter.UserIdClaim, UserId.ToString()), new Claim(DeleteFilter.ClientClaim, app)], "test")),
         };
         var descriptor = new ControllerActionDescriptor { ControllerName = "Library", ActionName = action };
         var actionContext = new ActionContext(http, new RouteData(), descriptor);
@@ -139,6 +142,25 @@ public class DeleteFilterTests
         _config.InterceptDeletes = false;
         Assert.True(await Run(Filter(), Context("DeleteItem", "itemId", id)));
         Assert.Empty(_asked);
+    }
+
+    [Fact]
+    public async Task The_web_app_deletes_now_once_it_has_Leaving_Soon_in_its_menu()
+    {
+        var id = Item(new DeleteAnswer(true, null, "deleting", null));
+        Assert.False(await Run(Filter(), Context("DeleteItem", "itemId", id, app: "Jellyfin Web")));
+        WebMenu.Active = true;
+        try
+        {
+            Assert.False(await Run(Filter(), Context("DeleteItem", "itemId", id, app: "Jellyfin Web")));
+            Assert.False(await Run(Filter(), Context("DeleteItem", "itemId", id)));
+        }
+        finally
+        {
+            WebMenu.Active = false;
+        }
+
+        Assert.Equal(new[] { Modes.Delete, Modes.Now, Modes.Delete }, _modes);
     }
 
     private sealed class FakeMovie : Movie

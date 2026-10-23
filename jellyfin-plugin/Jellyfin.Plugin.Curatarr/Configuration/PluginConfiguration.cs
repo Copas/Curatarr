@@ -27,4 +27,11 @@ public class PluginConfiguration : BasePluginConfiguration
     /// reached (rather than deleting the file as Jellyfin would without the plugin).
     /// </summary>
     public bool BlockWhenUnreachable { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the web app's menus get a Leaving Soon
+    /// item (Delete there then deletes straight away). Needs the File Transformation
+    /// plugin, and a restart of Jellyfin to take effect.
+    /// </summary>
+    public bool WebMenu { get; set; } = true;
 }

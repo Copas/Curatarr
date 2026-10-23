@@ -19,6 +19,8 @@
   <ItemGroup>
     <None Remove="Configuration\configPage.html" />
     <EmbeddedResource Include="Configuration\configPage.html" />
+    <None Remove="Web\menu.js" />
+    <EmbeddedResource Include="Web\menu.js" />
   </ItemGroup>
 
   <ItemGroup>

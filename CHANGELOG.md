@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Leaving Soon and Delete, both, from Jellyfin** (plugin 0.2.0.0). Deleting a title that's already Leaving Soon deletes it now, through Radarr or Sonarr, in every Jellyfin app. In the web app, the menu has **Leaving Soon** beside **Delete**, and Delete there deletes straight away; this needs the File Transformation plugin, since only the web app's menus can be changed. Both are for whoever Jellyfin lets delete the item.
 - **The Jellyfin plugin has Curatarr's logo** on its card in Jellyfin's plugin list (plugin 0.1.1.0), in place of the generic puzzle piece.
 - **Fixed: the English subtitles bar read 100% while subtitle jobs were still waiting.** Files with a subtitle job queued or running were counted neither as done nor as to do, so 700 waiting files dropped out of the total. They count as still to go now, and Enhance's Needing subtitles shows them with how many are queued.
 - **Curatarr says when a graphics card goes unused.** Settings → Enhance names the NVIDIA card it finds and whether transcription uses it; Enhance shows a notice when an install has faster-whisper but not the CUDA libraries (`EXTRAS=chapters` on a machine with a card), which transcribes several times slower on the processor. Reinstall hints suggest `chapters-gpu` only where there's a card, and `chapters` otherwise. The installer says so too when it finds a card.

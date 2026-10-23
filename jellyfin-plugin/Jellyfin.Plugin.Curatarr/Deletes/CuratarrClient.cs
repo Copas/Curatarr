@@ -10,9 +10,29 @@ namespace Jellyfin.Plugin.Curatarr.Deletes;
 /// </summary>
 /// <param name="Handled">False leaves the delete to Jellyfin.</param>
 /// <param name="Refused">Why Curatarr keeps the title (the delete fails).</param>
-/// <param name="Result">"leaving_soon" or "already".</param>
-/// <param name="Message">A sentence for the log.</param>
-public sealed record DeleteAnswer(bool Handled, string? Refused, string? Result, string? Message);
+/// <param name="Result">"leaving_soon", "deleting" or "already".</param>
+/// <param name="Message">A sentence to show or log.</param>
+/// <param name="LeavingSoon">For a status: whether the title is Leaving Soon now.</param>
+/// <param name="Deleting">For a status: whether it's being deleted.</param>
+public sealed record DeleteAnswer(bool Handled, string? Refused, string? Result, string? Message, bool LeavingSoon = false, bool Deleting = false);
+
+/// <summary>
+/// What Curatarr is asked to do with an item.
+/// </summary>
+public static class Modes
+{
+    /// <summary>Delete in an app: Leaving Soon, or deleted now if it already is.</summary>
+    public const string Delete = "delete";
+
+    /// <summary>Delete in the web app, which has a Leaving Soon item of its own: deleted now.</summary>
+    public const string Now = "now";
+
+    /// <summary>The web app's Leaving Soon item.</summary>
+    public const string LeavingSoon = "leaving_soon";
+
+    /// <summary>Whether Leaving Soon applies, for the web app's menu.</summary>
+    public const string Status = "status";
+}
 
 /// <summary>
 /// Asks Curatarr what a delete should do.
@@ -25,9 +45,10 @@ public interface ICuratarrClient
     /// <param name="config">The plugin's settings.</param>
     /// <param name="itemId">The item being deleted.</param>
     /// <param name="userName">Who deleted it.</param>
+    /// <param name="mode">One of <see cref="Modes"/>.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>Curatarr's answer, or null.</returns>
-    Task<DeleteAnswer?> AskAsync(PluginConfiguration config, Guid itemId, string userName, CancellationToken cancellationToken);
+    Task<DeleteAnswer?> AskAsync(PluginConfiguration config, Guid itemId, string userName, string mode, CancellationToken cancellationToken);
 
     /// <summary>
     /// Whether Curatarr answers at this address with this token.
@@ -61,7 +82,7 @@ public sealed class CuratarrClient : ICuratarrClient
     }
 
     /// <inheritdoc />
-    public async Task<DeleteAnswer?> AskAsync(PluginConfiguration config, Guid itemId, string userName, CancellationToken cancellationToken)
+    public async Task<DeleteAnswer?> AskAsync(PluginConfiguration config, Guid itemId, string userName, string mode, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(config);
         try
@@ -69,7 +90,7 @@ public sealed class CuratarrClient : ICuratarrClient
             using var response = await PostAsync(
                 config.CuratarrUrl,
                 config.Token,
-                new { itemId = itemId.ToString("N"), userName },
+                new { itemId = itemId.ToString("N"), userName, mode },
                 cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
