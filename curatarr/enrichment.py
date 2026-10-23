@@ -2059,8 +2059,15 @@ def needs_chapters_query(library_id=None):
     return query
 
 
-def needs_subtitles_query(library_id=None):
-    """Files not yet checked for subtitles, or whose check failed (mirrors queue_subtitles)."""
+def needs_subtitles_query(library_id=None, queued=False):
+    """Files not yet checked for subtitles, or whose check failed (mirrors
+    queue_subtitles); with ``queued``, those with a job waiting or running."""
+    if queued:
+        waiting = ChapterState.job_state.in_(("queued", "running"))
+    else:
+        waiting = or_(
+            ChapterState.job_state.is_(None), ChapterState.job_state == "idle"
+        )
     return (
         _parts_query(library_id)
         .outerjoin(ChapterState, ChapterState.media_part_id == MediaPart.id)
@@ -2069,7 +2076,7 @@ def needs_subtitles_query(library_id=None):
                 ChapterState.subtitle_status.is_(None),
                 ChapterState.subtitle_status == "failed",
             ),
-            or_(ChapterState.job_state.is_(None), ChapterState.job_state == "idle"),
+            waiting,
         )
     )
 
@@ -2474,6 +2481,9 @@ def maintenance_summary(library_id=None) -> dict:
         subtitle_rows = subtitle_rows.filter(MediaIdentity.library_id == library_id)
     subtitles = dict(subtitle_rows.group_by(ChapterState.subtitle_status).all())
     needing_subtitles = needs_subtitles_query(library_id).count()
+    # Queued files aren't done either: left out, the bar read 100% while
+    # hundreds of subtitle jobs were still waiting.
+    subtitles_queued = needs_subtitles_query(library_id, queued=True).count()
     to_check = recaps_to_check(library_id)
     checked = markers_checked(library_id)
     existing = by_status.get("existing", 0)
@@ -2487,7 +2497,7 @@ def maintenance_summary(library_id=None) -> dict:
         "chapters_have": existing + generated,
         "chapters_possible": existing + generated + needing,
         "subtitles_have": with_subtitles,
-        "subtitles_possible": with_subtitles + needing_subtitles,
+        "subtitles_possible": with_subtitles + needing_subtitles + subtitles_queued,
         "markers_checked": checked,
         "markers_possible": checked + to_check,
         "subtitles_generated": subtitles.get("generated", 0),
@@ -2500,6 +2510,7 @@ def maintenance_summary(library_id=None) -> dict:
         "generated": generated,
         "needing": needing,
         "needing_subtitles": needing_subtitles,
+        "subtitles_queued": subtitles_queued,
         "short": by_status.get("skipped_short", 0),
         "unsupported": by_status.get("unsupported_container", 0),
         "failed": failed_query(library_id).count(),

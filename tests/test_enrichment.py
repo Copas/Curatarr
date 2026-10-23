@@ -572,11 +572,16 @@ def test_maintenance_summary_counts_files_needing_subtitles(media_env):
 
     summary = enrichment.maintenance_summary()
     assert summary["needing_subtitles"] == 2  # part (never scanned) + never_checked
+    assert summary["subtitles_possible"] == 3
 
     enrichment.queue_subtitles()
     db.session.commit()
     summary = enrichment.maintenance_summary()
     assert summary["needing_subtitles"] == 0  # both now queued, not idle
+    assert summary["subtitles_queued"] == 2
+    # Queued files are still to do: the bar mustn't read 100% while they wait.
+    assert summary["subtitles_have"] == 1
+    assert summary["subtitles_possible"] == 3
 
 
 def test_pages_render_and_settings_save(app, client, media_env):

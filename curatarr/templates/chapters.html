@@ -36,7 +36,7 @@
     <h2 class="section-label" id="todo-heading">To do</h2>
     <div class="stat-grid">
       {{ stat('Needing chapters', summary.needing, (summary.transcription_estimate|commas ~ ' need transcription') if 0 < summary.transcription_estimate < summary.needing else None, True) }}
-      {{ stat('Needing subtitles', summary.needing_subtitles, None, True) }}
+      {{ stat('Needing subtitles', summary.needing_subtitles + summary.subtitles_queued, (summary.subtitles_queued|commas ~ ' queued') if summary.subtitles_queued else None, True) }}
       {{ stat('Chapter jobs queued or running', summary.queued, None, True) }}
       {{ stat('Not scanned yet', summary.not_scanned, None, True) }}
       {{ stat('Redo with Smart Chapters', summary.smart_upgradable, 'got Navigation chapters' if summary.smart_upgradable else None, True) }}
