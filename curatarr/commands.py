@@ -94,6 +94,7 @@ def worker_cycle():
         queue_watch_restoration()
         reconcile_acquisition()
         _curate()
+        _sync_jellyfin_plugin()
     evaluate_retention()
     _forecast()
     set_setting("last_reconcile_at", utcnow().isoformat())
@@ -127,6 +128,16 @@ def _curate():
         except Exception:
             db.session.rollback()
             current_app.logger.exception("Curation step %s failed", step.__name__)
+
+
+def _sync_jellyfin_plugin():
+    try:
+        from . import jellyfin_plugin
+
+        jellyfin_plugin.sync()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Updating the Jellyfin plugin's settings failed")
 
 
 def _sync_leaving_collection():

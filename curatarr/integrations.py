@@ -296,6 +296,34 @@ class JellyfinClient(Client):
     def sessions(self):
         return self.request("GET", "/Sessions")
 
+    def plugins(self):
+        return self.request("GET", "/Plugins") or []
+
+    def repositories(self):
+        return self.request("GET", "/Repositories") or []
+
+    def set_repositories(self, repositories):
+        """Jellyfin replaces its whole list of plugin repositories."""
+        return self.request("POST", "/Repositories", json=repositories)
+
+    def install_package(self, name, guid, repository_url):
+        return self.request(
+            "POST",
+            f"/Packages/Installed/{name}",
+            params={"assemblyGuid": guid, "repositoryUrl": repository_url},
+        )
+
+    def plugin_configuration(self, plugin_id):
+        return self.request("GET", f"/Plugins/{plugin_id}/Configuration") or {}
+
+    def set_plugin_configuration(self, plugin_id, configuration):
+        return self.request(
+            "POST", f"/Plugins/{plugin_id}/Configuration", json=configuration
+        )
+
+    def restart(self):
+        return self.request("POST", "/System/Restart")
+
     def create_collection(self, name, item_ids):
         """A new collection holding these items; returns its id."""
         data = self.request(

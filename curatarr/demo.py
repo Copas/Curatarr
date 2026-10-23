@@ -530,6 +530,13 @@ class DemoClient:
     def mark_played(self, _user_id, _item_id):
         self._check()
 
+    def plugins(self):
+        self._check()
+        return []
+
+    def repositories(self):
+        raise IntegrationError("The demo has no Jellyfin to install plugins in")
+
     def sessions(self):
         self._check()
         return []

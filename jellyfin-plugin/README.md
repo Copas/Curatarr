@@ -19,21 +19,21 @@ Only people Jellyfin already lets delete an item can do any of this. Deletes mad
 
 ## Install
 
-In Jellyfin: **Dashboard → Plugins → Repositories → +**, add
+**From Curatarr** (easiest): Settings → **Curatarr plugin for Jellyfin** → **Install in Jellyfin**, then **Restart Jellyfin** there. Curatarr adds the plugin's repository to Jellyfin, installs the plugin, and once Jellyfin has loaded it, gives it Curatarr's address and the webhook token. It updates them whenever they change (a new token, a new address).
+
+**By hand**: in Jellyfin, **Dashboard → Plugins → Repositories → +**, add
 
 ```
 https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/manifest.json
 ```
 
-then install **Curatarr** from the catalogue and restart Jellyfin.
-
-## Set up
-
-**Dashboard → Plugins → Curatarr**:
+install **Curatarr** from the catalogue, restart Jellyfin, then under **Dashboard → Plugins → Curatarr** enter:
 
 - **Curatarr address**: as the Jellyfin server reaches it, e.g. `http://127.0.0.1:8787`.
 - **Webhook token**: the one in Curatarr's Settings → Integrations (the same token the Webhook plugin sends).
 - **Test** checks both before you save.
+
+Either way, updates come through Jellyfin's plugin catalogue.
 
 **Refuse deletes while Curatarr can't be reached** is on by default: while Curatarr is down, deletes fail rather than removing files Curatarr would have kept. Untick **Send deletes to Curatarr** to turn the plugin off.
 

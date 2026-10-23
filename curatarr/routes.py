@@ -928,14 +928,41 @@ def settings():
                 )
                 flash(f"{kind.title()} connected", "success")
             elif kind == "webhook":
+                from . import jellyfin_plugin
+
                 own = (request.form.get("webhook_token") or "").strip()
                 token = rotate_webhook_token(own or None)
+                jellyfin_plugin.configure()  # the plugin sends the token too
                 if own:
                     flash("Webhook token saved.", "success")
                 else:
                     # Shown once on the next page; redirecting means a reload
                     # can never resubmit the form and create another token.
                     session["new_webhook_token"] = token
+            elif kind == "plugin_install":
+                from . import jellyfin_plugin
+
+                jellyfin_plugin.install(request.form.get("curatarr_url"))
+                flash(
+                    "Jellyfin is installing the Curatarr plugin. Restart Jellyfin "
+                    "to load it; Curatarr then sets it up.",
+                    "success",
+                )
+            elif kind == "plugin_address":
+                from . import jellyfin_plugin
+
+                jellyfin_plugin.set_address(request.form.get("curatarr_url"))
+                jellyfin_plugin.configure()
+                flash("The plugin now reaches Curatarr at that address.", "success")
+            elif kind == "plugin_restart":
+                from . import jellyfin_plugin
+
+                jellyfin_plugin.restart()
+                flash(
+                    "Jellyfin is restarting; it's back in a minute or so. "
+                    "Reload this page then.",
+                    "success",
+                )
             elif kind == "api_key":
                 session["new_api_key"] = rotate_api_key()
             elif kind == "api_key_revoke":
@@ -1000,8 +1027,19 @@ def settings():
         household_users=household_users,
         household_allowed=household_user_ids(),
         household_error=household_error,
+        plugin=_plugin_view(),
         **settings_view(),
     )
+
+
+def _plugin_view():
+    from . import jellyfin_plugin
+
+    view = jellyfin_plugin.status()
+    view["suggested_url"] = view.get("curatarr_url") or request.host_url.rstrip("/")
+    if view["state"] == "restart":
+        view["watching"] = jellyfin_plugin.watching()
+    return view
 
 
 def _queue_reconciliation():
