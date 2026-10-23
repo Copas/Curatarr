@@ -171,4 +171,5 @@ def test_overview_counts_every_title_leaving_soon(app, client):
             )
         )
     db.session.commit()
-    assert "Leaving soon: 7 titles" in client.get("/").text
+    page = client.get("/").text
+    assert "7 titles" in page and "Leaving soon</h2>" in page
