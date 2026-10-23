@@ -1348,6 +1348,19 @@ def setup_progress():
             "endpoint": "main.settings",
         }
     )
+    from . import jellyfin_plugin
+
+    steps.append(
+        {
+            "key": "jellyfin_plugin",
+            "label": "Install the Curatarr plugin for Jellyfin, so Delete in "
+            "Jellyfin marks titles Leaving Soon instead of deleting them",
+            "done": jellyfin_plugin.active(),
+            "optional": True,
+            "endpoint": "main.settings",
+            "args": {"_anchor": "jellyfin-plugin"},
+        }
+    )
     steps.append(
         {
             "key": "discover",
