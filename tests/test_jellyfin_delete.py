@@ -62,8 +62,13 @@ def test_the_web_apps_leaving_soon_never_deletes(app, client, monkeypatch):
     _setup(app, monkeypatch)
     status = _post(client, {"itemId": ITEM, "mode": "status"}).get_json()
     assert status["handled"] and not status["leavingSoon"]
-    first = _post(client, {"itemId": ITEM, "mode": "leaving_soon"}).get_json()
+    first = _post(
+        client, {"itemId": ITEM, "userName": "Sam", "mode": "leaving_soon"}
+    ).get_json()
     assert first["result"] == "leaving_soon"
+    with app.app_context():
+        candidate = db.session.query(PurgeCandidate).one()
+        assert "Leaving Soon in Jellyfin by Sam" in candidate.reason_text
     again = _post(client, {"itemId": ITEM, "mode": "leaving_soon"}).get_json()
     assert again["result"] == "already"
     status = _post(client, {"itemId": ITEM, "mode": "status"}).get_json()
