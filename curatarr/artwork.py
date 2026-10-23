@@ -132,6 +132,97 @@ def badge_kinds(item) -> list[str]:
     return [kind for kind in ("Primary", "Thumb", "Backdrop") if _tag(item, kind)]
 
 
+# Telling a backdrop's copies apart: small grey versions compared outside
+# the tag (where a tagged copy and its original are the same picture).
+SMALL = (64, 36)
+FINE = (160, 90)
+TAG_AREA = (0.40, 0.18, 0.92, 0.50)  # left, top, right, bottom, as fractions
+SAME_PICTURE = 2.0
+
+
+def _grey(data: bytes, size) -> list[int]:
+    image = Image.open(BytesIO(data)).convert("L")
+    if image.width > 320:  # as Jellyfin serves them to compare (maxWidth=320)
+        image = image.resize((320, round(image.height * 320 / image.width)))
+    return list(image.resize(size).tobytes())
+
+
+def _difference(a, b, size, *, area="all") -> float:
+    """Mean grey difference over the whole picture, or only "inside" or
+    "outside" the tag."""
+    width, height = size
+    left, top, right, bottom = TAG_AREA
+    total = count = 0
+    for index, (x, y) in enumerate(zip(a, b, strict=True)):
+        if area != "all":
+            col, row = index % width, index // width
+            inside = left * width <= col <= right * width and (
+                top * height <= row <= bottom * height
+            )
+            if inside != (area == "inside"):
+                continue
+        total += abs(x - y)
+        count += 1
+    return total / max(count, 1)
+
+
+def _backdrops(jellyfin, item_id) -> list[dict]:
+    listing = getattr(jellyfin, "image_list", None)
+    if listing is None:
+        return []
+    return sorted(
+        (i for i in listing(item_id) or [] if i.get("ImageType") == "Backdrop"),
+        key=lambda i: i.get("ImageIndex") or 0,
+    )
+
+
+def _put(jellyfin, item_id, data, kind, reference):
+    """Upload a picture. Jellyfin adds an uploaded backdrop to the title's
+    backdrops instead of replacing the first, so each redraw of the tag left
+    the old one behind (a title had 421), apps that rotate backdrops showed
+    old day counts, and restoring left tagged copies. So afterwards every
+    other copy of the picture (``reference``, the original), tagged or not,
+    is deleted and the new one made the first."""
+    if kind != "Backdrop":
+        return jellyfin.put_image(item_id, data, kind)
+    before = {i.get("ImageTag") for i in _backdrops(jellyfin, item_id)}
+    jellyfin.put_image(item_id, data, kind)
+    return _tidy_backdrops(jellyfin, item_id, data, reference, before)
+
+
+def _tidy_backdrops(jellyfin, item_id, uploaded, reference, before) -> int:
+    """Delete the copies of ``reference`` other than the just-uploaded one,
+    and make that one the first backdrop; returns how many were deleted."""
+    images = _backdrops(jellyfin, item_id)
+    new = [i["ImageIndex"] for i in images if i.get("ImageTag") not in before]
+    if len(images) < 2 or not new:
+        return 0
+    small = {}
+    for image in images:
+        index = image["ImageIndex"]
+        small[index] = jellyfin.image_at(item_id, "Backdrop", index, max_width=320)
+    if len(new) > 1:
+        # An earlier upload's tag can settle meanwhile: the new one is the
+        # one that looks most like what was uploaded, tag text included.
+        mine = _grey(uploaded, FINE)
+        new.sort(key=lambda i: _difference(_grey(small[i], FINE), mine, FINE))
+    keep = new[0]
+    original = _grey(reference, SMALL)
+    copies = [
+        index
+        for index, data in small.items()
+        if index != keep
+        and _difference(_grey(data, SMALL), original, SMALL, area="outside")
+        < SAME_PICTURE
+    ]
+    for index in sorted(copies, reverse=True):  # later indexes shift down
+        jellyfin.delete_image(item_id, "Backdrop", index)
+    keep -= sum(index < keep for index in copies)
+    if keep:
+        jellyfin.move_image(item_id, "Backdrop", keep, 0)
+    return len(copies)
+
+
 def _record_applied(snapshot, jellyfin):
     current_tag = _tag(jellyfin.item(snapshot.jellyfin_item_id), snapshot.image_type)
     if current_tag and current_tag != snapshot.original_image_tag:
@@ -224,7 +315,7 @@ def _apply_one(candidate, media, kind):
             original = Path(existing.original_image_bytes_path).read_bytes()
             if _jpeg(current) != original:
                 return False
-            jellyfin.put_image(existing.jellyfin_item_id, badged, kind)
+            _put(jellyfin, existing.jellyfin_item_id, badged, kind, original)
             _record_applied(existing, jellyfin)
             return True
         except (IntegrationError, OSError, ValueError):
@@ -256,7 +347,7 @@ def _apply_one(candidate, media, kind):
         snapshot.active = True
         # The original must be durable before an external image update can happen.
         db.session.commit()
-        jellyfin.put_image(media.jellyfin_id, badged, kind)
+        _put(jellyfin, media.jellyfin_id, badged, kind, original)
         _record_applied(snapshot, jellyfin)
         return True
     except (IntegrationError, OSError, ValueError) as exc:
@@ -308,10 +399,12 @@ def _keep_badged(snapshot, label):
         snapshot.badge_label = _recorded(label)
         # What restoring needs must be durable before the upload replaces it.
         db.session.commit()
-        jellyfin.put_image(
+        _put(
+            jellyfin,
             snapshot.jellyfin_item_id,
             Path(snapshot.badged_image_bytes_path).read_bytes(),
             kind,
+            original,
         )
         _record_applied(snapshot, jellyfin)
         if replaced:
@@ -358,7 +451,7 @@ def restore_badge(snapshot):
             ):
                 # External artwork changed; avoid overwriting someone else's edit.
                 return False
-        jellyfin.put_image(snapshot.jellyfin_item_id, original, kind)
+        _put(jellyfin, snapshot.jellyfin_item_id, original, kind, original)
         _record_restored(
             snapshot,
             "Original poster restored after cleanup was cancelled.",
@@ -432,8 +525,73 @@ def _repair_suspect_originals():
     db.session.commit()
 
 
+def _delete_tagged(jellyfin, item_id, original) -> int:
+    """Delete backdrops that are ``original`` with a tag on it."""
+    picture = _grey(original, SMALL)
+    tagged = []
+    for image in _backdrops(jellyfin, item_id):
+        index = image["ImageIndex"]
+        data = _grey(jellyfin.image_at(item_id, "Backdrop", index, 320), SMALL)
+        same = _difference(data, picture, SMALL, area="outside") < SAME_PICTURE
+        if same and _difference(data, picture, SMALL, area="inside") >= SAME_PICTURE:
+            tagged.append(index)
+    for index in sorted(tagged, reverse=True):
+        jellyfin.delete_image(item_id, "Backdrop", index)
+    return len(tagged)
+
+
+TIDIED = "backdrops_tidied"
+
+
+def _tidy_existing_backdrops():
+    """Once: delete the tagged backdrop copies uploads left behind (see
+    _put), on titles still Leaving Soon and on titles restored since."""
+    from .services import set_setting, setting
+
+    if setting(TIDIED):
+        return
+    rows = (
+        db.session.query(PosterSnapshot)
+        .filter(PosterSnapshot.image_type == "Backdrop")
+        .order_by(PosterSnapshot.active.desc(), PosterSnapshot.created_at.desc())
+        .all()
+    )
+    done, failed = set(), 0
+    for snapshot in rows:
+        item = snapshot.jellyfin_item_id
+        if item in done or snapshot.original_suspect:
+            continue
+        done.add(item)
+        try:
+            jellyfin = client("jellyfin")
+            if len(_backdrops(jellyfin, item)) < 2:
+                continue
+            original = Path(snapshot.original_image_bytes_path).read_bytes()
+            if snapshot.active:
+                badged = Path(snapshot.badged_image_bytes_path).read_bytes()
+                removed = _put(jellyfin, item, badged, "Backdrop", original)
+                _record_applied(snapshot, jellyfin)
+            else:
+                # Restored: only the tagged copies go; whatever else the title
+                # has now (perhaps a backdrop chosen since) stays.
+                removed = _delete_tagged(jellyfin, item, original)
+            current_app.logger.info(
+                "Deleted %s leftover backdrop copies of %s", removed, item
+            )
+        except (IntegrationError, OSError, ValueError) as exc:
+            failed += 1
+            current_app.logger.warning(
+                "Tidying the backdrops of %s failed: %s", item, type(exc).__name__
+            )
+            db.session.rollback()
+    if not failed:
+        set_setting(TIDIED, utcnow().isoformat())
+        db.session.commit()
+
+
 def reconcile_artwork():
     _repair_suspect_originals()
+    _tidy_existing_backdrops()
     active = (
         db.session.query(PurgeCandidate)
         .filter(PurgeCandidate.state.in_(["REVIEW", "LEAVING_SOON"]))
