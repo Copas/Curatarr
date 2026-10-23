@@ -64,7 +64,8 @@ Phase 8 — Media enrichment (chapters and subtitles) running live; preparing v0
 
 ## Known Issues
 - The first-run server URL can be bound by whoever signs in first unless `CURATARR_JELLYFIN_URL` is set. The sign-in rate limit is per process and per client address, so behind a reverse proxy it applies to all users together.
-- Poster restoration uses Jellyfin's primary image tag or exact badge bytes. An ambiguous upload followed by image re-encoding before the new tag is recorded still needs manual recovery.
+- Poster restoration compares the picture itself with the stored badged copy, since Jellyfin changes an uploaded image's tag a while after the upload. A badged picture saved as the original by older versions is repaired by having Jellyfin download the artwork afresh, which replaces any hand-picked poster with the provider's choice.
+- Jellyfin plugins that change posters on a schedule (poster rotators) undo the Leaving Soon badges' restoration checks and the poster language swap; Curatarr assumes it is the only thing changing posters.
 - PostgreSQL lease renewal and same-host multi-process contention were validated locally; cross-host contention has not been validated.
 - An external delete already in flight cannot be cancelled by a later playback event; the next TV file request is stopped and partial cleanup requires manual review.
 - Sonarr and Radarr record when a file was added to them, not when it first appeared in Jellyfin; titles re-imported into Radarr (for example during a library move) count as newly acquired from that date.
