@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Deletes in Jellyfin can go through Curatarr**: a new endpoint, `POST /api/v1/jellyfin/delete`, for the Curatarr plugin for Jellyfin. With the plugin, Delete in any Jellyfin app marks a film or show Leaving Soon instead of deleting its files behind Radarr's and Sonarr's backs. It uses the webhook token.
+- **The Curatarr plugin for Jellyfin** (in `jellyfin-plugin/`, released separately as `plugin-v…`): Delete in any Jellyfin app asks Curatarr first, through a new endpoint, `POST /api/v1/jellyfin/delete`. With the plugin, Delete in any Jellyfin app marks a film or show Leaving Soon instead of deleting its files behind Radarr's and Sonarr's backs. It uses the webhook token.
 - **Posters in another language are swapped for ones in the metadata language** (Settings → Household, on by default). A new release often has only foreign posters on TMDB when it arrives, and Jellyfin keeps the one it took. Once a day, films and shows released in the last year are compared with TMDB's posters; one in another language is replaced when TMDB has one in Jellyfin's metadata language. Posters chosen by hand and Leaving Soon posters are left alone.
 - **The Leaving Soon collection has a poster**: four of its titles' posters under a red LEAVING SOON band, redrawn when the titles change (Jellyfin draws nothing for a collection made through its API).
 - **A Leaving Soon collection in Jellyfin** (Settings → Household, on by default): titles join when they're marked Leaving Soon and leave when kept, watched or deleted. It's created as "Leaving Soon" and known by its id afterwards, so renaming it is fine.

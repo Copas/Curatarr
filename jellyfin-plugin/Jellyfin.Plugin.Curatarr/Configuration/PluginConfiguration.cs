@@ -1,0 +1,30 @@
+using MediaBrowser.Model.Plugins;
+
+namespace Jellyfin.Plugin.Curatarr.Configuration;
+
+/// <summary>
+/// Where Curatarr is, and what a delete does.
+/// </summary>
+public class PluginConfiguration : BasePluginConfiguration
+{
+    /// <summary>
+    /// Gets or sets Curatarr's address as Jellyfin's server reaches it, e.g. http://127.0.0.1:8787.
+    /// </summary>
+    public string CuratarrUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the webhook token from Curatarr's Settings → Integrations.
+    /// </summary>
+    public string Token { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether deletes ask Curatarr first.
+    /// </summary>
+    public bool InterceptDeletes { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether a delete fails while Curatarr can't be
+    /// reached (rather than deleting the file as Jellyfin would without the plugin).
+    /// </summary>
+    public bool BlockWhenUnreachable { get; set; } = true;
+}

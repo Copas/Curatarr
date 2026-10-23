@@ -14,3 +14,7 @@ config/posters/
 *.egg-info/
 build/
 dist/
+
+jellyfin-plugin/**/bin/
+jellyfin-plugin/**/obj/
+jellyfin-plugin/artifacts/

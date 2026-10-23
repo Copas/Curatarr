@@ -1,0 +1,21 @@
+using Jellyfin.Plugin.Curatarr.Deletes;
+using MediaBrowser.Controller;
+using MediaBrowser.Controller.Plugins;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Jellyfin.Plugin.Curatarr;
+
+/// <summary>
+/// Adds the delete filter to Jellyfin's API.
+/// </summary>
+public class PluginServiceRegistrator : IPluginServiceRegistrator
+{
+    /// <inheritdoc />
+    public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
+    {
+        serviceCollection.AddSingleton<ICuratarrClient, CuratarrClient>();
+        serviceCollection.AddScoped<DeleteFilter>();
+        serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<DeleteFilter>());
+    }
+}
