@@ -665,9 +665,14 @@ def overview():
     )
 
 
-def _leaving_summary(scheduled):
-    """How many titles are Leaving Soon, how much they free, and the first date."""
-    leaving = [c for c in scheduled if c.state == "LEAVING_SOON"]
+def _leaving_summary(_scheduled=None):
+    """How many titles are Leaving Soon, how much they free, and the first date.
+    All of them: Overview's upcoming list stops at five."""
+    leaving = (
+        db.session.query(PurgeCandidate)
+        .filter(PurgeCandidate.state == "LEAVING_SOON")
+        .all()
+    )
     if not leaving:
         return None
     dates = [c.scheduled_delete_at for c in leaving if c.scheduled_delete_at]
