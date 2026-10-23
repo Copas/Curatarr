@@ -125,7 +125,9 @@
 {% call card('tools', 'tools', 'Paths & tools', (('Tools ready' if tools_ok else 'Tools missing') ~ ' · Ollama ' ~ ('reachable' if environment.ollama else 'not reachable') ~ ' · ' ~ opts.path_mappings|length ~ ' path mapping' ~ ('' if opts.path_mappings|length == 1 else 's')), open=not tools_ok) %}
   <ul class="tool-status">
     {% for name in ['ffprobe', 'ffmpeg', 'mkvpropedit', 'mkvextract'] %}<li class="{{ 'ok' if environment[name] else 'missing' }}"><strong>{{ name }}</strong> {% if environment[name] %}<code>{{ environment[name] }}</code>{% else %}not found{% endif %}</li>{% endfor %}
-    <li class="{{ 'ok' if environment.faster_whisper else 'missing' }}"><strong>faster-whisper</strong> {{ 'installed' if environment.faster_whisper else 'not installed: Smart Chapters falls back to Navigation (install with EXTRAS=chapters-gpu)' }}</li>
+    <li class="{{ 'ok' if environment.faster_whisper else 'missing' }}"><strong>faster-whisper</strong> {% if environment.faster_whisper %}installed{% else %}not installed: Smart Chapters falls back to Navigation. Reinstall with <code>EXTRAS={{ environment.extras }}</code>{% endif %}</li>
+    {% if environment.gpu %}<li class="{{ 'ok' if environment.cuda else 'missing' }}"><strong>Graphics card</strong> {{ environment.gpu }}{% if environment.cuda %}, used for transcription{% else %}, but this install can't use it, so transcription runs on the processor, several times slower. Reinstall with <code>EXTRAS=chapters-gpu</code>{% endif %}</li>
+    {% else %}<li class="ok"><strong>Graphics card</strong> no NVIDIA card found: transcription runs on the processor</li>{% endif %}
     <li class="{{ 'ok' if environment.ollama else 'missing' }}"><strong>Ollama</strong> {% if environment.ollama %}reachable, {{ environment.ollama_models|length }} model{{ '' if environment.ollama_models|length == 1 else 's' }}{% else %}not reachable{% endif %}</li>
   </ul>
   <div class="setting-grid">

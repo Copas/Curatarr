@@ -81,7 +81,7 @@ Chapters, subtitles, recap and preview detection, and dub checks need a few more
    sudo EXTRAS=chapters-gpu ./scripts/install.sh   # NVIDIA GPU: adds the CUDA libraries
    sudo EXTRAS=chapters ./scripts/install.sh       # CPU only (much slower)
    ```
-   Give `EXTRAS` again on every upgrade; the choice is remembered in `/opt/curatarr/extras`. The model (about 1.5 GB for `medium`) downloads to `/var/lib/curatarr/models` on first use.
+   Not sure which? The installer says when it finds an NVIDIA card, and **Settings → Enhance → Paths & tools** shows the card and whether transcription uses it (Enhance also points out a card going unused). Upgrades keep the choice, remembered in `/opt/curatarr/extras`; give `EXTRAS` only to change it. The model (about 1.5 GB for `medium`) downloads to `/var/lib/curatarr/models` on first use.
 3. **Ollama** with a model, for Smart Chapters' chapter names and recap endings:
    ```bash
    curl -fsSL https://ollama.com/install.sh | sh

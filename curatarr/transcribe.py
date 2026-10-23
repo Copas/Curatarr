@@ -9,6 +9,7 @@ faster-whisper is an optional dependency: ``pip install curatarr[chapters]``.
 """
 
 import argparse
+import functools
 import hashlib
 import importlib.util
 import json
@@ -29,6 +30,40 @@ class TranscriptionUnavailable(RuntimeError):
 
 def available() -> bool:
     return importlib.util.find_spec("faster_whisper") is not None
+
+
+@functools.cache
+def nvidia_gpu() -> str | None:
+    """The NVIDIA graphics card's name, or None (no card, or no driver)."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    lines = result.stdout.strip().splitlines() if result.returncode == 0 else []
+    return lines[0].strip() if lines else None
+
+
+def cuda_libraries() -> bool:
+    """Whether the CUDA libraries faster-whisper needs on a GPU are installed
+    (the chapters-gpu extra)."""
+    try:
+        return all(
+            importlib.util.find_spec(package) is not None
+            for package in ("nvidia.cublas", "nvidia.cudnn")
+        )
+    except ModuleNotFoundError:
+        return False
+
+
+def recommended_extras() -> str:
+    """What to install for Smart Chapters on this machine."""
+    return "chapters-gpu" if nvidia_gpu() else "chapters"
 
 
 OPENING_SECONDS = 300  # enough to find a "previously on" recap
