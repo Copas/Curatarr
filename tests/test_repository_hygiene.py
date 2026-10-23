@@ -21,6 +21,7 @@ SECRET = re.compile(
     r"(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])|-----BEGIN [A-Z ]*PRIVATE KEY-----"
 )
 MAX_BYTES = 1_000_000
+PLUGIN_MANIFEST = "jellyfin-plugin/manifest.json"
 
 
 def _tracked():
@@ -52,6 +53,8 @@ def test_no_private_addresses_or_key_material():
         except UnicodeDecodeError:
             continue
         for number, line in enumerate(text.splitlines(), 1):
+            if name == PLUGIN_MANIFEST and line.strip().startswith('"checksum": '):
+                continue  # each release's MD5, which Jellyfin requires
             if PRIVATE_IPV4.search(line) or SECRET.search(line):
                 findings.append(f"{name}:{number}")
     assert findings == []

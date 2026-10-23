@@ -18,7 +18,7 @@ REPOSITORY = {
     "Url": "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/manifest.json",
     "Enabled": True,
 }
-KEY = "jellyfin_plugin"  # {"curatarr_url": what the plugin is given}
+KEY = "jellyfin_plugin"  # {"curatarr_url": what it's given, "active": last seen}
 
 
 def _norm(value) -> str:
@@ -42,6 +42,22 @@ def _wanted() -> dict | None:
     return {"CuratarrUrl": url, "Token": token}
 
 
+def _remember(active: bool) -> None:
+    """For the setup checklist, which shouldn't ask Jellyfin on every load."""
+    from .services import set_setting, setting
+
+    stored = setting(KEY, {}) or {}
+    if stored.get("active") != active:
+        set_setting(KEY, stored | {"active": active})
+        db.session.commit()
+
+
+def active() -> bool:
+    from .services import setting
+
+    return bool((setting(KEY, {}) or {}).get("active"))
+
+
 def status() -> dict:
     """For Settings: state is not_installed, restart (installed, Jellyfin
     must restart to load it), active, disabled or unreachable."""
@@ -54,10 +70,12 @@ def status() -> dict:
         return {"state": "unreachable"}
     stored = setting(KEY, {}) or {}
     if plugin is None:
+        _remember(False)
         return {"state": "not_installed", "curatarr_url": stored.get("curatarr_url")}
     state = {"Active": "active", "Restart": "restart"}.get(
         plugin.get("Status"), "disabled"
     )
+    _remember(state == "active")
     result = {
         "state": state,
         "version": plugin.get("Version"),
@@ -90,12 +108,12 @@ def install(curatarr_url: str) -> None:
 
 
 def set_address(curatarr_url: str) -> None:
-    from .services import set_setting
+    from .services import set_setting, setting
 
     url = (curatarr_url or "").strip().rstrip("/")
     if not url.startswith(("http://", "https://")):
         raise ValueError("Enter Curatarr's address, starting with http:// or https://.")
-    set_setting(KEY, {"curatarr_url": url})
+    set_setting(KEY, (setting(KEY, {}) or {}) | {"curatarr_url": url})
     db.session.commit()
 
 
@@ -123,14 +141,14 @@ def sync() -> None:
     again if they changed."""
     from .services import client
 
-    if _wanted() is None:
-        return
     try:
         jellyfin = client("jellyfin")
         plugin = _plugin(jellyfin)
     except IntegrationError:
         return
-    if plugin and plugin.get("Status") == "Active":
+    loaded = bool(plugin and plugin.get("Status") == "Active")
+    _remember(loaded)
+    if loaded and _wanted() is not None:
         configure(jellyfin)
 
 
