@@ -416,10 +416,16 @@ def replace(state) -> str:
     radarr = client("radarr")
     movie = radarr.movie(media.radarr_id)
     grabs = radarr.grabs(media.radarr_id)
-    blocklisted = None
-    if grabs:
+    blocklisted = (state.dub_result or {}).get("blocklisting")
+    # A retry (after a slow delete) mustn't blocklist again: by then the
+    # latest grab is the new copy.
+    if grabs and not blocklisted:
         radarr.mark_failed(grabs[0]["id"])
-        blocklisted = grabs[0].get("sourceTitle")
+        blocklisted = grabs[0].get("sourceTitle") or True
+        state.dub_result = {**(state.dub_result or {}), "blocklisting": blocklisted}
+        db.session.commit()
+    if blocklisted is True:
+        blocklisted = None
     file_id = (movie.get("movieFile") or {}).get("id")
     from . import replacements
 
@@ -428,7 +434,7 @@ def replace(state) -> str:
         radarr.delete_movie_file(file_id)
     radarr.search_movie(media.radarr_id)
     state.dub_result = {
-        **(state.dub_result or {}),
+        **{k: v for k, v in (state.dub_result or {}).items() if k != "blocklisting"},
         "replaced": {"at": utcnow().isoformat(), "blocklisted": blocklisted},
     }
     db.session.commit()

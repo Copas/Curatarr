@@ -231,6 +231,18 @@ SPLIT_RELEASE = (
 )
 
 
+def _blocklisted_before(state) -> bool:
+    """A replace that failed after blocklisting (a slow delete) mustn't
+    blocklist again when it's retried: by then the latest grab is the new
+    copy, not the bad one."""
+    return bool((state.file_check or {}).get("blocklisting"))
+
+
+def _note_blocklisted(state, title):
+    state.file_check = {**(state.file_check or {}), "blocklisting": title or True}
+    db.session.commit()
+
+
 def replace(state) -> str:
     """Blocklist the release, delete the file, and search again."""
     e = _enrichment()
@@ -259,9 +271,10 @@ def replace(state) -> str:
             radarr.ignore_for_movie(media.radarr_id, label, SPLIT_RELEASE, name)
         movie = radarr.movie(media.radarr_id)
         grabs = radarr.grabs(media.radarr_id)
-        if grabs:
+        if grabs and not _blocklisted_before(state):
             radarr.mark_failed(grabs[0]["id"])
             blocklisted = grabs[0].get("sourceTitle")
+            _note_blocklisted(state, blocklisted)
         file_id = (movie.get("movieFile") or {}).get("id")
         from . import replacements
 
@@ -277,16 +290,20 @@ def replace(state) -> str:
         if split and media.sonarr_id:
             sonarr.ignore_for_series(media.sonarr_id, label, SPLIT_RELEASE, name)
         grabs = sonarr.episode_grabs(part.sonarr_episode_id)
-        if grabs:
+        if grabs and not _blocklisted_before(state):
             sonarr.mark_failed(grabs[0]["id"])
             blocklisted = grabs[0].get("sourceTitle")
+            _note_blocklisted(state, blocklisted)
         if part.arr_file_id:
             sonarr.delete_episode_file(part.arr_file_id)
         sonarr.episode_search([part.sonarr_episode_id])
         service = "Sonarr"
     at = utcnow().isoformat()
+    blocklisted = blocklisted or ((state.file_check or {}).get("blocklisting") or None)
+    if blocklisted is True:
+        blocklisted = None
     state.file_check = {
-        **(state.file_check or {}),
+        **{k: v for k, v in (state.file_check or {}).items() if k != "blocklisting"},
         "replaced": {"at": at, "blocklisted": blocklisted},
     }
     state.file_problem = False
