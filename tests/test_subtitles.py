@@ -249,3 +249,23 @@ def test_bulk_queue_and_pages(app, client, subtitle_env):
     assert "Generated subtitles" in client.get(f"/titles/{media.id}").get_data(
         as_text=True
     )
+
+
+def test_new_imports_go_before_subtitles_that_need_transcribing(subtitle_env):
+    from curatarr.models import MediaPart
+
+    _files, _arr, _library, media, part, _calls = subtitle_env
+    other = MediaPart(
+        media_identity_id=media.id, kind="movie", has_file=True, file_path="/x.mkv"
+    )
+    db.session.add(other)
+    db.session.commit()
+    enrichment.request(part, "subtitles")  # no saved transcript: a backfill
+    enrichment.request(other, "auto")  # a new import, queued later
+    ids = [s.media_part_id for s in enrichment._due_jobs(10, scans=False)]
+    assert ids.index(other.id) < ids.index(part.id)
+    state = _state(part)
+    state.transcript_key = "saved"
+    db.session.commit()
+    ids = [s.media_part_id for s in enrichment._due_jobs(10, scans=False)]
+    assert ids[0] == part.id  # quick with a saved transcript: first
