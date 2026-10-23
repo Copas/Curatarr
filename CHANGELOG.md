@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Fixed: a slow delete made a Replace blocklist each new copy.** Sonarr took over a minute to delete a file from a network share, so the Replace gave up; retried every cycle, it blocklisted whatever had been grabbed most recently (by then the new copy) and failed again, because the file was gone. A file already gone now counts as deleted, deletes may take five minutes, and a retried Replace never blocklists twice.
 - **Overview's Leaving Soon summary has a card of its own**, above Needs you. At the foot of the Needs you list it read as part of the row above it (a show listed for misfiled episodes looked like it was leaving).
 - **Fixed: Overview's Leaving Soon line never said more than 5 titles.** It was counted from the upcoming list, which stops at five; it counts every title Leaving Soon now (14 here, not 5).
 - **Fixed: new imports waited behind a subtitle backfill, and the overall bar didn't count subtitles.** Subtitle jobs always ran first, which suited ones that reuse a saved transcript (seconds each) but not the picture-subtitle recheck's, which need transcribing (minutes each): 20 new imports sat a day behind 1,500 of them, and the bar showed only those 20, "measuring the pace". Subtitle jobs that need transcribing now run after chapter jobs, and subtitles are part of the overall bar with their own pace.
