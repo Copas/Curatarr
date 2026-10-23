@@ -1,0 +1,13 @@
+name: "Curatarr"
+guid: "42d6dc0d-a758-4b43-ab9c-303c6727aada"
+targetAbi: "12.2.0.0"
+framework: "net10.0"
+owner: "Copas"
+overview: "Delete in Jellyfin marks a title Leaving Soon in Curatarr instead"
+description: >
+  Delete in any Jellyfin app asks Curatarr first: a film or show Curatarr
+  manages is marked Leaving Soon instead of deleted, so it leaves through
+  Radarr or Sonarr and can still be saved.
+category: "General"
+artifacts:
+  - "Jellyfin.Plugin.Curatarr.dll"
