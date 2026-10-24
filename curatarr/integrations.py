@@ -185,6 +185,24 @@ class JellyfinClient(Client):
     def users(self):
         return self.request("GET", "/Users")
 
+    def next_up(self, user_id, limit=100):
+        """The next episode of each show the user is watching."""
+        data = self.request(
+            "GET",
+            "/Shows/NextUp",
+            params={"userId": user_id, "limit": limit, "enableResumable": "true"},
+        )
+        return (data or {}).get("Items") or []
+
+    def resume(self, user_id, limit=50):
+        """Films and episodes the user stopped partway through."""
+        data = self.request(
+            "GET",
+            f"/Users/{user_id}/Items/Resume",
+            params={"limit": limit, "includeItemTypes": "Movie,Episode"},
+        )
+        return (data or {}).get("Items") or []
+
     def libraries(self):
         return self.request("GET", "/Library/VirtualFolders")
 

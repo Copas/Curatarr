@@ -141,6 +141,12 @@ def probe(path: str) -> MediaInfo:
                 "forced": bool((s.get("disposition") or {}).get("forced")),
                 "language": (s.get("tags") or {}).get("language"),
                 "channels": s.get("channels"),
+                "title": (s.get("tags") or {}).get("title"),
+                # A commentary, or a narrator describing the picture.
+                "extra": bool(
+                    (s.get("disposition") or {}).get("comment")
+                    or (s.get("disposition") or {}).get("visual_impaired")
+                ),
             }
             for s in data.get("streams") or []
         ],

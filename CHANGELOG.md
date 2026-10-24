@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **What people will watch next is got ready first.** The next episodes of shows people are watching, and what they stopped partway through, go to the front of the job queue, so a new episode has its chapters, subtitles and recap marker by the time someone reaches it.
+- **A commentary or audio description isn't the default track any more** (Settings → Enhance, on by default): the film's own soundtrack in the same language is made the default, in place.
 - **Each device plays what it can play as it is** (plugin 0.3.0.0). Jellyfin plays the default audio track and a title's first copy whatever the device can decode. The plugin now asks Jellyfin's own stream builder, with the device's profile, how each copy and each audio track in the same language would play, and points the player at the one needing the least work: a browser gets a stereo AAC track instead of AC3 converted on the fly, and of two copies of a film, each device gets the one it plays directly. Tracks and copies picked by hand, other languages and commentaries are left alone.
 - **Stereo AAC tracks for web browsers** (Settings → Enhance, on by default with the plugin): added last and not default beside AC3, E-AC3 and DTS, so TVs keep their surround track. TV-friendly audio's rows are now *Playable audio*.
 - **Fixed: the finish estimate read 20 days after an hour of playback.** Subtitle and skip-marker estimates used the last hour's pace, and an hour mostly paused for people watching (3 subtitles done) made 1,486 left look like 20 days. They use the best of the last hour's, six hours' and day's pace now.

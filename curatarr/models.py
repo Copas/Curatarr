@@ -388,6 +388,9 @@ class ChapterState(db.Model, Timed):
     # A TV-friendly audio track added beside DTS/TrueHD/FLAC (compat_audio.py).
     compat_audio_size = db.Column(db.BigInteger)  # the file that was checked
     compat_audio = db.Column(db.JSON)
+    # Whether the file plays a commentary or audio description by default.
+    default_audio_size = db.Column(db.BigInteger)  # the file that was checked
+    default_audio = db.Column(db.JSON)
     # Seek index repair for files Roku players couldn't seek in (seek_repair.py).
     seek_layout_size = db.Column(db.BigInteger)  # the file that was checked
     seek_layout = db.Column(db.JSON)
