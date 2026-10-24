@@ -34,4 +34,11 @@ public class PluginConfiguration : BasePluginConfiguration
     /// plugin, and a restart of Jellyfin to take effect.
     /// </summary>
     public bool WebMenu { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether each device is pointed at the copy and
+    /// audio track it can play with the least work (an AAC track beside AC3 for a
+    /// browser, the copy it can play directly), when the viewer didn't pick one.
+    /// </summary>
+    public bool ChoosePlayable { get; set; } = true;
 }

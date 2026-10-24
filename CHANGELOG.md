@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Each device plays what it can play as it is** (plugin 0.3.0.0). Jellyfin plays the default audio track and a title's first copy whatever the device can decode. The plugin now asks Jellyfin's own stream builder, with the device's profile, how each copy and each audio track in the same language would play, and points the player at the one needing the least work: a browser gets a stereo AAC track instead of AC3 converted on the fly, and of two copies of a film, each device gets the one it plays directly. Tracks and copies picked by hand, other languages and commentaries are left alone.
+- **Stereo AAC tracks for web browsers** (Settings → Enhance, on by default with the plugin): added last and not default beside AC3, E-AC3 and DTS, so TVs keep their surround track. TV-friendly audio's rows are now *Playable audio*.
 - **Fixed: the finish estimate read 20 days after an hour of playback.** Subtitle and skip-marker estimates used the last hour's pace, and an hour mostly paused for people watching (3 subtitles done) made 1,486 left look like 20 days. They use the best of the last hour's, six hours' and day's pace now.
 - **Fixed: a chapter job failed when the database was busy.** A lock hit during an autoflush (a reconcile holds the write lock for a couple of minutes) surfaced as a different error and was recorded as a failure; the job is put back in the queue instead.
 - **Dates and times read the way people say them**, everywhere they're shown: "today at 5:55 PM", "tomorrow at 4 PM", "Wednesday at 3:21 AM", "last Monday", "Oct 31" (with the year only when it isn't this year's), in the viewer's own time zone and 12- or 24-hour style. Hovering shows the full date and time.

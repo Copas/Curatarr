@@ -58,7 +58,7 @@ def test_rebuilds_without_a_pace_are_named(app, monkeypatch):
     )
     monkeypatch.setattr(seek_repair, "progress", lambda: None)
     result = progress.overall()
-    assert result["left"] == 5 and result["unknown"] == ["TV-friendly audio"]
+    assert result["left"] == 5 and result["unknown"] == ["Playable audio"]
     assert result["time_left"] is None
 
 
