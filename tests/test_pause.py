@@ -93,3 +93,25 @@ def test_the_worker_does_nothing_else_while_paused(app, monkeypatch):
     pause.pause(4)
     commands._dispatch_chapters()
     assert called == []
+
+
+def test_the_workers_own_tools_are_never_suspended():
+    """The worker's thread lifts the pause, so a tool it runs while someone
+    watches (a reconcile probing a new import) must finish, or it waits forever."""
+    throttle.set_paused(True)
+    try:
+        assert throttle.run(["true"], timeout=5).returncode == 0
+        throttle.wait_while_paused()  # returns at once on this thread
+        outcome = {}
+
+        def job():
+            outcome["result"] = throttle.run(["true"], timeout=5).returncode
+
+        worker = threading.Thread(target=job)
+        worker.start()
+        worker.join(timeout=3)
+        assert worker.is_alive()  # a background job's tool is held
+    finally:
+        throttle.set_paused(False)
+    worker.join(timeout=10)
+    assert outcome["result"] == 0
