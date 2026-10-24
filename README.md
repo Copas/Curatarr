@@ -165,6 +165,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Recaps and previews](docs/FEATURES.md#recaps-previews-and-skip-markers) | "Previously on…" and "Next time on…" get Jellyfin's Skip button. | With Intro Skipper |
 | [Better skip markers](docs/FEATURES.md#recaps-previews-and-skip-markers) | Intro Skipper guesses that are plainly wrong are hidden, each undoable; films keep only their credits. | With Intro Skipper |
 | [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** |
+| [Custom posters](docs/FEATURES.md#collections-and-suggestions) | Your own poster for any title, uploaded or picked up from a folder, with the original kept to restore. Writes prompts in batches for an image-making AI to make them, even with your household cast in them. | One click |
 | [Posters in your language](docs/FEATURES.md#collections-and-suggestions) | A new release that arrived with a foreign poster gets one in your language once TMDB has it. | **On** |
 
 ### ▶️ Plays smoothly everywhere

@@ -27,6 +27,18 @@
     <a class="btn btn-outline-danger text-nowrap" href="{{ url_for('main.title_reset', media_id=media.id) }}" data-tip="Opens a page showing which episodes would be deleted to shrink this show back to its minimum. Nothing happens until you confirm.">Reset…</a>
   </div>{% endif %}
 </div>{% endif %}
+{% if is_admin and media.jellyfin_id %}<div class="card p-3 mb-4" id="poster"><h2 class="h5">Poster</h2>
+  <div class="d-flex flex-wrap gap-3 align-items-start">
+    <img class="poster poster-large" src="{{ url_for('main.custom_poster_image', poster_id=custom_poster.id) if custom_poster else url_for('main.poster', media_id=media.id) }}" alt="" loading="lazy">
+    <div class="flex-grow-1">
+      {% if custom_poster %}<p class="mb-2">A custom poster{% if custom_poster.source and custom_poster.source != 'Uploaded' %} from <code>{{ custom_poster.source }}</code>{% else %}, uploaded{% endif %}, since {{ custom_poster.applied_at|when('datetime') }}. Everyone sees it in Jellyfin; during Leaving Soon the countdown is drawn on it.</p>
+      <form method="post" action="{{ url_for('main.title_poster_restore', media_id=media.id) }}" class="mb-3"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light" data-tip="{{ 'Puts back the poster this title had before.' if custom_poster.original_path else 'Curatarr has no copy of the poster from before, so this takes the metadata provider\'s poster.' }}">Restore original</button></form>
+      {% else %}<p class="mb-2 text-secondary">Jellyfin's own poster. Upload a picture to use instead; the current one is kept to restore.</p>{% endif %}
+      <form method="post" action="{{ url_for('main.title_poster_upload', media_id=media.id) }}" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 align-items-center"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input class="form-control form-control-sm w-auto" type="file" name="poster" accept="image/jpeg,image/png,image/webp" required aria-label="Poster picture"><button class="btn btn-sm btn-primary">{{ 'Replace poster' if custom_poster else 'Use this poster' }}</button></form>
+      <p class="small text-secondary mt-2 mb-0">JPEG, PNG or WebP, portrait (2:3) works best. <a href="{{ url_for('main.custom_posters_page') }}">All custom posters</a></p>
+    </div>
+  </div>
+</div>{% endif %}
 <div class="card p-3 mb-4"><h2 class="h5">Lifecycle decisions</h2>
 {% for candidate in candidates %}<div class="border-top border-secondary-subtle pt-2 mt-2"><strong>{{ candidate.state.replace('_',' ')|title }}</strong> · {{ candidate.reason_text }}<br>
 <span class="text-secondary">{{ candidate.reclaimable_bytes|size }} reclaimable{% if is_admin %} · {{ candidate.reason_code.replace('_',' ')|title }}{% endif %}{% if candidate.scheduled_delete_at %} · Scheduled {{ candidate.scheduled_delete_at|when('date') }}{% endif %}</span>

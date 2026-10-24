@@ -350,6 +350,22 @@ class JellyfinClient(Client):
             },
         )
 
+    def item_details(self, item_ids):
+        """Year, genres and plot of several items, for writing about them."""
+        found = []
+        ids = list(item_ids)
+        for start in range(0, len(ids), 100):
+            data = self.request(
+                "GET",
+                "/Items",
+                params={
+                    "Ids": ",".join(ids[start : start + 100]),
+                    "Fields": "Overview,Genres,ProductionYear",
+                },
+            )
+            found.extend((data or {}).get("Items") or [])
+        return found
+
     def mark_played(self, user_id, item_id):
         return self.request("POST", f"/Users/{user_id}/PlayedItems/{item_id}")
 

@@ -258,6 +258,28 @@ class PosterSnapshot(db.Model, Timed):
     restored_at = db.Column(db.DateTime(timezone=True))
 
 
+class CustomPoster(db.Model, Timed):
+    """A poster someone chose for a title (custom_posters.py). Only one is
+    active per title and account; ``jellyfin_user_id`` None means everyone
+    (the poster Jellyfin itself has)."""
+
+    __tablename__ = "custom_posters"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    media_identity_id = db.Column(
+        db.String(36), db.ForeignKey("media_identities.id"), nullable=False, index=True
+    )
+    jellyfin_user_id = db.Column(db.String(100))
+    image_path = db.Column(db.String(512), nullable=False)
+    # The poster it replaced; None when that wasn't known (it was already
+    # showing when imported), so restoring takes the provider's poster.
+    original_path = db.Column(db.String(512))
+    source = db.Column(db.String(255))  # "Uploaded" or the imported file's name
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    applied_at = db.Column(db.DateTime(timezone=True))
+    restored_at = db.Column(db.DateTime(timezone=True))
+    media = db.relationship("MediaIdentity")
+
+
 class LifecycleEvent(db.Model, Timed):
     __tablename__ = "lifecycle_events"
     id = db.Column(db.String(36), primary_key=True, default=uuid)
