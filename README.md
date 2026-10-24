@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="#feature-list">Features</a> ·
   <a href="docs/INSTALL.md">Install</a> ·
   <a href="docs/FEATURES.md">How it works</a> ·
   <a href="docs/API.md">API</a> ·
@@ -31,10 +32,10 @@ That's all you need to get started. Add these when you want more:
 | Optional | Unlocks |
 |---|---|
 | Jellyfin **Webhook** plugin | Instant reactions to playback (otherwise Curatarr catches up hourly) |
-| The **Curatarr plugin for Jellyfin** ([jellyfin-plugin](jellyfin-plugin/README.md)) | Delete in any Jellyfin app marks a title Leaving Soon instead of deleting its files |
+| The **Curatarr plugin for Jellyfin** ([jellyfin-plugin](jellyfin-plugin/README.md)) | Delete in any Jellyfin app marks a title Leaving Soon instead of deleting its files, and each device plays the copy and audio track it can play without converting |
 | **FFmpeg** and **MKVToolNix** | Chapters, English-dub checks, file problem checks |
 | **Local AI**: Whisper (installed with the `chapters` extra) and **Ollama** with a model (e.g. `qwen3:14b`), ideally on an NVIDIA GPU | Smart Chapters, subtitles, recap and preview detection, Fun facts, search by what was said |
-| Jellyfin **Intro Skipper** plugin | Skip buttons for recaps and previews, and clean-up of bad skip markers |
+| Jellyfin **Intro Skipper** plugin | Skip buttons for recaps and previews, clean-up of bad skip markers, and knowing where a film's credits start |
 | **Seerr** (or Jellyseerr/Overseerr) | Requested titles are kept until whoever asked has watched them |
 
 Everything runs on your own server. No cloud service, no account, no tracking. Free and open source (MIT).
@@ -69,7 +70,7 @@ It knows what your household cares about, too:
 ![The review queue: why each title was picked, and what happens next](docs/images/review.png)
 
 ### 📺 The next episode is already there
-Finish an episode and Curatarr asks Sonarr for the rest of the season, and the next one, before anyone has to. Shows nobody continued stop downloading. Every show keeps its first few episodes, so there's always something to start on; if one of those never arrived, Curatarr says so and searches once at a click.
+Finish an episode and Curatarr asks Sonarr for the rest of the season, and the next one, before anyone has to. The episodes people are about to watch get their chapters, subtitles and skip markers first, and a film stopped in its end credits counts as watched, so Continue Watching holds only what's really unfinished. Shows nobody continued stop downloading. Every show keeps its first few episodes, so there's always something to start on; if one of those never arrived, Curatarr says so and searches once at a click.
 
 ### 🛠️ Bad downloads, caught and fixed
 Curatarr checks every file so you don't find out halfway through a film:
@@ -80,21 +81,25 @@ Curatarr checks every file so you don't find out halfway through a film:
 - **No English audio** on a film that was sold as an English dub
 - **Wrong episodes**: a file whose dialogue matches a different episode's summary
 
-Click **Replace** and Curatarr first checks that a better copy actually exists. Only then does it blocklist the bad release, delete the file and grab the new one. If nothing better is out there, it keeps what you have and tells you so.
+- **Misfiled episodes**: an episode Sonarr filed in another's slot is moved back where it belongs
+
+When Curatarr can be sure, it fixes these by itself. Every **Replace** first checks that a better copy actually exists; only then does it blocklist the bad release, delete the file and grab the new one. If nothing better is out there, it keeps what you have and tells you so.
 
 ![Problems: each with a fix, and a status once you've clicked](docs/images/problems.png)
 
 ### ✨ Every file nicer to watch
 - **Chapters** for files that have none, named from what's actually said (*Smart Chapters*, local Whisper + Ollama), or evenly spaced at scene changes.
-- **English subtitles** made from the soundtrack, for files that have none.
+- **English subtitles** made from the soundtrack, for files that have none, or only picture subtitles a Roku can't draw.
 - **Skip "Previously on…" and "Next time on…"** with Jellyfin's own Skip button.
 - **Better skip markers**: Intro Skipper guesses that are plainly wrong are hidden, each one undoable.
 - **The right audio first**: tracks labelled in the wrong language are relabelled, and the real English track becomes the default.
 - **Audio every TV can play**: films and episodes with DTS, TrueHD or FLAC sound get an AC3 copy beside the original, so a Roku or TV plays them directly instead of stumbling over conversion.
+- **Audio for web browsers**: Chrome and Firefox can't play AC3 or DTS, so files browser viewers are about to watch get a stereo AAC track, and the Curatarr plugin points browsers at it. TVs keep their surround track.
+- **The film's own soundtrack first**: when a release makes the director's commentary or the audio description the default track, the film's soundtrack becomes the default instead.
 - **Seeking that works on Roku**: files whose seek index sits where Roku players don't look are rebuilt (nothing re-encoded), so skipping ahead doesn't start the episode over.
 - **Posters in your language**: a new release that arrived with only a foreign poster gets one in your language once TMDB has it.
 
-The picture is never re-encoded, the only thing ever encoded is that optional extra audio track, and none of it happens until you switch it on.
+The picture is never re-encoded; the only thing ever encoded is an extra audio track, with the original kept beside it. Chapters and subtitles wait until you switch them on; the fixes Curatarr can be sure of are on from the start.
 
 ![Enhance: what Curatarr has done for your library so far](docs/images/chapters.png)
 
@@ -111,6 +116,84 @@ Everything works on a phone. Household members sign in with their own Jellyfin a
 
 <p align="center"><img src="docs/images/overview-phone.png" alt="Curatarr on a phone" width="270"></p>
 
+## Feature list
+
+Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr is connected; the rest are a switch away in Settings. [How it works](docs/FEATURES.md) has the detail behind each one.
+
+### 💾 Space and cleanup
+
+| Feature | What it does | Default |
+|---|---|---|
+| [Leaving Soon](docs/FEATURES.md#cleanup-is-driven-by-free-space) | Titles about to go count down on their poster, home-screen card and backdrop in Jellyfin, and gather in a Leaving Soon collection. Playing any of it saves it. | **On** |
+| [Free-space cleanup](docs/FEATURES.md#cleanup-is-driven-by-free-space) | When a disk runs low, the titles nobody has touched for longest go first, only as many as needed. | Set a disk to watch |
+| [Household choices](docs/FEATURES.md#what-the-households-choices-change) | Seerr requests stay until whoever asked has watched; favourites and rewatches go to the back of the line; what an import list added goes first. | **On** |
+| [Seasonal shelves](docs/FEATURES.md#what-the-households-choices-change) | Halloween films stay through October, Christmas ones through December; optionally they come back for their season. | **On** (return: Off) |
+| [Shrink instead of delete](docs/FEATURES.md#shrink-instead-of-delete) | Swaps a big copy of a film you keep for one half the size, only if one exists. | One click |
+| [Free up space](docs/FEATURES.md#tv-one-season-ahead) | Every film and show by what removing it would free, with who has watched it. | **On** |
+| [Disk forecast](docs/FEATURES.md#disk-forecast) | When each disk runs low at this week's pace, and what would go first. | **On** |
+| [Dry run](docs/FEATURES.md#before-anything-is-deleted) | Shows what would be removed, and why, without removing anything. | **On** for every library |
+| [Delete in any Jellyfin app](jellyfin-plugin/README.md) | Marks a film or show Leaving Soon instead of deleting its files behind Radarr's and Sonarr's backs. | With the plugin |
+
+### 📺 What to watch next
+
+| Feature | What it does | Default |
+|---|---|---|
+| [One season ahead](docs/FEATURES.md#tv-one-season-ahead) | Finish an episode and the rest of the season, and the next, are requested from Sonarr. Shows nobody continued stop downloading. | **On** |
+| [Always something to start](docs/FEATURES.md#tv-one-season-ahead) | Every show keeps its first few episodes; ones that never arrived are searched for once. | **On** |
+| [What's next is ready first](docs/FEATURES.md#continue-watching-and-whats-next) | The next episodes of shows people are watching get their chapters, subtitles and skip markers before the back catalogue. | **On** |
+| [Finished at the credits](docs/FEATURES.md#continue-watching-and-whats-next) | Something stopped in its end credits, or after its last line with only the ending left, is marked watched, so it leaves Continue Watching. | **On** |
+| [Collections and suggestions](docs/FEATURES.md#collections-and-suggestions) | The film series you have part of, and films ranked by how well they fit what the household favourites. | **On** |
+
+### 🛠️ Bad downloads, caught and fixed
+
+| Feature | What it does | Default |
+|---|---|---|
+| [File problems](docs/FEATURES.md#problems-burned-in-subtitles-and-broken-files) | Burned-in subtitles, files cut short or cut off, decoding errors, films that go quiet. | **On** |
+| [The wrong show](docs/FEATURES.md#shows-that-are-another-show-with-the-same-name) | A namesake (a remake, a foreign show) filed under your series. | **On** |
+| [Misfiled episodes](docs/FEATURES.md#episodes-filed-under-the-wrong-episode) | An episode Sonarr filed in another's slot is moved back, when what's said in it agrees with its download's name. | **On** |
+| [English dubs](docs/FEATURES.md#english-dubs) | Listens to films sold as English dubs: relabels wrong tracks, makes real English the default, replaces ones with none. | **On** |
+| [Wrong episodes](docs/FEATURES.md#recaps-previews-and-skip-markers) | Flags an episode whose dialogue fits another episode's summary. Experimental. | Off |
+| [Automatic fixes](docs/FEATURES.md#automatic-fixes) | The fixes above happen by themselves when Curatarr can be confident, each switchable. | **On** |
+| [Replace checks first](docs/FEATURES.md#replace-checks-first) | A file is only deleted once a better copy is confirmed to exist. | Always |
+
+### ✨ Every file nicer to watch
+
+| Feature | What it does | Default |
+|---|---|---|
+| [Chapters](docs/FEATURES.md#chapters-and-subtitles) | Chapters for files that have none, named from what's said (local Whisper and Ollama) or spaced at scene changes. | Off until you choose |
+| [Subtitles](docs/FEATURES.md#chapters-and-subtitles) | English subtitles from the soundtrack, for files with none, or with only picture subtitles a Roku can't draw. | Off until you choose |
+| [Recaps and previews](docs/FEATURES.md#recaps-previews-and-skip-markers) | "Previously on…" and "Next time on…" get Jellyfin's Skip button. | With Intro Skipper |
+| [Better skip markers](docs/FEATURES.md#recaps-previews-and-skip-markers) | Intro Skipper guesses that are plainly wrong are hidden, each undoable; films keep only their credits. | With Intro Skipper |
+| [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** |
+| [Posters in your language](docs/FEATURES.md#collections-and-suggestions) | A new release that arrived with a foreign poster gets one in your language once TMDB has it. | **On** |
+
+### ▶️ Plays smoothly everywhere
+
+| Feature | What it does | Default |
+|---|---|---|
+| [The right copy and track for each device](docs/FEATURES.md#playing-smoothly-on-every-device) | Each player is pointed at the copy and audio track it plays as it is, instead of having Jellyfin convert. | With the plugin |
+| [Audio for web browsers](docs/FEATURES.md#playing-smoothly-on-every-device) | A stereo AAC track beside AC3, E-AC3 and DTS, for the files browser viewers are about to watch. TVs keep their surround. | **On**, with the plugin |
+| [Audio every TV plays](docs/FEATURES.md#playing-smoothly-on-every-device) | An AC3 copy beside DTS, TrueHD or FLAC, so Rokus and TVs don't stumble over conversion. | Off |
+| [Seeking on Roku](docs/FEATURES.md#seeking-on-roku) | Files Roku can't seek in are rebuilt (nothing re-encoded), so skipping ahead doesn't start over. | **On** |
+| [Makes room for viewers](docs/FEATURES.md#sharing-the-machine-with-playback) | Measures CPU, GPU and who's watching, and backs off when someone starts a stream. | **On** |
+
+### 🎉 Just for fun
+
+| Feature | What it does | Default |
+|---|---|---|
+| [Search what was said](docs/FEATURES.md#search-what-was-said) | Find the episode where someone said *that line*, with the timestamp. | With transcripts |
+| [Fun facts](docs/FEATURES.md#fun-facts) | Which film swears most per hour, which show says "I love you" most, each show's catchphrase. | With transcripts |
+
+### 👥 For the whole household
+
+| Feature | What it does | Default |
+|---|---|---|
+| [Jellyfin sign-in](docs/FEATURES.md#signing-in-and-who-sees-what) | Everyone signs in with their own Jellyfin account; household members can browse, search and say Keep, only administrators approve deletions. | **On** |
+| Phone-friendly | Every page works on a phone, in light or dark. | **On** |
+| [API and metrics](docs/API.md) | Status and counts for home dashboards, a read-only API key, and metrics. | **On** |
+
+Nothing re-encodes the picture. The only thing ever encoded is an extra audio track (AAC or AC3), and the original is always kept beside it.
+
 ## Safe to point at your real library
 
 Curatarr was built on a real 8,000-file library and is careful by design:
@@ -118,7 +201,7 @@ Curatarr was built on a real 8,000-file library and is careful by design:
 - **Dry run is on by default** for every library. Curatarr shows what it *would* remove and why, until you switch that off.
 - **Deletions only go through Sonarr or Radarr**, after Curatarr rechecks playback, grace periods, the download queue and connection health. If anything can't be verified, nothing is deleted.
 - **Replace never leaves you with nothing.** It confirms a better copy can be found before it deletes the one you have.
-- **File edits never re-encode the picture.** Chapters and track flags are written in place with `mkvpropedit`. Removing language tracks, or adding a TV-friendly audio track (the one thing that encodes, and only that track), writes a copy that's checked before it replaces the original, which keeps every original track.
+- **File edits never re-encode the picture.** Chapters and track flags are written in place with `mkvpropedit`. Removing language tracks, or adding an extra audio track (the one thing that encodes, and only that track), writes a copy that's checked before it replaces the original, which keeps every original track.
 - **Everything is undoable or recorded.** Markers it hid can be restored, chapters it wrote can be removed (your originals are kept), and every action is in History with the reason.
 - **It steps aside for viewers.** It measures CPU, GPU and who's watching, and backs off when someone starts a stream.
 
@@ -146,7 +229,7 @@ Then open `http://<your-server>:8787` and sign in with a Jellyfin administrator 
 
 ## Learn more
 
-- [How it works](docs/FEATURES.md): cleanup and acquisition rules, sign-in, chapters, skip markers, dubs, problems, search and fun facts in detail.
+- [How it works](docs/FEATURES.md): cleanup and acquisition rules, sign-in, chapters, skip markers, dubs, problems, playback, search and fun facts in detail.
 - [Installing, upgrading and backing up](docs/INSTALL.md)
 - [API, dashboards, logs and metrics](docs/API.md)
 - [Developing Curatarr](docs/DEVELOPMENT.md) and [design decisions](docs/decisions/)

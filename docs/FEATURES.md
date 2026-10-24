@@ -6,11 +6,13 @@
 - [Chapters and subtitles](#chapters-and-subtitles)
 - [Recaps, previews and skip markers](#recaps-previews-and-skip-markers)
 - [English dubs](#english-dubs)
+- [Continue Watching and what's next](#continue-watching-and-whats-next)
 - [Problems: burned-in subtitles and broken files](#problems-burned-in-subtitles-and-broken-files)
 - [Search what was said](#search-what-was-said)
 - [Collections and suggestions](#collections-and-suggestions)
 - [Fun facts](#fun-facts)
 - [Sharing the machine with playback](#sharing-the-machine-with-playback)
+- [Playing smoothly on every device](#playing-smoothly-on-every-device): audio every device plays, seeking on Roku
 
 The interface groups daily decisions under **Overview** and **Review**, title browsing under **Library**, and file improvements under **Enhance**, and administrator controls under **Activity** and **Settings**. The theme button in the header switches between dark and light for that browser.
 
@@ -161,17 +163,18 @@ What it does with the result:
 | No English audio at all | Lists the film on **English dubs**, to **Replace** (blocklists the release in Radarr, deletes the file and searches again), **Listen again** or **Keep** |
 | *Optional:* audio heard clearly in another language, or subtitles labelled in another language | Removes them, once English audio is confirmed |
 
-- **Replace automatically** is off by default; with it on, films with no English audio are replaced without asking. Dry run is respected.
-- **What people watch next is ready first.** Every ten minutes Curatarr asks Jellyfin what each person is in the middle of: the next episode of each show (and the two after it) and films and episodes they stopped partway. Their jobs (chapters, subtitles, skip markers) go to the front of the queue, ahead of the back catalogue.
-- **A commentary or audio description isn't played by default** (Settings → Enhance, on by default). When a file's default audio track is the director's commentary or an audio description (by its flags or its name) and the film's own soundtrack in that language is there, that becomes the default: in place, nothing re-encoded. Every file is looked at once, a few each minute, and again when it's replaced.
-
-- **Something stopped in its credits counts as watched** (Settings → Enhance → Skip markers, on by default). Jellyfin marks a film watched only when it's stopped past 90%, so long end credits leave finished films in Continue Watching. Every few minutes Curatarr looks at each person's Continue Watching: anything stopped in its end credits (Intro Skipper's credits marker, in the last quarter), or after its last line of dialogue with at most twelve minutes left (three for an episode), is marked watched for that person, which clears its resume point. The dialogue comes from Curatarr's transcript or an English text subtitle that runs to near the end. Anything still playing, or stopped earlier, is left alone; each one is listed in History.
-- **Stereo AAC tracks for web browsers** (Settings → Enhance, on by default, with the Curatarr plugin for Jellyfin). Chrome and Firefox can't play AC3, E-AC3 or DTS, so Jellyfin converts the sound while they watch (half of all transcodes on one server). Curatarr adds a stereo AAC copy of the main track, last and not default, so TVs keep the surround track they play now, and the plugin points browsers at it. Picture and other tracks are copied untouched, the file is checked before it replaces the original, and rebuilds are paced to Jellyfin's thumbnails.
-- **TV-friendly audio** (Settings → Enhance, off by default). Rokus, many smart TVs and soundbars can't play DTS, TrueHD or FLAC, so Jellyfin converts it during playback, and some players then get stuck restarting at one spot. For films and episodes whose main audio is one of these, with no AC3, E-AC3 or AAC track in the same language, Curatarr adds an AC3 copy (5.1 at most) as the first, default track and keeps the original beside it. Only that track is encoded; everything else is copied. The copy is checked (same length, chapters, video and subtitles, one more audio track) before it replaces the file. They're found from Radarr's and Sonarr's media info, one or two at a time, never one being played and not in dry-run libraries. MKV only.
+- **Replace automatically** is on by default (Settings → Automatic): a film with no English audio is replaced once a better copy is confirmed to exist. Dry run is respected.
 - **Remove audio and subtitles in other languages** is off by default. The file is rewritten as a copy with `mkvmerge` (never re-encoded), checked (same length, chapters and video, and the expected tracks), and only then moved over the original. MKV only. Tracks it couldn't make out are kept.
 - A film's chapter job waits briefly for its dub check, so its transcript comes from the right track the first time.
 
 For Radarr to grab dubs in the first place, its quality profile's language must allow them (*Any*, with a custom format scoring non-English releases down), not *Original*.
+
+---
+
+## Continue Watching and what's next
+
+- **What people watch next is ready first.** Every ten minutes Curatarr asks Jellyfin what each person is in the middle of: the next episode of each show (and the two after it) and films and episodes they stopped partway. Their jobs (chapters, subtitles, skip markers) go to the front of the queue, ahead of the back catalogue.
+- **Something stopped in its credits counts as watched** (Settings → Enhance → Skip markers, on by default). Jellyfin marks a film watched only when it's stopped past 90%, so long end credits leave finished films in Continue Watching. Every few minutes Curatarr looks at each person's Continue Watching: anything stopped in its end credits (Intro Skipper's credits marker, in the last quarter), or after its last line of dialogue with at most twelve minutes left (three for an episode), is marked watched for that person, which clears its resume point. The dialogue comes from Curatarr's transcript or an English text subtitle that runs to near the end. Anything still playing, or stopped earlier, is left alone; each one is listed in History.
 
 ---
 
@@ -187,7 +190,7 @@ On by default; settings in Settings → Enhance → File problems. A background 
 | **Goes quiet** (films) | Nobody speaks after the first 60% of a film that has a transcript. |
 | **Decoding errors** | Errors from the video or audio decoder at two or more of six points through the file. |
 
-Problem files are listed on **Enhance → Problems** and on Overview, to **Replace** (blocklist the release in Radarr or Sonarr, delete the file, search again), **Check again** or **Keep**. **Replace problem files automatically** is off by default; dry run is respected. A film that's one part of a split release ("Part.2", "CD1", "Part.II") is flagged as such, and replacing it has Radarr ignore split releases for that film.
+Problem files are listed on **Enhance → Problems** and on Overview, to **Replace** (blocklist the release in Radarr or Sonarr, delete the file, search again), **Check again** or **Keep**. **Replace problem files automatically** is on by default (Settings → Automatic); dry run is respected. A film that's one part of a split release ("Part.2", "CD1", "Part.II") is flagged as such, and replacing it has Radarr ignore split releases for that film.
 
 ### Shows that are another show with the same name
 
@@ -247,13 +250,23 @@ Chapter work is heavy (scene detection, transcription, a language model), and th
 
 **Chapter jobs at once** (1–8) is only the ceiling. The Activity card on Enhance → Progress says what was measured and decided, for example *Up to 3 chapter jobs right now · CPU 42%, 1 watching (aiming under 70%)*.
 
-## Seeking on Roku
+---
+
+## Playing smoothly on every device
+
+Transcoding (converting while you watch) loads the server and is what makes some players stall or loop. Most of it comes from audio a device can't play, which is cheap to fix without touching the picture.
+
+- **Each device plays the copy and audio track it can play as it is** (with the [Curatarr plugin for Jellyfin](../jellyfin-plugin/README.md)). Jellyfin plays a title's default track and first copy whatever the device can decode. The plugin asks Jellyfin's own stream builder, with the device's profile, how each copy and each same-language audio track would play, and points the player at the one needing the least work. Commentaries, other languages and anything picked by hand are left alone.
+- **Stereo AAC tracks for web browsers** (Settings → Enhance, on by default, with the Curatarr plugin for Jellyfin). Chrome and Firefox can't play AC3, E-AC3 or DTS, so Jellyfin converts the sound while they watch (half of all transcodes on one server). Curatarr adds a stereo AAC copy of the main track, last and not default, so TVs keep the surround track they play now, and the plugin points browsers at it. Picture and other tracks are copied untouched, the file is checked before it replaces the original, and rebuilds are paced to Jellyfin's thumbnails.
+- **TV-friendly audio** (Settings → Enhance, off by default). Rokus, many smart TVs and soundbars can't play DTS, TrueHD or FLAC, so Jellyfin converts it during playback, and some players then get stuck restarting at one spot. For films and episodes whose main audio is one of these, with no AC3, E-AC3 or AAC track in the same language, Curatarr adds an AC3 copy (5.1 at most) as the first, default track and keeps the original beside it. Only that track is encoded; everything else is copied. The copy is checked (same length, chapters, video and subtitles, one more audio track) before it replaces the file. They're found from Radarr's and Sonarr's media info, one or two at a time, never one being played and not in dry-run libraries. MKV only.
+- **A commentary or audio description isn't played by default** (Settings → Enhance, on by default). When a file's default audio track is the director's commentary or an audio description (by its flags or its name) and the film's own soundtrack in that language is there, that becomes the default: in place, nothing re-encoded. Every file is looked at once, a few each minute, and again when it's replaced.
+
+### Seeking on Roku
 
 Matroska files carry a seek head that says where the seek index is. When an in-place edit (Curatarr's chapters, a track's language or default flag) doesn't fit at the start of the file, mkvpropedit moves the seek head to the end and leaves a stub at the start that only points there. That's valid Matroska, but Roku players don't follow the stub: they can't find the index, so jumping ahead starts the video over.
 
 Curatarr checks the file after every edit and, if the index is out of reach, rebuilds the file with mkvmerge: every track, chapter, tag and attachment is copied as it is, the copy is checked against the original, and only then replaces it. **Seeking on Roku** (Settings → Enhance, on by default) does the same for files already affected: it reads the start of each MKV once (again only if the file changes), titles being watched first, and rebuilds one or two files per worker cycle, never one that's playing. Enhance shows how many files were checked and repaired.
 
-## Jellyfin thumbnails
+### Jellyfin thumbnails
 
 Adding TV-friendly audio, repairing seeking and removing other languages each rebuild the file (the picture is copied untouched). Jellyfin can't tell, so it drops that title's scrubbing thumbnails (trickplay) and makes them again, one file at a time, a few minutes each. **Jellyfin thumbnails** (Settings → Enhance, on by default) keeps Curatarr from getting ahead of it: another rebuild starts only while fewer than three rebuilt files that had thumbnails are still waiting for new ones. Files that had none (or whose library has thumbnails off) don't count, and a file waits at most two days. Enhance says when rebuilds are waiting.
-
