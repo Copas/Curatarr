@@ -185,6 +185,10 @@ class JellyfinClient(Client):
     def users(self):
         return self.request("GET", "/Users")
 
+    def devices(self):
+        """Every device that has signed in: its app, last user and activity."""
+        return self.request("GET", "/Devices")
+
     def next_up(self, user_id, limit=100):
         """The next episode of each show the user is watching."""
         data = self.request(
