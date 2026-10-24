@@ -13,7 +13,9 @@ Makes Jellyfin and Curatarr play nicely together. It lives in Curatarr's reposit
 
 **Leaving Soon in the web app's menus.** Jellyfin's apps build their menus themselves, so a plugin can't add to the Roku, phone or TV apps' menus. The web app can be changed, through the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin: with it installed, the web app's menu for a film or show Curatarr manages has **Leaving Soon** beside **Delete**, and **Delete** there deletes straight away (through Radarr or Sonarr). Without it, the web app works like the other apps. It can be switched off in the plugin's settings.
 
-Only people Jellyfin already lets delete an item can do any of this. Deletes made with an API key (by other tools) aren't changed.
+Only people Jellyfin already lets delete an item can do any of this.
+
+**Each device plays what it can play as it is.** Jellyfin plays a title's default audio track and its first copy, whatever the device can decode: a browser has AC3 or E-AC3 converted to AAC while a stereo AAC track sits beside it, and with two copies of a film it plays the first though the other would play directly. When a player asks how to play something, the plugin asks Jellyfin's own stream builder, with that device's profile, how each copy and each audio track in the same language would play, and points the player at the one needing the least work (played as it is, then copied into another container, then converted). Commentary tracks and other languages are never chosen, and a track or copy picked by hand is left alone. Curatarr's *Add a stereo AAC track for web browsers* (Settings → Enhance) adds the tracks this makes use of. It can be switched off in the plugin's settings. Deletes made with an API key (by other tools) aren't changed.
 
 ## Requirements
 

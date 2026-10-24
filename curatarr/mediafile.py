@@ -509,6 +509,8 @@ def remove_tracks(
 # Jellyfin converts it during playback, which some clients handle badly.
 HARD_AUDIO = {"dts", "truehd", "mlp", "flac", "pcm_s16le", "pcm_s24le", "pcm_bluray"}
 EASY_AUDIO = {"ac3", "eac3", "aac"}
+# What web browsers play as it is (AC3, E-AC3 and DTS they can't).
+BROWSER_AUDIO = {"aac", "mp3", "opus", "flac", "vorbis"}
 
 
 def compatible_audio_source(info: MediaInfo) -> int | None:
@@ -529,8 +531,28 @@ def compatible_audio_source(info: MediaInfo) -> int | None:
     return main["index"]
 
 
-def add_compatible_audio(path: str, info: MediaInfo, source: int) -> MediaInfo:
-    """Add an AC3 copy of one audio track, first and default (5.1 at most).
+def browser_audio_source(info: MediaInfo) -> int | None:
+    """The track to add a stereo AAC copy of: the default audio track when no
+    track in its language is one web browsers can play."""
+    audio = [s for s in info.streams if s.get("codec_type") == "audio"]
+    if not audio:
+        return None
+    main = next((s for s in audio if s.get("default")), audio[0])
+    language = main.get("language")
+    if any(
+        s.get("codec_name") in BROWSER_AUDIO and s.get("language") == language
+        for s in audio
+    ):
+        return None
+    return main["index"]
+
+
+def add_compatible_audio(
+    path: str, info: MediaInfo, source: int, *, for_browsers=False
+) -> MediaInfo:
+    """Add an AC3 copy of one audio track, first and default (5.1 at most); or,
+    ``for_browsers``, a stereo AAC copy, last and not default, so TVs keep the
+    track they play now (the Jellyfin plugin points browsers at this one).
 
     Everything else is copied untouched, the original track included; only
     the new track is encoded. The copy is written beside the file, checked
@@ -543,20 +565,33 @@ def add_compatible_audio(path: str, info: MediaInfo, source: int) -> MediaInfo:
     if shutil.disk_usage(folder).free < info.size * 1.1:
         raise MediaToolError("Not enough free space beside the file to rewrite it")
     target = os.path.join(folder, f".{os.path.basename(path)}.curatarr-partial")
-    channels = min(stream.get("channels") or 6, 6)
     others = [s["index"] for s in info.streams if s.get("codec_type") == "audio"]
     args = [ffmpeg, "-v", "error", "-y", "-i", path, "-map", "0:v?"]
-    args += ["-map", f"0:{source}"]
-    for index in others:
-        args += ["-map", f"0:{index}"]
-    args += ["-map", "0:s?", "-map", "0:t?", "-map_chapters", "0", "-c", "copy"]
-    args += ["-c:a:0", "ac3", "-b:a:0", "640k" if channels > 2 else "224k"]
-    args += ["-ac:a:0", str(channels), "-disposition:a:0", "default"]
+    if for_browsers:
+        # The originals keep their order and default; the new track goes last.
+        for index in others:
+            args += ["-map", f"0:{index}"]
+        args += ["-map", f"0:{source}"]
+        new, codec = len(others), "aac"
+        args += ["-map", "0:s?", "-map", "0:t?", "-map_chapters", "0", "-c", "copy"]
+        args += [f"-c:a:{new}", "aac", f"-b:a:{new}", "160k", f"-ac:a:{new}", "2"]
+        args += [f"-disposition:a:{new}", "0"]
+        title = "AAC stereo"
+    else:
+        channels = min(stream.get("channels") or 6, 6)
+        args += ["-map", f"0:{source}"]
+        for index in others:
+            args += ["-map", f"0:{index}"]
+        new, codec = 0, "ac3"
+        args += ["-map", "0:s?", "-map", "0:t?", "-map_chapters", "0", "-c", "copy"]
+        args += ["-c:a:0", "ac3", "-b:a:0", "640k" if channels > 2 else "224k"]
+        args += ["-ac:a:0", str(channels), "-disposition:a:0", "default"]
+        for n in range(1, len(others) + 1):
+            args += [f"-disposition:a:{n}", "0"]
+        title = f"AC3 {'5.1' if channels > 2 else 'stereo'}"
     if stream.get("language"):
-        args += ["-metadata:s:a:0", f"language={stream['language']}"]
-    args += ["-metadata:s:a:0", f"title=AC3 {'5.1' if channels > 2 else 'stereo'}"]
-    for n in range(1, len(others) + 1):
-        args += [f"-disposition:a:{n}", "0"]
+        args += [f"-metadata:s:a:{new}", f"language={stream['language']}"]
+    args += [f"-metadata:s:a:{new}", f"title={title}"]
     args += ["-f", "matroska", target]
     try:
         result = throttle.run(args, timeout=4 * 3600)
@@ -567,14 +602,14 @@ def add_compatible_audio(path: str, info: MediaInfo, source: int) -> MediaInfo:
             )
         after = probe(target)
         count = lambda i, kind: sum(1 for s in i.streams if s.get("codec_type") == kind)
-        first = next(s for s in after.streams if s.get("codec_type") == "audio")
+        added = [s for s in after.streams if s.get("codec_type") == "audio"][new]
         if (
             abs(after.duration - info.duration) > 2
             or len(after.chapters) != len(info.chapters)
             or count(after, "video") != count(info, "video")
             or count(after, "audio") != count(info, "audio") + 1
             or count(after, "subtitle") != count(info, "subtitle")
-            or first.get("codec_name") != "ac3"
+            or added.get("codec_name") != codec
         ):
             raise MediaToolError("The rewritten file didn't check out; left unchanged")
         os.replace(target, path)

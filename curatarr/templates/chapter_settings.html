@@ -94,9 +94,10 @@
     {{ option('dub_replace_automatically', 'Replace films with no English audio automatically', 'Blocklists the release in Radarr, deletes the file and searches again, instead of listing it under English dubs.') }}
   </div>
 {% endcall %}
-{% call card('compat-audio', 'audio', 'TV-friendly audio', 'Adds AC3 beside DTS, TrueHD and FLAC' if opts.compat_audio else 'Off', opts.compat_audio) %}
+{% call card('compat-audio', 'audio', 'Playable audio', ((['AC3 for TVs'] if opts.compat_audio else []) + (['AAC for browsers'] if opts.browser_audio else []))|join(' · ') or 'Off', opts.compat_audio or opts.browser_audio) %}
   <div class="setting-grid">
     {{ option('compat_audio', 'Add a TV-friendly audio track to films and episodes', 'Rokus and many TVs can\'t play DTS, TrueHD or FLAC, so Jellyfin converts it while you watch, and some players get stuck restarting. Adds an AC3 copy as the default track and keeps the original. Only that track is encoded; MKV only, one film at a time, never while it\'s playing.') }}
+    {{ option('browser_audio', 'Add a stereo AAC track for web browsers', 'Chrome and Firefox can\'t play AC3, E-AC3 or DTS, so Jellyfin converts the sound while they watch. Adds a stereo AAC track beside the others, not as the default: TVs keep playing the surround track, and the Curatarr plugin for Jellyfin points browsers at this one. Only with the plugin connected.') }}
   </div>
 {% endcall %}
 {% call card('seek-repair', 'tools', 'Seeking on Roku', 'Repairs files Roku can\'t seek in' if opts.seek_repair else 'Off', opts.seek_repair) %}

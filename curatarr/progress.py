@@ -66,7 +66,7 @@ def overall(now=None) -> dict | None:
         if left:
             rebuilds_left += left
             rebuild_parts.append(
-                {"name": "TV-friendly audio", "done": audio["done"], "left": left}
+                {"name": "Playable audio", "done": audio["done"], "left": left}
             )
     seek = seek_repair.progress()
     if seek and seek["on"] and seek["left"]:
