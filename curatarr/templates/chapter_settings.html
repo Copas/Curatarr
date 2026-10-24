@@ -84,6 +84,7 @@
   <p class="form-text mt-0">Recaps, previews and fixes to Intro Skipper's markers come from Smart Chapters transcripts; start a check from <a href="{{ url_for('main.chapter_maintenance') }}">Enhance → Progress</a> and review changes under <a href="{{ url_for('main.chapter_markers') }}">Skip markers</a>.</p>
   <div class="setting-grid">
     {{ option('movie_credits_only', 'Movies keep only their credits marker', 'Hides the recaps and intros Intro Skipper guesses on movies from chapter names like "Chapter 1". Credits stay, for Skip Credits and Next.') }}
+    {{ option('finish_at_credits', 'Count something stopped in its credits as watched', 'Jellyfin counts a film as watched only past 90%, and long end credits keep finished films in Continue Watching. When someone stops a film or episode in its credits, or after its last line of dialogue with only a few minutes left, it\'s marked watched for them.') }}
     {{ option('episode_identity_check', 'Check episodes against their summaries', 'Experimental. Flags an episode whose transcript fits another episode\'s summary far better. Finds real mix-ups, but also some that are fine.') }}
   </div>
 {% endcall %}
