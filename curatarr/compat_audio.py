@@ -23,12 +23,20 @@ from sqlalchemy.exc import OperationalError
 
 from . import db, throttle, thumbnails
 from .integrations import IntegrationError
-from .mediafile import MediaToolError, add_compatible_audio, can_write, probe
+from .mediafile import (
+    MediaToolError,
+    add_compatible_audio,
+    browser_audio_source,
+    can_write,
+    probe,
+)
 from .mediafile import compatible_audio_source as source_track
 from .models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
 
 # Radarr's and Sonarr's names for audio Curatarr adds a TV-friendly track beside.
 HARD_CODECS = ("DTS", "TrueHD", "FLAC", "PCM")
+# And for audio web browsers can't play, given a stereo AAC track beside it.
+BROWSER_HARD_CODECS = ("AC3", "EAC3", "DTS", "TrueHD", "PCM")
 PER_RUN = 2  # each rewrites a whole file
 _lock = threading.Lock()
 _thread = None
@@ -40,11 +48,27 @@ def _enrichment():
     return enrichment
 
 
-def enabled() -> bool:
+def tv_enabled() -> bool:
     try:
         return bool(_enrichment().options()["compat_audio"])
     except Exception:  # noqa: BLE001  an unreadable config turns nothing on
         return False
+
+
+def browser_enabled() -> bool:
+    """AAC tracks for browsers: only with the Jellyfin plugin, which points
+    browsers at them (Jellyfin itself would keep playing the default track)."""
+    from . import jellyfin_plugin
+
+    try:
+        on = bool(_enrichment().options()["browser_audio"])
+    except Exception:  # noqa: BLE001
+        return False
+    return on and jellyfin_plugin.active()
+
+
+def enabled() -> bool:
+    return tv_enabled() or browser_enabled()
 
 
 SONARR_SCAN_SECONDS = 6 * 3600  # episode files are read per show: not every cycle
@@ -52,8 +76,11 @@ _sonarr_cache = {}
 
 
 def _hard(info) -> bool:
-    codec = str((info or {}).get("audioCodec") or "")
-    return any(codec.upper().startswith(c.upper()) for c in HARD_CODECS)
+    codecs = (HARD_CODECS if tv_enabled() else ()) + (
+        BROWSER_HARD_CODECS if browser_enabled() else ()
+    )
+    codec = str((info or {}).get("audioCodec") or "").upper()  # "DTS-HD MA", "EAC3"
+    return any(codec.startswith(c.upper()) for c in codecs)
 
 
 def hard_files() -> tuple[set, set]:
@@ -144,9 +171,28 @@ def _run(app):
             db.session.remove()
 
 
+BROWSER_RESET = "browser_audio_started"
+
+
+def _look_again_for_browsers():
+    """Once, when AAC tracks for browsers start: files already looked at for
+    TV-friendly audio are looked at again (they may need an AAC track)."""
+    from .services import set_setting, setting
+
+    if not browser_enabled() or setting(BROWSER_RESET):
+        return
+    db.session.query(ChapterState).filter(
+        ChapterState.compat_audio_size.isnot(None)
+    ).update({ChapterState.compat_audio_size: None}, synchronize_session=False)
+    _sonarr_cache.clear()
+    set_setting(BROWSER_RESET, utcnow().isoformat())
+    db.session.commit()
+
+
 def sweep(limit=PER_RUN) -> int:
     from .filecheck_jobs import _dry_run
 
+    _look_again_for_browsers()
     try:
         films, episodes = hard_files()
     except IntegrationError:
@@ -271,24 +317,34 @@ def _add(state, part, path) -> dict:
         info = probe(path)
     except MediaToolError as exc:
         return {"error": str(exc)}
-    source = source_track(info)
-    if source is None:
+    tv = source_track(info) if tv_enabled() else None
+    browser = browser_audio_source(info) if browser_enabled() else None
+    if tv is None and browser is None:
         return {"needed": False, "size": info.size}
     writable, reason = can_write(info)
     if not writable:
         return {"error": reason, "size": info.size}
-    codec = next(s["codec_name"] for s in info.streams if s["index"] == source)
+    codec = next(s["codec_name"] for s in info.streams if s["index"] == (tv or browser))
     in_sync = (state.chapter_file_size, state.chapter_file_mtime) == (
         info.size,
         info.mtime,
     )
+    tracks = []
     try:
-        after = add_compatible_audio(path, info, source)
+        if tv is not None:
+            info = add_compatible_audio(path, info, tv)
+            tracks.append("ac3")
+            # An AC3 track doesn't play in a browser either.
+            browser = browser_audio_source(info) if browser_enabled() else None
+        if browser is not None:
+            info = add_compatible_audio(path, info, browser, for_browsers=True)
+            tracks.append("aac")
     except MediaToolError as exc:
-        return {"error": str(exc), "size": info.size}
+        if not tracks:
+            return {"error": str(exc), "size": info.size}
     if in_sync:  # Curatarr's chapters are still its own
-        state.chapter_file_size, state.chapter_file_mtime = after.size, after.mtime
-    return {"added": True, "from": codec, "size": after.size}
+        state.chapter_file_size, state.chapter_file_mtime = info.size, info.mtime
+    return {"added": True, "from": codec, "tracks": tracks, "size": info.size}
 
 
 def _announce(state, part, path, result):
@@ -307,10 +363,15 @@ def _announce(state, part, path, result):
             )
     except IntegrationError:
         pass  # Radarr/Sonarr notice on their next rescan
+    tracks = result.get("tracks") or ["ac3"]
+    what = " and ".join(
+        {"ac3": "a TV-friendly AC3 track", "aac": "a stereo AAC track for browsers"}[t]
+        for t in tracks
+    )
     audit(
         "compat_audio_added",
         part.media.id,
-        f"Added a TV-friendly AC3 track to {e.file_label(state)}, beside its "
+        f"Added {what} to {e.file_label(state)}, beside its "
         f"{result['from'].upper()} audio.",
         f"compat-audio:{state.id}:{state.compat_audio['at']}",
         payload={"file": path, "from": result["from"]},

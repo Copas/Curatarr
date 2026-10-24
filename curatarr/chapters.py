@@ -75,6 +75,9 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "file_check": True,
     "file_replace_automatically": True,
     "compat_audio": False,
+    # A stereo AAC track for browsers (with the Curatarr plugin for Jellyfin,
+    # which points them at it; without it the track would go unused).
+    "browser_audio": True,
     "seek_repair": True,
     "pace_rebuilds": True,
     "settle_minutes": 10,
@@ -252,6 +255,8 @@ def validate_global_options(values: dict) -> dict:
         raise ChapterConfigError("Invalid file replacement setting")
     if type(merged["compat_audio"]) is not bool:
         raise ChapterConfigError("Invalid TV-friendly audio setting")
+    if type(merged["browser_audio"]) is not bool:
+        raise ChapterConfigError("Invalid browser audio setting")
     if type(merged["seek_repair"]) is not bool:
         raise ChapterConfigError("Invalid seek repair setting")
     if type(merged["pace_rebuilds"]) is not bool:

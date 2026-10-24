@@ -1,4 +1,5 @@
 using Jellyfin.Plugin.Curatarr.Deletes;
+using Jellyfin.Plugin.Curatarr.Playback;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<ICuratarrClient, CuratarrClient>();
         serviceCollection.AddScoped<DeleteFilter>();
         serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<DeleteFilter>());
+        serviceCollection.AddScoped<PlaybackFilter>();
+        serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<PlaybackFilter>());
         serviceCollection.AddHostedService<WebMenu>();
     }
 }

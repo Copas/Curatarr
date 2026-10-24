@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisMode>Recommended</AnalysisMode>
-    <Version>0.2.0.0</Version>
+    <Version>0.3.0.0</Version>
     <JellyfinVersion>12.2.0</JellyfinVersion>
     <!-- LoggerMessage delegates for a handful of log lines would only add noise. -->
     <NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>

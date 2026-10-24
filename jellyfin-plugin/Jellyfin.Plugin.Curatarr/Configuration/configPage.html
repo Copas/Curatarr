@@ -35,6 +35,13 @@
                     </div>
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">
+                            <input id="ChoosePlayable" type="checkbox" is="emby-checkbox" />
+                            <span>Play the copy and audio track each device can play as it is</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Jellyfin plays the default audio track and the first copy, whatever the device can decode. With this, a browser plays the stereo AAC track Curatarr adds instead of having AC3 converted, and of two copies of a film each device gets the one it plays directly. A track or copy picked by hand is left alone.</div>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
                             <input id="WebMenu" type="checkbox" is="emby-checkbox" />
                             <span>Add Leaving Soon to the web app's menus</span>
                         </label>
@@ -62,6 +69,7 @@
                         field('InterceptDeletes').checked = config.InterceptDeletes;
                         field('BlockWhenUnreachable').checked = config.BlockWhenUnreachable;
                         field('WebMenu').checked = config.WebMenu;
+                        field('ChoosePlayable').checked = config.ChoosePlayable;
                         Dashboard.hideLoadingMsg();
                     });
                 });
@@ -91,6 +99,7 @@
                         config.InterceptDeletes = field('InterceptDeletes').checked;
                         config.BlockWhenUnreachable = field('BlockWhenUnreachable').checked;
                         config.WebMenu = field('WebMenu').checked;
+                        config.ChoosePlayable = field('ChoosePlayable').checked;
                         ApiClient.updatePluginConfiguration(pluginId, config).then(Dashboard.processPluginConfigurationUpdateResult);
                     });
                     return false;

@@ -256,6 +256,7 @@ def parse_options(form) -> dict:
         "file_check",
         "file_replace_automatically",
         "compat_audio",
+        "browser_audio",
         "seek_repair",
         "pace_rebuilds",
     ):

@@ -113,6 +113,7 @@ def test_the_sweep_does_hard_films_once(app, monkeypatch):
     monkeypatch.setattr("curatarr.filecheck_jobs._dry_run", lambda media: False)
     monkeypatch.setattr(compat_audio, "probe", lambda path: _info(("dts", "eng", True)))
     monkeypatch.setattr(compat_audio, "can_write", lambda info: (True, None))
+    monkeypatch.setattr(compat_audio, "tv_enabled", lambda: True)
     calls = []
 
     def add(path, info, source):
@@ -153,8 +154,14 @@ def test_episodes_with_dts_are_found_from_sonarr(app, monkeypatch):
     clients = {"radarr": Radarr(), "sonarr": Sonarr()}
     monkeypatch.setattr("curatarr.services.client", lambda kind: clients[kind])
     monkeypatch.setattr("curatarr.services.configured", lambda kind: True)
+    monkeypatch.setattr(compat_audio, "tv_enabled", lambda: True)
     films, episodes = compat_audio.hard_files()
     assert films == {1} and episodes == {51}
+    # AAC for browsers (with the plugin) also takes E-AC3 and AC3.
+    compat_audio._sonarr_cache.clear()
+    monkeypatch.setattr(compat_audio, "browser_enabled", lambda: True)
+    films, _episodes = compat_audio.hard_files()
+    assert films == {1, 2}
 
 
 def test_progress_shows_on_enhance_and_overview(app, client, monkeypatch):
@@ -170,10 +177,11 @@ def test_progress_shows_on_enhance_and_overview(app, client, monkeypatch):
     set_setting(compat_audio.REMAINING_KEY, {"films": 3, "episodes": 10})
     db.session.commit()
     monkeypatch.setattr(compat_audio, "enabled", lambda: True)
+    monkeypatch.setattr(compat_audio, "tv_enabled", lambda: True)
     found = compat_audio.progress()
     assert found["films"] == {"done": 1, "total": 4, "left": 3}
     assert found["episodes"]["total"] == 10
-    assert "TV-friendly audio: films" in client.get("/chapters").text
+    assert "Playable audio: films" in client.get("/chapters").text
 
 
 def test_a_busy_database_doesnt_lose_an_added_track(app, monkeypatch):
@@ -194,6 +202,7 @@ def test_a_busy_database_doesnt_lose_an_added_track(app, monkeypatch):
     monkeypatch.setattr("curatarr.filecheck_jobs._dry_run", lambda media: False)
     monkeypatch.setattr(compat_audio, "probe", lambda path: _info(("dts", "eng", True)))
     monkeypatch.setattr(compat_audio, "can_write", lambda info: (True, None))
+    monkeypatch.setattr(compat_audio, "tv_enabled", lambda: True)
     monkeypatch.setattr(
         compat_audio,
         "add_compatible_audio",
@@ -255,3 +264,50 @@ def test_an_idle_jellyfin_app_doesnt_count_as_playing(app, monkeypatch):
         {"NowPlayingItem": {"Id": "x", "Path": "/Movies/Loud (2020)/Loud.mkv"}}
     )
     assert compat_audio._playing(part)  # matched by file name
+
+
+@pytest.mark.skipif(not tool("ffmpeg"), reason="needs FFmpeg")
+def test_browsers_get_a_stereo_aac_track_and_tvs_keep_theirs(tmp_path):
+    """Added last and not default: TVs keep the surround track."""
+    import subprocess
+
+    from curatarr.mediafile import add_compatible_audio, browser_audio_source, probe
+
+    ffmpeg = tool("ffmpeg")
+    path = str(tmp_path / "eac3.mkv")
+    subprocess.run(
+        [
+            ffmpeg,
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=2:size=64x64",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=duration=2",
+            "-ac",
+            "6",
+            "-c:v",
+            "mpeg4",
+            "-c:a",
+            "eac3",
+            "-metadata:s:a:0",
+            "language=eng",
+            "-disposition:a:0",
+            "default",
+            path,
+        ],
+        check=True,
+    )
+    before = probe(path)
+    source = browser_audio_source(before)
+    assert source is not None
+    after = add_compatible_audio(path, before, source, for_browsers=True)
+    audio = [s for s in after.streams if s["codec_type"] == "audio"]
+    assert [s["codec_name"] for s in audio] == ["eac3", "aac"]
+    assert audio[0]["default"] and not audio[1]["default"]
+    assert audio[1]["channels"] == 2 and audio[1]["language"] == "eng"
+    assert browser_audio_source(after) is None  # not added twice

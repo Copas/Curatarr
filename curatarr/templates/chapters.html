@@ -26,8 +26,8 @@
   {{ coverage('Files with chapters', summary.existing, summary.generated, summary.chapters_possible, 'files', 'already had them', 'added by Curatarr') }}
   {{ coverage('Files with English subtitles', summary.subtitles_existing, summary.subtitles_generated, summary.subtitles_possible, 'files', 'already had them', 'added by Curatarr') }}
   {{ coverage('Episodes checked for skip markers', 0, summary.markers_checked, summary.markers_possible, 'episodes', None, 'checked') }}
-  {% if compat %}{{ coverage('TV-friendly audio: films', 0, compat.films.done, compat.films.total, 'films', None, 'given an AC3 track') }}
-  {{ coverage('TV-friendly audio: episodes', 0, compat.episodes.done, compat.episodes.total, 'episodes', None, 'given an AC3 track') }}{% endif %}
+  {% if compat %}{{ coverage('Playable audio: films', 0, compat.films.done, compat.films.total, 'films', None, 'given a playable track') }}
+  {{ coverage('Playable audio: episodes', 0, compat.episodes.done, compat.episodes.total, 'episodes', None, 'given a playable track') }}{% endif %}
   {% if seek %}{{ coverage('Seeking on Roku', 0, seek.checked, seek.total, 'files', None, 'checked, ' ~ seek.rebuilt ~ ' repaired') }}{% endif %}
   {% if thumbs and thumbs.paused and (seek or compat) %}<p class="small text-secondary mb-0">File rebuilds are waiting for Jellyfin to remake scrubbing thumbnails for {{ thumbs.waiting }} rebuilt files; they carry on once it has.</p>{% endif %}
 </section>
