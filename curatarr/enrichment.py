@@ -259,6 +259,7 @@ def parse_options(form) -> dict:
         "compat_audio",
         "browser_audio",
         "fix_default_audio",
+        "finish_at_credits",
         "seek_repair",
         "pace_rebuilds",
     ):

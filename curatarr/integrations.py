@@ -198,13 +198,17 @@ class JellyfinClient(Client):
         )
         return (data or {}).get("Items") or []
 
-    def resume(self, user_id, limit=50):
+    def resume(self, user_id, limit=50, fields=None):
         """Films and episodes the user stopped partway through."""
-        data = self.request(
-            "GET",
-            f"/Users/{user_id}/Items/Resume",
-            params={"limit": limit, "includeItemTypes": "Movie,Episode"},
-        )
+        params = {"limit": limit, "includeItemTypes": "Movie,Episode"}
+        if fields:
+            params["fields"] = fields
+        data = self.request("GET", f"/Users/{user_id}/Items/Resume", params=params)
+        return (data or {}).get("Items") or []
+
+    def media_segments(self, item_id):
+        """Jellyfin's media segments for an item (Intro, Outro for credits, …)."""
+        data = self.request("GET", f"/MediaSegments/{item_id}")
         return (data or {}).get("Items") or []
 
     def libraries(self):

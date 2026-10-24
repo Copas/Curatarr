@@ -413,6 +413,7 @@ ACTION_WORDS = {
     "shrunk": "Shrunk to a smaller copy",
     "seasonal_returned": "Brought back for its season",
     "compat_audio_added": "Added TV-friendly audio",
+    "finished_at_credits": "Marked watched at the credits",
 }
 
 

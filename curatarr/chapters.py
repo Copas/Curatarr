@@ -79,6 +79,7 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     # which points them at it; without it the track would go unused).
     "browser_audio": True,
     "fix_default_audio": True,
+    "finish_at_credits": True,
     "seek_repair": True,
     "pace_rebuilds": True,
     "settle_minutes": 10,
@@ -260,6 +261,8 @@ def validate_global_options(values: dict) -> dict:
         raise ChapterConfigError("Invalid browser audio setting")
     if type(merged["fix_default_audio"]) is not bool:
         raise ChapterConfigError("Invalid default audio setting")
+    if type(merged["finish_at_credits"]) is not bool:
+        raise ChapterConfigError("Invalid finished-at-credits setting")
     if type(merged["seek_repair"]) is not bool:
         raise ChapterConfigError("Invalid seek repair setting")
     if type(merged["pace_rebuilds"]) is not bool:
