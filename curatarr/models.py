@@ -333,6 +333,8 @@ class ChapterState(db.Model, Timed):
     chapter_generation_version = db.Column(db.Integer)
     chapter_config_hash = db.Column(db.String(32))
     chapter_error = db.Column(db.Text)
+    # For an unexpected error: where it happened (the end of the traceback).
+    chapter_error_detail = db.Column(db.Text)
     duration_seconds = db.Column(db.Float)
     container = db.Column(db.String(60))
     # Work queue: idle, queued, running. ``requested_action`` is what to run.

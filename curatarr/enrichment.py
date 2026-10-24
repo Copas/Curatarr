@@ -16,6 +16,7 @@ import logging
 import os
 import threading
 import time
+import traceback
 from datetime import timedelta
 from pathlib import Path
 
@@ -727,6 +728,7 @@ def _due_automatically(state, part, now) -> bool:
 def _finish(state, status, *, error=None, info=None, source=None, count=None):
     state.chapter_status = status
     state.chapter_error = error
+    state.chapter_error_detail = None
     if source is not None:
         state.chapter_source = source
     if count is not None:
@@ -1817,10 +1819,11 @@ def _run_one(app, state_id, llm):
         db.session.rollback()
         _best_effort(lambda: _requeue(state_id))
         raise DatabaseBusy from exc
-    except Exception:
+    except Exception as exc:
         db.session.rollback()
         app.logger.exception("Chapter job %s failed unexpectedly", state_id)
-        _best_effort(lambda: _fail_unexpected(state_id))
+        failure, detail = exc, traceback.format_exc()
+        _best_effort(lambda: _fail_unexpected(state_id, failure, detail))
     finally:
         # If this cannot be released now, it expires and the job is requeued.
         _best_effort(lambda: leases.release(scope, owner))
@@ -1833,10 +1836,18 @@ def _requeue(state_id):
         db.session.commit()
 
 
-def _fail_unexpected(state_id):
+def _fail_unexpected(state_id, exc=None, detail=None):
+    """Record what went wrong, in words, with where it happened (the last
+    lines of the traceback) for the Details link: "see the worker log"
+    pointed at something the web app can't show."""
     state = db.session.get(ChapterState, state_id)
     if state and state.job_state == "running":
-        _fail(state, "Unexpected error; see the worker log")
+        said = str(exc or "").strip().splitlines()
+        what = f"{type(exc).__name__}: {said[0][:200]}" if said else type(exc).__name__
+        _fail(state, f"Unexpected error: {what}" if exc else "Unexpected error")
+        state.chapter_error_detail = (
+            "\n".join((detail or "").strip().splitlines()[-25:]) or None
+        )
         db.session.commit()
 
 
@@ -1910,7 +1921,14 @@ def dispatch(*, synchronous=False, llm=None) -> int:
     if not has_work:
         _set_paused(False)
         return 0
-    playing, transcoding = adaptive.viewers(playback_sessions())
+    sessions = playback_sessions()
+    playing, transcoding = adaptive.viewers(sessions)
+    from . import viewers
+
+    try:
+        viewers.note(sessions)
+    except OperationalError:
+        db.session.rollback()  # a busy moment: noted next time
     if not opts["pause_during_playback"]:
         playing = transcoding = 0  # "make room for people watching" is off
     reading = adaptive.Reading(
@@ -2445,7 +2463,10 @@ FAILURE_KINDS = (
     (
         "crash",
         "Curatarr hit an error",
-        "Something unexpected; the worker log has the details. Trying again often works.",
+        (
+            "Something unexpected; each file says what, with the details under "
+            "it. Trying again often works."
+        ),
         ("Unexpected error",),
     ),
 )
