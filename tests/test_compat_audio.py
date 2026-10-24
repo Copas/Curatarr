@@ -157,11 +157,43 @@ def test_episodes_with_dts_are_found_from_sonarr(app, monkeypatch):
     monkeypatch.setattr(compat_audio, "tv_enabled", lambda: True)
     films, episodes = compat_audio.hard_files()
     assert films == {1} and episodes == {51}
-    # AAC for browsers (with the plugin) also takes E-AC3 and AC3.
+    # AAC for browsers (with the plugin) also takes E-AC3 and AC3, but only for
+    # what people who watch in a browser watch.
+    from test_enrichment import _movie
+
+    _library, media, part = _movie()
+    media.radarr_id = 2  # the E-AC3 film
+    db.session.commit()
     compat_audio._sonarr_cache.clear()
     monkeypatch.setattr(compat_audio, "browser_enabled", lambda: True)
-    films, _episodes = compat_audio.hard_files()
-    assert films == {1, 2}
+    monkeypatch.setattr(compat_audio, "browser_parts", lambda: set())
+    assert compat_audio.hard_files()[0] == {1}
+    compat_audio._sonarr_cache.clear()
+    monkeypatch.setattr(compat_audio, "browser_parts", lambda: {part.id})
+    assert compat_audio.hard_files()[0] == {1, 2}
+
+
+def test_browser_viewers_are_who_mostly_watches_in_a_browser(app):
+    from curatarr import up_next, viewers
+    from curatarr.services import set_setting
+
+    kid = {"UserId": "kid", "Client": "Jellyfin Web", "NowPlayingItem": {"Id": "x"}}
+    tv = {"UserId": "tv", "Client": "Jellyfin Roku", "NowPlayingItem": {"Id": "y"}}
+    once = {"UserId": "tv", "Client": "Jellyfin Web", "NowPlayingItem": {"Id": "y"}}
+    for _ in range(viewers.MIN_SAMPLES):
+        viewers.note([kid, tv, tv])
+    viewers.note([once])  # the TV household tried the web app once
+    assert viewers.browser_viewers() == {"kid"}
+    set_setting(
+        up_next.KEY,
+        {
+            "at": "2026-01-01T00:00:00",
+            "parts": ["a", "b"],
+            "by_user": {"kid": ["a"], "tv": ["b"]},
+        },
+    )
+    db.session.commit()
+    assert compat_audio.browser_parts() == {"a"}
 
 
 def test_progress_shows_on_enhance_and_overview(app, client, monkeypatch):

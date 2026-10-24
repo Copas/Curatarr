@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **AAC tracks go where browsers will play them, not to every file.** Each one rebuilds a file behind Jellyfin's thumbnails, so the whole library would take a month (the estimate said 30 days). Curatarr now notes who watches in which app; for the people who mostly watch in a web browser, their next episodes and what they're partway through get the track, topped up as they go.
+- **An unexpected job error says what it was**, with the details under a link, instead of "see the worker log" (which the web app can't show).
 - **What people will watch next is got ready first.** The next episodes of shows people are watching, and what they stopped partway through, go to the front of the job queue, so a new episode has its chapters, subtitles and recap marker by the time someone reaches it.
 - **A commentary or audio description isn't the default track any more** (Settings → Enhance, on by default): the film's own soundtrack in the same language is made the default, in place.
 - **Each device plays what it can play as it is** (plugin 0.3.0.0). Jellyfin plays the default audio track and a title's first copy whatever the device can decode. The plugin now asks Jellyfin's own stream builder, with the device's profile, how each copy and each audio track in the same language would play, and points the player at the one needing the least work: a browser gets a stereo AAC track instead of AC3 converted on the fly, and of two copies of a film, each device gets the one it plays directly. Tracks and copies picked by hand, other languages and commentaries are left alone.

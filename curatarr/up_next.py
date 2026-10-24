@@ -33,21 +33,29 @@ def refresh(now=None) -> int:
     if checked and now - checked < EVERY:
         return len(stored.get("parts") or [])
     jellyfin = client("jellyfin")
-    items = set()
+    wanted = {}  # Jellyfin item id: the users about to watch it
     try:
         for user in jellyfin.users() or []:
             for item in jellyfin.next_up(user["Id"]) + jellyfin.resume(user["Id"]):
-                items.add(_norm(item.get("Id")))
+                wanted.setdefault(_norm(item.get("Id")), set()).add(_norm(user["Id"]))
     except IntegrationError:
         return len(stored.get("parts") or [])
+    items = set(wanted)
     db.session.rollback()  # asked Jellyfin outside any transaction
-    parts = set()
+    parts, by_user = set(), {}
+
+    def add(part_id, item):
+        parts.add(part_id)
+        for user in wanted.get(item, ()):
+            by_user.setdefault(user, set()).add(part_id)
+
     for part in db.session.query(MediaPart).filter(
         MediaPart.jellyfin_id.isnot(None), MediaPart.has_file.is_(True)
     ):
-        if _norm(part.jellyfin_id) not in items:
+        item = _norm(part.jellyfin_id)
+        if item not in items:
             continue
-        parts.add(part.id)
+        add(part.id, item)
         if part.kind == "episode" and part.episode_number is not None:
             # And the next couple, so a binge doesn't catch up with the queue.
             following = (
@@ -61,10 +69,11 @@ def refresh(now=None) -> int:
                 .order_by(MediaPart.episode_number)
                 .limit(AFTER)
             )
-            parts.update(row.id for row in following)
+            for row in following:
+                add(row.id, item)
     # Films: Jellyfin's id is the title's (their files aren't linked one by one).
-    for (part_id,) in (
-        db.session.query(MediaPart.id)
+    for part_id, item in (
+        db.session.query(MediaPart.id, MediaIdentity.jellyfin_id)
         .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
         .filter(
             MediaPart.kind == "movie_file",
@@ -72,13 +81,25 @@ def refresh(now=None) -> int:
             MediaIdentity.jellyfin_id.in_(sorted(items) or [""]),
         )
     ):
-        parts.add(part_id)
-    set_setting(KEY, {"at": now.isoformat(), "parts": sorted(parts)})
+        add(part_id, _norm(item))
+    set_setting(
+        KEY,
+        {
+            "at": now.isoformat(),
+            "parts": sorted(parts),
+            "by_user": {user: sorted(ids) for user, ids in by_user.items()},
+        },
+    )
     db.session.commit()
     return len(parts)
 
 
-def part_ids() -> list[str]:
+def part_ids(users=None) -> list[str]:
+    """Files someone will watch next; with ``users``, only those people."""
     from .services import setting
 
-    return list((setting(KEY) or {}).get("parts") or [])
+    stored = setting(KEY) or {}
+    if users is None:
+        return list(stored.get("parts") or [])
+    by_user = stored.get("by_user") or {}
+    return sorted({p for user in users for p in by_user.get(_norm(user), [])})

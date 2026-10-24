@@ -2606,3 +2606,22 @@ def test_a_locked_database_puts_the_job_back_instead_of_failing_it(
     db.session.expire_all()
     state = enrichment.state_for(part)
     assert state.job_state == "queued" and state.chapter_status != "failed"
+
+
+def test_an_unexpected_error_says_what_it_was(app, client, media_env, monkeypatch):
+    _library, _media, part = _movie()
+    enrichment.request(part, "generate")
+    state = enrichment.state_for(part)
+
+    def broken(*_args, **_kwargs):
+        raise KeyError("Streams")
+
+    monkeypatch.setattr(enrichment, "run_job", broken)
+    enrichment._run_one(app, state.id, None)
+    db.session.expire_all()
+    state = enrichment.state_for(part)
+    assert state.chapter_status == "failed"
+    assert state.chapter_error == "Unexpected error: KeyError: 'Streams'"
+    assert "Traceback" in state.chapter_error_detail
+    page = client.get("/chapters").text
+    assert "Unexpected error: KeyError" in page and "<summary" in page

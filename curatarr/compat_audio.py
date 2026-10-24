@@ -18,7 +18,7 @@ background, never one that's being played, and not in libraries in dry run.
 import threading
 
 from flask import current_app
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import OperationalError
 
 from . import db, throttle, thumbnails
@@ -75,38 +75,79 @@ SONARR_SCAN_SECONDS = 6 * 3600  # episode files are read per show: not every cyc
 _sonarr_cache = {}
 
 
-def _hard(info) -> bool:
-    codecs = (HARD_CODECS if tv_enabled() else ()) + (
-        BROWSER_HARD_CODECS if browser_enabled() else ()
-    )
+def _needs(info) -> str | None:
+    """From Radarr's or Sonarr's media info: "tv" when TVs can't play the
+    audio, "browser" when only browsers can't, else None."""
     codec = str((info or {}).get("audioCodec") or "").upper()  # "DTS-HD MA", "EAC3"
-    return any(codec.startswith(c.upper()) for c in codecs)
+    if tv_enabled() and any(codec.startswith(c.upper()) for c in HARD_CODECS):
+        return "tv"
+    if browser_enabled() and any(
+        codec.startswith(c.upper()) for c in BROWSER_HARD_CODECS
+    ):
+        return "browser"
+    return None
+
+
+def _hard(info) -> bool:
+    return _needs(info) is not None
+
+
+def browser_parts() -> set[str]:
+    """The files an AAC track is worth adding to: the next episodes, and what
+    they're partway through, of the people who mostly watch in a web browser
+    (viewers.py), topped up as they go. Adding one to every file would take
+    weeks, each rebuilt behind Jellyfin's thumbnails, for tracks only
+    browsers use."""
+    from . import up_next, viewers
+
+    who = viewers.browser_viewers()
+    return set(up_next.part_ids(users=who)) if who else set()
 
 
 def hard_files() -> tuple[set, set]:
     """(Radarr film ids, Sonarr episode-file ids) whose audio is hard to play,
-    from Radarr's and Sonarr's media info."""
+    from Radarr's and Sonarr's media info. Files only browsers can't play
+    count only when browser viewers are about to watch them (browser_parts)."""
     import time
 
     from .services import client, configured
 
-    films = {
-        movie["id"]
-        for movie in client("radarr").movies() or []
-        if _hard((movie.get("movieFile") or {}).get("mediaInfo"))
-    }
-    episodes = set()
+    films, film_browser = set(), set()
+    for movie in client("radarr").movies() or []:
+        need = _needs((movie.get("movieFile") or {}).get("mediaInfo"))
+        if need:
+            (films if need == "tv" else film_browser).add(movie["id"])
+    episodes, episode_browser = set(), set()
     if configured("sonarr"):
         hit = _sonarr_cache.get("files")
         if hit and time.monotonic() - hit[0] < SONARR_SCAN_SECONDS:
-            episodes = hit[1]
+            episodes, episode_browser = hit[1]
         else:
             sonarr = client("sonarr")
             for show in sonarr.series() or []:
                 for entry in sonarr.episode_files(show["id"]) or []:
-                    if _hard(entry.get("mediaInfo")):
-                        episodes.add(entry["id"])
-            _sonarr_cache["files"] = (time.monotonic(), episodes)
+                    need = _needs(entry.get("mediaInfo"))
+                    if need:
+                        (episodes if need == "tv" else episode_browser).add(entry["id"])
+            _sonarr_cache["files"] = (time.monotonic(), (episodes, episode_browser))
+    if film_browser or episode_browser:
+        wanted = browser_parts()
+        films |= {
+            radarr_id
+            for (radarr_id,) in db.session.query(MediaIdentity.radarr_id)
+            .join(MediaPart, MediaPart.media_identity_id == MediaIdentity.id)
+            .filter(
+                MediaIdentity.radarr_id.in_(film_browser),
+                MediaPart.id.in_(wanted or {""}),
+            )
+        }
+        episodes |= {
+            file_id
+            for (file_id,) in db.session.query(MediaPart.arr_file_id).filter(
+                MediaPart.arr_file_id.in_(episode_browser),
+                MediaPart.id.in_(wanted or {""}),
+            )
+        }
     return films, episodes
 
 
@@ -137,9 +178,19 @@ def _due(radarr_ids, episode_file_ids):
                 ChapterState.compat_audio_size != MediaPart.size_bytes,
             ),
         )
-        # Films first: they're where DTS and TrueHD mostly are.
-        .order_by(MediaPart.kind.desc())
+        # What people watch next first; then films, where DTS and TrueHD
+        # mostly are.
+        .order_by(
+            case((MediaPart.id.in_(_watching() or [""]), 0), else_=1),
+            MediaPart.kind.desc(),
+        )
     )
+
+
+def _watching():
+    from . import up_next
+
+    return up_next.part_ids()
 
 
 def start(app=None) -> bool:
