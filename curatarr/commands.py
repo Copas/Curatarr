@@ -251,6 +251,20 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Following up replaced films failed")
     try:
+        from . import default_audio
+
+        default_audio.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Checking default audio tracks failed")
+    try:
+        from . import up_next
+
+        up_next.refresh()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Finding what people will watch next failed")
+    try:
         from . import misfiled
 
         misfiled.sweep()

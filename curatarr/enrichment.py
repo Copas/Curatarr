@@ -257,6 +257,7 @@ def parse_options(form) -> dict:
         "file_replace_automatically",
         "compat_audio",
         "browser_audio",
+        "fix_default_audio",
         "seek_repair",
         "pace_rebuilds",
     ):
@@ -1734,8 +1735,15 @@ def _due_jobs(limit, *, scans, recaps=False):
         (ChapterState.requested_action == "subtitles", 4),
         else_=3,
     )
+    from . import up_next
+
+    # What people will watch next goes first, whatever kind of job it is.
+    watching = up_next.part_ids()
+    soon = case((ChapterState.media_part_id.in_(watching or [""]), 0), else_=1)
     rows = (
-        query.order_by(priority, ChapterState.requested_at).limit(limit * 4 + 100).all()
+        query.order_by(soon, priority, ChapterState.requested_at)
+        .limit(limit * 4 + 100)
+        .all()
     )
     from . import dub_jobs
 
