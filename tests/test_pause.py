@@ -115,3 +115,12 @@ def test_the_workers_own_tools_are_never_suspended():
         throttle.set_paused(False)
     worker.join(timeout=10)
     assert outcome["result"] == 0
+
+
+def test_a_pause_left_by_a_stopped_worker_is_cleared(app):
+    from curatarr import enrichment
+    from curatarr.services import set_setting
+
+    set_setting("chapters_paused_since", "2026-10-24T00:31:53+00:00")
+    enrichment._set_paused(False)  # this worker was never paused
+    assert setting("chapters_paused_since") is None

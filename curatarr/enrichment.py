@@ -1883,6 +1883,10 @@ def _set_paused(pause: bool):
     if throttle.set_paused(pause):
         set_setting("chapters_paused_since", utcnow().isoformat() if pause else None)
         _log("chapters_paused" if pause else "chapters_resumed")
+    elif not pause and setting("chapters_paused_since"):
+        # Left by a worker that stopped while paused: a new one starts unpaused,
+        # so Overview kept saying "Paused" with nobody watching.
+        set_setting("chapters_paused_since", None)
 
 
 def playback_sessions() -> list[dict]:

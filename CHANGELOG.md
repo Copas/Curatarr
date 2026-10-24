@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Fixed: the worker could stay paused for good after someone started watching.** Pausing for viewers suspends the tools jobs run, and it suspended one the worker itself had started (a reconcile reading a new import). The worker is what lifts the pause, so it waited on that tool forever: nothing ran for 14 hours, long after playback ended. Only background jobs' tools are suspended now.
+- **Fixed: the worker could stay paused for good after someone started watching.** Pausing for viewers suspends the tools jobs run, and it suspended one the worker itself had started (a reconcile reading a new import). The worker is what lifts the pause, so it waited on that tool forever: nothing ran for 14 hours, long after playback ended. Only background jobs' tools are suspended now, and a pause left behind by a stopped worker no longer shows as "Paused" on Overview.
 - **AAC tracks go where browsers will play them, not to every file.** Each one rebuilds a file behind Jellyfin's thumbnails, so the whole library would take a month (the estimate said 30 days). Curatarr now notes who watches in which app; for the people who mostly watch in a web browser, their next episodes and what they're partway through get the track, topped up as they go.
 - **An unexpected job error says what it was**, with the details under a link, instead of "see the worker log" (which the web app can't show).
 - **What people will watch next is got ready first.** The next episodes of shows people are watching, and what they stopped partway through, go to the front of the job queue, so a new episode has its chapters, subtitles and recap marker by the time someone reaches it.
