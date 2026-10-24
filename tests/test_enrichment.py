@@ -837,13 +837,24 @@ def test_paused_processes_are_suspended_and_their_time_not_counted():
 
     throttle.set_paused(True)
     threading.Timer(1.5, throttle.set_paused, args=(False,)).start()
-    started = time.monotonic()
+    started, found = time.monotonic(), {}
+
+    def job():  # on a job thread, as chapter jobs run; the worker's own isn't held
+        found["result"] = throttle.run(
+            ["/bin/sh", "-c", "sleep 1; echo done"], timeout=1.2
+        )
+        try:
+            throttle.run(["/bin/sleep", "10"], timeout=0.5)
+        except subprocess.TimeoutExpired:
+            found["timed_out"] = True
+
+    worker = threading.Thread(target=job)
+    worker.start()
+    worker.join(timeout=15)
     # 1 s of work with a 1.2 s limit: it only finishes because the suspended
     # time before it could start running is not counted.
-    result = throttle.run(["/bin/sh", "-c", "sleep 1; echo done"], timeout=1.2)
-    assert result.stdout.strip() == "done" and time.monotonic() - started >= 2.4
-    with pytest.raises(subprocess.TimeoutExpired):
-        throttle.run(["/bin/sleep", "10"], timeout=0.5)
+    assert found["result"].stdout.strip() == "done"
+    assert time.monotonic() - started >= 2.4 and found["timed_out"]
 
 
 def test_saving_a_page_without_the_pause_option_keeps_it(app, client):

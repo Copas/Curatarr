@@ -24,6 +24,7 @@ class Interrupted(BaseException):
 
 
 _children: set[subprocess.Popen] = set()
+_suspendable: set[subprocess.Popen] = set()  # not the worker's own thread's
 _lock = threading.Lock()
 POLL_SECONDS = 2.0
 _paused_total = 0.0  # seconds spent paused, completed pauses
@@ -61,15 +62,22 @@ def paused_seconds() -> float:
 
 def _signal_children(sig):
     """Signal each tool's whole process group (it may run helpers). Hold _lock."""
-    for process in list(_children):
+    for process in list(_suspendable):
         try:
             os.killpg(process.pid, sig)
         except ProcessLookupError:
             pass
 
 
+def _pausable() -> bool:
+    """Tools on the worker's own thread are never suspended: that thread is
+    the one that lifts a pause, so suspending its tool (a reconcile probing a
+    new import while someone watched) left the worker stuck for good."""
+    return threading.current_thread() is not threading.main_thread()
+
+
 def wait_while_paused():
-    while _paused.is_set():
+    while _pausable() and _paused.is_set():
         if _stopping.is_set():
             raise Interrupted
         time.sleep(POLL_SECONDS)
@@ -114,10 +122,13 @@ def run(args, timeout, env=None) -> subprocess.CompletedProcess:
         env=env,
         start_new_session=True,  # its own process group, signalled as one
     )
+    pausable = _pausable()
     with _lock:
         _children.add(process)
-        if _paused.is_set():
-            os.killpg(process.pid, signal.SIGSTOP)
+        if pausable:
+            _suspendable.add(process)
+            if _paused.is_set():
+                os.killpg(process.pid, signal.SIGSTOP)
     started, paused_before = time.monotonic(), paused_seconds()
     try:
         while True:
@@ -125,7 +136,9 @@ def run(args, timeout, env=None) -> subprocess.CompletedProcess:
                 stdout, stderr = process.communicate(timeout=POLL_SECONDS)
                 break
             except subprocess.TimeoutExpired:
-                active = time.monotonic() - started - (paused_seconds() - paused_before)
+                active = time.monotonic() - started
+                if pausable:
+                    active -= paused_seconds() - paused_before
                 if active > timeout:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.communicate()
@@ -133,6 +146,7 @@ def run(args, timeout, env=None) -> subprocess.CompletedProcess:
     finally:
         with _lock:
             _children.discard(process)
+            _suspendable.discard(process)
     if _stopping.is_set() and process.returncode != 0:
         raise Interrupted
     return subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
