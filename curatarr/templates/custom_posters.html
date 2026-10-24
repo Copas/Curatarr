@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Posters · Library · Curatarr<script src="{{ url_for('static', filename='copy.js', v='1') }}"></script>
+{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Custom posters</h1><p class="text-secondary mb-0">Pictures chosen for titles instead of Jellyfin's own poster. Upload one on a title's page, or drop pictures in an import folder. The poster each one replaced is kept, so it can be restored.</p></div></header>
+
+<section class="card p-3 mb-4"><h2 class="h5">Import folder</h2>
+  <p class="small text-secondary">Every couple of minutes Curatarr looks here for new pictures (JPEG, PNG or WebP) and puts each on the title its name matches: <code>The Big Lebowski (1998).jpg</code>, <code>the-big-lebowski-1998.png</code> or <code>08_the-big-lebowski.jpg</code>. The year is needed only when titles share a name. A file saved again later replaces its poster. The folder must be readable by Curatarr's worker.</p>
+  <form method="post" action="{{ url_for('main.custom_posters_settings') }}" class="d-flex flex-wrap gap-2 align-items-center"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input class="form-control w-auto flex-grow-1" type="text" name="folder" value="{{ folder or '' }}" placeholder="/path/to/posters" aria-label="Import folder"><button class="btn btn-primary">Save</button></form>
+  {% if folder and checked %}<p class="small text-secondary mt-2 mb-0">Last looked {{ checked|when('datetime') }}.</p>{% endif %}
+  {% if unmatched %}<details class="mt-3"{% if unmatched|length < 6 %} open{% endif %}><summary>{{ unmatched|length }} file{{ '' if unmatched|length == 1 else 's' }} not put on</summary>
+    <ul class="small mb-0 mt-2">{% for name, why in unmatched %}<li><code>{{ name }}</code>: {{ why }}</li>{% endfor %}</ul>
+    <p class="small text-secondary mt-2 mb-0">Rename a file to the title's name (and year) and it's tried again.</p></details>{% endif %}
+</section>
+
+<section class="card p-3 mb-4" id="prompts"><h2 class="h5">Make them with an AI</h2>
+  <p class="small text-secondary">Curatarr writes the prompts; an image-making AI agent (Codex, or any other that can read and save files) makes the posters and saves them in the import folder, where Curatarr puts them on. Each prompt is a batch, with each title's year, genres, plot and the file name to save it as.</p>
+  <form method="post" action="{{ url_for('main.custom_posters_prompts') }}" class="row g-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="col-sm-6 col-lg-4"><label class="form-label small mb-1" for="p-titles">Titles</label><select class="form-select" id="p-titles" name="titles">
+      <option value="favourites"{% if options.titles == 'favourites' %} selected{% endif %}>Anyone's favourites</option>
+      {% for id, name in accounts %}<option value="favourites:{{ id }}"{% if options.titles == 'favourites:' ~ id %} selected{% endif %}>{{ name }}'s favourites</option>{% endfor %}
+      <option value="movies"{% if options.titles == 'movies' %} selected{% endif %}>Every film</option>
+      <option value="shows"{% if options.titles == 'shows' %} selected{% endif %}>Every TV show</option>
+    </select></div>
+    <div class="col-6 col-sm-3 col-lg-2"><label class="form-label small mb-1" for="p-batch">Per batch</label><input class="form-control" id="p-batch" type="number" name="batch" min="1" max="100" value="{{ options.batch }}"></div>
+    <div class="col-6 col-sm-3 col-lg-2 form-check ms-2 mb-2"><input class="form-check-input" type="checkbox" id="p-skip" name="skip_done"{% if options.skip_done %} checked{% endif %}><label class="form-check-label small" for="p-skip">Skip titles that have one</label></div>
+    <div class="col-12 col-lg-6"><label class="form-label small mb-1" for="p-photos">Reference photos folder <span class="text-secondary">(optional)</span></label><input class="form-control" id="p-photos" name="photos" value="{{ options.photos }}" placeholder="Where the AI agent finds photos of the people to cast"></div>
+    <div class="col-12 col-lg-6"><label class="form-label small mb-1" for="p-people">Who's in them <span class="text-secondary">(optional)</span></label><input class="form-control" id="p-people" name="people" value="{{ options.people }}" maxlength="200" placeholder="e.g. a married couple, Sam (left) and Alex"></div>
+    <div class="col-12"><button class="btn btn-primary">Write prompts</button>{% if not folder %} <span class="small text-warning ms-2">Set the import folder above first, so the prompts say where to save.</span>{% endif %}</div>
+  </form>
+  <p class="small text-secondary mt-2 mb-0">Only use photos of people who've agreed. The photos are read by the AI agent you paste the prompt into, never by Curatarr; if it's a cloud service, they're sent there.</p>
+  {% if count is not none %}<hr>{% if written %}<p class="mb-2"><strong>{{ count }}</strong> title{{ '' if count == 1 else 's' }} in {{ written|length }} batch{{ '' if written|length == 1 else 'es' }}. Paste one at a time; the next can start when the last has finished.</p>
+    {% for text in written %}<div class="mb-3"><div class="d-flex justify-content-between align-items-center mb-1"><span class="small fw-semibold">Batch {{ loop.index }}</span><button type="button" class="btn btn-sm btn-outline-light" data-copy="#prompt-{{ loop.index }}">Copy</button></div><textarea class="form-control font-monospace small" id="prompt-{{ loop.index }}" rows="10" readonly>{{ text }}</textarea></div>{% endfor %}
+  {% else %}<p class="mb-0">No titles to write prompts for{% if options.skip_done %}: they all have a custom poster{% endif %}.</p>{% endif %}{% endif %}
+</section>
+
+<h2 class="h5">{{ posters|length }} custom poster{{ '' if posters|length == 1 else 's' }}</h2>
+{% if posters %}<div class="poster-grid">{% for p in posters %}<div class="poster-tile">
+  <a href="{{ url_for('main.title', media_id=p.media_identity_id) }}#poster"><img src="{{ url_for('main.custom_poster_image', poster_id=p.id) }}" alt="" loading="lazy"></a>
+  <div class="poster-title" title="{{ p.media.title }}"><a href="{{ url_for('main.title', media_id=p.media_identity_id) }}#poster">{{ p.media.title }}</a></div>
+  <div class="small text-secondary">{{ p.applied_at|when('date') }}</div>
+  <form method="post" action="{{ url_for('main.title_poster_restore', media_id=p.media_identity_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery"><button class="btn btn-sm btn-outline-secondary w-100" data-tip="{{ 'Puts back the poster this title had before.' if p.original_path else 'Curatarr has no copy of the poster from before, so this takes the metadata provider\'s poster.' }}">Restore original</button></form>
+</div>{% endfor %}</div>
+{% else %}<div class="empty-state"><h2 class="h6">No custom posters yet</h2><p class="mb-0">Upload one on a title's page under Poster, or set an import folder above.</p></div>{% endif %}
+<script src="{{ url_for('static', filename='copy.js', v='1') }}"></script>
+{% endblock %}

@@ -112,12 +112,17 @@ def guard_request():
         return
     if request.content_type and request.content_type.startswith("application/json"):
         abort(415)
+    if request.endpoint in UPLOAD_ENDPOINTS:
+        request.max_content_length = UPLOAD_LIMIT  # pictures; 1 MB elsewhere
     if current_app.config["CSRF_ENABLED"]:
         supplied = request.form.get("csrf_token", "")
         expected = session.get("csrf_token", "")
         if not expected or not hmac.compare_digest(supplied, expected):
             abort(403)
 
+
+UPLOAD_ENDPOINTS: set[str] = set()  # pages that take a file (poster_routes)
+UPLOAD_LIMIT = 25 * 1024 * 1024
 
 PUBLIC_ENDPOINTS = {
     "main.sign_in_page",
@@ -414,6 +419,8 @@ ACTION_WORDS = {
     "seasonal_returned": "Brought back for its season",
     "compat_audio_added": "Added TV-friendly audio",
     "finished_at_credits": "Marked watched at the credits",
+    "custom_poster_applied": "Custom poster put on",
+    "custom_poster_restored": "Original poster restored",
 }
 
 
@@ -1810,7 +1817,14 @@ def title(media_id):
         else:
             flash("Title override saved", "success")
         return redirect(url_for("main.title", media_id=media.id))
-    return render_template("title.html", media=media, **title_view(media))
+    from .custom_posters import active as custom_poster
+
+    return render_template(
+        "title.html",
+        media=media,
+        custom_poster=custom_poster(media.id),
+        **title_view(media),
+    )
 
 
 @bp.get("/more")

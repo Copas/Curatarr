@@ -265,6 +265,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Finding what people will watch next failed")
     try:
+        from . import custom_posters
+
+        custom_posters.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Importing custom posters failed")
+    try:
         from . import finished
 
         finished.sweep()
