@@ -1,9 +1,14 @@
 # Curatarr Implementation Status
 
 ## Current Phase
-Phase 8 — Media enrichment (chapters and subtitles) running live; preparing v0.2.0
+Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- Plugin 0.3.0.0 verified live: a browser asking to play a film with AC3 and an added AAC track was pointed at the AAC track and played it directly, instead of converting AC3.
+- Finished at the credits verified live: on its first pass, seven episodes a viewer had stopped in their end credits were marked watched and left Continue Watching; a film stopped twenty minutes from the end was left alone.
+- Misfiled episodes verified live on a real show whose release was numbered one slot off: the misnumbered release is now blocklisted before the vacated episode is searched for, so the search doesn't bring it straight back.
+- Fixed live: the worker could stay paused for good when a reconcile started a tool while someone was watching (it suspended its own tool); nothing ran for 14 hours until found.
+- Fixed live: automatic replacement judged episodes "cut short" against the whole show's runtime and replaced good copies repeatedly (404 replacements in a week); episodes are now judged by their own runtime, and a delete answered "not found" counts as done.
 - v0.2.0rc5 release candidate: household-aware cleanup (Seerr requests, rewatched titles, import-list arrivals, seasonal shelves), Shrink instead of delete, the disk forecast, automatic fixes (Settings → Automatic), TV-friendly audio for films and episodes with progress, Sonarr-or-Radarr setups, and Replace that checks a better copy exists first. Checked before tagging: the test suite and lint, the Linux installer on a fresh Ubuntu 24.04 container (without systemd), and the Docker Compose build on Linux with PostgreSQL migrated to head and healthy. The Windows Docker Desktop steps are still untested on a Windows host.
 - v0.2.0rc4 release candidate: English dub checks (language identification per audio track, relabelling, default track, optional removal of other languages, replacement through Radarr), the chapter maintenance accomplishments card, a 24-hour pace for the finish estimate, and rewritten README and install guides for Linux, Docker and Windows. The Windows Docker Desktop steps are still untested on a Windows host.
 - v0.2.0rc3 release candidate: Docker Desktop installation steps for Windows, LF shell entrypoints, and Windows Arr disk-path matching are included. The Docker image was built and served HTTP on Linux; a Windows host smoke test is still pending. The rc2 native upgrade is running on the owner's host. Live lifecycle validation remains pending before v0.2.0.
@@ -55,7 +60,8 @@ Phase 8 — Media enrichment (chapters and subtitles) running live; preparing v0
 - Docker image: optional `EXTRAS=chapters` / `chapters-gpu` build argument adds FFmpeg, MKVToolNix, and faster-whisper.
 
 ## In Progress
-- Working through the chapter backlog on the installed copy (Smart Chapters, three concurrent jobs).
+- Working through the subtitle backlog on the installed copy: text subtitles for files whose English subtitles are only pictures (about 1,400 files).
+- Stereo AAC tracks for the files browser viewers are about to watch, topped up as they go.
 
 ## Next
 - Compare chapter throughput at 2 and 3 concurrent jobs now that transcription is serialized; settle the default.
