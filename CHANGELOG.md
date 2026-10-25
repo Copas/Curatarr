@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Hidden Jellyfin accounts can be kept out of Curatarr** (Settings → Integrations → Hidden Jellyfin accounts). Accounts hidden from Jellyfin's sign-in screen can be shown like any other (the default), left out of Curatarr's pages (never listed or named, while their watching still keeps titles), or ignored completely (not read at all, so a title only they watch can become Leaving Soon).
 - **A banner says when the Jellyfin plugin has an update**, on every page for admins: **Update** has Jellyfin download it, and then **Restart when nobody's watching** restarts Jellyfin to load it once nothing has played for 10 minutes (or **Restart now**). It says when Curatarr's features need the new version.
 - **Fixed: a plugin update waiting for a restart switched off what needs the plugin.** Jellyfin lists the version still loaded as "Superseded" until it restarts, which Curatarr took for the plugin being disabled, so AAC tracks for browsers stopped being added and Settings said the plugin was off.
 - **The ribbon previews use a real poster** (the latest favourite's) instead of a grey box.

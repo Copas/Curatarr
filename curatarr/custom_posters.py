@@ -887,6 +887,13 @@ def ribbons(options=None) -> dict[tuple[str, str, str], dict]:
             )
         ):
             liked.setdefault(("e", part_id), {})[user_id] = since
+    from .services import left_out_user_ids
+
+    left_out = left_out_user_ids()  # never named on a ribbon
+    liked = {
+        key: {u: since for u, since in users.items() if u not in left_out}
+        for key, users in liked.items()
+    }
     recent = utcnow() - timedelta(days=options["new_days"] or 0)
     household_at = options["household_at"] or 0
     found = {}

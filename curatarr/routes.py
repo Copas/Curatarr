@@ -44,13 +44,16 @@ from .services import (
     RoutineWebhookEvent,
     UnsupportedWebhookEvent,
     _as_datetime,
+    account_names,
     action_context,
     api_key_valid,
     dry_run_by_library,
+    hidden_accounts,
     history_actions,
     history_filter_options,
     ingest_event,
     integrations_ready,
+    left_out_user_ids,
     media_titles_for,
     metrics_summary,
     operational_status,
@@ -1046,6 +1049,11 @@ def settings():
                     minutes = None
                 save_reconcile_interval(minutes)
                 flash("Reconciliation interval saved", "success")
+            elif kind == "hidden_accounts":
+                from .services import save_hidden_accounts
+
+                save_hidden_accounts(request.form.get("hidden_accounts"))
+                flash("Hidden accounts saved.", "success")
             elif kind == "household":
                 from .services import client as integration_client
 
@@ -1079,10 +1087,12 @@ def settings():
         users = integration_client("jellyfin").users()
         if not isinstance(users, list):
             raise TypeError("Jellyfin did not return a user list.")
+        left_out = left_out_user_ids()
         household_users = [
             user
             for user in users
             if isinstance(user, dict)
+            and str(user.get("Id")) not in left_out
             and isinstance(user.get("Policy"), dict)
             and not user["Policy"].get("IsAdministrator")
             and not user["Policy"].get("IsDisabled")
@@ -1096,6 +1106,11 @@ def settings():
         new_api_key=session.pop("new_api_key", None),
         api_key_present=bool(setting("api_key_sha256")),
         household_users=household_users,
+        hidden_accounts=hidden_accounts(),
+        hidden_account_names=sorted(
+            (setting("jellyfin_user_names", {}) or {}).get(i, "an account")
+            for i in setting("jellyfin_hidden_user_ids", []) or []
+        ),
         household_allowed=household_user_ids(),
         household_error=household_error,
         plugin=_plugin_view(),
@@ -1872,9 +1887,7 @@ def title(media_id):
         media=media,
         custom_poster=custom_posters.active(media.id),
         title_posters=custom_posters.for_title(media.id),
-        poster_accounts=sorted(
-            (setting("jellyfin_user_names", {}) or {}).items(), key=lambda a: a[1]
-        ),
+        poster_accounts=sorted(account_names().items(), key=lambda a: a[1]),
         **title_view(media),
     )
 
