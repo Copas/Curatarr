@@ -93,6 +93,25 @@ def test_rebuilding_keeps_everything(tmp_path):
     assert abs(after.duration - before.duration) < 0.1
 
 
+@pytest.mark.skipif(not TOOLS, reason="needs FFmpeg and MKVToolNix")
+def test_a_file_with_its_audio_first_is_rebuilt_as_it_is(tmp_path):
+    """Some web releases put the audio track before the video. mkvmerge put
+    the video first, the check saw different tracks and kept the broken
+    original: 201 files, Roku still unable to seek in them."""
+    plain = _mkv(tmp_path)
+    path = str(tmp_path / "Top Gear - S01E01.mkv")
+    subprocess.run(
+        [tool("mkvmerge"), "-q", "--track-order", "0:1,0:0", "-o", path, plain],
+        check=True,
+    )
+    _hide_index(path)
+    before = mediafile.probe(path)
+    assert [s["codec_type"] for s in before.streams] == ["audio", "video"]
+    after = mediafile.rebuild_layout(path)
+    assert [s["codec_type"] for s in after.streams] == ["audio", "video"]
+    assert not seek_index_hidden(path)
+
+
 def test_not_matroska_or_unreadable_is_left_alone(tmp_path):
     other = tmp_path / "film.mp4"
     other.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 100)
