@@ -953,17 +953,15 @@ def _casting(photos: str, who: str, single: bool) -> list[str]:
             "is clear."
         ),
         (
-            "- For each title, first make a head-and-shoulders portrait of each of "
-            "them as their character (costume and hair styling for the role, "
-            "plain background), from several of their photos as image inputs. "
-            "Compare it with the photos and redo it until it's clearly them. Keep "
-            "it as a working reference, outside the folder the pictures are "
-            "saved in."
-        ),
-        (
             "- Make every picture with them in it from image inputs, never from a "
-            "description of them: the photos chosen for that picture, plus the "
-            "approved portrait so the faces stay the same across the set."
+            "description of them: the photos chosen for that picture"
+            + (
+                "."
+                if single
+                else ", plus the title's poster, so the faces, costumes and look "
+                "stay the same across its set. Where a title's poster still has "
+                "to be made, make and check it first, then the rest from it."
+            )
         ),
         (
             "- Keep what makes them recognisable, as in the photos: face shape, "
@@ -1045,6 +1043,11 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
                 f"- Save it in {output} under the file name given. Write each file in "
                 "one go (or write it elsewhere and move it in): it's picked up as soon "
                 "as it stops changing."
+            ),
+            (
+                "- Make only the files listed: no drafts, test images, extra "
+                "versions or working references. Image generation is slow and "
+                "costly, and Jellyfin uses nothing else."
             ),
             (
                 "- If one comes out wrong (a misspelled title, an unconvincing face), "

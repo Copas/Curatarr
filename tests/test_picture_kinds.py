@@ -356,8 +356,10 @@ def test_prompts_keep_the_reference_people_recognisable(app, client, tmp_path):
     )[0]
     assert "Reference photos of Sam and Alex" in text and "/photos" in text
     assert "in place of the actors" in text
-    assert "as image inputs" in text and "side by side" in text
-    assert "Use all of their photos" in text and "portrait of each of them" in text
+    assert "from image inputs" in text and "side by side" in text
+    assert "Make only the files listed" in text
+    assert "Use all of their photos" in text and "plus the title's poster" in text
+    assert "head-and-shoulders" not in text  # nothing made that Jellyfin doesn't use
     assert "a different photo leads each time" in text
     assert "large and clear enough to recognise" in text  # the background
     # A photos folder that isn't there is saved, with a warning.
