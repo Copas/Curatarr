@@ -56,6 +56,12 @@ Titles nobody has played are not removed just for being unwatched. (A library ca
 
 The default grace period after adding a title is 30 days, and the inactivity period is 90 days. Movie cleanup is retention only: deleted movies are never automatically re-acquired (except seasonal films, below, when you switch that on).
 
+### Compression first
+
+If an external transcoder such as Tdarr saves space by recompressing the library, Curatarr can wait for it (Settings → Compression first, off by default): while the transcoder has files queued, being **low** on space marks nothing Leaving Soon, and History says so once a day. Below the **critical** threshold, cleanup goes ahead anyway.
+
+The transcoder, or a small script beside it, says how many files are waiting with `POST /api/v1/compression` and the webhook token (`{"pending": 312, "source": "Tdarr"}`; `0` when it's done), or keeps a file in place while it has work (a number inside counts the files). A signal older than 6 hours (adjustable) counts as nothing waiting, so a transcoder that stops reporting doesn't hold cleanup forever. Files flagged [Never compress](#leave-after-watched-and-never-compress) are listed for it to skip.
+
 ### What the household's choices change
 
 Settings → Household. Each of these shows on a title's page, and in Review, as a short note saying why.
