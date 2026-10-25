@@ -175,6 +175,12 @@ public sealed class PosterFilter : IAsyncActionFilter
         }
 
         var file = PosterSync.FileFor(poster.Tag);
+        if (poster.Large && IsLarge(args, _config()?.LargePosterWidth ?? PluginConfiguration.DefaultLargePosterWidth)
+            && File.Exists(PosterSync.LargeFileFor(poster.Tag)))
+        {
+            file = PosterSync.LargeFileFor(poster.Tag);
+        }
+
         if (!File.Exists(file))
         {
             return null;
@@ -212,6 +218,34 @@ public sealed class PosterFilter : IAsyncActionFilter
             _logger.LogWarning(ex, "Couldn't resize the account poster {Tag}; sending it as it is", poster.Tag);
             return new PhysicalFileResult(file, "image/jpeg");
         }
+    }
+
+    /// <summary>
+    /// Whether an app wants a poster big: on a title's own page rather than in a
+    /// row of posters. Apps ask for a size in pixels; this is the width the poster
+    /// would be drawn at (a height counts as the width of a poster that tall).
+    /// The Roku app asks for at most 295 wide in lists and 300 on a title's page.
+    /// </summary>
+    /// <param name="args">The image request's arguments.</param>
+    /// <param name="from">The width from which a poster is big.</param>
+    /// <returns>Whether it's big.</returns>
+    internal static bool IsLarge(IDictionary<string, object?> args, int from)
+    {
+        static int Width(int? width, int? height) => (width, height) switch
+        {
+            (int w, int h) => Math.Min(w, h * 2 / 3),
+            (int w, null) => w,
+            (null, int h) => h * 2 / 3,
+            _ => 0,
+        };
+
+        var size = new[]
+        {
+            Width(Arg<int?>(args, "width"), Arg<int?>(args, "height")),
+            Width(Arg<int?>(args, "fillWidth"), Arg<int?>(args, "fillHeight")),
+            Width(Arg<int?>(args, "maxWidth"), Arg<int?>(args, "maxHeight")),
+        }.Max();
+        return size >= from;
     }
 
     private static T? Arg<T>(IDictionary<string, object?> args, string name)

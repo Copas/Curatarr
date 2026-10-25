@@ -547,6 +547,85 @@ def test_a_ribbon_goes_on_an_accounts_own_poster(app, monkeypatch):
     assert custom_posters.plugin_list()[0]["id"] == mine.id
 
 
+def _band_height(picture: bytes) -> int:
+    """How far up from the bottom the ribbon reaches (stops at the poster's blue)."""
+    shown = Image.open(BytesIO(picture)).convert("RGB")
+    rows = 0
+    while rows < shown.height:
+        red, _green, blue = shown.getpixel((2, shown.height - 1 - rows))
+        if blue > red:
+            break
+        rows += 1
+    return rows
+
+
+def test_a_ribbon_lists_names_where_its_shown_big(app, client, monkeypatch):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    monkeypatch.setattr(
+        "curatarr.services.client",
+        lambda _kind: RibbonJellyfin(_picture("#223399", size=(400, 600))),
+    )
+    accounts = [("u1", "Sam"), ("u2", "Alex"), ("u3", "Kim")]
+    set_setting("jellyfin_user_names", dict(accounts))
+    set_setting("webhook_token", "secret")
+    db.session.commit()
+    _favourite(media, "u1")
+    _favourite(media, "u3")
+    custom_posters.save_ribbon_settings(
+        {"enabled": "on", "see-u2-u1": "on", "see-u2-u3": "on"}, accounts
+    )
+    options = custom_posters.ribbon_settings()
+    assert (options["list_style"], options["page_style"], options["colour"]) == (
+        "faces",
+        "names",
+        "gold",
+    )
+    entry = custom_posters.plugin_list()[0]
+    assert entry["large"]
+    small = client.get(
+        f"/api/v1/jellyfin/posters/{entry['id']}.jpg",
+        headers={"X-Curatarr-Token": "secret"},
+    ).data
+    large = client.get(
+        f"/api/v1/jellyfin/posters/{entry['id']}.jpg?size=large",
+        headers={"X-Curatarr-Token": "secret"},
+    ).data
+    assert _band_height(large) > 1.5 * _band_height(small)  # two names, stacked
+    # "As in lists" on a title's page: one picture, and a new look means new tags.
+    custom_posters.save_ribbon_settings(
+        {
+            "enabled": "on",
+            "see-u2-u1": "on",
+            "see-u2-u3": "on",
+            "page_style": "list",
+            "colour": "teal",
+        },
+        accounts,
+    )
+    changed = custom_posters.plugin_list()[0]
+    assert not changed["large"] and changed["tag"] != entry["tag"]
+    teal = Image.open(BytesIO(custom_posters.plugin_picture(changed["id"]))).convert(
+        "RGB"
+    )
+    assert (
+        teal.getpixel((2, teal.height - 3))[1] > teal.getpixel((2, teal.height - 3))[0]
+    )
+
+
+def test_ribbon_settings_from_before_the_looks_carry_over(app):
+    from curatarr.services import set_setting
+
+    set_setting("favourite_ribbons", {"enabled": True, "label": "star"})
+    db.session.commit()
+    options = custom_posters.ribbon_settings()
+    assert (options["list_style"], options["page_style"]) == ("star", "list")
+    set_setting("favourite_ribbons", {"label": "names", "avatars": False})
+    db.session.commit()
+    assert custom_posters.ribbon_settings()["list_style"] == "names"
+
+
 def test_the_ribbon_settings_page(app, client):
     from curatarr.services import set_setting
 
@@ -557,6 +636,10 @@ def test_the_ribbon_settings_page(app, client):
     assert 'name="see-u1-u1"' not in page  # nobody's set to see themselves here
     preview = client.get("/library/posters/ribbon-preview.jpg")
     assert preview.status_code == 200 and preview.mimetype == "image/jpeg"
+    assert 'name="list_style"' in page and 'name="colour"' in page
+    assert "size=large" in page  # the page's version, previewed
+    big = client.get("/library/posters/ribbon-preview.jpg?size=large")
+    assert big.status_code == 200 and big.data != preview.data
 
 
 def test_everyone_sees_one_accounts_favourites_in_one_tick(app, client):
@@ -596,7 +679,6 @@ def test_new_household_and_episode_ribbons(app, client, monkeypatch):
     form = {
         "enabled": "on",
         "all-u1": "on",
-        "avatars": "on",
         "new": "on",
         "new_days": "7",
         "household": "on",
@@ -661,6 +743,7 @@ def test_new_household_and_episode_ribbons(app, client, monkeypatch):
     jellyfin.current = _picture("#335566", size=(1280, 720))
     picture = Image.open(BytesIO(custom_posters.plugin_picture(f"e.u2.{episode.id}")))
     assert picture.width > picture.height  # still a thumbnail
+    assert not entries[f"e.u2.{episode.id}"]["large"]  # thumbnails: one size
     # Episodes switched off: gone.
     custom_posters.save_ribbon_settings({**form, "episodes": ""}, accounts)
     assert f"e.u2.{episode.id}" not in {e["id"] for e in custom_posters.plugin_list()}

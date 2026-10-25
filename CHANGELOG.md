@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Favourite ribbons are simpler in lists, with names where there's room, and have looks to choose.** In rows of posters a ribbon is now a star and the faces of who favourited it, without the name beside them. On a title's own page, where the poster is big, it lists each full name under a star, one under another (with plugin 0.5.0.0). Library → Posters → Favourite ribbons has *In lists* (faces, "★ Sam", or just a star), *On its page* (names, or as in lists) and *Colour* (gold, silver, teal, purple), with a preview of each. Earlier settings carry over.
 - **Favourite ribbons show who, what's new, what everyone loves, and episodes.** Each ribbon has the round pictures of who favourited it (their Jellyfin profile picture, one uploaded on Library → Posters, or their initials); a red NEW for 7 days after something's favourited; a red "♥ Household favourite" band when 3 or more people favourited it; and favourite episodes get a ribbon on their thumbnails. Each can be switched off or adjusted; no plugin update is needed. Curatarr now records when each favourite was made, and which episodes people favourited.
 - **Favourite ribbons** (Library → Posters, off by default, with the Curatarr plugin for Jellyfin). A gold tag on a title's poster saying whose favourite it is ("★ Sam", "★ Sam + 1"), shown to the accounts you choose: one tick per account for "everyone sees their favourites", or, under *Choose account by account*, a grid of who sees whose (it opens by itself when choices are mixed), and whether accounts see their own (off); along the bottom (the default) or top right, opposite Leaving Soon's tag; names or just a star. It's drawn over whatever poster that account would see, its own custom poster and the Leaving Soon countdown included. No plugin update is needed.
 - **Fixed: an account's own poster hid the Leaving Soon countdown.** Everyone else saw "7 DAYS LEFT" on Jellyfin's poster, but an account with a custom poster of its own saw it without the banner, so it couldn't tell the title was going. Curatarr now draws the banner on the account's poster too, with a new tag each time its words change so apps fetch it again; no plugin update is needed.
@@ -105,6 +106,11 @@
 ## Jellyfin plugin
 
 The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed and updated from Jellyfin's plugin catalogue once Curatarr adds its repository. Each version's notes below are what Jellyfin shows as its changelog, and the release page's notes.
+
+### 0.5.0.0 (2026-10-25)
+
+- A favourite ribbon can look different on a title's own page, where the poster is shown big: Curatarr draws a second version listing each name, and the plugin serves it when an app asks for a poster at least 300 pixels wide (the Roku app asks for 295 in lists and 300 on a title's page). The width is *LargePosterWidth* in the plugin's settings.
+- Needs a Curatarr newer than 0.2.0rc6 for the second version; with older ones, posters work as before.
 
 ### 0.4.0.0 (2026-10-24)
 

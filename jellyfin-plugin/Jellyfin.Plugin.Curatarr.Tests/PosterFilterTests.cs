@@ -97,6 +97,56 @@ public class PosterFilterTests
         Assert.False(_store.TryGetByTag(null, out _));
     }
 
+    [Theory]
+    [InlineData(295, 440, false)] // the Roku app's library rows
+    [InlineData(464, 261, false)] // its home rows
+    [InlineData(300, 450, true)] // a title's own page
+    [InlineData(null, 900, true)]
+    public void A_poster_is_big_on_a_titles_page(int? maxWidth, int? maxHeight, bool large)
+    {
+        var args = new Dictionary<string, object?> { ["maxWidth"] = maxWidth, ["maxHeight"] = maxHeight };
+        Assert.Equal(large, PosterFilter.IsLarge(args, PluginConfiguration.DefaultLargePosterWidth));
+    }
+
+    [Fact]
+    public async Task A_big_poster_is_its_version_with_names()
+    {
+        var tag = "cccc" + Guid.NewGuid().ToString("N")[..12];
+        _store.Replace([new AccountPoster(Film.ToString("N"), Sam.ToString("N"), "v.x", tag, Large: true)]);
+        Directory.CreateDirectory(PosterSync.Folder);
+        await File.WriteAllTextAsync(PosterSync.FileFor(tag), "small");
+        await File.WriteAllTextAsync(PosterSync.LargeFileFor(tag), "large");
+        try
+        {
+            var library = new Mock<ILibraryManager>();
+            library.Setup(l => l.GetItemById(Film)).Returns(new MediaBrowser.Controller.Entities.Movies.Movie());
+            var images = new Mock<IImageProcessor>();
+            images.Setup(i => i.ProcessImage(It.IsAny<MediaBrowser.Controller.Drawing.ImageProcessingOptions>()))
+                .ReturnsAsync((MediaBrowser.Controller.Drawing.ImageProcessingOptions o) => (o.Image.Path, "image/jpeg", DateTime.UtcNow));
+            var filter = new PosterFilter(_store, library.Object, images.Object, NullLogger<PosterFilter>.Instance, () => new PluginConfiguration());
+
+            async Task<string?> Served(int maxWidth, int maxHeight)
+            {
+                var descriptor = new ControllerActionDescriptor { ControllerName = "Image", ActionName = "GetItemImage" };
+                var context = new ActionExecutingContext(
+                    new ActionContext(new DefaultHttpContext(), new RouteData(), descriptor),
+                    [],
+                    new Dictionary<string, object?> { ["itemId"] = Film, ["tag"] = tag, ["maxWidth"] = maxWidth, ["maxHeight"] = maxHeight },
+                    controller: new object());
+                await filter.OnActionExecutionAsync(context, () => throw new InvalidOperationException("served by the plugin"));
+                return (context.Result as PhysicalFileResult)?.FileName;
+            }
+
+            Assert.Equal(PosterSync.FileFor(tag), await Served(295, 440));
+            Assert.Equal(PosterSync.LargeFileFor(tag), await Served(300, 450));
+        }
+        finally
+        {
+            File.Delete(PosterSync.FileFor(tag));
+            File.Delete(PosterSync.LargeFileFor(tag));
+        }
+    }
+
     [Fact]
     public async Task Switched_off_changes_nothing()
     {
