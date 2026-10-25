@@ -750,12 +750,17 @@ DEFAULT_STYLE = (
     "than the film itself, with bold, dramatic composition and lighting."
 )
 OVERVIEW_CHARS = 280
-# Left to "lettering in the film's style", logos came out as plain fonts.
+# Left to "lettering in the film's style", logos came out as plain fonts; and
+# with the pictures made without text, an agent typed every title on in the
+# same serif font with code.
 LETTERING = (
     "- The title is in the title's own logo lettering, as on its official "
     "poster and title card: the same typeface (or the closest match), weight, "
     "letter shapes, spacing, colours and effects (chrome, cracks, glow, drips, "
-    "whatever it has). Look it up if you can. Never a plain or generic font."
+    "whatever it has). Look it up if you can. Never a plain or generic font. "
+    "Make the lettering with the image tool, as part of each picture (the logo "
+    "with a transparent background), not typed on afterwards with code or a "
+    "font file."
 )
 # What each picture should be, for the prompts.
 KIND_SPECS = {
