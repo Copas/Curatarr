@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Posters · Library · Curatarr<script src="{{ url_for('static', filename='copy.js', v='1') }}"></script>
-{% endblock %}
+{% block title %}Posters · Library · Curatarr{% endblock %}
 {% block content %}
 <header class="page-heading"><div><div class="eyebrow">Library</div><h1>Custom posters</h1><p class="text-secondary mb-0">Pictures chosen for titles instead of Jellyfin's own poster. Upload one on a title's page, or drop pictures in an import folder. The poster each one replaced is kept, so it can be restored.</p></div></header>
 
@@ -40,12 +39,15 @@
   {% else %}<p class="mb-0">No titles to write prompts for{% if options.skip_done %}: they all have a custom poster{% endif %}.</p>{% endif %}{% endif %}
 </section>
 
-<h2 class="h5">{{ posters|length }} custom poster{{ '' if posters|length == 1 else 's' }}</h2>
-{% if posters %}<div class="poster-grid">{% for p in posters %}<div class="poster-tile">
-  <a href="{{ url_for('main.title', media_id=p.media_identity_id) }}#poster"><img src="{{ url_for('main.custom_poster_image', poster_id=p.id) }}" alt="" loading="lazy"></a>
-  <div class="poster-title" title="{{ p.media.title }}"><a href="{{ url_for('main.title', media_id=p.media_identity_id) }}#poster">{{ p.media.title }}</a></div>
-  <div class="small text-secondary">{% if p.jellyfin_user_id %}Only for {{ accounts|selectattr(0, 'equalto', p.jellyfin_user_id)|map(attribute=1)|first or 'one account' }} · {% endif %}{{ p.applied_at|when('date') }}</div>
-  <form method="post" action="{{ url_for('main.title_poster_restore', media_id=p.media_identity_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery"><input type="hidden" name="poster" value="{{ p.id }}"><button class="btn btn-sm btn-outline-secondary w-100" data-tip="{{ 'Shows this account the usual poster again.' if p.jellyfin_user_id else ('Puts back the poster this title had before.' if p.original_path else 'Curatarr has no copy of the poster from before, so this takes the metadata provider\'s poster.') }}">{{ 'Remove' if p.jellyfin_user_id else 'Restore original' }}</button></form>
+{% macro who(p) %}{% if p.jellyfin_user_id %}{{ accounts|selectattr(0, 'equalto', p.jellyfin_user_id)|map(attribute=1)|first or 'One account' }}{% else %}Everyone{% endif %}{% endmacro %}
+{% set total = groups|map(attribute='posters')|map('length')|sum %}
+<h2 class="h5">{{ groups|length }} custom poster{{ '' if groups|length == 1 else 's' }}{% if total > groups|length %} <span class="text-secondary small fw-normal">({{ total }} across accounts)</span>{% endif %}</h2>
+{% if groups %}<div class="poster-grid">{% for g in groups %}<div class="poster-tile">
+  <a href="{{ url_for('main.title', media_id=g.media.id) }}#poster"><img src="{{ url_for('main.custom_poster_image', poster_id=g.image.id) }}" alt="" loading="lazy"></a>
+  <div class="poster-title" title="{{ g.media.title }}"><a href="{{ url_for('main.title', media_id=g.media.id) }}#poster">{{ g.media.title }}</a></div>
+  {% if g.applied_at %}<div class="small text-secondary">{{ g.applied_at|when('date') }}</div>{% endif %}
+  <ul class="poster-who">{% for p in g.posters %}<li><span>{{ who(p) }}</span><form method="post" action="{{ url_for('main.title_poster_restore', media_id=g.media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery"><input type="hidden" name="poster" value="{{ p.id }}"><button class="btn btn-link btn-sm p-0" aria-label="{{ 'Restore the original poster for everyone' if not p.jellyfin_user_id else 'Remove it for ' ~ who(p) }}" data-tip="{{ 'Shows this account the usual poster again.' if p.jellyfin_user_id else ('Puts back the poster this title had before.' if p.original_path else 'Curatarr has no copy of the poster from before, so this takes the metadata provider\'s poster.') }}">{{ 'Remove' if p.jellyfin_user_id else 'Restore' }}</button></form></li>{% endfor %}</ul>
+  {% if g.posters|length > 1 %}<form method="post" action="{{ url_for('main.title_poster_restore', media_id=g.media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery">{% for p in g.posters %}<input type="hidden" name="poster" value="{{ p.id }}">{% endfor %}<button class="btn btn-sm btn-outline-secondary w-100" data-tip="Everyone sees the usual poster again.">Remove for all</button></form>{% endif %}
 </div>{% endfor %}</div>
 {% else %}<div class="empty-state"><h2 class="h6">No custom posters yet</h2><p class="mb-0">Upload one on a title's page under Poster, or set an import folder above.</p></div>{% endif %}
 <script src="{{ url_for('static', filename='copy.js', v='1') }}"></script>

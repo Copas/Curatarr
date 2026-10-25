@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Library → Posters shows one tile per picture**: a poster several accounts have is one tile listing each account with its own Remove, and **Remove for all**. Fixed: the page's title in the browser tab showed a script tag.
 - **Imported posters can be for chosen accounts** (Library → Posters → *Imported posters are for*). Each picture in the import folder becomes those accounts' own poster, and everyone else keeps the usual one: where an imported picture was everyone's poster before, Jellyfin's own goes back on for them (the saved original, or the metadata provider's poster when Curatarr has none). Changing who they're for looks at every picture again.
 - **A poster you pick shows before it's uploaded**, in the title's Poster panel, and the panel says whether the large picture is what everyone sees or what everyone else sees.
 - **Fixed: Enhance's Activity panel failed to load** when a subtitle check listed there was queued again while the page was being drawn (the picture-subtitle pass requeues many at once). It shows "queued again" instead.
