@@ -338,6 +338,21 @@ def seek_index_hidden(path: str) -> bool:
     return bool(ids) and CUES_ID not in ids and SEEK_HEAD_ID in ids
 
 
+def _keep_track_order(path: str) -> list[str]:
+    """mkvmerge's options to keep the tracks in the file's own order. Left to
+    itself it puts video first, so a file with its audio first (as some web
+    releases are) came out reordered and failed the check below: 201 files,
+    Roku still unable to seek in them."""
+    result = _run([required_tool("mkvmerge"), "-J", path], 120)
+    try:
+        tracks = json.loads(result.stdout or "{}").get("tracks") or []
+    except ValueError:
+        return []
+    if result.returncode not in (0, 1) or not tracks:
+        return []
+    return ["--track-order", ",".join(f"0:{t['id']}" for t in tracks)]
+
+
 def rebuild_layout(path: str) -> MediaInfo:
     """Rewrite a Matroska file with mkvmerge so its seek head is whole again.
 
@@ -349,7 +364,15 @@ def rebuild_layout(path: str) -> MediaInfo:
     partial = target.with_name(f".{target.name}.curatarr-partial")
     try:
         result = _run(
-            [required_tool("mkvmerge"), "-q", "-o", str(partial), path], 4 * 3600
+            [
+                required_tool("mkvmerge"),
+                "-q",
+                *_keep_track_order(path),
+                "-o",
+                str(partial),
+                path,
+            ],
+            4 * 3600,
         )
         # mkvmerge exits 1 for warnings with a good file, 2 for errors.
         if result.returncode not in (0, 1):

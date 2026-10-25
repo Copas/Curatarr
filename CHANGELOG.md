@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc14 (2026-10-25)
+
+- **Pressing play moves a file to the front of the line.** What's playing, and the five episodes after it (into the next season too), go first in every queue within seconds: chapters, subtitles, skip markers, TV-friendly audio and the Roku seek index repair, in watching order. Before, the queue only learned what people watch next every ten minutes, from Jellyfin's Next Up and Continue Watching, with two episodes after each, and the seek repair didn't use it at all (it went by when anything in a show was last played, then file order).
+- **Fixed: the Roku seek index repair gave up on files with their audio first.** mkvmerge put the video track first, so the check found the copy different from the original and kept the broken file: 201 files (Good Eats, Impractical Jokers, Top Gear and others) still couldn't be seeked on a Roku. It now keeps the file's own track order, and those files are tried again.
+
 ## 0.2.0rc13 (2026-10-25)
 
 - **The AI prompts use every reference photo.** They asked for each person's two or three best photos, so the same ones led every picture; the photos are different on purpose. Now each picture leads with the photos that suit it (a different one each time), and photos with a hidden or small face are paired with a clear one.

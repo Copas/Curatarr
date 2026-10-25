@@ -43,9 +43,12 @@ def enabled() -> bool:
 
 
 def _due():
-    """MKV files not looked at yet, or changed since: what's being watched
-    first, then chaptered ones (Curatarr's own edits are where this mostly
-    came from)."""
+    """MKV files not looked at yet, or changed since: what's playing and what
+    people will watch next first (the episode playing, then the ones after
+    it), then the rest of what's been watched, then chaptered ones (Curatarr's
+    own edits are where this mostly came from)."""
+    from . import up_next
+
     watched = (
         db.session.query(
             UserMediaState.media_identity_id.label("media_id"),
@@ -71,6 +74,7 @@ def _due():
             ),
         )
         .order_by(
+            up_next.rank(MediaPart.id),
             case((watched.c.last.is_(None), 1), else_=0),
             watched.c.last.desc(),
             case((ChapterState.chapter_status.like("generated%"), 0), else_=1),

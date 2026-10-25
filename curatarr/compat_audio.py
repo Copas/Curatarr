@@ -18,7 +18,7 @@ background, never one that's being played, and not in libraries in dry run.
 import threading
 
 from flask import current_app
-from sqlalchemy import and_, case, func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import OperationalError
 
 from . import db, throttle, thumbnails
@@ -181,16 +181,16 @@ def _due(radarr_ids, episode_file_ids):
         # What people watch next first; then films, where DTS and TrueHD
         # mostly are.
         .order_by(
-            case((MediaPart.id.in_(_watching() or [""]), 0), else_=1),
+            _watching_rank(),
             MediaPart.kind.desc(),
         )
     )
 
 
-def _watching():
+def _watching_rank():
     from . import up_next
 
-    return up_next.part_ids()
+    return up_next.rank(MediaPart.id)
 
 
 def start(app=None) -> bool:
