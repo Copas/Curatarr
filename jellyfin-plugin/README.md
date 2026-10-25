@@ -22,7 +22,7 @@ Only people Jellyfin already lets delete an item can do any of this.
 ## Requirements
 
 - Jellyfin 12.2
-- Curatarr 0.2.0 or later (the `/api/v1/jellyfin/delete` endpoint; posters for one account need the `/api/v1/jellyfin/posters` endpoint, from the custom posters release)
+- Curatarr 0.2.0 or later (the `/api/v1/jellyfin/delete` endpoint; posters for one account need Curatarr 0.2.0rc6 or later)
 
 ## Install
 
@@ -60,6 +60,14 @@ dotnet publish Jellyfin.Plugin.Curatarr -c Release -o artifacts
 ```
 
 `scripts/install-local.sh` copies a build into a local Jellyfin's plugin folder (run with sudo after building).
+
+## Releasing
+
+1. Set `<Version>` in `Directory.Build.props`.
+2. Add the version's notes to [CHANGELOG.md](../CHANGELOG.md), under **Jellyfin plugin**, as `### 0.5.0.0 (date)` with a bullet per change. They become the GitHub release's notes and the changelog Jellyfin shows for the version.
+3. Push a tag `plugin-v0.5.0.0`. The release workflow refuses a version without notes; with them it runs the tests, builds the plugin, attaches it to a release and adds it to `manifest.json`.
+
+`python3 scripts/manifest.py --refresh` rewrites every listed version's changelog, and the plugin's description from `build.yaml`, after notes are edited.
 
 ## License
 

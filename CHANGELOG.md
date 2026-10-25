@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The Jellyfin plugin's version history says what changed.** Each plugin version has notes in this changelog, which Jellyfin shows as the version's changelog and GitHub as its release notes (filled in for every release so far); a plugin release can't be tagged without them. The plugin's description in Jellyfin's catalogue covers everything it does, not only Delete.
 ## 0.2.0rc6 (2026-10-24)
 
 ### Custom posters
@@ -99,13 +100,37 @@
 
 ## Jellyfin plugin
 
-The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed from Jellyfin's plugin catalogue once Curatarr adds its repository.
+The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed and updated from Jellyfin's plugin catalogue once Curatarr adds its repository. Each version's notes below are what Jellyfin shows as its changelog, and the release page's notes.
 
-- **0.4.0.0** (2026-10-24): each account can have posters of its own (Curatarr's custom posters for one account), in every app, Roku included. A switch in the plugin's settings.
-- **0.3.0.0** (2026-10-23): each device is pointed at the copy and audio track it plays as it is (a browser gets the stereo AAC track instead of AC3 converted).
-- **0.2.0.0** (2026-10-23): Leaving Soon and Delete, both, in the web app's menus (with the File Transformation plugin).
-- **0.1.1.0** (2026-10-23): Curatarr's logo; installed and connected from Curatarr's Settings in one click.
-- **0.1.0.0** (2026-10-23): Delete in any Jellyfin app marks a film or show Leaving Soon instead of deleting its files.
+### 0.4.0.0 (2026-10-24)
+
+- Each account can have posters of its own. With Curatarr's custom posters for one account, that account sees its poster in every app (web, phone, TV, Roku), and everyone else sees the usual one.
+- How: in item details sent to that account, the poster's image tag is swapped for one standing for the account's poster (a show's poster on its episodes' cards too), and an image asked for with that tag is served from Curatarr's picture, resized and cached by Jellyfin like its own. The list is fetched from Curatarr every minute.
+- New setting: *Show each account its own posters* (on).
+- Needs Curatarr 0.2.0rc6 or later for posters; older Curatarr versions work as before.
+
+### 0.3.0.0 (2026-10-23)
+
+- Each device plays the copy and audio track it can play as it is. When an app asks how to play a title, the plugin asks Jellyfin's own stream builder, with that device's profile, how each copy and each audio track in the same language would play, and points the app at the one needing the least work (played as it is, then copied into another container, then converted).
+- A web browser plays the stereo AAC track Curatarr adds instead of having AC3 or E-AC3 converted while it plays; of two copies of a film, each device gets the one it plays directly.
+- Commentaries and other languages are never chosen, and a track or copy picked by hand is left alone.
+- New setting: *Play the copy and audio track each device can play as it is* (on).
+
+### 0.2.0.0 (2026-10-23)
+
+- Delete on a title that's already Leaving Soon deletes it now, through Radarr or Sonarr, in every app.
+- The web app's menu for a film or show Curatarr manages has **Leaving Soon** beside **Delete**, and Delete there deletes straight away. Needs the File Transformation plugin (only the web app's menus can be changed); a setting switches it off.
+- Only for people Jellyfin already lets delete the item.
+
+### 0.1.1.0 (2026-10-23)
+
+- Curatarr's logo on the plugin's card in Jellyfin's plugin list.
+- Works with Curatarr's one-click **Install in Jellyfin** (Settings), which installs the plugin, restarts Jellyfin and connects the two, with no address or token to type.
+
+### 0.1.0.0 (2026-10-23)
+
+- First release. Delete in any Jellyfin app asks Curatarr first: a film or show Curatarr manages is marked Leaving Soon instead of having its files deleted behind Radarr's and Sonarr's backs, so it leaves through them at the end of the notice period and can still be saved. A title Curatarr must keep (Never Purge) can't be deleted; episodes, music and anything Curatarr doesn't manage are deleted by Jellyfin as usual.
+- Settings: Curatarr's address and webhook token, and whether a delete fails while Curatarr can't be reached.
 
 ## 0.2.0rc5 (2026-10-17)
 
