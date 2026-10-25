@@ -112,6 +112,9 @@ def not_paused():
 def media_env(app, monkeypatch, tmp_path):
     files = FakeFiles()
     arr = FakeArr()
+    # Transcription is faked where it's used; without this the tests passed
+    # only where faster-whisper happened to be installed.
+    monkeypatch.setattr("curatarr.transcribe.available", lambda: True)
     monkeypatch.setattr(enrichment, "probe", files.probe)
     monkeypatch.setattr(enrichment, "write_chapters", files.write)
     monkeypatch.setattr(enrichment, "remove_chapters", files.remove)
