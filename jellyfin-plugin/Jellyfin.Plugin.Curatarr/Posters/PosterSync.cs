@@ -1,14 +1,16 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Jellyfin.Plugin.Curatarr.Configuration;
+using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Curatarr.Posters;
 
 /// <summary>
-/// Every minute, fetches from Curatarr which accounts have posters of their own,
-/// and downloads each picture once (kept in the plugin's data folder).
+/// Every minute, fetches from Curatarr which accounts have pictures of their own
+/// (posters, wide tiles, backgrounds, logos, banners), and downloads each once
+/// (kept in the plugin's data folder).
 /// </summary>
 public sealed class PosterSync : BackgroundService
 {
@@ -42,6 +44,16 @@ public sealed class PosterSync : BackgroundService
     /// <param name="tag">The poster's tag.</param>
     /// <returns>Its path.</returns>
     internal static string FileFor(string tag) => Path.Combine(Folder, tag + ".jpg");
+
+    /// <summary>
+    /// The file a picture of one type is kept in: a logo is a PNG, see-through
+    /// parts and all.
+    /// </summary>
+    /// <param name="tag">The picture's tag.</param>
+    /// <param name="type">Its type.</param>
+    /// <returns>Its path.</returns>
+    internal static string FileFor(string tag, ImageType type)
+        => type == ImageType.Logo ? Path.Combine(Folder, tag + ".png") : FileFor(tag);
 
     /// <summary>
     /// The file a poster's big version is kept in.
@@ -82,24 +94,25 @@ public sealed class PosterSync : BackgroundService
         {
             var client = _httpClientFactory.CreateClient();
             client.Timeout = TimeSpan.FromSeconds(20);
-            var listing = await GetAsync<PosterListing>(client, config, "/api/v1/jellyfin/posters", cancellationToken).ConfigureAwait(false);
+            // Version 2: each type of picture; older Curatarrs answer with posters only.
+            var listing = await GetAsync<PosterListing>(client, config, "/api/v1/jellyfin/posters?v=2", cancellationToken).ConfigureAwait(false);
             var ready = new List<AccountPoster>();
             Directory.CreateDirectory(Folder);
             foreach (var poster in listing?.Posters ?? [])
             {
-                if (!await DownloadAsync(client, config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg", FileFor(poster.Tag), cancellationToken).ConfigureAwait(false))
+                if (!await DownloadAsync(client, config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg", FileFor(poster.Tag, poster.Type), cancellationToken).ConfigureAwait(false))
                 {
                     continue;
                 }
 
-                if (poster.Large)
+                if (poster.Large && poster.Type == ImageType.Primary)
                 {
                     // Without it, the usual one shows big too.
                     await DownloadAsync(client, config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg?size=large", LargeFileFor(poster.Tag), cancellationToken).ConfigureAwait(false);
                 }
 
                 // Without it, wide tiles show the usual picture.
-                var wide = poster.Wide
+                var wide = poster.Wide && poster.Type == ImageType.Primary
                     && await DownloadAsync(client, config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg?size=wide", WideFileFor(poster.Tag), cancellationToken).ConfigureAwait(false);
                 ready.Add(poster with { Wide = wide });
             }
@@ -136,8 +149,8 @@ public sealed class PosterSync : BackgroundService
 
     private static void Tidy(List<AccountPoster> ready)
     {
-        var keep = ready.SelectMany(p => new[] { FileFor(p.Tag), LargeFileFor(p.Tag), WideFileFor(p.Tag) }).ToHashSet(StringComparer.Ordinal);
-        foreach (var file in Directory.EnumerateFiles(Folder, "*.jpg"))
+        var keep = ready.SelectMany(p => new[] { FileFor(p.Tag, p.Type), LargeFileFor(p.Tag), WideFileFor(p.Tag) }).ToHashSet(StringComparer.Ordinal);
+        foreach (var file in Directory.EnumerateFiles(Folder))
         {
             if (!keep.Contains(file))
             {

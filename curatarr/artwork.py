@@ -379,13 +379,12 @@ def _jpeg(source: bytes) -> bytes:
 
 
 WIDE_SIZE = (1280, 720)
+BANNER_SIZE = (1000, 185)
+BACKGROUND_SIZE = (1920, 1080)
 
 
-def widen(source: bytes, size=WIDE_SIZE) -> bytes:
-    """A poster made landscape, for the wide tiles apps show in some rows
-    (Jellyfin's Thumb): the poster at full height, centred on a blurred,
-    darkened copy of itself."""
-    poster = Image.open(BytesIO(source)).convert("RGB")
+def _blurred_fill(poster: Image.Image, size) -> Image.Image:
+    """``poster`` scaled to cover ``size``, blurred and darkened."""
     width, height = size
     cover = max(width / poster.width, height / poster.height)
     backdrop = poster.resize(
@@ -394,16 +393,35 @@ def widen(source: bytes, size=WIDE_SIZE) -> bytes:
     left = (backdrop.width - width) // 2
     top = (backdrop.height - height) // 2
     backdrop = backdrop.crop((left, top, left + width, top + height))
-    backdrop = backdrop.filter(ImageFilter.GaussianBlur(height / 24))
-    canvas = ImageEnhance.Brightness(backdrop).enhance(0.45)
+    backdrop = backdrop.filter(ImageFilter.GaussianBlur(max(width, height) / 43))
+    return ImageEnhance.Brightness(backdrop).enhance(0.45)
+
+
+def _save(image: Image.Image) -> bytes:
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=90)
+    return output.getvalue()
+
+
+def widen(source: bytes, size=WIDE_SIZE) -> bytes:
+    """A poster made landscape, for the wide tiles apps show in some rows
+    (Jellyfin's Thumb) or a banner: the poster at full height, centred on a
+    blurred, darkened copy of itself."""
+    poster = Image.open(BytesIO(source)).convert("RGB")
+    width, height = size
+    canvas = _blurred_fill(poster, size)
     fit = min(height / poster.height, width / poster.width)
     front = poster.resize(
         (round(poster.width * fit), round(poster.height * fit)), Image.LANCZOS
     )
     canvas.paste(front, ((width - front.width) // 2, (height - front.height) // 2))
-    output = BytesIO()
-    canvas.save(output, format="JPEG", quality=90)
-    return output.getvalue()
+    return _save(canvas)
+
+
+def blurred_background(source: bytes, size=BACKGROUND_SIZE) -> bytes:
+    """A background made from a poster: the poster filling the screen,
+    blurred and darkened, so text laid over it stays readable."""
+    return _save(_blurred_fill(Image.open(BytesIO(source)).convert("RGB"), size))
 
 
 def _store_dir() -> Path:

@@ -1982,7 +1982,9 @@ def title(media_id):
         title_flags=flags.flags_for(media),
         describe_flag=flags.describe,
         flag_accounts=sorted(account_names().items(), key=lambda a: a[1]),
-        title_posters=custom_posters.for_title(media.id),
+        title_posters=custom_posters.for_title(media.id, None),
+        picture_kinds=custom_posters.KINDS,
+        picture_names=custom_posters.KIND_NAMES,
         poster_accounts=sorted(account_names().items(), key=lambda a: a[1]),
         **title_view(media),
     )

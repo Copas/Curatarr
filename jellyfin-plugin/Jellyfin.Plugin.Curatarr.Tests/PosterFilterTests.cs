@@ -205,6 +205,84 @@ public class PosterFilterTests
     }
 
     [Fact]
+    public async Task Each_type_of_picture_goes_where_apps_look_for_it()
+    {
+        _store.Replace(
+        [
+            new AccountPoster(Film.ToString("N"), Sam.ToString("N"), "p1", "poster11", Kind: "Primary"),
+            new AccountPoster(Film.ToString("N"), Sam.ToString("N"), "thumb.x", "thumb111", Kind: "Thumb"),
+            new AccountPoster(Film.ToString("N"), Sam.ToString("N"), "backdrop.x", "back1111", Kind: "Backdrop"),
+            new AccountPoster(Film.ToString("N"), Sam.ToString("N"), "logo.x", "logo1111", Kind: "Logo"),
+            new AccountPoster(Film.ToString("N"), Sam.ToString("N"), "banner.x", "bann1111", Kind: "Banner"),
+            new AccountPoster(Show.ToString("N"), Sam.ToString("N"), "backdrop.s", "back2222", Kind: "Backdrop"),
+            new AccountPoster(Show.ToString("N"), Sam.ToString("N"), "logo.s", "logo2222", Kind: "Logo"),
+        ]);
+        var film = Item(Film);
+        film.BackdropImageTags = ["first", "second"];
+        var episode = new BaseItemDto
+        {
+            Id = Guid.NewGuid(),
+            SeriesId = Show,
+            ParentBackdropItemId = Show,
+            ParentBackdropImageTags = ["showback"],
+            ParentLogoItemId = Show,
+            ParentLogoImageTag = "showlogo",
+        };
+        await SendAsync(Filter(), Sam, new List<BaseItemDto> { film, episode });
+        Assert.Equal("poster11", film.ImageTags![ImageType.Primary]);
+        Assert.Equal("thumb111", film.ImageTags[ImageType.Thumb]);
+        Assert.Equal("logo1111", film.ImageTags[ImageType.Logo]);
+        Assert.Equal("bann1111", film.ImageTags[ImageType.Banner]);
+        Assert.Equal(["back1111", "second"], film.BackdropImageTags);
+        Assert.Equal(["back2222"], episode.ParentBackdropImageTags);
+        Assert.Equal("logo2222", episode.ParentLogoImageTag);
+        // Someone else: Jellyfin's own.
+        var theirs = Item(Film);
+        theirs.BackdropImageTags = ["first"];
+        await SendAsync(Filter(), Alex, theirs);
+        Assert.Equal(["first"], theirs.BackdropImageTags);
+    }
+
+    [Fact]
+    public async Task A_picture_is_served_only_as_its_own_type()
+    {
+        var tag = "ffff" + Guid.NewGuid().ToString("N")[..12];
+        _store.Replace([new AccountPoster(Film.ToString("N"), Sam.ToString("N"), "logo.x", tag, Kind: "Logo")]);
+        Directory.CreateDirectory(PosterSync.Folder);
+        await File.WriteAllTextAsync(PosterSync.FileFor(tag, ImageType.Logo), "logo");
+        try
+        {
+            var library = new Mock<ILibraryManager>();
+            library.Setup(l => l.GetItemById(Film)).Returns(new MediaBrowser.Controller.Entities.Movies.Movie());
+            var images = new Mock<IImageProcessor>();
+            images.Setup(i => i.ProcessImage(It.IsAny<MediaBrowser.Controller.Drawing.ImageProcessingOptions>()))
+                .ReturnsAsync((MediaBrowser.Controller.Drawing.ImageProcessingOptions o) => (o.Image.Path, o.SupportedOutputFormats.Contains(MediaBrowser.Model.Drawing.ImageFormat.Png) ? "image/png" : "image/jpeg", DateTime.UtcNow));
+            var filter = new PosterFilter(_store, library.Object, images.Object, NullLogger<PosterFilter>.Instance, () => new PluginConfiguration());
+
+            async Task<PhysicalFileResult?> Served(ImageType type)
+            {
+                var descriptor = new ControllerActionDescriptor { ControllerName = "Image", ActionName = "GetItemImage" };
+                var context = new ActionExecutingContext(
+                    new ActionContext(new DefaultHttpContext(), new RouteData(), descriptor),
+                    [],
+                    new Dictionary<string, object?> { ["itemId"] = Film, ["tag"] = tag, ["imageType"] = type },
+                    controller: new object());
+                await filter.OnActionExecutionAsync(context, () => Task.FromResult<ActionExecutedContext>(null!));
+                return context.Result as PhysicalFileResult;
+            }
+
+            var logo = await Served(ImageType.Logo);
+            Assert.Equal(PosterSync.FileFor(tag, ImageType.Logo), logo?.FileName);
+            Assert.Equal("image/png", logo?.ContentType);
+            Assert.Null(await Served(ImageType.Primary));
+        }
+        finally
+        {
+            File.Delete(PosterSync.FileFor(tag, ImageType.Logo));
+        }
+    }
+
+    [Fact]
     public async Task Switched_off_changes_nothing()
     {
         var filter = new PosterFilter(

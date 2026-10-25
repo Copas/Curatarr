@@ -40,10 +40,12 @@ def custom_posters_page():
     options = custom_posters.prompt_options()
     written, count = [], None
     if request.args.get("prompts"):
-        titles = custom_posters.prompt_titles(options["titles"], options["skip_done"])
+        titles = custom_posters.prompt_titles(
+            options["titles"], options["skip_done"], options["kinds"]
+        )
         count = len(titles)
         written = custom_posters.prompts(
-            custom_posters.describe(titles),
+            custom_posters.describe(titles, options["kinds"]),
             batch=options["batch"],
             photos=options["photos"],
             people=options["people"],
@@ -74,6 +76,9 @@ def custom_posters_page():
         ),
         written=written,
         count=count,
+        fallbacks=custom_posters.fallbacks(),
+        kinds=custom_posters.KINDS,
+        kind_names=custom_posters.KIND_NAMES,
     )
 
 
@@ -182,7 +187,18 @@ def custom_poster_image(poster_id):
     poster = db.session.get(CustomPoster, poster_id)
     if not poster or not Path(poster.image_path).exists():
         abort(404)
-    return send_file(poster.image_path, mimetype="image/jpeg", max_age=3600)
+    return send_file(
+        poster.image_path,
+        mimetype=custom_posters.mimetype(poster.image_type),
+        max_age=3600,
+    )
+
+
+@bp.post("/library/posters/fallbacks")
+def custom_posters_fallbacks():
+    custom_posters.save_fallbacks(request.form)
+    flash("Saved; Jellyfin apps show the change within a couple of minutes.", "success")
+    return redirect(url_for("main.custom_posters_page") + "#fallbacks")
 
 
 def _back(media):
@@ -203,15 +219,21 @@ def title_poster_upload(media_id):
     user_id = request.form.get("for") or None
     if user_id and user_id not in dict(_accounts()):
         abort(400)
+    kind = request.form.get("kind") or "Primary"
+    if kind not in custom_posters.KINDS:
+        abort(400)
+    noun = custom_posters.KIND_NAMES[kind]
     try:
-        custom_posters.apply(media, upload.read(), "Uploaded", user_id=user_id)
+        custom_posters.apply(
+            media, upload.read(), "Uploaded", user_id=user_id, kind=kind
+        )
     except (ValueError, IntegrationError) as exc:
         db.session.rollback()
-        flash(f"Couldn't put that poster on: {exc}", "danger")
+        flash(f"Couldn't put that {noun} on: {exc}", "danger")
     else:
         who = custom_posters.account_name(user_id) if user_id else "everyone"
         flash(
-            f"{media.title} has its new poster for {who}. Jellyfin apps may show "
+            f"{media.title} has its new {noun} for {who}. Jellyfin apps may show "
             "their cached copy for a little while"
             + (
                 "; other accounts keep the usual one (needs the Curatarr plugin)."
@@ -270,8 +292,12 @@ def jellyfin_posters():
     """Each account's own posters: which item, whose, and the tag to use."""
     if not _plugin_allowed():
         abort(403)
-    posters = custom_posters.plugin_list()
-    return jsonify({"posters": posters})
+    try:
+        version = int(request.args.get("v") or 1)
+    except ValueError:
+        version = 1
+    posters = custom_posters.plugin_list(version)
+    return jsonify({"posters": posters, "version": min(version, 2)})
 
 
 @bp.get("/api/v1/jellyfin/posters/<path:poster_id>.jpg")
@@ -287,4 +313,7 @@ def jellyfin_poster_image(poster_id):
         abort(503)  # Jellyfin's poster couldn't be read: the plugin tries again
     if picture is None:
         abort(404)
-    return send_file(BytesIO(picture), mimetype="image/jpeg", max_age=300)
+    kind = "Logo" if poster_id.startswith("logo.") else "Primary"
+    return send_file(
+        BytesIO(picture), mimetype=custom_posters.mimetype(kind), max_age=300
+    )
