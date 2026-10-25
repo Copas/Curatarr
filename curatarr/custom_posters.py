@@ -755,14 +755,16 @@ KIND_SPECS = {
     "Backdrop": (
         "Background: landscape 16:9, at least 1920 × 1080, JPEG, with no text at "
         "all; keep the lower left fairly calm, as apps lay the title and plot "
-        "over it."
+        "over it. A place or moment from the story; people only if their faces "
+        "are large and clear enough to recognise."
     ),
     "Logo": (
         "Logo: only the title, as lettering in the film's style, on a transparent "
         "background, PNG, at least 1000 pixels wide; nothing else in it."
     ),
     "Banner": (
-        "Banner: a wide strip, 1000 × 185 (about 5.4:1), JPEG, with the title on it."
+        "Banner: a wide strip, 1000 × 185 (about 5.4:1), JPEG, with the title on "
+        "it; too small for faces, so a setting or object from the story."
     ),
 }
 
@@ -772,6 +774,8 @@ def prompt_options() -> dict:
 
 
 def save_prompt_options(form) -> dict:
+    """Saves the prompt options; ValueError (after saving) when the reference
+    photos folder isn't there, as the prompts would send the AI to nothing."""
     from .services import set_setting
 
     try:
@@ -789,6 +793,12 @@ def save_prompt_options(form) -> dict:
     }
     set_setting(KEY, settings() | {"prompts": options})
     db.session.commit()
+    if options["photos"] and not Path(options["photos"]).is_dir():
+        raise ValueError(
+            f"Curatarr can't find the reference photos folder {options['photos']}. "
+            "The prompts send the AI agent there, so check the path (the agent "
+            "reads it, so it must be a folder the agent can open)."
+        )
     return options
 
 
@@ -915,6 +925,71 @@ def describe(titles, kinds=("Primary",), skip_done=False) -> list[dict]:
     return described
 
 
+def _casting(photos: str, who: str, single: bool) -> list[str]:
+    """How to cast the people in the reference photos, keeping them
+    recognisable: an image model left to a description makes generic faces
+    with their general look, or puts them small and turned away."""
+    pictures = "poster" if single else "pictures"
+    return [
+        (
+            f"Reference photos of {who}, who've agreed to this, are in {photos}. "
+            "Each photo's file name says who's in it."
+        ),
+        "",
+        (
+            "Casting: they play the story's main characters, in place of the "
+            "actors. Decide from the story who plays whom, and keep them in the "
+            f"same roles in every picture of a title. Where a story has no fitting "
+            f"roles, make the {pictures} without them."
+        ),
+        "",
+        "Likeness matters most: they must still be themselves.",
+        (
+            "- Choose each person's two or three best photos: face large, sharp, "
+            "well lit, front or three-quarter view. Leave out ones with "
+            "sunglasses, hats or hands over the face, and ones taken from far away."
+        ),
+        (
+            "- For each title, first make a head-and-shoulders portrait of each of "
+            "them as their character (costume and hair styling for the role, "
+            "plain background), using those photos as image inputs. Compare it "
+            "with the photos and redo it until it's clearly them. Keep it as a "
+            "working reference, outside the folder the pictures are saved in."
+        ),
+        (
+            "- Make every picture with them in it from image inputs, never from a "
+            "description of them: their best photos and the approved portrait, so "
+            "the faces stay the same across the set."
+        ),
+        (
+            "- Keep what makes them recognisable, as in the photos: face shape, "
+            "eyes, brows, nose, mouth, jaw, skin tone, real age and build, and "
+            "their own hair and facial hair (length, colour, texture). Don't make "
+            "them younger, slimmer or more glamorous, and don't blend in an "
+            "actor's features."
+        ),
+        (
+            "- Costume, setting, lighting and expression change with the story; "
+            "their faces don't. Keep hair and beards as they are unless a role "
+            "can't work without a change."
+        ),
+        (
+            "- Show their faces clearly: front or three-quarter view, well lit, "
+            "large in the frame. No tiny figures in the distance, backs turned or "
+            "faces in shadow; a picture is better without them than with people "
+            "who aren't recognisably them."
+        ),
+        (
+            "- Before saving, compare each face with the photos side by side. If "
+            "someone who knows them wouldn't recognise them at a glance, make it "
+            "again."
+        ),
+        "",
+        "Don't use any other real person's likeness, actors included.",
+        "",
+    ]
+
+
 def prompts(described, *, batch, photos, people, output) -> list[str]:
     """One prompt per batch, for Codex or another image-making AI agent."""
     chunks = [described[i : i + batch] for i in range(0, len(described), batch)]
@@ -935,16 +1010,7 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
             "",
         ]
         if photos:
-            lines += [
-                (
-                    f"Reference photos are in {photos}. Use them for the likeness of "
-                    f"{who}, with their consent. Where a title's story suits it, cast "
-                    "them as its lead characters; where it doesn't, make the "
-                    f"{'poster' if single else 'pictures'} without them. Don't use any other real person's likeness, actors "
-                    "included."
-                ),
-                "",
-            ]
+            lines += _casting(photos, who, single)
         else:
             lines += ["Don't use any real person's likeness, actors included.", ""]
         if single:
