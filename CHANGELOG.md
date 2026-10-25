@@ -9,6 +9,7 @@
 - **Without a picture of its own** (Library → Posters): for an account with its own poster or a ribbon, a wide tile made from its poster (the default, as in 0.2.0rc8) or Jellyfin's own; a background of the poster blurred, or Jellyfin's own (the default); a banner made from the poster, or Jellyfin's own (the default).
 - An account's own pictures other than the poster need plugin 0.8.0.0; the banner on every page says when it's out.
 - **Click a picture on Library → Posters to see it full screen**; click again or press Esc to close it. The title's name still opens its page.
+- **Fixed: a deleted title's custom pictures stayed behind.** Its posters stayed active, Curatarr kept their copies, and the plugin kept listing and storing them. Now, once a title is gone (deleted by Curatarr or outside it, or no longer in Radarr or Sonarr), its custom pictures are retired and Curatarr's copies deleted, and History says so; the plugin drops its copies within a minute. Files in the import folder are left alone.
 
 ## 0.2.0rc8 (2026-10-25)
 

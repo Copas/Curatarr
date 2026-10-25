@@ -463,6 +463,7 @@ ACTION_WORDS = {
     "finished_at_credits": "Marked watched at the credits",
     "custom_poster_applied": "Custom poster put on",
     "custom_poster_restored": "Original poster restored",
+    "custom_pictures_retired": "Custom pictures of a deleted title removed",
     "flag_leave_after_watched_set": "Leave after watched",
     "flag_leave_after_watched_cleared": "Leave after watched ended",
     "flag_never_compress_set": "Never compress",

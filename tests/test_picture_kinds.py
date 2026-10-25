@@ -268,3 +268,36 @@ def test_an_accounts_wide_tile_counts_down_and_carries_the_ribbon(app, monkeypat
     assert green(counted, bottom) < 80  # red
     assert green(ribboned, bottom) > 150  # gold
     assert green(counted, (counted.width // 2, 5)) > 150  # gold, up top
+
+
+def test_a_deleted_titles_pictures_are_retired(app, monkeypatch):
+    from pathlib import Path
+
+    from curatarr.models import LifecycleAction, PurgeCandidate
+
+    _library, media, part = _movie()
+    _fake(monkeypatch, Primary=_picture("#223344"))
+    poster = custom_posters.apply(media, _picture("#cc2222"), "Up", user_id="u1")
+    logo = custom_posters.apply(media, _logo(), "Up", user_id="u1", kind="Logo")
+    candidate = PurgeCandidate(
+        media_identity_id=media.id,
+        state="COMPLETED",
+        reason_code="unwatched",
+        reason_text="test",
+        reclaimable_bytes=0,
+        score=0,
+    )
+    db.session.add(candidate)
+    db.session.commit()
+    assert custom_posters.retire_gone() == 0  # a dry run: its file's still there
+    part.has_file = False
+    db.session.commit()
+    assert custom_posters.plugin_list(2)
+    assert custom_posters.retire_gone() == 1
+    assert custom_posters.plugin_list(2) == []
+    assert not Path(poster.image_path).exists() and not Path(logo.image_path).exists()
+    said = db.session.query(LifecycleAction).filter_by(
+        action_type="custom_pictures_retired"
+    )
+    assert "2 custom pictures were removed" in said.one().reason_text
+    assert custom_posters.retire_gone() == 0
