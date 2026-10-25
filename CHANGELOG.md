@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc11 (2026-10-25)
+
+- **Fixed: chapter and subtitle jobs paused themselves while someone watched.** While Jellyfin was transcoding, Curatarr counted the graphics card's whole load against its target, its own transcription included, so a single subtitle job pushed the GPU to 90%, paused itself, and resumed once it fell back, over and over, with the machine mostly idle. Curatarr's own share (its processes, from `nvidia-smi pmon`) is now left out, as Jellyfin's transcoding runs on the card's own encoder and decoder; only a card that's all but full (98%) counts it again. The Activity card says what it left out ("GPU 12% besides Curatarr's own 78%").
+
 ## 0.2.0rc10 (2026-10-25)
 
 - **The AI prompts ask each title only for what it's missing.** With *Skip titles that have them all*, a title that has its poster but not its other pictures was asked for the whole set again, poster included. Now it's asked only for the pictures it lacks, and where its poster is in the import folder the prompt points the AI to it, to match the rest to its cast and style; the new files are named after it, so they sit beside it.

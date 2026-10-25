@@ -1942,6 +1942,7 @@ def dispatch(*, synchronous=False, llm=None) -> int:
         playing,
         transcoding,
         adaptive.last_decoder,
+        adaptive.last_own_gpu,
     )
     adaptive.leave_decoder = bool(transcoding)
     busy = (
