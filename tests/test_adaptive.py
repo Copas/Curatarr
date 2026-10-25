@@ -1,5 +1,10 @@
+import pytest
+
 from curatarr import adaptive
 from curatarr.adaptive import Controller, Reading, _describe
+
+# conftest swaps gpu_use for an idle machine's; this is the real one.
+REAL_GPU_USE = adaptive.gpu_use
 
 
 def decide(controller, reading, *, running, most=4, now):
@@ -112,3 +117,46 @@ def test_scene_detection_leaves_the_decoder_to_jellyfin(monkeypatch):
     monkeypatch.setattr(adaptive, "leave_decoder", False)
     mediafile.detect_scenes("/x.mkv", 0.3)
     assert "-hwaccel" not in calls[0] and "-hwaccel" in calls[1]
+
+
+PMON = """# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command
+# Idx           #    C/G      %      %      %      %      %      %    name
+    0       1499     G      3      0      -      -      -      -    Xorg
+    0       4242     C     78     30      -      -      -      -    python3
+    0       5151     C      4      2     10     40      -      -    ffmpeg
+    0       6000     G      -      -      -      -      -      -    firefox
+"""
+
+
+def test_curatarrs_own_gpu_use_is_its_processes():
+    owners = {1499: 0, 4242: 990, 5151: 120, 6000: 1000}
+    assert adaptive.own_share(PMON, 990, owners.get) == 0.78
+    assert adaptive.own_share(PMON, 777, owners.get) == 0
+
+
+def test_curatarr_doesnt_pause_for_its_own_gpu_use(monkeypatch):
+    """A subtitle job pushed the GPU to 90% while someone watched a
+    transcode: counted, it paused itself, the GPU fell to 13%, it resumed,
+    and so on, with the machine mostly idle."""
+    from types import SimpleNamespace
+
+    answers = {
+        "--query-gpu=utilization.gpu,utilization.decoder": "90, 80\n",
+        "pmon": PMON,
+    }
+
+    def run(command, **_kwargs):
+        key = "pmon" if "pmon" in command else command[1]
+        return SimpleNamespace(returncode=0, stdout=answers[key])
+
+    monkeypatch.setattr(adaptive.subprocess, "run", run)
+    monkeypatch.setattr(adaptive, "_uid_of", lambda pid: 990 if pid == 4242 else 0)
+    monkeypatch.setattr(adaptive.os, "getuid", lambda: 990)
+    assert REAL_GPU_USE() == pytest.approx(0.12)  # 90% less Curatarr's 78%
+    assert adaptive.last_own_gpu == 0.78
+    reading = Reading(0.10, 0.12, 1, 1, own_gpu=0.78)
+    assert not decide(Controller(), reading, running=1, now=0).suspend
+    assert "GPU 12% besides Curatarr's own 78%" in _describe(reading, 0.12, 0.55)
+    # An all but full card slows Jellyfin's transcoding too: it all counts.
+    answers["--query-gpu=utilization.gpu,utilization.decoder"] = "99, 80\n"
+    assert REAL_GPU_USE() == pytest.approx(0.99)
