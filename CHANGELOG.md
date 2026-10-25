@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc18 (2026-10-25)
+
+- **The AI prompts ask for the lettering to be made with the picture.** In the first sets, every title (on the wide tile, banner and logo alike) was in the same plain serif font: the agent made the pictures without text and typed the titles on with code. The prompts now say to make the lettering with the image tool, as part of each picture, the logo with a transparent background.
+
 ## 0.2.0rc17 (2026-10-25)
 
 - **The AI prompts ask for the title's own logo lettering.** Asked only for "lettering in the film's style", logos came out in plain fonts. The title, on the logo and wherever else it appears, is now in the lettering of the film's official logo: the same typeface (or the closest match), weight, letter shapes, spacing, colours and effects. The prompts no longer say the pictures mustn't copy the official artwork.
