@@ -24,6 +24,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+      - name: Release notes
+        # From CHANGELOG.md's "## Jellyfin plugin" section; no notes, no release.
+        run: python3 scripts/notes.py "${GITHUB_REF_NAME#plugin-v}" > "$RUNNER_TEMP/notes.md"
       - run: dotnet test Jellyfin.Plugin.Curatarr.Tests -c Release
       - name: Package
         id: package
@@ -41,7 +44,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" \
             --title "Jellyfin plugin ${{ steps.package.outputs.version }}" \
-            --notes "The Curatarr plugin for Jellyfin. Install it from the plugin repository in jellyfin-plugin/README.md."
+            --notes-file "$RUNNER_TEMP/notes.md"
       - name: Add to manifest.json
         run: |
           python3 scripts/manifest.py \
