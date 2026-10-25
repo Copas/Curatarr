@@ -160,7 +160,10 @@ def custom_posters_ribbon_preview():
 
 @bp.post("/library/posters/prompts")
 def custom_posters_prompts():
-    custom_posters.save_prompt_options(request.form)
+    try:
+        custom_posters.save_prompt_options(request.form)
+    except ValueError as exc:
+        flash(str(exc), "warning")
     return redirect(url_for("main.custom_posters_page", prompts=1) + "#prompts")
 
 

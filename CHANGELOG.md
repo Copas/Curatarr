@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc12 (2026-10-25)
+
+- **The AI prompts keep the people in your reference photos recognisable.** Cast in place of a story's actors, they came out as generic faces with their general look, or small and turned away. The prompts now ask the agent to pick each person's clearest photos (no sunglasses, nothing far away), make an approved head-and-shoulders portrait of each of them in costume first, build every picture from those images rather than a description, keep their own faces, age, build, hair and beards, show faces large and clear (a background or banner goes without people rather than with unrecognisable ones), and compare each face with the photos before saving.
+- A reference photos folder that isn't there gets a warning when the prompt options are saved.
+
 ## 0.2.0rc11 (2026-10-25)
 
 - **Fixed: chapter and subtitle jobs paused themselves while someone watched.** While Jellyfin was transcoding, Curatarr counted the graphics card's whole load against its target, its own transcription included, so a single subtitle job pushed the GPU to 90%, paused itself, and resumed once it fell back, over and over, with the machine mostly idle. Curatarr's own share (its processes, from `nvidia-smi pmon`) is now left out, as Jellyfin's transcoding runs on the card's own encoder and decoder; only a card that's all but full (98%) counts it again. The Activity card says what it left out ("GPU 12% besides Curatarr's own 78%").

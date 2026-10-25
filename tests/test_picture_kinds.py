@@ -337,3 +337,38 @@ def test_a_deleted_titles_pictures_are_retired(app, monkeypatch):
     )
     assert "2 custom pictures were removed" in said.one().reason_text
     assert custom_posters.retire_gone() == 0
+
+
+def test_prompts_keep_the_reference_people_recognisable(app, client, tmp_path):
+    entry = {
+        "number": 1,
+        "title": "Film",
+        "year": 2016,
+        "kind": "film",
+        "genres": [],
+        "overview": "",
+        "file": "01_film.jpg",
+        "files": {"Primary": "01_film.jpg", "Backdrop": "01_film.backdrop.jpg"},
+        "made": None,
+    }
+    text = custom_posters.prompts(
+        [entry], batch=5, photos="/photos", people="Sam and Alex", output="/out"
+    )[0]
+    assert "Reference photos of Sam and Alex" in text and "/photos" in text
+    assert "in place of the actors" in text
+    assert "as image inputs" in text and "side by side" in text
+    assert "sunglasses" in text and "portrait of each of them" in text
+    assert "large and clear enough to recognise" in text  # the background
+    # A photos folder that isn't there is saved, with a warning.
+    response = client.post(
+        "/library/posters/prompts",
+        data={"titles": "favourites", "batch": "5", "photos": "/no/such/folder"},
+        follow_redirects=True,
+    )
+    assert "find the reference photos folder" in response.text
+    assert custom_posters.prompt_options()["photos"] == "/no/such/folder"
+    client.post(
+        "/library/posters/prompts",
+        data={"titles": "favourites", "batch": "5", "photos": str(tmp_path)},
+    )
+    assert custom_posters.prompt_options()["photos"] == str(tmp_path)
