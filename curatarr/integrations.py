@@ -377,6 +377,16 @@ class JellyfinClient(Client):
             found.extend((data or {}).get("Items") or [])
         return found
 
+    def user_data(self, user_id, item_id) -> dict:
+        """One account's play state for an item (Played, LastPlayedDate…)."""
+        data = self.request(
+            "GET",
+            "/Items",
+            params={"Ids": item_id, "userId": user_id, "Fields": "UserData"},
+        )
+        items = data.get("Items") if isinstance(data, dict) else None
+        return (items[0].get("UserData") or {}) if items else {}
+
     def mark_played(self, user_id, item_id):
         return self.request("POST", f"/Users/{user_id}/PlayedItems/{item_id}")
 

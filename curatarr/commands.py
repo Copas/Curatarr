@@ -74,6 +74,7 @@ def worker_cycle():
     reconcile_artwork()
     _sync_leaving_collection()
     _finish_jellyfin_plugin()
+    _leave_after_watched()
     _dispatch_chapters()
     now = utcnow()
     if not _reconcile_due(now):
@@ -96,6 +97,7 @@ def worker_cycle():
         reconcile_acquisition()
         _curate()
         _sync_jellyfin_plugin()
+        _write_protected_paths()
     evaluate_retention()
     _forecast()
     set_setting("last_reconcile_at", utcnow().isoformat())
@@ -129,6 +131,28 @@ def _curate():
         except Exception:
             db.session.rollback()
             current_app.logger.exception("Curation step %s failed", step.__name__)
+
+
+def _leave_after_watched():
+    """Titles flagged Leave after watched that have been watched since."""
+    try:
+        from . import flags
+
+        flags.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Checking Leave after watched failed")
+
+
+def _write_protected_paths():
+    """Never compress's list, with favourites as they are now."""
+    try:
+        from . import flags
+
+        flags.write_protected_file()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Writing the protected paths failed")
 
 
 def _finish_jellyfin_plugin():
