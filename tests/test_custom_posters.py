@@ -384,3 +384,64 @@ def test_the_page_title_is_only_words(app, client):
     page = client.get("/library/posters").text
     title = re.search(r"<title>(.*?)</title>", page, re.DOTALL).group(1)
     assert "<" not in title and "Posters" in title
+
+
+def test_an_accounts_poster_carries_the_leaving_soon_banner(app, client, monkeypatch):
+    """Everyone else's poster shows the countdown; the account's own must too."""
+    from datetime import timedelta
+
+    from curatarr.models import PosterSnapshot, PurgeCandidate, utcnow
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    _fake(monkeypatch, _picture("#223344"))
+    set_setting("jellyfin_user_names", {"u1": "Sam"})
+    set_setting("webhook_token", "secret")
+    db.session.commit()
+    mine = custom_posters.apply(media, _picture("#22aa22"), "Uploaded", user_id="u1")
+    token = {"X-Curatarr-Token": "secret"}
+
+    def listed():
+        return client.get("/api/v1/jellyfin/posters", headers=token).get_json()[
+            "posters"
+        ][0]["tag"]
+
+    def served():
+        return client.get(f"/api/v1/jellyfin/posters/{mine.id}.jpg", headers=token).data
+
+    plain_tag, plain_picture = listed(), served()
+    assert plain_tag == mine.id.replace("-", "")
+    candidate = PurgeCandidate(
+        media_identity_id=media.id,
+        state="LEAVING_SOON",
+        reason_code="inactivity",
+        reason_text="Old",
+        reclaimable_bytes=1,
+        scheduled_delete_at=utcnow() + timedelta(days=7),
+    )
+    db.session.add(candidate)
+    db.session.flush()
+    db.session.add(
+        PosterSnapshot(
+            media_identity_id=media.id,
+            jellyfin_item_id=media.jellyfin_id,
+            candidate_id=candidate.id,
+            image_type="Primary",
+            active=True,
+        )
+    )
+    db.session.commit()
+    leaving_tag, leaving_picture = listed(), served()
+    assert leaving_tag != plain_tag  # apps fetch it again
+    assert leaving_picture != plain_picture
+    # The red tag is in the top-left corner.
+    corner = Image.open(BytesIO(leaving_picture)).convert("RGB").getpixel((30, 40))
+    assert corner[0] > 180 and corner[1] < 80
+    # The banner's words change day by day, and so does the tag.
+    candidate.scheduled_delete_at = utcnow() + timedelta(days=3)
+    db.session.commit()
+    assert listed() not in {plain_tag, leaving_tag}
+    # Kept: the plain poster again.
+    candidate.state = "KEPT"
+    db.session.commit()
+    assert listed() == plain_tag
