@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc8 (2026-10-25)
+
+- **Custom posters and favourite ribbons show in rows of wide tiles too**, with plugin 0.7.0.0. Some rows (the Roku app's home rows, *Recently added in My List*, Continue Watching) show a title's landscape picture rather than its poster, so an account's own poster and its ribbon didn't show there. Curatarr now draws a landscape version, the poster at full height on a blurred copy of itself, and the plugin shows it in those rows to the same accounts.
+
 ## 0.2.0rc7 (2026-10-25)
 
 ### Keeping and letting go
@@ -131,6 +135,11 @@
 ## Jellyfin plugin
 
 The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed and updated from Jellyfin's plugin catalogue once Curatarr adds its repository. Each version's notes below are what Jellyfin shows as its changelog, and the release page's notes.
+
+### 0.7.0.0 (2026-10-25)
+
+- An account's own posters and favourite ribbons show in rows of wide tiles too (the Roku app's home rows, Continue Watching), where apps use a title's landscape picture (its Thumb) rather than its poster. Curatarr draws a landscape version, and the plugin puts its tag in for the Thumb and serves it.
+- Needs Curatarr 0.2.0rc8 or later for the landscape version; with older ones, wide tiles show the usual picture as before.
 
 ### 0.6.0.0 (2026-10-25)
 

@@ -272,6 +272,7 @@ def test_a_poster_for_one_account_and_the_plugins_list(app, client, monkeypatch)
             "user": "u1",
             "id": mine.id,
             "tag": mine.id.replace("-", ""),
+            "wide": True,
         }
     ]
     picture = client.get(
@@ -593,6 +594,21 @@ def test_a_ribbon_lists_names_where_its_shown_big(app, client, monkeypatch):
         headers={"X-Curatarr-Token": "secret"},
     ).data
     assert _band_height(large) > 1.5 * _band_height(small)  # two names, stacked
+    # Rows of wide tiles get it landscape: the poster, ribbon and all, centred.
+    assert entry["wide"]
+    wide = Image.open(
+        BytesIO(
+            client.get(
+                f"/api/v1/jellyfin/posters/{entry['id']}.jpg?size=wide",
+                headers={"X-Curatarr-Token": "secret"},
+            ).data
+        )
+    )
+    assert wide.size == (1280, 720)
+    middle = wide.convert("RGB").getpixel((640, 360))
+    assert middle[2] > middle[0]  # the blue poster, at full brightness
+    edge = wide.convert("RGB").getpixel((5, 360))
+    assert max(edge) < max(middle)  # a darkened copy behind it
     # "As in lists" on a title's page: one picture, and a new look means new tags.
     custom_posters.save_ribbon_settings(
         {
@@ -744,6 +760,7 @@ def test_new_household_and_episode_ribbons(app, client, monkeypatch):
     picture = Image.open(BytesIO(custom_posters.plugin_picture(f"e.u2.{episode.id}")))
     assert picture.width > picture.height  # still a thumbnail
     assert not entries[f"e.u2.{episode.id}"]["large"]  # thumbnails: one size
+    assert not entries[f"e.u2.{episode.id}"]["wide"]  # and wide already
     # Episodes switched off: gone.
     custom_posters.save_ribbon_settings({**form, "episodes": ""}, accounts)
     assert f"e.u2.{episode.id}" not in {e["id"] for e in custom_posters.plugin_list()}

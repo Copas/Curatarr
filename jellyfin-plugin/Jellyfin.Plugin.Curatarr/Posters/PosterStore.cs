@@ -12,7 +12,9 @@ namespace Jellyfin.Plugin.Curatarr.Posters;
 /// <param name="Tag">The image tag that stands for this poster.</param>
 /// <param name="Large">Whether there's a second picture for where it's shown big
 /// (a favourite ribbon listing names, on a title's own page).</param>
-public sealed record AccountPoster(string Item, string User, string Id, string Tag, bool Large = false);
+/// <param name="Wide">Whether there's a landscape version, for rows of wide
+/// tiles (the title's Thumb).</param>
+public sealed record AccountPoster(string Item, string User, string Id, string Tag, bool Large = false, bool Wide = false);
 
 /// <summary>
 /// The posters Curatarr has for single accounts, looked up by account and title
@@ -26,7 +28,7 @@ public sealed class PosterStore
 
     private FrozenDictionary<string, AccountPoster> _byTag = FrozenDictionary<string, AccountPoster>.Empty;
 
-    /// <summary>Gets the placeholder blur for a tag, once worked out.</summary>
+    /// <summary>Gets the placeholder blur for a picture file, once worked out.</summary>
     internal ConcurrentDictionary<string, string> BlurHashes { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Gets a value indicating whether any account has a poster of its own.</summary>

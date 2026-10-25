@@ -279,8 +279,9 @@ def jellyfin_poster_image(poster_id):
     if not _plugin_allowed():
         abort(403)
     try:
+        size = request.args.get("size")
         picture = custom_posters.plugin_picture(
-            poster_id, large=request.args.get("size") == "large"
+            poster_id, large=size == "large", wide=size == "wide"
         )
     except (IntegrationError, ValueError, OSError):
         abort(503)  # Jellyfin's poster couldn't be read: the plugin tries again

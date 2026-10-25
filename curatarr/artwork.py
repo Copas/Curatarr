@@ -7,7 +7,7 @@ from io import BytesIO
 from pathlib import Path
 
 from flask import current_app
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from sqlalchemy.exc import OperationalError
 
 from . import db
@@ -375,6 +375,34 @@ def _jpeg(source: bytes) -> bytes:
     image = Image.open(BytesIO(source)).convert("RGB")
     output = BytesIO()
     image.save(output, format="JPEG", quality=95)
+    return output.getvalue()
+
+
+WIDE_SIZE = (1280, 720)
+
+
+def widen(source: bytes, size=WIDE_SIZE) -> bytes:
+    """A poster made landscape, for the wide tiles apps show in some rows
+    (Jellyfin's Thumb): the poster at full height, centred on a blurred,
+    darkened copy of itself."""
+    poster = Image.open(BytesIO(source)).convert("RGB")
+    width, height = size
+    cover = max(width / poster.width, height / poster.height)
+    backdrop = poster.resize(
+        (round(poster.width * cover), round(poster.height * cover)), Image.LANCZOS
+    )
+    left = (backdrop.width - width) // 2
+    top = (backdrop.height - height) // 2
+    backdrop = backdrop.crop((left, top, left + width, top + height))
+    backdrop = backdrop.filter(ImageFilter.GaussianBlur(height / 24))
+    canvas = ImageEnhance.Brightness(backdrop).enhance(0.45)
+    fit = min(height / poster.height, width / poster.width)
+    front = poster.resize(
+        (round(poster.width * fit), round(poster.height * fit)), Image.LANCZOS
+    )
+    canvas.paste(front, ((width - front.width) // 2, (height - front.height) // 2))
+    output = BytesIO()
+    canvas.save(output, format="JPEG", quality=90)
     return output.getvalue()
 
 

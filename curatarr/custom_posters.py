@@ -1106,6 +1106,7 @@ def plugin_list() -> list[dict]:
                     "user": bare(viewer),
                     "id": poster.id,
                     "tag": account_tag(poster, label_for(media_id)),
+                    "wide": True,
                 }
             )
     for kind, viewer, item_id in sorted(keys):
@@ -1153,14 +1154,24 @@ def plugin_list() -> list[dict]:
                 "tag": hashlib.sha1(spec.encode()).hexdigest()[:32],
                 # A second picture, listing the names, for where it's shown big.
                 "large": bool(ribbon) and has_large(options, ribbon["household"], kind),
+                # A landscape version, for rows of wide tiles (a title's Thumb).
+                "wide": kind == "t",
             }
         )
     return entries
 
 
-def plugin_picture(entry_id: str, large: bool = False) -> bytes | None:
+def plugin_picture(
+    entry_id: str, large: bool = False, wide: bool = False
+) -> bytes | None:
     """The picture for one of plugin_list's entries, or None if it's gone.
-    ``large``: a ribbon as shown big (on a title's own page), with names."""
+    ``large``: a ribbon as shown big (on a title's own page), with names.
+    ``wide``: the picture made landscape, for rows of wide tiles."""
+    if wide:
+        from .artwork import widen
+
+        picture = plugin_picture(entry_id)
+        return widen(picture) if picture else None
     from .artwork import _jpeg
     from .services import client
 
