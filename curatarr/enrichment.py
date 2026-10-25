@@ -1740,9 +1740,9 @@ def _due_jobs(limit, *, scans, recaps=False):
     )
     from . import up_next
 
-    # What people will watch next goes first, whatever kind of job it is.
-    watching = up_next.part_ids()
-    soon = case((ChapterState.media_part_id.in_(watching or [""]), 0), else_=1)
+    # What's playing and what people will watch next go first, in watching
+    # order, whatever kind of job it is.
+    soon = up_next.rank(ChapterState.media_part_id)
     rows = (
         query.order_by(soon, priority, ChapterState.requested_at)
         .limit(limit * 4 + 100)
