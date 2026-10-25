@@ -445,3 +445,104 @@ def test_an_accounts_poster_carries_the_leaving_soon_banner(app, client, monkeyp
     candidate.state = "KEPT"
     db.session.commit()
     assert listed() == plain_tag
+
+
+class RibbonJellyfin(FakeJellyfin):
+    poster_tag = "tag-1"
+
+    def item_details(self, ids):
+        return [{"Id": i, "ImageTags": {"Primary": self.poster_tag}} for i in ids]
+
+
+def _favourite(media, user_id):
+    from curatarr.models import UserMediaState
+
+    db.session.add(
+        UserMediaState(
+            media_identity_id=media.id, jellyfin_user_id=user_id, favorite=True
+        )
+    )
+    db.session.commit()
+
+
+def test_favourite_ribbons_show_whose_favourite_a_title_is(app, client, monkeypatch):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    jellyfin = RibbonJellyfin(_picture("#223344", size=(400, 600)))
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: jellyfin)
+    accounts = {"u1": "Sam", "u2": "Alex", "u3": "Kim"}
+    set_setting("jellyfin_user_names", accounts)
+    set_setting("webhook_token", "secret")
+    db.session.commit()
+    _favourite(media, "u1")
+    assert custom_posters.plugin_list() == []  # off by default
+    # Alex sees Sam's favourites; Kim sees nobody's; Sam doesn't see their own.
+    response = client.post(
+        "/library/posters/ribbons", data={"enabled": "on", "see-u2-u1": "on"}
+    )
+    assert response.status_code == 302
+    entries = custom_posters.plugin_list()
+    assert [(e["user"], e["id"]) for e in entries] == [("u2", f"v.u2.{media.id}")]
+    assert custom_posters.ribbons() == {("u2", media.id): ["Sam"]}
+    picture = client.get(
+        f"/api/v1/jellyfin/posters/{entries[0]['id']}.jpg",
+        headers={"X-Curatarr-Token": "secret"},
+    )
+    assert picture.status_code == 200
+    gold = Image.open(BytesIO(picture.data)).convert("RGB").getpixel((395, 40))
+    assert gold[0] > 200 and gold[1] > 150 and gold[2] < 90  # top right, gold
+    # A new poster in Jellyfin (Leaving Soon's banner, say) means a new tag.
+    first = entries[0]["tag"]
+    jellyfin.poster_tag = "tag-2"
+    assert custom_posters.plugin_list()[0]["tag"] != first
+    # Seeing their own too, and with two names it says "+ 1".
+    _favourite(media, "u2")
+    client.post(
+        "/library/posters/ribbons",
+        data={"enabled": "on", "own": "on", "see-u2-u1": "on", "position": "bottom"},
+    )
+    assert custom_posters.ribbons()[("u2", media.id)] == ["Alex", "Sam"]
+    assert custom_posters.ribbon_text(["Alex", "Sam"], "names") == "★ Alex + 1"
+    assert ("u1", media.id) in custom_posters.ribbons()  # Sam's own
+    # Off: gone.
+    client.post("/library/posters/ribbons", data={})
+    assert custom_posters.plugin_list() == []
+
+
+def test_a_ribbon_goes_on_an_accounts_own_poster(app, monkeypatch):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    monkeypatch.setattr(
+        "curatarr.services.client",
+        lambda _kind: RibbonJellyfin(_picture("#223344", size=(400, 600))),
+    )
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex"})
+    db.session.commit()
+    mine = custom_posters.apply(
+        media, _picture("#22aa22", size=(400, 600)), "Uploaded", user_id="u2"
+    )
+    custom_posters.save_ribbon_settings(
+        {"enabled": "on", "see-u2-u1": "on"}, [("u1", "Sam"), ("u2", "Alex")]
+    )
+    _favourite(media, "u1")
+    entries = custom_posters.plugin_list()
+    assert len(entries) == 1 and entries[0]["id"].startswith("v.")  # one, combined
+    picture = Image.open(BytesIO(custom_posters.plugin_picture(entries[0]["id"])))
+    assert picture.convert("RGB").getpixel((20, 300))[1] > 150  # Alex's green poster
+    # Without the ribbon, Alex's own poster as before.
+    custom_posters.save_ribbon_settings({}, [("u1", "Sam"), ("u2", "Alex")])
+    assert custom_posters.plugin_list()[0]["id"] == mine.id
+
+
+def test_the_ribbon_settings_page(app, client):
+    from curatarr.services import set_setting
+
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex"})
+    db.session.commit()
+    page = client.get("/library/posters").text
+    assert "Favourite ribbons" in page and 'name="see-u1-u2"' in page
+    assert 'name="see-u1-u1"' not in page  # nobody's set to see themselves here
+    preview = client.get("/library/posters/ribbon-preview.jpg")
+    assert preview.status_code == 200 and preview.mimetype == "image/jpeg"

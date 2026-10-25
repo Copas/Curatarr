@@ -104,7 +104,7 @@ The picture is never re-encoded; the only thing ever encoded is an extra audio t
 ![Enhance: what Curatarr has done for your library so far](docs/images/chapters.png)
 
 ### 🖼️ Posters starring your household
-Give any title your own poster: upload one, or drop a folder of pictures and Curatarr matches each to its title. Curatarr can even write the prompts for an image-making AI to make them, in batches, with the two of you cast as the leads of your favourite films. With the Curatarr plugin, a poster can be for chosen accounts only: you see yourselves on the Roku, the kids' account sees the usual art. The original is always kept, one click away.
+Give any title your own poster: upload one, or drop a folder of pictures and Curatarr matches each to its title. Curatarr can even write the prompts for an image-making AI to make them, in batches, with the two of you cast as the leads of your favourite films. With the Curatarr plugin, a poster can be for chosen accounts only: you see yourselves on the Roku, the kids' account sees the usual art. And favourite ribbons put a gold "★ Sam" on the posters of what someone else in the house loves. The original is always kept, one click away.
 
 ### 🎉 Fun facts the whole household will argue about
 Which film swears most per hour? Which show says "I love you" most? Who talks longest without a pause, and what's each show's catchphrase? **Fun facts** ranks your library by what's actually said in it, all per hour or per minute so a long-running show doesn't win just by being long. Handy, too, for finding the films that don't swear at all when the kids are around.
@@ -170,6 +170,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** |
 | [Custom posters](docs/FEATURES.md#custom-posters) | Your own poster for any title, uploaded or picked up from a folder, with the original kept to restore. | One click |
 | [Posters for one account](docs/FEATURES.md#for-everyone-or-for-chosen-accounts) | A poster only chosen accounts see, in every app (Roku included); everyone else keeps the usual one. | With the plugin |
+| [Favourite ribbons](docs/FEATURES.md#favourite-ribbons) | A gold "★ Sam" tag on the posters of the titles someone favourited, shown to the accounts you choose. | Off, with the plugin |
 | [Make them with an AI](docs/FEATURES.md#make-them-with-an-ai) | Prompts in batches for an image-making AI agent, with each title's plot and file name, and your household cast as the leads where it suits. | One click |
 | [Posters in your language](docs/FEATURES.md#collections-and-suggestions) | A new release that arrived with a foreign poster gets one in your language once TMDB has it. | **On** |
 
