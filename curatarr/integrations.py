@@ -275,6 +275,10 @@ class JellyfinClient(Client):
         or Backdrop (its first one)."""
         return self.request("GET", f"/Items/{item_id}/Images/{_image_path(kind)}")
 
+    def user_image(self, user_id):
+        """An account's profile picture (Jellyfin answers 404 when it has none)."""
+        return self.request("GET", "/UserImage", params={"userId": user_id})
+
     def image_list(self, item_id):
         """Every image an item has, with its type, index and tag."""
         return self.request("GET", f"/Items/{item_id}/Images") or []

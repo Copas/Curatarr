@@ -29,6 +29,12 @@
           <label class="small">Says <select class="form-select form-select-sm d-inline-block w-auto ms-1" name="label"><option value="names"{% if ribbon.label == 'names' %} selected{% endif %}>Who: ★ Sam (+ 1 when more)</option><option value="star"{% if ribbon.label == 'star' %} selected{% endif %}>Just ★</option></select></label>
           <div class="form-check"><input class="form-check-input" type="checkbox" id="rib-own" name="own"{% if ribbon.own %} checked{% endif %}><label class="form-check-label small" for="rib-own">Accounts see their own favourites marked too</label></div>
         </div>
+        <div class="d-flex flex-wrap gap-3 mb-2 small">
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="rib-avatars" name="avatars"{% if ribbon.avatars %} checked{% endif %}><label class="form-check-label" for="rib-avatars">Pictures (or initials) of who favourited it</label></div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="rib-new" name="new"{% if ribbon.new_days %} checked{% endif %}><label class="form-check-label" for="rib-new">NEW for</label> <input class="form-control form-control-sm d-inline-block" style="width:4.5rem" type="number" min="1" max="60" name="new_days" value="{{ ribbon.new_days or 7 }}" aria-label="Days a favourite is new"> days after it's favourited</div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="rib-household" name="household"{% if ribbon.household_at %} checked{% endif %}><label class="form-check-label" for="rib-household">"Household favourite" when</label> <input class="form-control form-control-sm d-inline-block" style="width:4.5rem" type="number" min="2" max="20" name="household_at" value="{{ ribbon.household_at or 3 }}" aria-label="How many people make a household favourite"> or more people favourited it</div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="rib-episodes" name="episodes"{% if ribbon.episodes %} checked{% endif %}><label class="form-check-label" for="rib-episodes">Favourite episodes too, on their thumbnails</label></div>
+        </div>
         <fieldset class="mb-2"><legend class="small fw-semibold mb-1">Whose favourites everyone sees</legend>
           <div class="d-flex flex-wrap gap-3">{% for who, who_name in accounts %}{% set seen_by = accounts|rejectattr(0, 'equalto', who)|selectattr(0, 'in', ribbon_viewers_of[who])|list %}<div class="form-check"><input class="form-check-input" type="checkbox" id="all-{{ who }}" name="all-{{ who }}" data-ribbon-all="{{ who }}"{% if seen_by|length == accounts|length - 1 %} checked{% endif %}><label class="form-check-label" for="all-{{ who }}">{{ who_name }}</label></div>{% endfor %}</div>
         </fieldset>
@@ -38,9 +44,13 @@
         </details>
         <button class="btn btn-primary">Save</button>
       </div>
-      <figure class="mb-0 text-center"><img class="poster poster-large" src="{{ url_for('main.custom_posters_ribbon_preview') }}?v={{ ribbon.position }}-{{ ribbon.label }}" alt="How the ribbon looks"><figcaption class="small text-secondary mt-1">How it looks</figcaption></figure>
+      <div class="d-flex gap-2"><figure class="mb-0 text-center"><img class="poster poster-large" src="{{ url_for('main.custom_posters_ribbon_preview') }}?v={{ ribbon|tojson|urlencode }}" alt="How a ribbon looks"><figcaption class="small text-secondary mt-1">A favourite</figcaption></figure>{% if ribbon.household_at %}<figure class="mb-0 text-center"><img class="poster poster-large" src="{{ url_for('main.custom_posters_ribbon_preview', household=1) }}&amp;v={{ ribbon|tojson|urlencode }}" alt="How a household favourite looks"><figcaption class="small text-secondary mt-1">Household favourite</figcaption></figure>{% endif %}</div>
     </div>
-  </form>{% else %}<p class="mb-0 text-secondary">Curatarr hasn't read Jellyfin's accounts yet; they appear after the next reconciliation.</p>{% endif %}
+  </form>
+  <h3 class="h6 mt-3">Pictures</h3>
+  <p class="small text-secondary mb-2">Each person's Jellyfin profile picture, or one uploaded here (it's only used on ribbons), or their initials.</p>
+  <ul class="list-unstyled d-flex flex-wrap gap-3 mb-0">{% for who, who_name in accounts %}<li class="d-flex align-items-center gap-2"><img src="{{ url_for('main.custom_posters_avatar_image', account=who) }}?v={{ range(1000)|random }}" width="40" height="40" alt=""><div><div class="small fw-semibold">{{ who_name }}</div>
+    <form method="post" action="{{ url_for('main.custom_posters_avatar') }}" enctype="multipart/form-data" class="d-flex gap-1 align-items-center"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="account" value="{{ who }}"><input class="form-control form-control-sm" style="max-width:12rem" type="file" name="picture" accept="image/jpeg,image/png,image/webp" aria-label="Picture for {{ who_name }}"><button class="btn btn-sm btn-outline-light">Use</button>{% if avatar_uploaded[who] %}<button class="btn btn-sm btn-link p-0" name="remove" value="1">Remove</button>{% endif %}</form></div></li>{% endfor %}</ul>{% else %}<p class="mb-0 text-secondary">Curatarr hasn't read Jellyfin's accounts yet; they appear after the next reconciliation.</p>{% endif %}
 </section>
 
 <section class="card p-3 mb-4" id="prompts"><h2 class="h5">Make them with an AI</h2>

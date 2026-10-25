@@ -156,6 +156,9 @@ class UserMediaState(db.Model, Timed):
     last_played_at = db.Column(db.DateTime(timezone=True))
     completed_episode_count = db.Column(db.Integer, default=0, nullable=False)
     favorite = db.Column(db.Boolean, default=False, nullable=False)
+    # When it was favourited, if Curatarr saw it happen (favourite ribbons'
+    # "NEW"); None for favourites older than Curatarr's first look.
+    favorite_since = db.Column(db.DateTime(timezone=True))
     # A film: how many times this person has played it. A show: how many of
     # its episodes they have played more than once.
     play_count = db.Column(db.Integer, default=0, nullable=False)
@@ -173,6 +176,7 @@ class EpisodeUserState(db.Model, Timed):
     last_played_at = db.Column(db.DateTime(timezone=True))
     playback_position_ticks = db.Column(db.BigInteger, default=0, nullable=False)
     favorite = db.Column(db.Boolean, default=False, nullable=False)
+    favorite_since = db.Column(db.DateTime(timezone=True))
     __table_args__ = (db.UniqueConstraint("media_part_id", "jellyfin_user_id"),)
 
 

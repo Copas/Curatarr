@@ -252,9 +252,16 @@ Before the first custom poster goes on for everyone, the poster it replaces is s
 
 ### Favourite ribbons
 
-A gold tag on a title's poster saying whose favourite it is ("★ Sam", or "★ Sam + 1" when several people favourited it), so one account sees what another loves, in every Jellyfin app. Off by default; set it up on Library → Posters under **Favourite ribbons**: whose favourites everyone sees (one tick per account), or account by account under *Choose account by account* (a grid, so one can see another's and not the reverse), whether accounts see their own marked (off), along the bottom (the default) or top right, and names or just a star. A preview shows how it looks.
+A gold band on a title's poster saying whose favourite it is, so one account sees what another loves, in every Jellyfin app. Off by default; set it up on Library → Posters under **Favourite ribbons**, with a preview of how it looks:
 
-It needs the Curatarr plugin for Jellyfin (0.4.0.0 or later) and works like posters for one account: the plugin shows each account its version of the poster, drawn over the one it would see anyway (Jellyfin's poster with any Leaving Soon countdown, which sits top left, or the account's own custom poster). Favourites come from Jellyfin, so a new one gets its ribbon at the next reconciliation. The first time it's switched on, the plugin downloads each marked poster once (a few minutes for a few hundred), and again only when the poster, the countdown or the ribbon changes.
+- **Whose favourites everyone sees**, one tick per account, or account by account under *Choose account by account* (a grid, so one can see another's and not the reverse). Whether accounts see their own marked (off by default).
+- **What it shows:** "★ Sam", or "★ Sam + 1" when several people favourited it, or just a star; along the bottom (the default) or top right, opposite Leaving Soon's tag.
+- **Pictures:** each person who favourited it, as a round picture beside the star: their Jellyfin profile picture, one uploaded under *Pictures* (used only on ribbons), or their initials in a colour of their own.
+- **NEW** (on, 7 days): a red NEW on the ribbon for a while after something's favourited. Favourites Curatarr found on its first look at a server aren't new.
+- **Household favourite** (on, 3 people): a title that many people favourited gets a red "♥ Household favourite" band with everyone's pictures, for every account that has ribbons.
+- **Favourite episodes** (on): the same ribbon on a favourited episode's thumbnail, in the season's list of episodes. Episode favourites are read from Jellyfin at each reconciliation.
+
+It needs the Curatarr plugin for Jellyfin (0.4.0.0 or later) and works like posters for one account: the plugin shows each account its version of the picture, drawn over the one it would see anyway (Jellyfin's poster with any Leaving Soon countdown, or the account's own custom poster). Favourites come from Jellyfin, so a new one gets its ribbon at the next reconciliation. The first time it's switched on, the plugin downloads each marked picture once (a few minutes for a few hundred), and again only when the picture, the countdown or the ribbon changes.
 
 ### Make them with an AI
 

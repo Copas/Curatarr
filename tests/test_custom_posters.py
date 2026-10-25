@@ -450,6 +450,9 @@ def test_an_accounts_poster_carries_the_leaving_soon_banner(app, client, monkeyp
 class RibbonJellyfin(FakeJellyfin):
     poster_tag = "tag-1"
 
+    def users(self):
+        return [{"Id": u, "PrimaryImageTag": None} for u in ("u1", "u2", "u3")]
+
     def item_details(self, ids):
         return [{"Id": i, "ImageTags": {"Primary": self.poster_tag}} for i in ids]
 
@@ -484,7 +487,14 @@ def test_favourite_ribbons_show_whose_favourite_a_title_is(app, client, monkeypa
     assert response.status_code == 302
     entries = custom_posters.plugin_list()
     assert [(e["user"], e["id"]) for e in entries] == [("u2", f"v.u2.{media.id}")]
-    assert custom_posters.ribbons() == {("u2", media.id): ["Sam"]}
+    assert custom_posters.ribbons() == {
+        ("t", "u2", media.id): {
+            "users": ["u1"],
+            "names": ["Sam"],
+            "new": False,
+            "household": False,
+        }
+    }
     picture = client.get(
         f"/api/v1/jellyfin/posters/{entries[0]['id']}.jpg",
         headers={"X-Curatarr-Token": "secret"},
@@ -503,9 +513,9 @@ def test_favourite_ribbons_show_whose_favourite_a_title_is(app, client, monkeypa
         "/library/posters/ribbons",
         data={"enabled": "on", "own": "on", "see-u2-u1": "on", "position": "top_right"},
     )
-    assert custom_posters.ribbons()[("u2", media.id)] == ["Alex", "Sam"]
+    assert custom_posters.ribbons()[("t", "u2", media.id)]["names"] == ["Alex", "Sam"]
     assert custom_posters.ribbon_text(["Alex", "Sam"], "names") == "★ Alex + 1"
-    assert ("u1", media.id) in custom_posters.ribbons()  # Sam's own
+    assert ("t", "u1", media.id) in custom_posters.ribbons()  # Sam's own
     # Off: gone.
     client.post("/library/posters/ribbons", data={})
     assert custom_posters.plugin_list() == []
@@ -568,3 +578,111 @@ def test_everyone_sees_one_accounts_favourites_in_one_tick(app, client):
     page = client.get("/library/posters").text
     assert '<details class="mb-2" open>' in page
     assert "ribbon-grid.js" in page
+
+
+def test_new_household_and_episode_ribbons(app, client, monkeypatch):
+    from datetime import timedelta
+
+    from curatarr.models import EpisodeUserState, MediaPart, UserMediaState, utcnow
+    from curatarr.services import set_setting
+
+    library, film, _part = _movie()
+    jellyfin = RibbonJellyfin(_picture("#223344", size=(400, 600)))
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: jellyfin)
+    accounts = [("u1", "Sam"), ("u2", "Alex"), ("u3", "Kim")]
+    set_setting("jellyfin_user_names", dict(accounts))
+    set_setting("webhook_token", "secret")
+    db.session.commit()
+    form = {
+        "enabled": "on",
+        "all-u1": "on",
+        "avatars": "on",
+        "new": "on",
+        "new_days": "7",
+        "household": "on",
+        "household_at": "3",
+        "episodes": "on",
+    }
+    custom_posters.save_ribbon_settings(form, accounts)
+    # Sam favourited the film yesterday: NEW for Alex and Kim.
+    db.session.add(
+        UserMediaState(
+            media_identity_id=film.id,
+            jellyfin_user_id="u1",
+            favorite=True,
+            favorite_since=utcnow() - timedelta(days=1),
+        )
+    )
+    db.session.commit()
+    ribbon = custom_posters.ribbons()[("t", "u2", film.id)]
+    assert ribbon["new"] and not ribbon["household"]
+    # A month on, it isn't.
+    state = db.session.query(UserMediaState).one()
+    state.favorite_since = utcnow() - timedelta(days=30)
+    db.session.commit()
+    assert not custom_posters.ribbons()[("t", "u2", film.id)]["new"]
+    # Everyone's favourite: a household favourite, shown to all three.
+    for user in ("u2", "u3"):
+        db.session.add(
+            UserMediaState(
+                media_identity_id=film.id, jellyfin_user_id=user, favorite=True
+            )
+        )
+    db.session.commit()
+    marked = custom_posters.ribbons()
+    assert all(marked[("t", u, film.id)]["household"] for u in ("u2", "u3"))
+    assert ("t", "u1", film.id) not in marked  # Sam's account isn't set up for ribbons
+    assert custom_posters.ribbon_text(["a"], "names", True) == "♥ Household favourite"
+    # A favourite episode's thumbnail.
+    show = MediaIdentity(
+        library_id=library.id, media_type="series", title="Show", jellyfin_id="show"
+    )
+    db.session.add(show)
+    db.session.flush()
+    episode = MediaPart(
+        media_identity_id=show.id,
+        kind="episode",
+        season_number=1,
+        episode_number=2,
+        has_file=True,
+        jellyfin_id="episode-2",
+    )
+    db.session.add(episode)
+    db.session.flush()
+    db.session.add(
+        EpisodeUserState(media_part_id=episode.id, jellyfin_user_id="u1", favorite=True)
+    )
+    db.session.commit()
+    entries = {e["id"]: e for e in custom_posters.plugin_list()}
+    assert (
+        f"e.u2.{episode.id}" in entries
+        and entries[f"e.u2.{episode.id}"]["item"] == "episode2"
+    )
+    jellyfin.current = _picture("#335566", size=(1280, 720))
+    picture = Image.open(BytesIO(custom_posters.plugin_picture(f"e.u2.{episode.id}")))
+    assert picture.width > picture.height  # still a thumbnail
+    # Episodes switched off: gone.
+    custom_posters.save_ribbon_settings({**form, "episodes": ""}, accounts)
+    assert f"e.u2.{episode.id}" not in {e["id"] for e in custom_posters.plugin_list()}
+
+
+def test_an_uploaded_picture_goes_on_the_ribbon(app, client, monkeypatch):
+    from curatarr.services import set_setting
+
+    set_setting("jellyfin_user_names", {"u1": "Sam"})
+    db.session.commit()
+    assert custom_posters.avatar_picture("u1") is None  # initials
+    response = client.post(
+        "/library/posters/avatar",
+        data={"account": "u1", "picture": (BytesIO(_picture("#cc2222")), "me.png")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 302
+    face = Image.open(BytesIO(custom_posters.avatar_picture("u1")))
+    assert face.size == (256, 256)
+    assert client.get("/library/posters/avatar/u1.jpg").mimetype == "image/png"
+    client.post("/library/posters/avatar", data={"account": "u1", "remove": "1"})
+    assert custom_posters.avatar_picture("u1") is None
+    assert (
+        client.post("/library/posters/avatar", data={"account": "x"}).status_code == 400
+    )

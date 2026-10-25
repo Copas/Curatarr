@@ -738,9 +738,14 @@ RIBBON_DEFAULTS = {
     "label": "names",  # or "star"
     "own": False,  # whether an account sees its own favourites marked
     "sees": {},  # account → the accounts whose favourites it sees
+    "avatars": True,  # each person's picture, or their initials
+    "new_days": 7,  # a favourite this recent says NEW (0: never)
+    "household_at": 3,  # this many people's favourite: a household one (0: off)
+    "episodes": True,  # favourite episodes' thumbnails too
 }
-RIBBON_STYLE = "fav-1"  # part of each tag: a new look fetches every ribbon again
-_jellyfin_tags: dict[str, str] = {}  # last known poster tags, while Jellyfin is away
+RIBBON_STYLE = "fav-2"  # part of each tag: a new look fetches every ribbon again
+_jellyfin_tags: dict[str, str] = {}  # last known image tags, while Jellyfin is away
+_avatar_tags: dict[str, str] = {}  # Jellyfin profile pictures' tags
 
 
 def ribbon_settings() -> dict:
@@ -749,15 +754,23 @@ def ribbon_settings() -> dict:
     return RIBBON_DEFAULTS | (setting(RIBBON_KEY) or {})
 
 
+def _number(value, default, low, high) -> int:
+    try:
+        return max(low, min(int(value), high))
+    except (TypeError, ValueError):
+        return default
+
+
 def save_ribbon_settings(form, accounts) -> dict:
     from .services import set_setting
 
     known = [a for a, _name in accounts]
+    ticked = lambda name: form.get(name) in {"on", "true", "1"}
     options = {
-        "enabled": form.get("enabled") in {"on", "true", "1"},
+        "enabled": ticked("enabled"),
         "position": "top_right" if form.get("position") == "top_right" else "bottom",
         "label": "star" if form.get("label") == "star" else "names",
-        "own": form.get("own") in {"on", "true", "1"},
+        "own": ticked("own"),
         # "Everyone sees Sam's favourites", or account by account.
         "sees": {
             viewer: [
@@ -768,120 +781,256 @@ def save_ribbon_settings(form, accounts) -> dict:
             ]
             for viewer in known
         },
+        "avatars": ticked("avatars"),
+        "new_days": _number(form.get("new_days"), 7, 0, 60) if ticked("new") else 0,
+        "household_at": (
+            _number(form.get("household_at"), 3, 2, 20) if ticked("household") else 0
+        ),
+        "episodes": ticked("episodes"),
     }
     set_setting(RIBBON_KEY, options)
     db.session.commit()
     return options
 
 
-def ribbon_text(names: list[str], label: str) -> str:
+def ribbon_text(names: list[str], label: str, household: bool = False) -> str:
+    if household:
+        return "♥ Household favourite"
     if label == "star" or not names:
         return "★"
     return f"★ {names[0]}" + (f" + {len(names) - 1}" if len(names) > 1 else "")
 
 
-def ribbons(options=None) -> dict[tuple[str, str], list[str]]:
-    """(account, title) → the names on its ribbon: whose favourite the title
-    is, among the accounts that account sees."""
-    from .models import UserMediaState
+def _since(value):
+    from .services import _as_datetime
+
+    return _as_datetime(value)
+
+
+def ribbons(options=None) -> dict[tuple[str, str, str], dict]:
+    """(kind, account, id) → that account's ribbon on a title ("t", a
+    MediaIdentity id) or an episode ("e", a MediaPart id): whose favourite
+    it is among the accounts it sees, whether it's NEW, and whether it's a
+    household favourite."""
+    from .models import EpisodeUserState, UserMediaState
 
     options = options or ribbon_settings()
     if not options["enabled"]:
         return {}
-    favourites: dict[str, set[str]] = {}
-    for media_id, user_id in (
+    liked: dict[tuple[str, str], dict[str, object]] = {}  # (kind, id) → user → since
+    for media_id, user_id, since in (
         db.session.query(
-            UserMediaState.media_identity_id, UserMediaState.jellyfin_user_id
+            UserMediaState.media_identity_id,
+            UserMediaState.jellyfin_user_id,
+            UserMediaState.favorite_since,
         )
         .join(MediaIdentity, UserMediaState.media_identity_id == MediaIdentity.id)
         .filter(
             UserMediaState.favorite.is_(True), MediaIdentity.jellyfin_id.isnot(None)
         )
     ):
-        favourites.setdefault(media_id, set()).add(user_id)
+        liked.setdefault(("t", media_id), {})[user_id] = since
+    if options["episodes"]:
+        for part_id, user_id, since in (
+            db.session.query(
+                EpisodeUserState.media_part_id,
+                EpisodeUserState.jellyfin_user_id,
+                EpisodeUserState.favorite_since,
+            )
+            .join(MediaPart, EpisodeUserState.media_part_id == MediaPart.id)
+            .filter(
+                EpisodeUserState.favorite.is_(True), MediaPart.jellyfin_id.isnot(None)
+            )
+        ):
+            liked.setdefault(("e", part_id), {})[user_id] = since
+    recent = utcnow() - timedelta(days=options["new_days"] or 0)
+    household_at = options["household_at"] or 0
     found = {}
     for viewer, seen in (options["sees"] or {}).items():
         shown = set(seen) | ({viewer} if options["own"] else set())
-        if not shown:
-            continue
-        for media_id, users in favourites.items():
-            names = sorted(account_name(u) for u in users & shown)
-            if names:
-                found[(viewer, media_id)] = names
+        if not seen and not options["own"]:
+            continue  # ribbons aren't set up for this account
+        for (kind, item), users in liked.items():
+            household = bool(household_at) and len(users) >= household_at
+            who = sorted(users if household else set(users) & shown, key=account_name)
+            if not who:
+                continue
+            new = bool(options["new_days"]) and any(
+                (_since(users[u]) or recent) > recent for u in who
+            )
+            found[(kind, viewer, item)] = {
+                "users": who,
+                "names": [account_name(u) for u in who],
+                "new": new,
+                "household": household,
+            }
     return found
 
 
-def _poster_tags(jellyfin_ids) -> dict[str, str]:
-    """Jellyfin's current poster tag of each title (it changes when the
-    poster does, Leaving Soon's banner included)."""
+def _image_tags(jellyfin_ids) -> dict[str, str]:
+    """Jellyfin's current Primary image tag of each item (it changes when the
+    picture does, Leaving Soon's banner included)."""
     from .services import client
 
     try:
-        for item in client("jellyfin").item_details(list(jellyfin_ids)):
-            tag = (item.get("ImageTags") or {}).get("Primary")
-            if tag:
-                _jellyfin_tags[str(item.get("Id") or "").replace("-", "")] = tag
+        ids = list(jellyfin_ids)
+        for start in range(0, len(ids), 100):
+            for item in client("jellyfin").item_details(ids[start : start + 100]):
+                tag = (item.get("ImageTags") or {}).get("Primary")
+                if tag:
+                    _jellyfin_tags[str(item.get("Id") or "").replace("-", "")] = tag
     except IntegrationError:
         pass  # the last known tags stand in
     return _jellyfin_tags
 
 
+def _avatar_dir() -> Path:
+    path = Path(current_app.instance_path) / "avatars"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def save_avatar(user_id: str, data: bytes | None) -> None:
+    """An account's picture for ribbons (None: back to Jellyfin's, or initials)."""
+    target = _avatar_dir() / f"{user_id}.jpg"
+    if data is None:
+        target.unlink(missing_ok=True)
+        return
+    picture = Image.open(BytesIO(normalise(data))).convert("RGB")
+    side = min(picture.size)
+    left, top = (picture.width - side) // 2, (picture.height - side) // 3
+    picture = picture.crop((left, top, left + side, top + side)).resize((256, 256))
+    output = BytesIO()
+    picture.save(output, format="JPEG", quality=90)
+    target.write_bytes(output.getvalue())
+
+
+def has_uploaded_avatar(user_id: str) -> bool:
+    return (_avatar_dir() / f"{user_id}.jpg").exists()
+
+
+def avatar_picture(user_id: str) -> bytes | None:
+    """The picture on a person's ribbon: one uploaded in Curatarr, else their
+    Jellyfin profile picture, else None (their initials are drawn)."""
+    from .services import client
+
+    uploaded = _avatar_dir() / f"{user_id}.jpg"
+    if uploaded.exists():
+        return uploaded.read_bytes()
+    if not _avatar_tags.get(user_id):
+        return None
+    try:
+        return client("jellyfin").user_image(user_id)
+    except IntegrationError:
+        return None
+
+
+def _avatar_version(user_id: str) -> str:
+    uploaded = _avatar_dir() / f"{user_id}.jpg"
+    if uploaded.exists():
+        return f"up{int(uploaded.stat().st_mtime)}"
+    return _avatar_tags.get(user_id) or "initials"
+
+
+def _refresh_avatar_tags() -> None:
+    from .services import client
+
+    try:
+        for user in client("jellyfin").users() or []:
+            _avatar_tags[str(user["Id"])] = user.get("PrimaryImageTag") or ""
+    except IntegrationError:
+        pass
+
+
 def plugin_list() -> list[dict]:
     """What the Curatarr plugin shows each account instead of the usual
-    poster: its own custom posters, and favourite ribbons."""
+    picture: its own custom posters, and favourite ribbons on titles and
+    episodes."""
     import hashlib
+    import json
 
     bare = lambda value: str(value or "").replace("-", "").lower()
     options = ribbon_settings()
     marked = ribbons(options)
     own = {(p.jellyfin_user_id, p.media_identity_id): p for p in for_accounts()}
+    title_ids = {i for k, _v, i in marked if k == "t"} | {m for _v, m in own}
     medias = {
         m.id: m
         for m in db.session.query(MediaIdentity).filter(
-            MediaIdentity.id.in_({media for _v, media in {*own, *marked}} or {""})
+            MediaIdentity.id.in_(title_ids or {""})
         )
     }
-    needs_tag = {
-        medias[media].jellyfin_id
-        for (viewer, media) in marked
-        if (viewer, media) not in own and media in medias
+    part_ids = {i for k, _v, i in marked if k == "e"}
+    parts = {
+        p.id: p
+        for p in db.session.query(MediaPart).filter(MediaPart.id.in_(part_ids or {""}))
     }
-    tags = _poster_tags(needs_tag) if needs_tag else _jellyfin_tags
+    needs_tag = {
+        medias[i].jellyfin_id
+        for k, v, i in marked
+        if k == "t" and (v, i) not in own and i in medias
+    } | {parts[i].jellyfin_id for k, _v, i in marked if k == "e" and i in parts}
+    tags = _image_tags(needs_tag) if needs_tag else _jellyfin_tags
+    if marked and options["avatars"]:
+        _refresh_avatar_tags()
     leaving: dict[str, str | None] = {}
     entries = []
-    for key in sorted({*own, *marked}):
-        viewer, media_id = key
-        media = medias.get(media_id)
-        if media is None or not media.jellyfin_id:
-            continue
+
+    def label_for(media_id):
         if media_id not in leaving:
             leaving[media_id] = leaving_label(media_id)
-        poster, names = own.get(key), marked.get(key)
-        if not names:
+        return leaving[media_id]
+
+    for (viewer, media_id), poster in own.items():
+        media = medias.get(media_id)
+        if media and media.jellyfin_id and ("t", viewer, media_id) not in marked:
             entries.append(
                 {
                     "item": bare(media.jellyfin_id),
                     "user": bare(viewer),
                     "id": poster.id,
-                    "tag": account_tag(poster, leaving[media_id]),
+                    "tag": account_tag(poster, label_for(media_id)),
                 }
             )
-            continue
-        base = poster.id if poster else tags.get(bare(media.jellyfin_id))
+    for (kind, viewer, item_id), ribbon in sorted(marked.items()):
+        if kind == "t":
+            media = medias.get(item_id)
+            if media is None or not media.jellyfin_id:
+                continue
+            jellyfin_id, poster = media.jellyfin_id, own.get((viewer, item_id))
+            base = poster.id if poster else tags.get(bare(jellyfin_id))
+            banner = label_for(item_id)
+        else:
+            part = parts.get(item_id)
+            if part is None or not part.jellyfin_id:
+                continue
+            jellyfin_id, base, banner = (
+                part.jellyfin_id,
+                tags.get(bare(part.jellyfin_id)),
+                None,
+            )
         if base is None:
-            continue  # Jellyfin's poster unknown for now: the usual one shows
-        text = ribbon_text(names, options["label"])
-        tag = hashlib.sha1(
-            "|".join(
-                (base, leaving[media_id] or "", text, options["position"], RIBBON_STYLE)
-            ).encode()
-        ).hexdigest()[:32]
+            continue  # Jellyfin's picture unknown for now: the usual one shows
+        spec = json.dumps(
+            [
+                base,
+                banner,
+                ribbon,
+                options["position"],
+                options["label"],
+                [_avatar_version(u) for u in ribbon["users"]]
+                if options["avatars"]
+                else None,
+                RIBBON_STYLE,
+            ],
+            sort_keys=True,
+        )
         entries.append(
             {
-                "item": bare(media.jellyfin_id),
+                "item": bare(jellyfin_id),
                 "user": bare(viewer),
-                "id": f"v.{viewer}.{media_id}",
-                "tag": tag,
+                "id": f"{'v' if kind == 't' else 'e'}.{viewer}.{item_id}",
+                "tag": hashlib.sha1(spec.encode()).hexdigest()[:32],
             }
         )
     return entries
@@ -892,22 +1041,40 @@ def plugin_picture(entry_id: str) -> bytes | None:
     from .artwork import _jpeg, favourite_ribbon
     from .services import client
 
-    if not entry_id.startswith("v."):
+    if not entry_id.startswith(("v.", "e.")):
         poster = db.session.get(CustomPoster, entry_id)
         if not poster or not poster.active or not Path(poster.image_path).exists():
             return None
         return account_picture(poster, leaving_label(poster.media_identity_id))
-    _v, viewer, media_id = entry_id.split(".", 2)
+    kind, viewer, item_id = entry_id.split(".", 2)
     options = ribbon_settings()
-    names = ribbons(options).get((viewer, media_id))
-    media = db.session.get(MediaIdentity, media_id)
-    if not names or media is None or not media.jellyfin_id:
+    ribbon = ribbons(options).get(("t" if kind == "v" else "e", viewer, item_id))
+    if not ribbon:
         return None
-    poster = active(media_id, viewer)
-    if poster and Path(poster.image_path).exists():
-        base = account_picture(poster, leaving_label(media_id))
+    if kind == "v":
+        media = db.session.get(MediaIdentity, item_id)
+        if media is None or not media.jellyfin_id:
+            return None
+        poster = active(item_id, viewer)
+        if poster and Path(poster.image_path).exists():
+            base = account_picture(poster, leaving_label(item_id))
+        else:
+            base = _jpeg(client("jellyfin").image(media.jellyfin_id))
     else:
-        base = _jpeg(client("jellyfin").image(media.jellyfin_id))
+        part = db.session.get(MediaPart, item_id)
+        if part is None or not part.jellyfin_id:
+            return None
+        base = _jpeg(client("jellyfin").image(part.jellyfin_id))
+    faces = (
+        [(avatar_picture(u), account_name(u)) for u in ribbon["users"]]
+        if options["avatars"]
+        else ()
+    )
     return favourite_ribbon(
-        base, ribbon_text(names, options["label"]), options["position"]
+        base,
+        ribbon_text(ribbon["names"], options["label"], ribbon["household"]),
+        options["position"],
+        avatars=faces,
+        new=ribbon["new"],
+        household=ribbon["household"],
     )
