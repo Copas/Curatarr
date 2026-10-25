@@ -734,7 +734,7 @@ def account_picture(poster: CustomPoster, label: str | None) -> bytes:
 RIBBON_KEY = "favourite_ribbons"
 RIBBON_DEFAULTS = {
     "enabled": False,
-    "position": "top_right",  # or "bottom"
+    "position": "bottom",  # or "top_right"
     "label": "names",  # or "star"
     "own": False,  # whether an account sees its own favourites marked
     "sees": {},  # account → the accounts whose favourites it sees
@@ -755,7 +755,7 @@ def save_ribbon_settings(form, accounts) -> dict:
     known = [a for a, _name in accounts]
     options = {
         "enabled": form.get("enabled") in {"on", "true", "1"},
-        "position": "bottom" if form.get("position") == "bottom" else "top_right",
+        "position": "top_right" if form.get("position") == "top_right" else "bottom",
         "label": "star" if form.get("label") == "star" else "names",
         "own": form.get("own") in {"on", "true", "1"},
         "sees": {

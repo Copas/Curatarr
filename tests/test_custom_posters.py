@@ -490,8 +490,9 @@ def test_favourite_ribbons_show_whose_favourite_a_title_is(app, client, monkeypa
         headers={"X-Curatarr-Token": "secret"},
     )
     assert picture.status_code == 200
-    gold = Image.open(BytesIO(picture.data)).convert("RGB").getpixel((395, 40))
-    assert gold[0] > 200 and gold[1] > 150 and gold[2] < 90  # top right, gold
+    shown = Image.open(BytesIO(picture.data)).convert("RGB")
+    gold = shown.getpixel((5, shown.height - 5))
+    assert gold[0] > 200 and gold[1] > 150 and gold[2] < 90  # along the bottom, gold
     # A new poster in Jellyfin (Leaving Soon's banner, say) means a new tag.
     first = entries[0]["tag"]
     jellyfin.poster_tag = "tag-2"
@@ -500,7 +501,7 @@ def test_favourite_ribbons_show_whose_favourite_a_title_is(app, client, monkeypa
     _favourite(media, "u2")
     client.post(
         "/library/posters/ribbons",
-        data={"enabled": "on", "own": "on", "see-u2-u1": "on", "position": "bottom"},
+        data={"enabled": "on", "own": "on", "see-u2-u1": "on", "position": "top_right"},
     )
     assert custom_posters.ribbons()[("u2", media.id)] == ["Alex", "Sam"]
     assert custom_posters.ribbon_text(["Alex", "Sam"], "names") == "★ Alex + 1"

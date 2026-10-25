@@ -252,7 +252,7 @@ Before the first custom poster goes on for everyone, the poster it replaces is s
 
 ### Favourite ribbons
 
-A gold tag on a title's poster saying whose favourite it is ("★ Sam", or "★ Sam + 1" when several people favourited it), so one account sees what another loves, in every Jellyfin app. Off by default; set it up on Library → Posters under **Favourite ribbons**: who sees whose favourites (a grid of accounts, so one can see another's and not the reverse), whether accounts see their own marked, top right or along the bottom, and names or just a star. A preview shows how it looks.
+A gold tag on a title's poster saying whose favourite it is ("★ Sam", or "★ Sam + 1" when several people favourited it), so one account sees what another loves, in every Jellyfin app. Off by default; set it up on Library → Posters under **Favourite ribbons**: who sees whose favourites (a grid of accounts, so one can see another's and not the reverse), whether accounts see their own marked (off), along the bottom (the default) or top right, and names or just a star. A preview shows how it looks.
 
 It needs the Curatarr plugin for Jellyfin (0.4.0.0 or later) and works like posters for one account: the plugin shows each account its version of the poster, drawn over the one it would see anyway (Jellyfin's poster with any Leaving Soon countdown, which sits top left, or the account's own custom poster). Favourites come from Jellyfin, so a new one gets its ribbon at the next reconciliation. The first time it's switched on, the plugin downloads each marked poster once (a few minutes for a few hundred), and again only when the poster, the countdown or the ribbon changes.
 
