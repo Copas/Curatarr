@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from notes import notes, plain  # noqa: E402
+from notes import notes, plain
 
 ROOT = Path(__file__).resolve().parent.parent
 # Jellyfin saves this beside the plugin when it installs it, for its card.
@@ -34,9 +34,7 @@ def main():
     path = ROOT / "manifest.json"
     plugins = json.loads(path.read_text())
     if not plugins:
-        plugins.append(
-            {"guid": meta["guid"], "name": meta["name"], "versions": []}
-        )
+        plugins.append({"guid": meta["guid"], "name": meta["name"], "versions": []})
     plugin = plugins[0]
     plugin.update(
         overview=meta["overview"],
@@ -84,6 +82,7 @@ def _meta() -> dict:
         key = name.strip()
         meta[key] = "" if value == ">" else value.strip('"')
     return meta
+
 
 if __name__ == "__main__":
     main()

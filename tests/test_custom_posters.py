@@ -382,5 +382,5 @@ def test_the_page_title_is_only_words(app, client):
     import re
 
     page = client.get("/library/posters").text
-    title = re.search(r"<title>(.*?)</title>", page, re.S).group(1)
+    title = re.search(r"<title>(.*?)</title>", page, re.DOTALL).group(1)
     assert "<" not in title and "Posters" in title

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **For contributors:** `AGENTS.md` sets out how changes are made here (tests before every commit, changelog entries, commits under the author's own name, keeping the repository anonymous, releases), for people and coding agents alike. GitHub now runs the tests and linters on every push, and checks the Jellyfin plugin's version has notes as soon as it changes.
 - **The Jellyfin plugin's version history says what changed.** Each plugin version has notes in this changelog, which Jellyfin shows as the version's changelog and GitHub as its release notes (filled in for every release so far); a plugin release can't be tagged without them. The plugin's description in Jellyfin's catalogue covers everything it does, not only Delete.
 ## 0.2.0rc6 (2026-10-24)
 

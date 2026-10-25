@@ -22,7 +22,9 @@ def notes(version: str, text: str | None = None) -> str:
         return ""
     plugin = section[1].split("\n## ", 1)[0]
     found = re.search(
-        rf"^### {re.escape(version)}\b[^\n]*\n(.*?)(?=^### |\Z)", plugin, re.M | re.S
+        rf"^### {re.escape(version)}\b[^\n]*\n(.*?)(?=^### |\Z)",
+        plugin,
+        re.MULTILINE | re.DOTALL,
     )
     return found.group(1).strip() if found else ""
 
