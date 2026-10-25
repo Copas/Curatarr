@@ -53,6 +53,7 @@ def custom_posters_page():
         "custom_posters.html",
         posters=custom_posters.gallery(),
         folder=folder,
+        import_accounts=custom_posters.settings().get("accounts") or [],
         unmatched=sorted(state["unmatched"].items()),
         checked=state.get("at"),
         options=options,
@@ -71,7 +72,11 @@ def custom_posters_prompts():
 @bp.post("/library/posters/settings")
 def custom_posters_settings():
     try:
-        custom_posters.save_settings(request.form.get("folder"))
+        known = dict(_accounts())
+        custom_posters.save_settings(
+            request.form.get("folder"),
+            [a for a in request.form.getlist("accounts") if a in known],
+        )
     except ValueError as exc:
         flash(str(exc), "danger")
     else:
