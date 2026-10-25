@@ -1580,11 +1580,16 @@ def plugin_list(version: int = 1) -> list[dict]:
     poster_of: dict[tuple[str, str], dict] = {}  # (viewer, title): its entry
 
     def add(entry, viewer=None, media_id=None, title=True):
-        if version >= 2:
-            entry.pop("wide", None)
-            entry["kind"] = "Primary"
-        elif not title:
+        if not title:
             entry["wide"] = False
+        if version >= 2:
+            entry["kind"] = "Primary"
+            # A wide tile made from the poster stays the poster's "wide"
+            # version, under its tag, as plugin 0.7.0.0 had it: a separate
+            # entry had a tag of its own, and plugin 0.8.0.0 fetched every one
+            # again. An account's own wide tile takes its place.
+            if (viewer, media_id, "Thumb") in others:
+                entry["wide"] = False
         if viewer and media_id:
             poster_of[(viewer, media_id)] = entry
         entries.append(entry)
@@ -1676,6 +1681,8 @@ def plugin_list(version: int = 1) -> list[dict]:
                 base = custom.id
                 label = label_for(media_id) if kind in BADGED_KINDS else None
                 drawn = ribbon if kind in RIBBON_KINDS else None
+            elif kind == "Thumb":
+                continue  # made from the poster: its "wide" version
             elif poster and made.get(kind, "own") != "own":
                 # Made from the poster as this account sees it, ribbon and all.
                 base, label, drawn = f"{made[kind]}:{poster['tag']}", None, None

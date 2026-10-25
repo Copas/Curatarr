@@ -96,9 +96,17 @@ public sealed class PosterSync : BackgroundService
             client.Timeout = TimeSpan.FromSeconds(20);
             // Version 2: each type of picture; older Curatarrs answer with posters only.
             var listing = await GetAsync<PosterListing>(client, config, "/api/v1/jellyfin/posters?v=2", cancellationToken).ConfigureAwait(false);
-            var ready = new List<AccountPoster>();
+            var posters = listing?.Posters ?? [];
             Directory.CreateDirectory(Folder);
-            foreach (var poster in listing?.Posters ?? [])
+
+            // What's on disk already shows straight away; the rest as it arrives.
+            // Waiting for every download first left everyone without their own
+            // pictures for minutes after Jellyfin restarted.
+            _store.Replace(posters
+                .Where(p => File.Exists(FileFor(p.Tag, p.Type)))
+                .Select(p => p with { Wide = p.Wide && File.Exists(WideFileFor(p.Tag)) }));
+            var ready = new List<AccountPoster>();
+            foreach (var poster in posters)
             {
                 if (!await DownloadAsync(client, config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg", FileFor(poster.Tag, poster.Type), cancellationToken).ConfigureAwait(false))
                 {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc15 (2026-10-25)
+
+- **Fixed: updating to plugin 0.8.0.0 fetched every wide tile again.** A wide tile made from an account's poster was listed as a picture of its own, under a new tag, so the plugin downloaded all of them again (about 700), each drawn afresh, while it already had them. It's the poster's wide version again, as plugin 0.7.0.0 had it, so those files are kept; an account's own wide tile still takes its place. With plugin 0.8.1.0, pictures it already has show straight away after Jellyfin restarts.
+
 ## 0.2.0rc14 (2026-10-25)
 
 - **Pressing play moves a file to the front of the line.** What's playing, and the five episodes after it (into the next season too), go first in every queue within seconds: chapters, subtitles, skip markers, TV-friendly audio and the Roku seek index repair, in watching order. Before, the queue only learned what people watch next every ten minutes, from Jellyfin's Next Up and Continue Watching, with two episodes after each, and the seek repair didn't use it at all (it went by when anything in a show was last played, then file order).
@@ -169,6 +173,10 @@
 ## Jellyfin plugin
 
 The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed and updated from Jellyfin's plugin catalogue once Curatarr adds its repository. Each version's notes below are what Jellyfin shows as its changelog, and the release page's notes.
+
+### 0.8.1.0 (2026-10-25)
+
+- After Jellyfin restarts, the account pictures already downloaded show straight away, and new ones as they arrive. Before, nobody saw their own pictures until every download had finished, which after the update to 0.8.0.0 took several minutes.
 
 ### 0.8.0.0 (2026-10-25)
 
