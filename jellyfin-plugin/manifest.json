@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/logo.png",
     "versions": [
       {
+        "version": "0.8.0.0",
+        "changelog": "- An account can have each of a title's pictures of its own, not just the poster: its wide tile (Thumb), background (Backdrop), logo and banner, swapped into what's sent to that account, including a show's background, logo and wide tile on its episodes and seasons. An account's background goes first among the title's backgrounds. A logo is served as a PNG, keeping its see-through background.\n- Needs Curatarr 0.2.0rc9 or later for pictures other than the poster; with older ones, it works as 0.7.0.0 did.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/Copas/Curatarr/releases/download/plugin-v0.8.0.0/curatarr-jellyfin-plugin_0.8.0.0.zip",
+        "checksum": "262b005bde18380c275d6d8fc966b318",
+        "timestamp": "2026-10-25T20:41:18Z"
+      },
+      {
         "version": "0.7.0.0",
         "changelog": "- An account's own posters and favourite ribbons show in rows of wide tiles too (the Roku app's home rows, Continue Watching), where apps use a title's landscape picture (its Thumb) rather than its poster. Curatarr draws a landscape version, and the plugin puts its tag in for the Thumb and serves it.\n- Needs Curatarr 0.2.0rc8 or later for the landscape version; with older ones, wide tiles show the usual picture as before.",
         "targetAbi": "12.2.0.0",
