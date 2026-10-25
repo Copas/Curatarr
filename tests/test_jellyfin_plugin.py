@@ -171,6 +171,7 @@ def test_settings_page_walks_through_it(app, client, jellyfin):
         worker_cycle()  # the worker finishes once Jellyfin is back
     page = client.get("/settings").text
     assert "deletes in Jellyfin go through Curatarr at <code>http://127.0.0.1:" in page
+    assert "Install plugin updates automatically" in page
 
 
 def test_the_setup_checklist_offers_the_plugin(app, client, jellyfin):
@@ -265,3 +266,45 @@ def test_the_update_banner(app, client, jellyfin):
         jellyfin_plugin.sync()
     client.post("/jellyfin-plugin/update", data={"action": "restart"})
     assert jellyfin.restarts == 2
+
+
+def test_updates_can_install_themselves_and_restart_when_nobodys_watching(
+    app, client, jellyfin
+):
+    from datetime import timedelta
+
+    from curatarr.models import LifecycleAction, utcnow
+
+    def install(name, guid, repo):
+        jellyfin.installed.append(name)
+        jellyfin.status = "Superseded"  # the old one stays loaded until a restart
+        jellyfin.extra = [PLUGIN | {"Version": "0.3.0.0", "Status": "Restart"}]
+
+    jellyfin.install_package = install
+    jellyfin.status = "Active"
+    jellyfin.catalogue = ["0.1.0.0", "0.3.0.0"]
+    with app.app_context():
+        jellyfin_plugin.sync()
+        assert not jellyfin.installed  # off by default: the banner offers it
+    client.post("/settings", data={"kind": "plugin_auto_update", "auto_update": "on"})
+    with app.app_context():
+        assert jellyfin_plugin.auto_update()
+        assert jellyfin.installed == ["Curatarr"]  # straight away
+        assert setting(jellyfin_plugin.KEY)["restart_when_idle"]
+        assert jellyfin_plugin.notice()["when_idle"]
+        said = db.session.query(LifecycleAction).filter_by(
+            action_type="jellyfin_plugin_updated"
+        )
+        assert "0.3.0.0" in said.one().reason_text
+        jellyfin_plugin.tick()
+        assert jellyfin.restarts == 0  # someone's watching
+        jellyfin.playing = False
+        jellyfin_plugin.tick()
+        stored = setting(jellyfin_plugin.KEY)
+        stored["idle_since"] = (utcnow() - timedelta(minutes=11)).isoformat()
+        set_setting(jellyfin_plugin.KEY, stored)
+        db.session.commit()
+        jellyfin_plugin.tick()
+        assert jellyfin.restarts == 1
+        jellyfin_plugin.sync()
+        assert jellyfin.installed == ["Curatarr"]  # not again
