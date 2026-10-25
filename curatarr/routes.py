@@ -468,6 +468,7 @@ ACTION_WORDS = {
     "flag_never_compress_set": "Never compress",
     "flag_never_compress_cleared": "Never compress cleared",
     "protected_file_changed": "A Never compress file changed",
+    "cleanup_held_for_compression": "Cleanup held for compression",
 }
 
 
@@ -511,6 +512,16 @@ def template_values():
         "theme": request.cookies.get("curatarr_theme")
         if request.cookies.get("curatarr_theme") in {"light", "dark"}
         else "dark",
+    }
+
+
+def _compression_settings():
+    from . import compression
+
+    return {
+        "options": compression.settings(),
+        "signal": compression.signal(),
+        "holding": compression.holding(),
     }
 
 
@@ -1064,6 +1075,15 @@ def settings():
                     request.form.get("favourites") == "on", request.form.get("file")
                 )
                 flash("Never compress saved.", "success")
+            elif kind == "compression_first":
+                from . import compression
+
+                compression.save_settings(
+                    request.form.get("enabled") == "on",
+                    request.form.get("file"),
+                    request.form.get("stale_hours"),
+                )
+                flash("Compression first saved.", "success")
             elif kind == "never_compress_dismiss":
                 flags.dismiss_changed()
             elif kind == "hidden_accounts":
@@ -1127,6 +1147,7 @@ def settings():
         never_compress=flags.settings(),
         never_compress_count=len(flags.protected_paths()),
         never_compress_changed=flags.changed_files(),
+        compression=_compression_settings(),
         hidden_account_names=sorted(
             (setting("jellyfin_user_names", {}) or {}).get(i, "an account")
             for i in setting("jellyfin_hidden_user_ids", []) or []
