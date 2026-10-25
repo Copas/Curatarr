@@ -125,15 +125,22 @@ def _original(media, jellyfin) -> bytes:
     return _jpeg(jellyfin.image(media.jellyfin_id))
 
 
-def apply(media, data: bytes, source: str, *, adopt=False) -> CustomPoster | None:
+def apply(
+    media, data: bytes, source: str, *, adopt=False, user_id=None
+) -> CustomPoster | None:
     """Put ``data`` on as the title's poster in Jellyfin. With ``adopt`` (an
     import), a picture already showing is only recorded. Returns the record,
-    or None when nothing changed (the same picture is on already)."""
+    or None when nothing changed (the same picture is on already).
+
+    With ``user_id`` it's that account's poster only: Jellyfin's own poster
+    stays, and the Curatarr plugin shows this one to that account."""
     from .services import audit, client
 
     if not media.jellyfin_id:
         raise ValueError(f"{media.title} isn't linked to Jellyfin yet")
     picture = normalise(data)
+    if user_id:
+        return _for_account(media, picture, source, user_id)
     jellyfin = client("jellyfin")
     current = jellyfin.image(media.jellyfin_id)
     previous = active(media.id)
@@ -168,11 +175,79 @@ def apply(media, data: bytes, source: str, *, adopt=False) -> CustomPoster | Non
     return record
 
 
+def _for_account(media, picture, source, user_id) -> CustomPoster:
+    from .services import audit
+
+    record = CustomPoster(
+        id=uuid(), media_identity_id=media.id, source=source, jellyfin_user_id=user_id
+    )
+    image = _store() / f"{record.id}.jpg"
+    image.write_bytes(picture)
+    record.image_path = str(image)
+    record.applied_at = utcnow()
+    previous = active(media.id, user_id)
+    if previous:
+        previous.active = False
+    db.session.add(record)
+    audit(
+        "custom_poster_applied",
+        media.id,
+        f"Custom poster for {media.title}, for {account_name(user_id)} only ({source}).",
+        f"custom-poster:{record.id}",
+        payload={"source": source, "user": user_id},
+    )
+    db.session.commit()
+    return record
+
+
+def account_name(user_id) -> str:
+    from .services import setting
+
+    return (setting("jellyfin_user_names", {}) or {}).get(user_id) or "one account"
+
+
+def for_title(media_id) -> list[CustomPoster]:
+    """A title's active custom posters: everyone's first, then each account's."""
+    rows = (
+        db.session.query(CustomPoster)
+        .filter_by(media_identity_id=media_id, active=True)
+        .all()
+    )
+    return sorted(rows, key=lambda p: (p.jellyfin_user_id is not None, p.created_at))
+
+
+def for_accounts() -> list[CustomPoster]:
+    """Every account's own poster, for the Jellyfin plugin."""
+    return (
+        db.session.query(CustomPoster)
+        .join(MediaIdentity, CustomPoster.media_identity_id == MediaIdentity.id)
+        .filter(
+            CustomPoster.active.is_(True),
+            CustomPoster.jellyfin_user_id.isnot(None),
+            MediaIdentity.jellyfin_id.isnot(None),
+        )
+        .all()
+    )
+
+
 def restore(poster: CustomPoster) -> str:
     """Put the original back; returns what was done, in words."""
     from .services import audit, client
 
     media = poster.media
+    if poster.jellyfin_user_id:
+        poster.active = False
+        poster.restored_at = utcnow()
+        who = account_name(poster.jellyfin_user_id)
+        said = f"{who} sees {media.title}'s usual poster again."
+        audit(
+            "custom_poster_restored",
+            media.id,
+            said,
+            f"custom-poster-restored:{poster.id}",
+        )
+        db.session.commit()
+        return said
     jellyfin = client("jellyfin")
     original = Path(poster.original_path) if poster.original_path else None
     if original and original.exists():
