@@ -105,7 +105,7 @@ def badge_poster(
 FAVOURITE_GOLD = "#E8B923"
 
 
-def favourite_ribbon(source: bytes, text: str, position: str = "top_right") -> bytes:
+def favourite_ribbon(source: bytes, text: str, position: str = "bottom") -> bytes:
     """A gold tag saying whose favourite this is ("★ Sam and Alex"). At the
     top right it mirrors Leaving Soon's tag (top left), so both fit; along
     the bottom it's a band across the poster's foot."""
