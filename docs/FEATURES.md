@@ -318,7 +318,7 @@ Chapter work is heavy (scene detection, transcription, a language model), and th
 - With nobody watching it aims to keep the machine under 85%. Each viewer lowers that by 15 points and each transcode by another 15, never below 35%.
 - Below the target it adds a job, one a minute. Above it, nothing new starts and running jobs finish.
 - With **Make room for people watching** on, if someone is watching and the machine stays well over the target for 30 seconds, running jobs are suspended for at least two minutes and resume once there's room.
-- While Jellyfin transcodes, the graphics card's video decoder is left to it: Curatarr's scene detection decodes on the processor instead, and the decoder's load isn't counted (Jellyfin's own streams can keep it near 100%, which pausing Curatarr wouldn't change). The graphics card's compute, which transcription uses, still counts.
+- While Jellyfin transcodes, the graphics card's video decoder is left to it: Curatarr's scene detection decodes on the processor instead, and the decoder's load isn't counted (Jellyfin's own streams can keep it near 100%, which pausing Curatarr wouldn't change). The graphics card's compute counts, apart from Curatarr's own transcription (its processes' share, from `nvidia-smi pmon`), which doesn't slow Jellyfin's encoder and decoder; on a card that's all but full (98% or more) that counts too. Counting it, a single subtitle job used to pause itself and resume over and over while someone watched.
 
 **Chapter jobs at once** (1–8) is only the ceiling. The Activity card on Enhance → Progress says what was measured and decided, for example *Up to 3 chapter jobs right now · CPU 42%, 1 watching (aiming under 70%)*.
 

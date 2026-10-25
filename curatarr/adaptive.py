@@ -33,6 +33,7 @@ class Reading:
     viewers: int
     transcodes: int
     decoder: float | None = None  # 0-1, its video decoder: shown, not counted
+    own_gpu: float | None = None  # 0-1, Curatarr's own share: shown, not counted
 
     @property
     def load(self) -> float:
@@ -130,6 +131,8 @@ def _describe(reading: Reading, load: float, target: float) -> str:
         # Only Jellyfin's transcoding competes with Curatarr for the graphics
         # card, so without one the GPU isn't counted (it's mostly Curatarr's).
         counted = "" if reading.transcodes else " (not counted: nothing is transcoding)"
+        if reading.transcodes and reading.own_gpu:
+            counted = f" besides Curatarr's own {reading.own_gpu:.0%}"
         parts.append(f"GPU {reading.gpu:.0%}{counted}")
     if reading.decoder is not None and reading.transcodes:
         parts.append(f"video decoder {reading.decoder:.0%} (Jellyfin's)")
@@ -179,11 +182,63 @@ def _load_fallback() -> float | None:
 leave_decoder = False
 last_decoder: float | None = None
 
+# Curatarr's own use of the graphics card (transcription) isn't counted
+# against it: counting it, a subtitle job pushed the GPU to 90% while someone
+# watched, paused itself, and resumed once the GPU fell back to 13%, over and
+# over, with the machine mostly idle. Jellyfin's transcoding runs on the
+# card's own encoder and decoder, so Curatarr's compute doesn't slow it,
+# unless the card is all but full: then Curatarr's share counts again.
+SATURATED = 0.98
+last_own_gpu: float | None = None
+
+
+def _uid_of(pid: int) -> int | None:
+    try:
+        with open(f"/proc/{pid}/status", encoding="ascii") as status:
+            for line in status:
+                if line.startswith("Uid:"):
+                    return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def own_share(table: str, uid: int, uid_of=None) -> float:
+    """Curatarr's processes' (its own user's) share of the GPU's compute,
+    from ``nvidia-smi pmon -s u`` output."""
+    uid_of = uid_of or _uid_of
+    total = 0
+    for line in table.splitlines():
+        cols = line.split()
+        if line.startswith("#") or len(cols) < 4:
+            continue
+        if cols[1].isdigit() and cols[3].isdigit() and uid_of(int(cols[1])) == uid:
+            total += int(cols[3])
+    return min(total, 100) / 100
+
+
+def _own_compute() -> float | None:
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "pmon", "-c", "1", "-s", "u"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    return own_share(result.stdout, os.getuid())
+
 
 def gpu_use() -> float | None:
-    """The NVIDIA GPU's compute use, or None without one (its video decoder's
-    is kept in last_decoder)."""
-    global last_decoder
+    """The NVIDIA GPU's compute use by everything but Curatarr (all of it,
+    Curatarr's included, when the card is all but full), or None without one.
+    Its video decoder's is kept in last_decoder, Curatarr's own share in
+    last_own_gpu."""
+    global last_decoder, last_own_gpu
     try:
         result = subprocess.run(
             [
@@ -207,6 +262,9 @@ def gpu_use() -> float | None:
     except (IndexError, ValueError):
         return None
     last_decoder = decoder
+    last_own_gpu = _own_compute() if compute else 0.0
+    if last_own_gpu and compute < SATURATED:
+        return max(0.0, compute - last_own_gpu)
     return compute
 
 
