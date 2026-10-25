@@ -59,9 +59,41 @@ def custom_posters_page():
         checked=state.get("at"),
         options=options,
         accounts=_accounts(),
+        ribbon=custom_posters.ribbon_settings(),
         written=written,
         count=count,
     )
+
+
+@bp.post("/library/posters/ribbons")
+def custom_posters_ribbons():
+    options = custom_posters.save_ribbon_settings(request.form, _accounts())
+    flash(
+        "Favourite ribbons saved; Jellyfin apps show them within a couple of minutes."
+        if options["enabled"]
+        else "Favourite ribbons are off.",
+        "success",
+    )
+    return redirect(url_for("main.custom_posters_page") + "#ribbons")
+
+
+@bp.get("/library/posters/ribbon-preview.jpg")
+def custom_posters_ribbon_preview():
+    """The ribbon as it would look, on a plain stand-in poster."""
+    from PIL import Image
+
+    from .artwork import favourite_ribbon
+
+    options = custom_posters.ribbon_settings()
+    blank = BytesIO()
+    Image.new("RGB", (400, 600), "#2b3a4a").save(blank, format="JPEG")
+    names = sorted(name for _id, name in _accounts())[:2] or ["Sam"]
+    picture = favourite_ribbon(
+        blank.getvalue(),
+        custom_posters.ribbon_text(names, options["label"]),
+        options["position"],
+    )
+    return send_file(BytesIO(picture), mimetype="image/jpeg", max_age=0)
 
 
 @bp.post("/library/posters/prompts")
@@ -181,34 +213,18 @@ def jellyfin_posters():
     """Each account's own posters: which item, whose, and the tag to use."""
     if not _plugin_allowed():
         abort(403)
-    labels: dict[str, str | None] = {}
-    posters = []
-    for p in custom_posters.for_accounts():
-        if p.media_identity_id not in labels:
-            labels[p.media_identity_id] = custom_posters.leaving_label(
-                p.media_identity_id
-            )
-        posters.append(
-            {
-                "item": _bare(p.media.jellyfin_id),
-                "user": _bare(p.jellyfin_user_id),
-                "id": p.id,
-                "tag": custom_posters.account_tag(p, labels[p.media_identity_id]),
-            }
-        )
+    posters = custom_posters.plugin_list()
     return jsonify({"posters": posters})
 
 
-@bp.get("/api/v1/jellyfin/posters/<poster_id>.jpg")
+@bp.get("/api/v1/jellyfin/posters/<path:poster_id>.jpg")
 def jellyfin_poster_image(poster_id):
     if not _plugin_allowed():
         abort(403)
-    poster = db.session.get(CustomPoster, poster_id)
-    if not poster or not poster.active or not Path(poster.image_path).exists():
+    try:
+        picture = custom_posters.plugin_picture(poster_id)
+    except (IntegrationError, ValueError, OSError):
+        abort(503)  # Jellyfin's poster couldn't be read: the plugin tries again
+    if picture is None:
         abort(404)
-    label = custom_posters.leaving_label(poster.media_identity_id)
-    return send_file(
-        BytesIO(custom_posters.account_picture(poster, label)),
-        mimetype="image/jpeg",
-        max_age=300,
-    )
+    return send_file(BytesIO(picture), mimetype="image/jpeg", max_age=300)

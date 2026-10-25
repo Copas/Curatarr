@@ -10,7 +10,7 @@
 - [Problems: burned-in subtitles and broken files](#problems-burned-in-subtitles-and-broken-files)
 - [Search what was said](#search-what-was-said)
 - [Collections and suggestions](#collections-and-suggestions)
-- [Custom posters](#custom-posters): for everyone or chosen accounts, and prompts for an AI
+- [Custom posters](#custom-posters): for everyone or chosen accounts, favourite ribbons, and prompts for an AI
 - [Fun facts](#fun-facts)
 - [Sharing the machine with playback](#sharing-the-machine-with-playback)
 - [Playing smoothly on every device](#playing-smoothly-on-every-device): audio every device plays, seeking on Roku
@@ -249,6 +249,12 @@ How it works: apps fetch a poster from an address with a tag in it, taken from t
 ### Restoring
 
 Before the first custom poster goes on for everyone, the poster it replaces is saved (during Leaving Soon, the one from before the banner), and **Restore original** puts it back. A picture that was already the title's poster when imported is recorded without uploading it again; restoring it takes the metadata provider's poster. An account's own poster is simply removed. On Library → Posters each picture is one tile, listing everyone it's for, with a **Remove** for each and **Remove for all**. During Leaving Soon the countdown is drawn on the custom poster, an account's own included (its tag changes with the banner's words, so apps fetch it again as the days count down), and the custom poster is what's restored if the title is kept. History records each one.
+
+### Favourite ribbons
+
+A gold tag on a title's poster saying whose favourite it is ("★ Sam", or "★ Sam + 1" when several people favourited it), so one account sees what another loves, in every Jellyfin app. Off by default; set it up on Library → Posters under **Favourite ribbons**: who sees whose favourites (a grid of accounts, so one can see another's and not the reverse), whether accounts see their own marked, top right or along the bottom, and names or just a star. A preview shows how it looks.
+
+It needs the Curatarr plugin for Jellyfin (0.4.0.0 or later) and works like posters for one account: the plugin shows each account its version of the poster, drawn over the one it would see anyway (Jellyfin's poster with any Leaving Soon countdown, which sits top left, or the account's own custom poster). Favourites come from Jellyfin, so a new one gets its ribbon at the next reconciliation. The first time it's switched on, the plugin downloads each marked poster once (a few minutes for a few hundred), and again only when the poster, the countdown or the ribbon changes.
 
 ### Make them with an AI
 

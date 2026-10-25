@@ -102,6 +102,56 @@ def badge_poster(
     return output.getvalue()
 
 
+FAVOURITE_GOLD = "#E8B923"
+
+
+def favourite_ribbon(source: bytes, text: str, position: str = "top_right") -> bytes:
+    """A gold tag saying whose favourite this is ("★ Sam and Alex"). At the
+    top right it mirrors Leaving Soon's tag (top left), so both fit; along
+    the bottom it's a band across the poster's foot."""
+    image = Image.open(BytesIO(source)).convert("RGB")
+    image.thumbnail((1000, 1500))
+    width, height = image.size
+    drawing = ImageDraw.Draw(image)
+    if position == "bottom":
+        band = max(24, round(height * 0.075))
+        top = height - band
+        drawing.rectangle((0, top, width, height), fill=FAVOURITE_GOLD)
+        drawing.rectangle(
+            (0, top - max(2, round(height * 0.004)), width, top), fill="#111111"
+        )
+        font, box = _fit(drawing, text, round(band * 0.6), width * 0.92)
+        drawing.text(
+            (
+                (width - (box[2] - box[0])) / 2 - box[0],
+                top + (band - (box[3] - box[1])) / 2 - box[1],
+            ),
+            text,
+            fill="#1A1405",
+            font=font,
+        )
+    else:
+        size = max(12, round(width * 0.055))
+        # At most just under half the width: Leaving Soon's tag is opposite.
+        font, box = _fit(drawing, text, size, width * 0.44)
+        text_width, text_height = box[2] - box[0], box[3] - box[1]
+        pad_x, pad_y = round(size * 0.5), round(size * 0.45)
+        tag_width = text_width + 2 * pad_x
+        top, left = round(height * 0.05), width - tag_width
+        drawing.rectangle(
+            (left, top, width, top + text_height + 2 * pad_y), fill=FAVOURITE_GOLD
+        )
+        drawing.text(
+            (left + pad_x - box[0], top + pad_y - box[1]),
+            text,
+            fill="#1A1405",
+            font=font,
+        )
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=88)
+    return output.getvalue()
+
+
 def _recorded(label: str) -> str:
     return f"{BADGE_STYLE}:{label}"
 

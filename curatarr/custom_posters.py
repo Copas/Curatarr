@@ -727,3 +727,185 @@ def account_picture(poster: CustomPoster, label: str | None) -> bytes:
 
     picture = Path(poster.image_path).read_bytes()
     return badge_poster(picture, label, "Primary") if label else picture
+
+
+# --- Favourite ribbons -----------------------------------------------------
+
+RIBBON_KEY = "favourite_ribbons"
+RIBBON_DEFAULTS = {
+    "enabled": False,
+    "position": "top_right",  # or "bottom"
+    "label": "names",  # or "star"
+    "own": False,  # whether an account sees its own favourites marked
+    "sees": {},  # account → the accounts whose favourites it sees
+}
+RIBBON_STYLE = "fav-1"  # part of each tag: a new look fetches every ribbon again
+_jellyfin_tags: dict[str, str] = {}  # last known poster tags, while Jellyfin is away
+
+
+def ribbon_settings() -> dict:
+    from .services import setting
+
+    return RIBBON_DEFAULTS | (setting(RIBBON_KEY) or {})
+
+
+def save_ribbon_settings(form, accounts) -> dict:
+    from .services import set_setting
+
+    known = [a for a, _name in accounts]
+    options = {
+        "enabled": form.get("enabled") in {"on", "true", "1"},
+        "position": "bottom" if form.get("position") == "bottom" else "top_right",
+        "label": "star" if form.get("label") == "star" else "names",
+        "own": form.get("own") in {"on", "true", "1"},
+        "sees": {
+            viewer: [
+                who
+                for who in known
+                if who != viewer and form.get(f"see-{viewer}-{who}")
+            ]
+            for viewer in known
+        },
+    }
+    set_setting(RIBBON_KEY, options)
+    db.session.commit()
+    return options
+
+
+def ribbon_text(names: list[str], label: str) -> str:
+    if label == "star" or not names:
+        return "★"
+    return f"★ {names[0]}" + (f" + {len(names) - 1}" if len(names) > 1 else "")
+
+
+def ribbons(options=None) -> dict[tuple[str, str], list[str]]:
+    """(account, title) → the names on its ribbon: whose favourite the title
+    is, among the accounts that account sees."""
+    from .models import UserMediaState
+
+    options = options or ribbon_settings()
+    if not options["enabled"]:
+        return {}
+    favourites: dict[str, set[str]] = {}
+    for media_id, user_id in (
+        db.session.query(
+            UserMediaState.media_identity_id, UserMediaState.jellyfin_user_id
+        )
+        .join(MediaIdentity, UserMediaState.media_identity_id == MediaIdentity.id)
+        .filter(
+            UserMediaState.favorite.is_(True), MediaIdentity.jellyfin_id.isnot(None)
+        )
+    ):
+        favourites.setdefault(media_id, set()).add(user_id)
+    found = {}
+    for viewer, seen in (options["sees"] or {}).items():
+        shown = set(seen) | ({viewer} if options["own"] else set())
+        if not shown:
+            continue
+        for media_id, users in favourites.items():
+            names = sorted(account_name(u) for u in users & shown)
+            if names:
+                found[(viewer, media_id)] = names
+    return found
+
+
+def _poster_tags(jellyfin_ids) -> dict[str, str]:
+    """Jellyfin's current poster tag of each title (it changes when the
+    poster does, Leaving Soon's banner included)."""
+    from .services import client
+
+    try:
+        for item in client("jellyfin").item_details(list(jellyfin_ids)):
+            tag = (item.get("ImageTags") or {}).get("Primary")
+            if tag:
+                _jellyfin_tags[str(item.get("Id") or "").replace("-", "")] = tag
+    except IntegrationError:
+        pass  # the last known tags stand in
+    return _jellyfin_tags
+
+
+def plugin_list() -> list[dict]:
+    """What the Curatarr plugin shows each account instead of the usual
+    poster: its own custom posters, and favourite ribbons."""
+    import hashlib
+
+    bare = lambda value: str(value or "").replace("-", "").lower()
+    options = ribbon_settings()
+    marked = ribbons(options)
+    own = {(p.jellyfin_user_id, p.media_identity_id): p for p in for_accounts()}
+    medias = {
+        m.id: m
+        for m in db.session.query(MediaIdentity).filter(
+            MediaIdentity.id.in_({media for _v, media in {*own, *marked}} or {""})
+        )
+    }
+    needs_tag = {
+        medias[media].jellyfin_id
+        for (viewer, media) in marked
+        if (viewer, media) not in own and media in medias
+    }
+    tags = _poster_tags(needs_tag) if needs_tag else _jellyfin_tags
+    leaving: dict[str, str | None] = {}
+    entries = []
+    for key in sorted({*own, *marked}):
+        viewer, media_id = key
+        media = medias.get(media_id)
+        if media is None or not media.jellyfin_id:
+            continue
+        if media_id not in leaving:
+            leaving[media_id] = leaving_label(media_id)
+        poster, names = own.get(key), marked.get(key)
+        if not names:
+            entries.append(
+                {
+                    "item": bare(media.jellyfin_id),
+                    "user": bare(viewer),
+                    "id": poster.id,
+                    "tag": account_tag(poster, leaving[media_id]),
+                }
+            )
+            continue
+        base = poster.id if poster else tags.get(bare(media.jellyfin_id))
+        if base is None:
+            continue  # Jellyfin's poster unknown for now: the usual one shows
+        text = ribbon_text(names, options["label"])
+        tag = hashlib.sha1(
+            "|".join(
+                (base, leaving[media_id] or "", text, options["position"], RIBBON_STYLE)
+            ).encode()
+        ).hexdigest()[:32]
+        entries.append(
+            {
+                "item": bare(media.jellyfin_id),
+                "user": bare(viewer),
+                "id": f"v.{viewer}.{media_id}",
+                "tag": tag,
+            }
+        )
+    return entries
+
+
+def plugin_picture(entry_id: str) -> bytes | None:
+    """The picture for one of plugin_list's entries, or None if it's gone."""
+    from .artwork import _jpeg, favourite_ribbon
+    from .services import client
+
+    if not entry_id.startswith("v."):
+        poster = db.session.get(CustomPoster, entry_id)
+        if not poster or not poster.active or not Path(poster.image_path).exists():
+            return None
+        return account_picture(poster, leaving_label(poster.media_identity_id))
+    _v, viewer, media_id = entry_id.split(".", 2)
+    options = ribbon_settings()
+    names = ribbons(options).get((viewer, media_id))
+    media = db.session.get(MediaIdentity, media_id)
+    if not names or media is None or not media.jellyfin_id:
+        return None
+    poster = active(media_id, viewer)
+    if poster and Path(poster.image_path).exists():
+        base = account_picture(poster, leaving_label(media_id))
+    else:
+        base = _jpeg(client("jellyfin").image(media.jellyfin_id))
+    return favourite_ribbon(
+        base, ribbon_text(names, options["label"]), options["position"]
+    )
