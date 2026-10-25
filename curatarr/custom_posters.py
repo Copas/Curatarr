@@ -60,13 +60,20 @@ def settings() -> dict:
     return {"folder": None, "prompts": {}} | (setting(KEY) or {})
 
 
-def save_settings(folder: str | None) -> None:
+def save_settings(folder: str | None, accounts=None) -> None:
+    """The import folder, and who imported posters are for (None or empty:
+    everyone, as Jellyfin's own poster)."""
     from .services import set_setting
 
     folder = (folder or "").strip() or None
     if folder and not Path(folder).is_dir():
         raise ValueError(f"Curatarr can't find the folder {folder}")
-    set_setting(KEY, settings() | {"folder": folder})
+    chosen = sorted({a for a in accounts or [] if a})
+    previous = settings()
+    if chosen != sorted(previous.get("accounts") or []):
+        # Who they're for changed: every picture is looked at again.
+        set_setting(STATE_KEY, import_state() | {"seen": {}, "at": None})
+    set_setting(KEY, previous | {"folder": folder, "accounts": chosen})
     db.session.commit()
 
 
@@ -198,6 +205,58 @@ def _for_account(media, picture, source, user_id) -> CustomPoster:
     )
     db.session.commit()
     return record
+
+
+def import_for_accounts(media, data: bytes, source: str, accounts) -> bool:
+    """An imported picture for some accounts only. Each gets it (unless it
+    already has this picture), and if it's everyone's poster in Jellyfin now
+    (put on for everyone before), everyone else gets Jellyfin's usual poster
+    back. Returns whether anything changed."""
+    from .services import client
+
+    if not media.jellyfin_id:
+        raise ValueError(f"{media.title} isn't linked to Jellyfin yet")
+    picture = normalise(data)
+    changed = False
+    for user_id in accounts:
+        mine = active(media.id, user_id)
+        kept = Path(mine.image_path) if mine else None
+        if kept and kept.exists() and _same_picture(picture, kept.read_bytes()):
+            continue  # already theirs
+        _for_account(media, picture, source, user_id)
+        changed = True
+    everyone = active(media.id)
+    if everyone and _same_picture(picture, Path(everyone.image_path).read_bytes()):
+        restore(everyone)
+        return True
+    if everyone is None:
+        current = client("jellyfin").image(media.jellyfin_id)
+        if current and _same_picture(picture, current):
+            _give_back_usual(media)
+            return True
+    return changed
+
+
+def _give_back_usual(media) -> None:
+    """Jellyfin's poster is a custom picture Curatarr has no record of (put on
+    for everyone before): the metadata provider's poster goes back on."""
+    from .services import audit, client
+
+    jellyfin = client("jellyfin")
+    offered = jellyfin.remote_images(media.jellyfin_id, "Primary")
+    if not offered:
+        raise ValueError(
+            f"Jellyfin's metadata providers offer no poster for {media.title}"
+        )
+    jellyfin.download_remote_image(media.jellyfin_id, offered[0], "Primary")
+    audit(
+        "custom_poster_restored",
+        media.id,
+        f"Everyone else sees {media.title}'s provider poster again; the custom one "
+        "is for chosen accounts only.",
+        f"custom-poster-usual:{media.id}:{utcnow().isoformat()}",
+    )
+    db.session.commit()
 
 
 def account_name(user_id) -> str:
@@ -354,6 +413,7 @@ def sweep(now=None) -> int:
     from .services import _as_datetime, set_setting
 
     folder = settings().get("folder")
+    accounts = settings().get("accounts") or []
     if not folder:
         return 0
     now = now or utcnow()
@@ -387,7 +447,10 @@ def sweep(now=None) -> int:
             seen[path.name] = mtime
             continue
         try:
-            if apply(media, path.read_bytes(), path.name, adopt=True):
+            if accounts:
+                if import_for_accounts(media, path.read_bytes(), path.name, accounts):
+                    changed += 1
+            elif apply(media, path.read_bytes(), path.name, adopt=True):
                 changed += 1
         except IntegrationError:
             db.session.rollback()

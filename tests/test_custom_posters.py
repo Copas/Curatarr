@@ -297,3 +297,59 @@ def test_a_poster_for_one_account_and_the_plugins_list(app, client, monkeypatch)
         ).get_json()["posters"]
         == []
     )
+
+
+def test_imported_posters_for_chosen_accounts_give_everyone_else_the_usual_one(
+    app,
+    media_env,  # noqa: F811
+    monkeypatch,
+    tmp_path,
+):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie("/movies/Film (2020)/Film.mkv")
+    mine = _picture("#cc2222")
+    # Put on for everyone before (by hand, unrecorded), so Jellyfin shows it now.
+    jellyfin = _fake(monkeypatch, mine)
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex", "u3": "Kim"})
+    custom_posters.save_settings(str(tmp_path), ["u1", "u2"])
+    settled = time.time() - 60
+    (tmp_path / "01_film.jpg").write_bytes(mine)
+    os.utime(tmp_path / "01_film.jpg", (settled, settled))
+    assert custom_posters.sweep() == 1
+    assert custom_posters.active(media.id, "u1") and custom_posters.active(
+        media.id, "u2"
+    )
+    assert custom_posters.active(media.id, "u3") is None
+    assert jellyfin.downloaded == ["https://provider/poster.jpg"]  # everyone else
+    # Looked at again (who it's for changed): nothing more to do.
+    custom_posters.save_settings(str(tmp_path), ["u1"])
+    jellyfin.current = _picture("#223344")  # the provider's poster is on now
+    assert custom_posters.sweep() == 0
+    assert len(jellyfin.downloaded) == 1
+
+
+def test_a_recorded_poster_for_everyone_becomes_one_for_chosen_accounts(
+    app,
+    media_env,  # noqa: F811
+    monkeypatch,
+    tmp_path,
+):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie("/movies/Film (2020)/Film.mkv")
+    original = _picture("#223344")
+    jellyfin = _fake(monkeypatch, original)
+    mine = _picture("#cc2222")
+    custom_posters.apply(media, mine, "01_film.jpg")  # everyone's, original kept
+    set_setting("jellyfin_user_names", {"u1": "Sam"})
+    custom_posters.save_settings(str(tmp_path), ["u1"])
+    settled = time.time() - 60
+    (tmp_path / "01_film.jpg").write_bytes(mine)
+    os.utime(tmp_path / "01_film.jpg", (settled, settled))
+    assert custom_posters.sweep() == 1
+    assert (
+        custom_posters.active(media.id, "u1")
+        and custom_posters.active(media.id) is None
+    )
+    assert custom_posters._same_picture(jellyfin.current, original)  # the real original

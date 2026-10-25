@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Imported posters can be for chosen accounts** (Library → Posters → *Imported posters are for*). Each picture in the import folder becomes those accounts' own poster, and everyone else keeps the usual one: where an imported picture was everyone's poster before, Jellyfin's own goes back on for them (the saved original, or the metadata provider's poster when Curatarr has none). Changing who they're for looks at every picture again.
 - **A poster you pick shows before it's uploaded**, in the title's Poster panel, and the panel says whether the large picture is what everyone sees or what everyone else sees.
 - **Fixed: Enhance's Activity panel failed to load** when a subtitle check listed there was queued again while the page was being drawn (the picture-subtitle pass requeues many at once). It shows "queued again" instead.
 - **A poster for one account** (prototype; needs the Curatarr plugin for Jellyfin). On a title's Poster panel, choose *Only for* an account: that account sees the picture as the title's poster in every Jellyfin app, and everyone else keeps the usual one. Jellyfin has one poster per title, so the plugin swaps the poster's image tag in what's sent to that account, and serves the picture (resized and cached by Jellyfin like its own) when an app asks for that tag; Curatarr lists the posters for it at `/api/v1/jellyfin/posters`, with the webhook token.
