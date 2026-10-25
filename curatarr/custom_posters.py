@@ -741,7 +741,14 @@ PROMPT_DEFAULTS = {
     "photos": "",
     "people": "",
     "kinds": ["Primary"],  # which pictures to ask for, as a matching set
+    "style": None,  # the look asked for; None: DEFAULT_STYLE, "": none
 }
+DEFAULT_STYLE = (
+    "An extreme, heightened take on the story, like an over-the-top movie "
+    "poster: big, intense facial expressions (terror, joy, rage, grief, "
+    "romantic or sexual tension, whatever the story runs on), pushed further "
+    "than the film itself, with bold, dramatic composition and lighting."
+)
 OVERVIEW_CHARS = 280
 # What each picture should be, for the prompts.
 KIND_SPECS = {
@@ -770,7 +777,10 @@ KIND_SPECS = {
 
 
 def prompt_options() -> dict:
-    return PROMPT_DEFAULTS | (settings().get("prompts") or {})
+    options = PROMPT_DEFAULTS | (settings().get("prompts") or {})
+    if options["style"] is None:
+        options["style"] = DEFAULT_STYLE
+    return options
 
 
 def save_prompt_options(form) -> dict:
@@ -790,6 +800,7 @@ def save_prompt_options(form) -> dict:
         "photos": (form.get("photos") or "").strip(),
         "people": (form.get("people") or "").strip()[:200],
         "kinds": kinds,
+        "style": " ".join((form.get("style") or "").split())[:600],
     }
     set_setting(KEY, settings() | {"prompts": options})
     db.session.commit()
@@ -953,17 +964,15 @@ def _casting(photos: str, who: str, single: bool) -> list[str]:
             "is clear."
         ),
         (
-            "- For each title, first make a head-and-shoulders portrait of each of "
-            "them as their character (costume and hair styling for the role, "
-            "plain background), from several of their photos as image inputs. "
-            "Compare it with the photos and redo it until it's clearly them. Keep "
-            "it as a working reference, outside the folder the pictures are "
-            "saved in."
-        ),
-        (
             "- Make every picture with them in it from image inputs, never from a "
-            "description of them: the photos chosen for that picture, plus the "
-            "approved portrait so the faces stay the same across the set."
+            "description of them: the photos chosen for that picture"
+            + (
+                "."
+                if single
+                else ", plus the title's poster, so the faces, costumes and look "
+                "stay the same across its set. Where a title's poster still has "
+                "to be made, make and check it first, then the rest from it."
+            )
         ),
         (
             "- Keep what makes them recognisable, as in the photos: face shape, "
@@ -994,7 +1003,7 @@ def _casting(photos: str, who: str, single: bool) -> list[str]:
     ]
 
 
-def prompts(described, *, batch, photos, people, output) -> list[str]:
+def prompts(described, *, batch, photos, people, output, style="") -> list[str]:
     """One prompt per batch, for Codex or another image-making AI agent."""
     chunks = [described[i : i + batch] for i in range(0, len(described), batch)]
     kinds = [k for k in KINDS if any(k in entry["files"] for entry in described)]
@@ -1017,6 +1026,8 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
             lines += _casting(photos, who, single)
         else:
             lines += ["Don't use any real person's likeness, actors included.", ""]
+        if style:
+            lines += [f"The look: {style}", ""]
         if single:
             lines += [
                 "For each title below, make one poster:",
@@ -1045,6 +1056,11 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
                 f"- Save it in {output} under the file name given. Write each file in "
                 "one go (or write it elsewhere and move it in): it's picked up as soon "
                 "as it stops changing."
+            ),
+            (
+                "- Make only the files listed: no drafts, test images, extra "
+                "versions or working references. Image generation is slow and "
+                "costly, and Jellyfin uses nothing else."
             ),
             (
                 "- If one comes out wrong (a misspelled title, an unconvincing face), "

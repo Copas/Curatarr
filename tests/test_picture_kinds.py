@@ -356,8 +356,10 @@ def test_prompts_keep_the_reference_people_recognisable(app, client, tmp_path):
     )[0]
     assert "Reference photos of Sam and Alex" in text and "/photos" in text
     assert "in place of the actors" in text
-    assert "as image inputs" in text and "side by side" in text
-    assert "Use all of their photos" in text and "portrait of each of them" in text
+    assert "from image inputs" in text and "side by side" in text
+    assert "Make only the files listed" in text
+    assert "Use all of their photos" in text and "plus the title's poster" in text
+    assert "head-and-shoulders" not in text  # nothing made that Jellyfin doesn't use
     assert "a different photo leads each time" in text
     assert "large and clear enough to recognise" in text  # the background
     # A photos folder that isn't there is saved, with a warning.
@@ -373,3 +375,35 @@ def test_prompts_keep_the_reference_people_recognisable(app, client, tmp_path):
         data={"titles": "favourites", "batch": "5", "photos": str(tmp_path)},
     )
     assert custom_posters.prompt_options()["photos"] == str(tmp_path)
+
+
+def test_prompts_ask_for_an_extreme_take_unless_told_otherwise(app, client, tmp_path):
+    entry = {
+        "number": 1,
+        "title": "Film",
+        "year": 2016,
+        "kind": "film",
+        "genres": [],
+        "overview": "",
+        "file": "01_film.jpg",
+        "files": {"Primary": "01_film.jpg"},
+        "made": None,
+    }
+    options = custom_posters.prompt_options()
+    assert "extreme, heightened take" in options["style"]  # the default
+    text = custom_posters.prompts(
+        [entry], batch=5, photos="", people="", output="/out", style=options["style"]
+    )[0]
+    assert "The look: An extreme" in text and "sexual tension" in text
+    assert "The look" in client.get("/library/posters").text
+    client.post(
+        "/library/posters/prompts",
+        data={"titles": "favourites", "batch": "5", "style": "Quiet,  painterly."},
+    )
+    assert custom_posters.prompt_options()["style"] == "Quiet, painterly."
+    client.post("/library/posters/prompts", data={"titles": "favourites", "batch": "5"})
+    assert custom_posters.prompt_options()["style"] == ""  # emptied: none
+    plain = custom_posters.prompts(
+        [entry], batch=5, photos="", people="", output="/out", style=""
+    )[0]
+    assert "The look" not in plain
