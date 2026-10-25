@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc16 (2026-10-25)
+
+- **The AI prompts say where the role portraits go**: a *Role portraits* folder beside the import folder, one folder per title, as each person's name (Amber.png). Told only to keep them out of the import folder, the agent made up a folder of its own. The prompts also say to work title by title, portraits first, then each picture saved as soon as it's checked, so a batch's pictures appear as it goes.
+
 ## 0.2.0rc15 (2026-10-25)
 
 - **Fixed: updating to plugin 0.8.0.0 fetched every wide tile again.** A wide tile made from an account's poster was listed as a picture of its own, under a new tag, so the plugin downloaded all of them again (about 700), each drawn afresh, while it already had them. It's the poster's wide version again, as plugin 0.7.0.0 had it, so those files are kept; an account's own wide tile still takes its place. With plugin 0.8.1.0, pictures it already has show straight away after Jellyfin restarts.

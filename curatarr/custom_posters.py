@@ -925,7 +925,17 @@ def describe(titles, kinds=("Primary",), skip_done=False) -> list[dict]:
     return described
 
 
-def _casting(photos: str, who: str, single: bool) -> list[str]:
+def portraits_folder(output: str) -> str:
+    """Where the agent keeps its role portraits: beside the import folder,
+    never in it (Curatarr would take them for posters). Named, because left
+    to choose, the agent made up a folder nobody could find."""
+    folder = Path(output)
+    if not folder.is_absolute():
+        return "a folder of its own beside the import folder"
+    return str(folder.parent / "Role portraits")
+
+
+def _casting(photos: str, who: str, single: bool, portraits: str) -> list[str]:
     """How to cast the people in the reference photos, keeping them
     recognisable: an image model left to a description makes generic faces
     with their general look, or puts them small and turned away."""
@@ -956,9 +966,10 @@ def _casting(photos: str, who: str, single: bool) -> list[str]:
             "- For each title, first make a head-and-shoulders portrait of each of "
             "them as their character (costume and hair styling for the role, "
             "plain background), from several of their photos as image inputs. "
-            "Compare it with the photos and redo it until it's clearly them. Keep "
-            "it as a working reference, outside the folder the pictures are "
-            "saved in."
+            "Compare it with the photos and redo it until it's clearly them. Save "
+            f"it as a working reference in {portraits}, in a folder named after "
+            "the title's file name (without .jpg), as the person's name: "
+            "Amber.png, say. Never in the folder the pictures are saved in."
         ),
         (
             "- Make every picture with them in it from image inputs, never from a "
@@ -1014,7 +1025,7 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
             "",
         ]
         if photos:
-            lines += _casting(photos, who, single)
+            lines += _casting(photos, who, single, portraits_folder(output))
         else:
             lines += ["Don't use any real person's likeness, actors included.", ""]
         if single:
@@ -1049,6 +1060,18 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
             (
                 "- If one comes out wrong (a misspelled title, an unconvincing face), "
                 "make it again under the same name."
+            ),
+            *(
+                [
+                    (
+                        "- Work title by title: its role portraits first, then its "
+                        "pictures, each saved as soon as it's checked, so they "
+                        "appear in the library as you go. Only the finished "
+                        f"pictures go in {output}."
+                    )
+                ]
+                if photos
+                else []
             ),
             (
                 "- When the batch is done, list each file with a line on its concept."

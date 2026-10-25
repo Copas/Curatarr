@@ -359,6 +359,8 @@ def test_prompts_keep_the_reference_people_recognisable(app, client, tmp_path):
     assert "as image inputs" in text and "side by side" in text
     assert "Use all of their photos" in text and "portrait of each of them" in text
     assert "a different photo leads each time" in text
+    assert "in /Role portraits, in a folder named after" in text  # beside /out
+    assert "Work title by title" in text
     assert "large and clear enough to recognise" in text  # the background
     # A photos folder that isn't there is saved, with a warning.
     response = client.post(
