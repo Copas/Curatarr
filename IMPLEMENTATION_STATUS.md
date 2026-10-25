@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc10 (2026-10-25): the AI prompts ask each title only for the pictures it lacks, matching the poster it has, and leave out deleted titles.
 - v0.2.0rc9 (2026-10-25): every picture of a title (wide tile, background, logo, banner) as well as its poster, for everyone or per account, imported by file name, asked for as matching sets in the AI prompts, with pictures made from the poster where a title has none. Plugin 0.8.0.0 released alongside.
 - v0.2.0rc8 (2026-10-25): an account's own posters and favourite ribbons in rows of wide tiles (the Roku app's home rows), as a landscape version the plugin shows for the Thumb. Plugin 0.7.0.0 released alongside.
 - v0.2.0rc7 (2026-10-25): the first community requests (issues #1–#3) — free-space thresholds as sizes, Leave after watched at every level (episodes leave on their own through Sonarr), Never compress with a skip list and change warnings, a JSON API for flags, and Compression first; per-account favourite ribbons with faces, names on a title's page and looks to choose; hidden accounts; a plugin update banner. Release checks passed: 677 tests and lint, the migration round trip and `db check` on SQLite, a scratch native install started in demo mode outside the checkout. Plugin 0.6.0.0 released alongside.

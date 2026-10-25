@@ -795,10 +795,14 @@ def save_prompt_options(form) -> dict:
 def prompt_titles(
     which: str, skip_done=True, kinds=("Primary",)
 ) -> list[MediaIdentity]:
-    """The titles to write prompts for, A to Z. ``skip_done`` leaves out those
-    that already have a custom picture of every type asked for."""
+    """The titles to write prompts for, A to Z: ones with a file on disk (a
+    deleted title needs no pictures). ``skip_done`` leaves out those that
+    already have a custom picture of every type asked for."""
     from .models import UserMediaState
 
+    on_disk = db.session.query(MediaPart.media_identity_id).filter(
+        MediaPart.has_file.is_(True)
+    )
     query = (
         db.session.query(MediaIdentity)
         .join(Library, MediaIdentity.library_id == Library.id)
@@ -806,6 +810,7 @@ def prompt_titles(
             Library.media_type.in_(("tv", "movies")),
             MediaIdentity.jellyfin_id.isnot(None),
             MediaIdentity.missing_since.is_(None),
+            MediaIdentity.id.in_(on_disk),
         )
     )
     if which == "movies":
@@ -843,9 +848,24 @@ def file_name(base: str, kind: str) -> str:
     return f"{base}.{FILE_WORDS[kind]}{_extension(kind)}"
 
 
-def describe(titles, kinds=("Primary",)) -> list[dict]:
+def _made(titles) -> dict[str, dict[str, CustomPoster]]:
+    """Each title's active custom pictures by type (anyone's)."""
+    found: dict[str, dict[str, CustomPoster]] = {}
+    rows = db.session.query(CustomPoster).filter(
+        CustomPoster.active.is_(True),
+        CustomPoster.media_identity_id.in_([m.id for m in titles] or [""]),
+    )
+    for poster in rows.order_by(CustomPoster.created_at):
+        found.setdefault(poster.media_identity_id, {})[poster.image_type] = poster
+    return found
+
+
+def describe(titles, kinds=("Primary",), skip_done=False) -> list[dict]:
     """Each title with its year, genres, a short plot and the file names to
-    save (``file``: the poster's; ``files``: each type asked for)."""
+    save (``file``: the poster's; ``files``: each type asked for). With
+    ``skip_done``, only the types it has no custom picture of yet; ``made``
+    is then the import folder's file of the poster it has, for the rest to
+    match, and its name is the one the new files are given."""
     from .services import client
 
     details = {}
@@ -855,6 +875,8 @@ def describe(titles, kinds=("Primary",)) -> list[dict]:
     except IntegrationError:
         pass  # titles and years still make a prompt
     folder_years = {m.id: y for _w, m, y in _titles()}
+    made = _made(titles) if skip_done else {}
+    folder = settings().get("folder")
     described = []
     for number, media in enumerate(titles, 1):
         item = details.get(str(media.jellyfin_id).replace("-", ""), {})
@@ -863,6 +885,14 @@ def describe(titles, kinds=("Primary",)) -> list[dict]:
         if len(overview) > OVERVIEW_CHARS:
             overview = overview[:OVERVIEW_CHARS].rsplit(" ", 1)[0] + "…"
         name = f"{number:02d}_{_slug(media.title)}" + (f"-{year}" if year else "")
+        have = made.get(media.id, {}) if skip_done else {}
+        needed = [kind for kind in kinds if kind not in have] or list(kinds)
+        poster = have.get("Primary")
+        source = poster.source if poster else None
+        if source and split_kind(source)[0] == "Primary" and source != "Uploaded":
+            name = Path(source).stem  # beside its poster in the import folder
+        else:
+            source = None
         described.append(
             {
                 "media": media,
@@ -873,7 +903,13 @@ def describe(titles, kinds=("Primary",)) -> list[dict]:
                 "genres": (item.get("Genres") or media.genres or [])[:3],
                 "overview": overview,
                 "file": name + ".jpg",
-                "files": {kind: file_name(name, kind) for kind in kinds},
+                "files": {kind: file_name(name, kind) for kind in needed},
+                "made": source
+                if source
+                and "Primary" not in needed
+                and folder
+                and (Path(folder) / source).is_file()
+                else None,
             }
         )
     return described
@@ -882,7 +918,7 @@ def describe(titles, kinds=("Primary",)) -> list[dict]:
 def prompts(described, *, batch, photos, people, output) -> list[str]:
     """One prompt per batch, for Codex or another image-making AI agent."""
     chunks = [described[i : i + batch] for i in range(0, len(described), batch)]
-    kinds = [k for k in KINDS if described and k in described[0]["files"]]
+    kinds = [k for k in KINDS if any(k in entry["files"] for entry in described)]
     if not kinds:
         kinds = ["Primary"]
     single = kinds == ["Primary"]
@@ -964,9 +1000,15 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
             if entry["overview"]:
                 lines.append(f"    {entry['overview']}")
             if not single:
+                if entry.get("made"):
+                    lines.append(
+                        f"    Its poster is already made: {output}/{entry['made']}. "
+                        "Don't make it again; match the others to its cast and style."
+                    )
                 lines += [
                     f"    {KIND_NAMES[kind].capitalize()} → {entry['files'][kind]}"
                     for kind in kinds
+                    if kind in entry["files"]
                 ]
         texts.append("\n".join(lines))
     return texts
