@@ -1,14 +1,14 @@
 {% extends 'base.html' %}
 {% block title %}Posters · Library · Curatarr{% endblock %}
 {% block content %}
-<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Custom posters</h1><p class="text-secondary mb-0">Pictures chosen for titles instead of Jellyfin's own poster. Upload one on a title's page, or drop pictures in an import folder. The poster each one replaced is kept, so it can be restored.</p></div></header>
+<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Custom posters</h1><p class="text-secondary mb-0">Pictures chosen for titles instead of Jellyfin's own: their posters, and their wide tiles, backgrounds, logos and banners. Upload one on a title's page, or drop pictures in an import folder. The picture each one replaced is kept, so it can be restored.</p></div></header>
 
 <section class="card p-3 mb-4"><h2 class="h5">Import folder</h2>
-  <p class="small text-secondary">Every couple of minutes Curatarr looks here for new pictures (JPEG, PNG or WebP) and puts each on the title its name matches: <code>The Big Lebowski (1998).jpg</code>, <code>the-big-lebowski-1998.png</code> or <code>08_the-big-lebowski.jpg</code>. The year is needed only when titles share a name. A file saved again later replaces its poster. The folder must be readable by Curatarr's worker.</p>
+  <p class="small text-secondary">Every couple of minutes Curatarr looks here for new pictures (JPEG, PNG or WebP) and puts each on the title its name matches: <code>The Big Lebowski (1998).jpg</code>, <code>the-big-lebowski-1998.png</code> or <code>08_the-big-lebowski.jpg</code>. The year is needed only when titles share a name. A word before the extension makes it another of the title's pictures: <code>….thumb.jpg</code> its wide tile, <code>….backdrop.jpg</code> its background, <code>….logo.png</code> its logo (a see-through PNG), <code>….banner.jpg</code> its banner. A file saved again later replaces its picture. The folder must be readable by Curatarr's worker.</p>
   <form method="post" action="{{ url_for('main.custom_posters_settings') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="d-flex flex-wrap gap-2 align-items-center"><input class="form-control w-auto flex-grow-1" type="text" name="folder" value="{{ folder or '' }}" placeholder="/path/to/posters" aria-label="Import folder"><button class="btn btn-primary">Save</button></div>
-    {% if accounts %}<fieldset class="mt-3"><legend class="small fw-semibold mb-1">Imported posters are for</legend>
-      <p class="small text-secondary mb-2">None ticked: everyone, as Jellyfin's own poster. Ticked: only those accounts (with the Curatarr plugin for Jellyfin), and everyone else keeps the usual poster, including where an imported poster was everyone's before.</p>
+    {% if accounts %}<fieldset class="mt-3"><legend class="small fw-semibold mb-1">Imported pictures are for</legend>
+      <p class="small text-secondary mb-2">None ticked: everyone, as Jellyfin's own pictures. Ticked: only those accounts (with the Curatarr plugin for Jellyfin), and everyone else keeps the usual ones, including where an imported picture was everyone's before.</p>
       <div class="d-flex flex-wrap gap-3">{% for id, name in accounts %}<div class="form-check"><input class="form-check-input" type="checkbox" name="accounts" value="{{ id }}" id="acc-{{ id }}"{% if id in import_accounts %} checked{% endif %}><label class="form-check-label" for="acc-{{ id }}">{{ name }}</label></div>{% endfor %}</div>
     </fieldset>{% endif %}
   </form>
@@ -16,6 +16,17 @@
   {% if unmatched %}<details class="mt-3"{% if unmatched|length < 6 %} open{% endif %}><summary>{{ unmatched|length }} file{{ '' if unmatched|length == 1 else 's' }} not put on</summary>
     <ul class="small mb-0 mt-2">{% for name, why in unmatched %}<li><code>{{ name }}</code>: {{ why }}</li>{% endfor %}</ul>
     <p class="small text-secondary mt-2 mb-0">Rename a file to the title's name (and year) and it's tried again.</p></details>{% endif %}
+</section>
+
+<section class="card p-3 mb-4" id="fallbacks"><h2 class="h5">Without a picture of its own</h2>
+  <p class="small text-secondary">Rows of wide tiles, a title's background and some apps' banners use pictures other than the poster. When an account sees its own poster (or a ribbon on one) but the title has no wide tile, background or banner made for it, show it one made from its poster, or Jellyfin's own. Needs the Curatarr plugin for Jellyfin (0.8.0.0 or later; 0.7.0.0 for wide tiles).</p>
+  <form method="post" action="{{ url_for('main.custom_posters_fallbacks') }}" class="d-flex flex-wrap gap-3 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="small">Wide tile <select class="form-select form-select-sm d-inline-block w-auto ms-1" name="Thumb"><option value="widened"{% if fallbacks.Thumb == 'widened' %} selected{% endif %}>The poster, on a blurred copy of itself</option><option value="own"{% if fallbacks.Thumb == 'own' %} selected{% endif %}>Jellyfin's own</option></select></label>
+    <label class="small">Background <select class="form-select form-select-sm d-inline-block w-auto ms-1" name="Backdrop"><option value="own"{% if fallbacks.Backdrop == 'own' %} selected{% endif %}>Jellyfin's own</option><option value="blurred"{% if fallbacks.Backdrop == 'blurred' %} selected{% endif %}>The poster, blurred and darkened</option></select></label>
+    <label class="small">Banner <select class="form-select form-select-sm d-inline-block w-auto ms-1" name="Banner"><option value="own"{% if fallbacks.Banner == 'own' %} selected{% endif %}>Jellyfin's own</option><option value="widened"{% if fallbacks.Banner == 'widened' %} selected{% endif %}>The poster, on a blurred copy of itself</option></select></label>
+    <button class="btn btn-primary btn-sm">Save</button>
+  </form>
+  <p class="small text-secondary mt-2 mb-0">A logo is only ever one made for it.</p>
 </section>
 
 <section class="card p-3 mb-4" id="ribbons"><h2 class="h5">Favourite ribbons</h2>
@@ -55,7 +66,7 @@
 </section>
 
 <section class="card p-3 mb-4" id="prompts"><h2 class="h5">Make them with an AI</h2>
-  <p class="small text-secondary">Curatarr writes the prompts; an image-making AI agent (Codex, or any other that can read and save files) makes the posters and saves them in the import folder, where Curatarr puts them on. Each prompt is a batch, with each title's year, genres, plot and the file name to save it as.</p>
+  <p class="small text-secondary">Curatarr writes the prompts; an image-making AI agent (Codex, or any other that can read and save files) makes the pictures and saves them in the import folder, where Curatarr puts them on. Each prompt is a batch, with each title's year, genres, plot and the file names to save them as. Asking for more than the poster gets a matching set: the same cast and style, each picture a different scene.</p>
   <form method="post" action="{{ url_for('main.custom_posters_prompts') }}" class="row g-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="col-sm-6 col-lg-4"><label class="form-label small mb-1" for="p-titles">Titles</label><select class="form-select" id="p-titles" name="titles">
       <option value="favourites"{% if options.titles == 'favourites' %} selected{% endif %}>Anyone's favourites</option>
@@ -64,7 +75,8 @@
       <option value="shows"{% if options.titles == 'shows' %} selected{% endif %}>Every TV show</option>
     </select></div>
     <div class="col-6 col-sm-3 col-lg-2"><label class="form-label small mb-1" for="p-batch">Per batch</label><input class="form-control" id="p-batch" type="number" name="batch" min="1" max="100" value="{{ options.batch }}"></div>
-    <div class="col-6 col-sm-3 col-lg-2 form-check ms-2 mb-2"><input class="form-check-input" type="checkbox" id="p-skip" name="skip_done"{% if options.skip_done %} checked{% endif %}><label class="form-check-label small" for="p-skip">Skip titles that have one</label></div>
+    <div class="col-6 col-sm-3 col-lg-2 form-check ms-2 mb-2"><input class="form-check-input" type="checkbox" id="p-skip" name="skip_done"{% if options.skip_done %} checked{% endif %}><label class="form-check-label small" for="p-skip">Skip titles that have them all</label></div>
+    <fieldset class="col-12"><legend class="form-label small mb-1">Pictures to make</legend><div class="d-flex flex-wrap gap-3">{% for kind in kinds %}<div class="form-check"><input class="form-check-input" type="checkbox" name="kinds" value="{{ kind }}" id="p-kind-{{ kind }}"{% if kind in options.kinds %} checked{% endif %}><label class="form-check-label small" for="p-kind-{{ kind }}">{{ kind_names[kind]|capitalize }}</label></div>{% endfor %}</div></fieldset>
     <div class="col-12 col-lg-6"><label class="form-label small mb-1" for="p-photos">Reference photos folder <span class="text-secondary">(optional)</span></label><input class="form-control" id="p-photos" name="photos" value="{{ options.photos }}" placeholder="Where the AI agent finds photos of the people to cast"></div>
     <div class="col-12 col-lg-6"><label class="form-label small mb-1" for="p-people">Who's in them <span class="text-secondary">(optional)</span></label><input class="form-control" id="p-people" name="people" value="{{ options.people }}" maxlength="200" placeholder="e.g. a married couple, Sam (left) and Alex"></div>
     <div class="col-12"><button class="btn btn-primary">Write prompts</button>{% if not folder %} <span class="small text-warning ms-2">Set the import folder above first, so the prompts say where to save.</span>{% endif %}</div>
@@ -72,18 +84,20 @@
   <p class="small text-secondary mt-2 mb-0">Only use photos of people who've agreed. The photos are read by the AI agent you paste the prompt into, never by Curatarr; if it's a cloud service, they're sent there.</p>
   {% if count is not none %}<hr>{% if written %}<p class="mb-2"><strong>{{ count }}</strong> title{{ '' if count == 1 else 's' }} in {{ written|length }} batch{{ '' if written|length == 1 else 'es' }}. Paste one at a time; the next can start when the last has finished.</p>
     {% for text in written %}<div class="mb-3"><div class="d-flex justify-content-between align-items-center mb-1"><span class="small fw-semibold">Batch {{ loop.index }}</span><button type="button" class="btn btn-sm btn-outline-light" data-copy="#prompt-{{ loop.index }}">Copy</button></div><textarea class="form-control font-monospace small" id="prompt-{{ loop.index }}" rows="10" readonly>{{ text }}</textarea></div>{% endfor %}
-  {% else %}<p class="mb-0">No titles to write prompts for{% if options.skip_done %}: they all have a custom poster{% endif %}.</p>{% endif %}{% endif %}
+  {% else %}<p class="mb-0">No titles to write prompts for{% if options.skip_done %}: they all have the pictures asked for{% endif %}.</p>{% endif %}{% endif %}
 </section>
 
 {% macro who(p) %}{% if p.jellyfin_user_id %}{{ accounts|selectattr(0, 'equalto', p.jellyfin_user_id)|map(attribute=1)|first or 'One account' }}{% else %}Everyone{% endif %}{% endmacro %}
 {% set total = groups|map(attribute='posters')|map('length')|sum %}
-<h2 class="h5">{{ groups|length }} custom poster{{ '' if groups|length == 1 else 's' }}{% if total > groups|length %} <span class="text-secondary small fw-normal">({{ total }} across accounts)</span>{% endif %}</h2>
+<h2 class="h5">{{ groups|length }} title{{ '' if groups|length == 1 else 's' }} with custom pictures{% if total > groups|length %} <span class="text-secondary small fw-normal">({{ total }} posters across accounts)</span>{% endif %}</h2>
 {% if groups %}<div class="poster-grid">{% for g in groups %}<div class="poster-tile">
-  <a href="{{ url_for('main.title', media_id=g.media.id) }}#poster"><img src="{{ url_for('main.custom_poster_image', poster_id=g.image.id) }}" alt="" loading="lazy"></a>
+  <a href="{{ url_for('main.title', media_id=g.media.id) }}#poster"><img{% if g.kind != 'Primary' %} class="tile-{{ g.kind|lower }}"{% endif %} src="{{ url_for('main.custom_poster_image', poster_id=g.image.id) }}" alt="" loading="lazy"></a>
   <div class="poster-title" title="{{ g.media.title }}"><a href="{{ url_for('main.title', media_id=g.media.id) }}#poster">{{ g.media.title }}</a></div>
   {% if g.applied_at %}<div class="small text-secondary">{{ g.applied_at|when('date') }}</div>{% endif %}
-  <ul class="poster-who">{% for p in g.posters %}<li><span>{{ who(p) }}</span><form method="post" action="{{ url_for('main.title_poster_restore', media_id=g.media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery"><input type="hidden" name="poster" value="{{ p.id }}"><button class="btn btn-link btn-sm p-0" aria-label="{{ 'Restore the original poster for everyone' if not p.jellyfin_user_id else 'Remove it for ' ~ who(p) }}" data-tip="{{ 'Shows this account the usual poster again.' if p.jellyfin_user_id else ('Puts back the poster this title had before.' if p.original_path else 'Curatarr has no copy of the poster from before, so this takes the metadata provider\'s poster.') }}">{{ 'Remove' if p.jellyfin_user_id else 'Restore' }}</button></form></li>{% endfor %}</ul>
-  {% if g.posters|length > 1 %}<form method="post" action="{{ url_for('main.title_poster_restore', media_id=g.media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery">{% for p in g.posters %}<input type="hidden" name="poster" value="{{ p.id }}">{% endfor %}<button class="btn btn-sm btn-outline-secondary w-100" data-tip="Everyone sees the usual poster again.">Remove for all</button></form>{% endif %}
+  <ul class="poster-who">{% for p in g.posters %}<li><span>{{ who(p) }}</span><form method="post" action="{{ url_for('main.title_poster_restore', media_id=g.media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery"><input type="hidden" name="poster" value="{{ p.id }}"><button class="btn btn-link btn-sm p-0" aria-label="{{ ('Restore the original ' ~ g.noun ~ ' for everyone') if not p.jellyfin_user_id else 'Remove it for ' ~ who(p) }}" data-tip="{{ ('Shows this account the usual ' ~ g.noun ~ ' again.') if p.jellyfin_user_id else ('Puts back the ' ~ g.noun ~ ' this title had before.' if p.original_path else ('The title had no ' ~ g.noun ~ ' before, so this removes it.' if p.original_path == '' else 'Curatarr has no copy of the ' ~ g.noun ~ ' from before, so this takes the metadata provider\'s.')) }}">{{ 'Remove' if p.jellyfin_user_id or p.original_path == '' else 'Restore' }}</button></form></li>{% endfor %}</ul>
+  {% if g.kind != 'Primary' %}<div class="small text-secondary">Its {{ g.noun }}</div>{% endif %}
+  {% if g.posters|length > 1 %}<form method="post" action="{{ url_for('main.title_poster_restore', media_id=g.media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery">{% for p in g.posters %}<input type="hidden" name="poster" value="{{ p.id }}">{% endfor %}<button class="btn btn-sm btn-outline-secondary w-100" data-tip="Everyone sees the usual {{ g.noun }} again.">Remove for all</button></form>{% endif %}
+  {% if g.extras %}<div class="poster-extras">{% for e in g.extras %}<figure><a href="{{ url_for('main.title', media_id=g.media.id) }}#poster"><img class="poster poster-{{ e.kind|lower }}" src="{{ url_for('main.custom_poster_image', poster_id=e.image.id) }}" alt="" loading="lazy"></a><figcaption>{{ e.noun|capitalize }} · {% for p in e.posters %}{{ who(p) }}{{ ', ' if not loop.last }}{% endfor %}</figcaption></figure>{% endfor %}</div>{% endif %}
 </div>{% endfor %}</div>
 {% else %}<div class="empty-state"><h2 class="h6">No custom posters yet</h2><p class="mb-0">Upload one on a title's page under Poster, or set an import folder above.</p></div>{% endif %}
 <script src="{{ url_for('static', filename='copy.js', v='1') }}"></script>

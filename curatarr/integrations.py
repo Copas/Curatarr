@@ -301,12 +301,12 @@ class JellyfinClient(Client):
             params={"newIndex": new_index},
         )
 
-    def put_image(self, item_id, image_bytes, kind="Primary"):
+    def put_image(self, item_id, image_bytes, kind="Primary", mimetype="image/jpeg"):
         return self.request(
             "POST",
             f"/Items/{item_id}/Images/{_image_path(kind)}",
             data=base64.b64encode(image_bytes).decode("ascii"),
-            headers={"Content-Type": "image/jpeg"},
+            headers={"Content-Type": mimetype},
         )
 
     def configuration(self):

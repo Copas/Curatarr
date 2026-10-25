@@ -152,12 +152,12 @@ def test_the_pages(app, client, monkeypatch):
     _library, media, _part = _movie()
     _fake(monkeypatch, _picture("#223344"))
     page = client.get(f"/titles/{media.id}").text
-    assert "Use this poster" in page
+    assert "Use this picture" in page and "As its wide tile" in page
     assert 'data-preview="#poster-preview"' in page and "poster-preview.js" in page
     custom_posters.apply(media, _picture("#cc2222"), "Uploaded")
     assert "Restore original" in client.get(f"/titles/{media.id}").text
     gallery = client.get("/library/posters").text
-    assert "1 custom poster" in gallery and media.title in gallery
+    assert "1 title with custom pictures" in gallery and media.title in gallery
 
 
 def test_uploading_a_big_picture_on_the_title_page(app, client, monkeypatch):
@@ -369,7 +369,9 @@ def test_the_gallery_shows_one_tile_per_picture(app, client, monkeypatch):
     groups = custom_posters.gallery_groups()
     assert len(groups) == 1 and len(groups[0]["posters"]) == 3
     page = client.get("/library/posters").text
-    assert "1 custom poster" in page and "(3 across accounts)" in page
+    assert (
+        "1 title with custom pictures" in page and "(3 posters across accounts)" in page
+    )
     assert page.count("Remove for all") == 1
     # Remove for all: every account's goes in one go.
     client.post(

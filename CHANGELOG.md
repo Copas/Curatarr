@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.2.0rc9 (2026-10-25)
+
+- **Every picture of a title, not just its poster.** Custom pictures can be a title's wide tile (the landscape picture in rows such as the Roku app's home rows and Continue Watching), background, logo or banner as well as its poster: uploaded on a title's page (now **Pictures**, choosing which), or imported with a word before the extension (`….thumb.jpg`, `….backdrop.jpg`, `….logo.png`, `….banner.jpg`). Each is for everyone or for chosen accounts, with the original kept to restore; a logo stays a see-through PNG. Library → Posters groups each title's pictures in one tile.
+- **The AI prompts can ask for a matching set**: tick the pictures to make, and each title gets the same cast and style across them, each a different scene, with the file name for each. *Skip titles that have them all* skips a title only once it has every picture asked for.
+- **Without a picture of its own** (Library → Posters): for an account with its own poster or a ribbon, a wide tile made from its poster (the default, as in 0.2.0rc8) or Jellyfin's own; a background of the poster blurred, or Jellyfin's own (the default); a banner made from the poster, or Jellyfin's own (the default).
+- An account's own pictures other than the poster need plugin 0.8.0.0; the banner on every page says when it's out.
+
 ## 0.2.0rc8 (2026-10-25)
 
 - **Custom posters and favourite ribbons show in rows of wide tiles too**, with plugin 0.7.0.0. Some rows (the Roku app's home rows, *Recently added in My List*, Continue Watching) show a title's landscape picture rather than its poster, so an account's own poster and its ribbon didn't show there. Curatarr now draws a landscape version, the poster at full height on a blurred copy of itself, and the plugin shows it in those rows to the same accounts.
@@ -135,6 +142,11 @@
 ## Jellyfin plugin
 
 The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed and updated from Jellyfin's plugin catalogue once Curatarr adds its repository. Each version's notes below are what Jellyfin shows as its changelog, and the release page's notes.
+
+### 0.8.0.0 (2026-10-25)
+
+- An account can have each of a title's pictures of its own, not just the poster: its wide tile (Thumb), background (Backdrop), logo and banner, swapped into what's sent to that account, including a show's background, logo and wide tile on its episodes and seasons. An account's background goes first among the title's backgrounds. A logo is served as a PNG, keeping its see-through background.
+- Needs Curatarr 0.2.0rc9 or later for pictures other than the poster; with older ones, it works as 0.7.0.0 did.
 
 ### 0.7.0.0 (2026-10-25)
 
