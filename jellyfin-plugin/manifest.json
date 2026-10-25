@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/logo.png",
     "versions": [
       {
+        "version": "0.5.0.0",
+        "changelog": "- A favourite ribbon can look different on a title's own page, where the poster is shown big: Curatarr draws a second version listing each name, and the plugin serves it when an app asks for a poster at least 300 pixels wide (the Roku app asks for 295 in lists and 300 on a title's page). The width is LargePosterWidth in the plugin's settings.\n- Needs a Curatarr newer than 0.2.0rc6 for the second version; with older ones, posters work as before.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/Copas/Curatarr/releases/download/plugin-v0.5.0.0/curatarr-jellyfin-plugin_0.5.0.0.zip",
+        "checksum": "725e2a83862a73d6380350f28d3c01f8",
+        "timestamp": "2026-10-25T13:07:09Z"
+      },
+      {
         "version": "0.4.0.0",
         "changelog": "- Each account can have posters of its own. With Curatarr's custom posters for one account, that account sees its poster in every app (web, phone, TV, Roku), and everyone else sees the usual one.\n- How: in item details sent to that account, the poster's image tag is swapped for one standing for the account's poster (a show's poster on its episodes' cards too), and an image asked for with that tag is served from Curatarr's picture, resized and cached by Jellyfin like its own. The list is fetched from Curatarr every minute.\n- New setting: Show each account its own posters (on).\n- Needs Curatarr 0.2.0rc6 or later for posters; older Curatarr versions work as before.",
         "targetAbi": "12.2.0.0",
