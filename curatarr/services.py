@@ -587,6 +587,13 @@ def _rescue(media, event):
         return
     occurred = _as_datetime(event.occurred_at)
     created = _as_datetime(candidate.created_at)
+    if candidate.target_part_ids:
+        # Only some episodes are leaving: only playing one of them again
+        # counts, not watching on through the show.
+        part = _part_for_event(media, event.normalized_json)
+        if part is None or part.id not in set(candidate.target_part_ids):
+            return
+        created = _as_datetime(candidate.last_activity_snapshot) or created
     if occurred and created and occurred <= created:
         # Viewing from before it was marked: the hourly check reports plays it
         # finds in Jellyfin, often ones already counted, and they mustn't undo

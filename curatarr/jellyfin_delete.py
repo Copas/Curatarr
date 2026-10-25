@@ -14,13 +14,24 @@ Modes, from the plugin:
 - ``delete`` (Delete in an app): Leaving Soon, or now if it already is;
 - ``now`` (Delete in the web app): now;
 - ``leaving_soon`` (the web app's Leaving Soon): Leaving Soon only;
-- ``status`` (the web app, opening a menu): whether Leaving Soon applies.
+- ``status`` (the web app, opening a menu): whether Leaving Soon applies,
+  and whether Leave after watched can be set or is set for this account;
+- ``leave_after_watched`` / ``keep_after_watched`` (the web app's Leave after
+  I watch, and undoing it): for a film, show, season or episode, counting the
+  watch of the account that chose it.
 """
 
 from . import db
 from .models import MediaIdentity, utcnow
 
-MODES = {"delete", "now", "leaving_soon", "status"}
+MODES = {
+    "delete",
+    "now",
+    "leaving_soon",
+    "status",
+    "leave_after_watched",
+    "keep_after_watched",
+}
 GOING = {"APPROVED", "EXECUTING"}
 
 
@@ -83,6 +94,9 @@ def handle(item_id, user_name=None, mode=None) -> tuple[int, dict]:
     item = _norm(item_id)
     if item is None:
         return 400, {"error": "itemId must be a Jellyfin item id"}
+    if mode in {"leave_after_watched", "keep_after_watched"}:
+        return _leave_after(item, user_name, mode)
+    leave = _leave_status(item, user_name) if mode == "status" else {}
     media = (
         db.session.query(MediaIdentity)
         .filter(
@@ -91,8 +105,10 @@ def handle(item_id, user_name=None, mode=None) -> tuple[int, dict]:
         .first()
     )
     if media is None or media.media_type not in {"movie", "series"}:
-        return 200, {"handled": False}
+        return 200, {"handled": False} | leave
     existing = _active_candidate(media.id)
+    if existing is not None and existing.target_part_ids:
+        existing = None  # only some episodes are leaving: the show isn't
     state = existing.state if existing else None
     if mode == "status":
         return 200, {
@@ -100,7 +116,7 @@ def handle(item_id, user_name=None, mode=None) -> tuple[int, dict]:
             "title": media.title,
             "leavingSoon": state == "LEAVING_SOON",
             "deleting": state in GOING,
-        }
+        } | leave
     who = (user_name or "").strip()[:100] or "someone"
     if state in GOING:
         return 200, {
@@ -130,4 +146,77 @@ def handle(item_id, user_name=None, mode=None) -> tuple[int, dict]:
         "title": media.title,
         "deleteAt": when.isoformat() if when else None,
         "message": f"{media.title} is Leaving Soon. Delete it again to delete it now.",
+    }
+
+
+def _account(user_name) -> str | None:
+    """The Jellyfin account id for a user name the plugin sent."""
+    from .services import setting
+
+    wanted = (user_name or "").strip().lower()
+    for user_id, name in (setting("jellyfin_user_names", {}) or {}).items():
+        if str(name).strip().lower() == wanted:
+            return user_id
+    return None
+
+
+def _flag_target(item):
+    """(title, season, episode) for Leave after watched, or None."""
+    from .flag_routes import resolve
+
+    try:
+        media, season, part = resolve(item)
+    except LookupError:
+        return None
+    if media is None or media.media_type not in {"movie", "series"}:
+        return None
+    return media, season, part
+
+
+def _leave_status(item, user_name) -> dict:
+    from . import flags
+    from .services import resolved_policy
+
+    target = _flag_target(item)
+    if target is None:
+        return {"canLeaveAfterWatched": False, "leavesAfterWatched": False}
+    media, season, part = target
+    row = flags.find(media, flags.LEAVE, season=season, part=part)
+    policy, _ = resolved_policy(media)
+    return {
+        "canLeaveAfterWatched": row is None and not policy["never_purge"],
+        "leavesAfterWatched": row is not None,
+    }
+
+
+def _leave_after(item, user_name, mode) -> tuple[int, dict]:
+    from . import flags
+
+    target = _flag_target(item)
+    if target is None:
+        return 200, {"handled": False}
+    media, season, part = target
+    who = (user_name or "").strip()[:100] or "someone"
+    if mode == "keep_after_watched":
+        flags.clear_flag(media, flags.LEAVE, season=season, part=part)
+        return 200, {
+            "handled": True,
+            "result": "cleared",
+            "message": f"{media.title} won't leave after it's watched.",
+        }
+    try:
+        row = flags.set_flag(
+            media,
+            flags.LEAVE,
+            season=season,
+            part=part,
+            user_id=_account(user_name),
+            set_by=f"{who} in Jellyfin",
+        )
+    except ValueError as exc:
+        return 200, {"handled": True, "refused": str(exc)}
+    return 200, {
+        "handled": True,
+        "result": "leave_after_watched",
+        "message": f"{media.title}: {flags.describe(row)}.",
     }
