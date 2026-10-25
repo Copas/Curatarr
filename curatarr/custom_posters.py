@@ -1029,34 +1029,63 @@ def _refresh_avatar_tags() -> None:
         pass
 
 
+def waiting_marks() -> dict[tuple[str, str, str], str]:
+    """(kind, account, id) → the tag on a title or episode flagged Leave after
+    watched, for the accounts whose watch counts (everyone's, when anyone's
+    does). A season has no picture of its own here."""
+    from .flags import LEAVE
+    from .models import MediaFlag
+    from .services import account_names
+
+    everyone = list(account_names())
+    found = {}
+    for row in db.session.query(MediaFlag).filter_by(flag=LEAVE):
+        if row.media_part_id:
+            key = ("e", row.media_part_id)
+        elif row.season_number is None:
+            key = ("t", row.media_identity_id)
+        else:
+            continue
+        each = row.mode == "each"
+        for viewer in [row.jellyfin_user_id] if row.jellyfin_user_id else everyone:
+            if row.jellyfin_user_id:
+                text = "LEAVES AS YOU WATCH" if each else "LEAVING AFTER YOU WATCH"
+            else:
+                text = "LEAVES AS WATCHED" if each else "LEAVING AFTER WATCHED"
+            found[(key[0], viewer, key[1])] = text
+    return found
+
+
 def plugin_list() -> list[dict]:
     """What the Curatarr plugin shows each account instead of the usual
-    picture: its own custom posters, and favourite ribbons on titles and
-    episodes."""
+    picture: its own custom posters, favourite ribbons on titles and
+    episodes, and Leave after watched's tag."""
     import hashlib
     import json
 
     bare = lambda value: str(value or "").replace("-", "").lower()
     options = ribbon_settings()
     marked = ribbons(options)
+    waiting = waiting_marks()
+    keys = set(marked) | set(waiting)
     own = {(p.jellyfin_user_id, p.media_identity_id): p for p in for_accounts()}
-    title_ids = {i for k, _v, i in marked if k == "t"} | {m for _v, m in own}
+    title_ids = {i for k, _v, i in keys if k == "t"} | {m for _v, m in own}
     medias = {
         m.id: m
         for m in db.session.query(MediaIdentity).filter(
             MediaIdentity.id.in_(title_ids or {""})
         )
     }
-    part_ids = {i for k, _v, i in marked if k == "e"}
+    part_ids = {i for k, _v, i in keys if k == "e"}
     parts = {
         p.id: p
         for p in db.session.query(MediaPart).filter(MediaPart.id.in_(part_ids or {""}))
     }
     needs_tag = {
         medias[i].jellyfin_id
-        for k, v, i in marked
+        for k, v, i in keys
         if k == "t" and (v, i) not in own and i in medias
-    } | {parts[i].jellyfin_id for k, _v, i in marked if k == "e" and i in parts}
+    } | {parts[i].jellyfin_id for k, _v, i in keys if k == "e" and i in parts}
     tags = _image_tags(needs_tag) if needs_tag else _jellyfin_tags
     if marked and options["list_style"] == "faces":
         _refresh_avatar_tags()
@@ -1070,7 +1099,7 @@ def plugin_list() -> list[dict]:
 
     for (viewer, media_id), poster in own.items():
         media = medias.get(media_id)
-        if media and media.jellyfin_id and ("t", viewer, media_id) not in marked:
+        if media and media.jellyfin_id and ("t", viewer, media_id) not in keys:
             entries.append(
                 {
                     "item": bare(media.jellyfin_id),
@@ -1079,7 +1108,8 @@ def plugin_list() -> list[dict]:
                     "tag": account_tag(poster, label_for(media_id)),
                 }
             )
-    for (kind, viewer, item_id), ribbon in sorted(marked.items()):
+    for kind, viewer, item_id in sorted(keys):
+        ribbon = marked.get((kind, viewer, item_id))
         if kind == "t":
             media = medias.get(item_id)
             if media is None or not media.jellyfin_id:
@@ -1103,12 +1133,13 @@ def plugin_list() -> list[dict]:
                 base,
                 banner,
                 ribbon,
+                waiting.get((kind, viewer, item_id)),
                 options["position"],
                 options["list_style"],
                 options["page_style"],
                 options["colour"],
                 [_avatar_version(u) for u in ribbon["users"]]
-                if options["list_style"] == "faces"
+                if ribbon and options["list_style"] == "faces"
                 else None,
                 RIBBON_STYLE,
             ],
@@ -1121,7 +1152,7 @@ def plugin_list() -> list[dict]:
                 "id": f"{'v' if kind == 't' else 'e'}.{viewer}.{item_id}",
                 "tag": hashlib.sha1(spec.encode()).hexdigest()[:32],
                 # A second picture, listing the names, for where it's shown big.
-                "large": has_large(options, ribbon["household"], kind),
+                "large": bool(ribbon) and has_large(options, ribbon["household"], kind),
             }
         )
     return entries
@@ -1140,8 +1171,10 @@ def plugin_picture(entry_id: str, large: bool = False) -> bytes | None:
         return account_picture(poster, leaving_label(poster.media_identity_id))
     kind, viewer, item_id = entry_id.split(".", 2)
     options = ribbon_settings()
-    ribbon = ribbons(options).get(("t" if kind == "v" else "e", viewer, item_id))
-    if not ribbon:
+    key = ("t" if kind == "v" else "e", viewer, item_id)
+    ribbon = ribbons(options).get(key)
+    wait = waiting_marks().get(key)
+    if not ribbon and not wait:
         return None
     if kind == "v":
         media = db.session.get(MediaIdentity, item_id)
@@ -1158,6 +1191,13 @@ def plugin_picture(entry_id: str, large: bool = False) -> bytes | None:
         if part is None or not part.jellyfin_id:
             return None
         base, leaving = _jpeg(client("jellyfin").image(part.jellyfin_id)), None
+    if wait:
+        from .artwork import INK, WAITING_AMBER, badge_poster
+
+        base = badge_poster(base, wait, colour=WAITING_AMBER, ink=INK)
+        leaving = wait  # a ribbon along the top goes below it
+    if not ribbon:
+        return base
     return draw_ribbon(
         base,
         ribbon["users"],

@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Jellyfin.Plugin.Curatarr.Api;
 
 /// <summary>
-/// The web app's Leaving Soon menu item, for anyone Jellyfin lets delete the item.
+/// The web app's Leaving Soon and Leave after I watch menu items, for anyone
+/// Jellyfin lets delete the item.
 /// </summary>
 [ApiController]
 [Route("Curatarr/Items")]
@@ -55,7 +56,40 @@ public class ItemsController : ControllerBase
 
         var answer = await _curatarr.AskAsync(config, itemId, userName, Modes.Status, cancellationToken).ConfigureAwait(false);
         var handled = answer is { Handled: true, Deleting: false };
-        return new ItemStatus(handled && !answer!.LeavingSoon, handled && answer!.LeavingSoon);
+        return new ItemStatus(
+            handled && !answer!.LeavingSoon,
+            handled && answer!.LeavingSoon,
+            answer?.CanLeaveAfterWatched ?? false,
+            answer?.LeavesAfterWatched ?? false);
+    }
+
+    /// <summary>
+    /// Leave after I watch: the item is marked Leaving Soon once this account has
+    /// watched it (a film, show, season or episode). With <paramref name="undo"/>,
+    /// it isn't any more.
+    /// </summary>
+    /// <param name="itemId">The item.</param>
+    /// <param name="undo">Clears it instead.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What happened, as a sentence to show.</returns>
+    [HttpPost("{itemId}/LeaveAfterWatched")]
+    public async Task<ActionResult<LeavingSoonResult>> LeaveAfterWatched([FromRoute] Guid itemId, [FromQuery] bool undo, CancellationToken cancellationToken)
+    {
+        var (config, userName) = Allowed(itemId);
+        if (config is null || userName is null)
+        {
+            return Forbid();
+        }
+
+        var mode = undo ? Modes.KeepAfterWatched : Modes.LeaveAfterWatched;
+        var answer = await _curatarr.AskAsync(config, itemId, userName, mode, cancellationToken).ConfigureAwait(false);
+        return answer switch
+        {
+            null => new LeavingSoonResult(false, "Curatarr couldn't be reached."),
+            { Handled: false } => new LeavingSoonResult(false, "Curatarr doesn't look after this."),
+            { Refused: not null } => new LeavingSoonResult(false, answer.Refused),
+            _ => new LeavingSoonResult(true, answer.Message ?? "Done."),
+        };
     }
 
     /// <summary>
@@ -108,7 +142,9 @@ public class ItemsController : ControllerBase
 /// </summary>
 /// <param name="CanLeave">Curatarr looks after it, it isn't Leaving Soon yet, and the user may delete it.</param>
 /// <param name="LeavingSoon">It's Leaving Soon already.</param>
-public sealed record ItemStatus(bool CanLeave, bool LeavingSoon);
+/// <param name="CanLeaveAfterWatched">Leave after I watch can be set on it.</param>
+/// <param name="LeavesAfterWatched">It's set.</param>
+public sealed record ItemStatus(bool CanLeave, bool LeavingSoon, bool CanLeaveAfterWatched = false, bool LeavesAfterWatched = false);
 
 /// <summary>
 /// The answer to Leaving Soon.

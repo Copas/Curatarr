@@ -467,6 +467,7 @@ ACTION_WORDS = {
     "flag_leave_after_watched_cleared": "Leave after watched ended",
     "flag_never_compress_set": "Never compress",
     "flag_never_compress_cleared": "Never compress cleared",
+    "protected_file_changed": "A Never compress file changed",
 }
 
 
@@ -1063,6 +1064,8 @@ def settings():
                     request.form.get("favourites") == "on", request.form.get("file")
                 )
                 flash("Never compress saved.", "success")
+            elif kind == "never_compress_dismiss":
+                flags.dismiss_changed()
             elif kind == "hidden_accounts":
                 from .services import save_hidden_accounts
 
@@ -1123,6 +1126,7 @@ def settings():
         hidden_accounts=hidden_accounts(),
         never_compress=flags.settings(),
         never_compress_count=len(flags.protected_paths()),
+        never_compress_changed=flags.changed_files(),
         hidden_account_names=sorted(
             (setting("jellyfin_user_names", {}) or {}).get(i, "an account")
             for i in setting("jellyfin_hidden_user_ids", []) or []
@@ -1566,6 +1570,12 @@ def title_flags(media_id):
     flag, action = request.form.get("flag"), request.form.get("action")
     season = request.form.get("season") or None
     part = request.form.get("part") or None
+    mode = None
+    scope = request.form.get("scope") or ""
+    if scope in {"all", "each"}:
+        mode = scope
+    elif scope.startswith("s") and "-" in scope:
+        season, mode = scope[1:].split("-", 1)
     try:
         season = int(season) if season is not None else None
         part = db.session.get(MediaPart, part) if part else None
@@ -1577,6 +1587,7 @@ def title_flags(media_id):
                 part=part,
                 user_id=request.form.get("user") or None,
                 set_by=(current_user() or {}).get("name") or "admin",
+                mode=mode,
             )
             flash(f"{media.title}: {flags.describe(row)}.", "success")
         elif action == "clear":

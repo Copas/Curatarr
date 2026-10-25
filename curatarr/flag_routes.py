@@ -123,7 +123,9 @@ def api_title(item_id):
 def api_title_change(item_id):
     """{"action": keep | snooze_30 | snooze_90 | never_purge |
     leave_after_watched | never_compress | clear, "flag": (for clear),
-    "user": (leave_after_watched: whose watch counts; omitted: anyone's)}.
+    "user": (leave_after_watched: whose watch counts; omitted: anyone's),
+    "mode": (leave_after_watched on a show or season: "all" once its last
+    episode is watched, the default, or "each" episode as it's watched)}.
     A season's or episode's review choices apply to its show."""
     from .lifecycle import _active_candidate, review_candidate
     from .services import save_title_override
@@ -152,6 +154,7 @@ def api_title_change(item_id):
                 part=part,
                 user_id=body.get("user") or None,
                 set_by="API",
+                mode=body.get("mode"),
             )
         elif action == "clear" and body.get("flag") in flags.FLAGS:
             flags.clear_flag(media, body["flag"], season=season, part=part)

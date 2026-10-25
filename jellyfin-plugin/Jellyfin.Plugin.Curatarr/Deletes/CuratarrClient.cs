@@ -14,7 +14,17 @@ namespace Jellyfin.Plugin.Curatarr.Deletes;
 /// <param name="Message">A sentence to show or log.</param>
 /// <param name="LeavingSoon">For a status: whether the title is Leaving Soon now.</param>
 /// <param name="Deleting">For a status: whether it's being deleted.</param>
-public sealed record DeleteAnswer(bool Handled, string? Refused, string? Result, string? Message, bool LeavingSoon = false, bool Deleting = false);
+/// <param name="CanLeaveAfterWatched">For a status: whether Leave after watched can be set on it.</param>
+/// <param name="LeavesAfterWatched">For a status: whether it's set.</param>
+public sealed record DeleteAnswer(
+    bool Handled,
+    string? Refused,
+    string? Result,
+    string? Message,
+    bool LeavingSoon = false,
+    bool Deleting = false,
+    bool CanLeaveAfterWatched = false,
+    bool LeavesAfterWatched = false);
 
 /// <summary>
 /// What Curatarr is asked to do with an item.
@@ -32,6 +42,12 @@ public static class Modes
 
     /// <summary>Whether Leaving Soon applies, for the web app's menu.</summary>
     public const string Status = "status";
+
+    /// <summary>The web app's Leave after I watch: Leaving Soon once this account has watched it.</summary>
+    public const string LeaveAfterWatched = "leave_after_watched";
+
+    /// <summary>Undoes <see cref="LeaveAfterWatched"/>.</summary>
+    public const string KeepAfterWatched = "keep_after_watched";
 }
 
 /// <summary>
