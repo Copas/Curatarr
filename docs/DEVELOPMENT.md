@@ -62,7 +62,11 @@ PREFIX=/tmp/c/opt CONFIG_DIR=/tmp/c/etc DATA_DIR=/tmp/c/data \
   SERVICE_USER=$(id -un) NO_SYSTEMD=1 ./scripts/install.sh
 ```
 
-Then start the app on a fresh database and in demo mode (`demo-seed`, `worker --once`), confirm `/health` and the main pages load, update `CHANGELOG.md`, bump the version in `pyproject.toml`, and create an annotated `vX.Y.Z` tag.
+Then start the app on a fresh database and in demo mode (`demo-seed`, `worker --once`), confirm `/health` and the main pages load. Move **Unreleased** in `CHANGELOG.md` into a dated `## X.Y.Z` section, bump the version in `pyproject.toml` and in the install instructions (README and `docs/INSTALL.md`), and push an annotated `vX.Y.Z` tag (`git tag -a vX.Y.Z -m "Curatarr X.Y.Z"`).
+
+The Jellyfin plugin is released on its own, with `plugin-v…` tags: see [Releasing](../jellyfin-plugin/README.md#releasing) in its README. Its notes go in `CHANGELOG.md` under **Jellyfin plugin**, and its release workflow won't run without them.
+
+GitHub runs the tests and linters on every push (`.github/workflows/tests.yml`), and the plugin's tests, with a check that its version has notes, when the plugin changes.
 
 ## Screenshots
 

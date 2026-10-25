@@ -3,9 +3,9 @@ name: Jellyfin plugin
 on:
   push:
     branches: [main]
-    paths: ["jellyfin-plugin/**", ".github/workflows/jellyfin-plugin.yml"]
+    paths: ["jellyfin-plugin/**", "CHANGELOG.md", ".github/workflows/jellyfin-plugin.yml"]
   pull_request:
-    paths: ["jellyfin-plugin/**", ".github/workflows/jellyfin-plugin.yml"]
+    paths: ["jellyfin-plugin/**", "CHANGELOG.md", ".github/workflows/jellyfin-plugin.yml"]
 
 jobs:
   test:
@@ -18,4 +18,8 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+      - name: Notes for this version
+        # The version in Directory.Build.props needs notes in CHANGELOG.md
+        # before it can be released (scripts/notes.py); say so on the push.
+        run: python3 scripts/notes.py "$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)" > /dev/null
       - run: dotnet test Jellyfin.Plugin.Curatarr.Tests -c Release

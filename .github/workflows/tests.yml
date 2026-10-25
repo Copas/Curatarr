@@ -1,0 +1,20 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg mkvtoolnix
+      # ruff pinned: a newer one can add lint rules between commits.
+      - run: pip install -e ".[dev]" "ruff==0.16.10"
+      - run: ruff check . && ruff format --check .
+      - run: pytest -q
