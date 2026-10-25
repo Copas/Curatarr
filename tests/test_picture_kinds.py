@@ -141,6 +141,7 @@ def test_prompts_ask_for_a_matching_set(app, monkeypatch):
         described, batch=10, photos="", people="", output="/posters"
     )[0]
     assert "matching set" in text and "transparent background" in text
+    assert "own logo lettering" in text and "Never a plain or generic font" in text
     assert "Wide tile → 01_the-big-lebowski-1998.thumb.jpg" in text
     assert "Banner:" not in text  # not asked for
     # Each file name finds its title and type.
