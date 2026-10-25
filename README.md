@@ -32,7 +32,7 @@ That's all you need to get started. Add these when you want more:
 | Optional | Unlocks |
 |---|---|
 | Jellyfin **Webhook** plugin | Instant reactions to playback (otherwise Curatarr catches up hourly) |
-| The **Curatarr plugin for Jellyfin** ([jellyfin-plugin](jellyfin-plugin/README.md)) | Delete in any Jellyfin app marks a title Leaving Soon instead of deleting its files, each device plays the copy and audio track it can play without converting, and each account can have posters of its own |
+| The **Curatarr plugin for Jellyfin** ([jellyfin-plugin](jellyfin-plugin/README.md)) | Delete in any Jellyfin app marks a title Leaving Soon instead of deleting its files, each device plays the copy and audio track it can play without converting, and each account can have posters (and other pictures) of its own |
 | **FFmpeg** and **MKVToolNix** | Chapters, English-dub checks, file problem checks |
 | **Local AI**: Whisper (installed with the `chapters` extra) and **Ollama** with a model (e.g. `qwen3:14b`), ideally on an NVIDIA GPU | Smart Chapters, subtitles, recap and preview detection, Fun facts, search by what was said |
 | Jellyfin **Intro Skipper** plugin | Skip buttons for recaps and previews, clean-up of bad skip markers, and knowing where a film's credits start |
@@ -171,7 +171,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Recaps and previews](docs/FEATURES.md#recaps-previews-and-skip-markers) | "Previously on…" and "Next time on…" get Jellyfin's Skip button. | With Intro Skipper |
 | [Better skip markers](docs/FEATURES.md#recaps-previews-and-skip-markers) | Intro Skipper guesses that are plainly wrong are hidden, each undoable; films keep only their credits. | With Intro Skipper |
 | [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** |
-| [Custom posters](docs/FEATURES.md#custom-posters) | Your own poster for any title, uploaded or picked up from a folder, with the original kept to restore. | One click |
+| [Custom posters](docs/FEATURES.md#custom-posters) | Your own poster for any title, and its wide tile, background, logo and banner, uploaded or picked up from a folder (or made by an AI from prompts Curatarr writes), with the originals kept to restore. | One click |
 | [Posters for one account](docs/FEATURES.md#for-everyone-or-for-chosen-accounts) | A poster only chosen accounts see, in every app (Roku included); everyone else keeps the usual one. | With the plugin |
 | [Favourite ribbons](docs/FEATURES.md#favourite-ribbons) | A gold band with a star and Sam's face on what someone favourited (and "★ Sam" on its page), shown to the accounts you choose; NEW for a week, "♥ Household favourite" for everyone's, and on favourite episodes too. | Off, with the plugin |
 | [Make them with an AI](docs/FEATURES.md#make-them-with-an-ai) | Prompts in batches for an image-making AI agent, with each title's plot and file name, and your household cast as the leads where it suits. | One click |
@@ -231,7 +231,7 @@ Quick start on Linux:
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc8
+git checkout v0.2.0rc9
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 

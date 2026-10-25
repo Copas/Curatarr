@@ -286,9 +286,10 @@ class PosterSnapshot(db.Model, Timed):
 
 
 class CustomPoster(db.Model, Timed):
-    """A poster someone chose for a title (custom_posters.py). Only one is
-    active per title and account; ``jellyfin_user_id`` None means everyone
-    (the poster Jellyfin itself has)."""
+    """A picture someone chose for a title (custom_posters.py): its poster or
+    another of its pictures (``image_type``, Jellyfin's: Primary, Thumb,
+    Backdrop, Logo or Banner). Only one is active per title, type and account;
+    ``jellyfin_user_id`` None means everyone (the picture Jellyfin itself has)."""
 
     __tablename__ = "custom_posters"
     id = db.Column(db.String(36), primary_key=True, default=uuid)
@@ -296,6 +297,9 @@ class CustomPoster(db.Model, Timed):
         db.String(36), db.ForeignKey("media_identities.id"), nullable=False, index=True
     )
     jellyfin_user_id = db.Column(db.String(100))
+    image_type = db.Column(
+        db.String(20), nullable=False, default="Primary", server_default="Primary"
+    )
     image_path = db.Column(db.String(512), nullable=False)
     # The poster it replaced; None when that wasn't known (it was already
     # showing when imported), so restoring takes the provider's poster.

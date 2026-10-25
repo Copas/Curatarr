@@ -29,7 +29,7 @@ REPOSITORY = {
 #  "idle_since": when playback was last seen to stop}
 KEY = "jellyfin_plugin"
 # The plugin version this Curatarr's features are made for.
-WANTED = "0.7.0.0"
+WANTED = "0.8.0.0"
 # A restart when nobody's watching waits this long after the last playback,
 # so someone between episodes isn't cut off.
 IDLE_MINUTES = 10

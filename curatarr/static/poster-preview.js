@@ -8,7 +8,7 @@ document.addEventListener("change", (event) => {
   reader.onload = () => {
     target.src = reader.result;
     const caption = document.querySelector(input.dataset.previewCaption);
-    if (caption) caption.textContent = "Preview: not saved until you press Use this poster";
+    if (caption) caption.textContent = "Preview: not saved until you press Use this picture";
   };
   reader.readAsDataURL(input.files[0]);
 });

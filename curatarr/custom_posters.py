@@ -16,6 +16,12 @@ original isn't known: restoring then takes the metadata provider's poster.
 During Leaving Soon the countdown banner is drawn on the custom poster (the
 artwork pass notices the change), and the poster saved as the original is the
 one from before the banner.
+
+A title's other pictures work the same way (``KINDS``, Jellyfin's image
+types): its wide tile (Thumb), background (Backdrop), logo and banner. An
+imported file says which with a word before its extension
+(``08_the-big-lebowski.thumb.jpg``, ``….logo.png``); without one it's the
+poster. A logo stays a PNG, keeping its see-through background.
 """
 
 import re
@@ -47,7 +53,39 @@ SETTLE = 20  # seconds a file must be unchanged before it's taken
 BATCH = 20  # files a pass, so one worker cycle stays short
 SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_UPLOAD = 25 * 1024 * 1024
-LARGEST = (2000, 3000)  # bigger pictures are scaled down to this
+# Jellyfin's image types Curatarr manages, and what people call them.
+KINDS = ("Primary", "Thumb", "Backdrop", "Logo", "Banner")
+KIND_NAMES = {
+    "Primary": "poster",
+    "Thumb": "wide tile",
+    "Backdrop": "background",
+    "Logo": "logo",
+    "Banner": "banner",
+}
+# The word before a file's extension that says which picture it is.
+FILE_KINDS = {
+    "poster": "Primary",
+    "thumb": "Thumb",
+    "backdrop": "Backdrop",
+    "background": "Backdrop",
+    "logo": "Logo",
+    "banner": "Banner",
+}
+FILE_WORDS = {
+    "Thumb": "thumb",
+    "Backdrop": "backdrop",
+    "Logo": "logo",
+    "Banner": "banner",
+}
+# Bigger pictures are scaled down to these.
+LARGEST_OF = {
+    "Primary": (2000, 3000),
+    "Thumb": (3840, 2160),
+    "Backdrop": (3840, 2160),
+    "Logo": (2000, 1000),
+    "Banner": (3000, 600),
+}
+LARGEST = LARGEST_OF["Primary"]
 MAX_PIXELS = 60_000_000  # refuse decompression bombs before decoding
 SAME = 2.0  # mean grey difference (24 × 36) below which two posters are one
 YEAR = re.compile(r"[\s_.\-(]+((?:19|20)\d\d)\)?$")
@@ -77,35 +115,110 @@ def save_settings(folder: str | None, accounts=None) -> None:
     db.session.commit()
 
 
+# Without a picture of its own, what an account with its own poster (or a
+# ribbon) sees for each other type: one made from its poster, or Jellyfin's.
+FALLBACK_CHOICES = {
+    "Thumb": ("widened", "own"),
+    "Backdrop": ("own", "blurred"),
+    "Banner": ("own", "widened"),
+}
+
+
+def fallbacks() -> dict:
+    chosen = settings().get("fallbacks") or {}
+    return {
+        kind: chosen.get(kind) if chosen.get(kind) in options else options[0]
+        for kind, options in FALLBACK_CHOICES.items()
+    }
+
+
+def save_fallbacks(form) -> dict:
+    from .services import set_setting
+
+    chosen = {
+        kind: form.get(kind) if form.get(kind) in options else options[0]
+        for kind, options in FALLBACK_CHOICES.items()
+    }
+    set_setting(KEY, settings() | {"fallbacks": chosen})
+    db.session.commit()
+    return chosen
+
+
 def _store() -> Path:
     path = Path(current_app.instance_path) / "custom_posters"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def normalise(data: bytes) -> bytes:
-    """The picture as a JPEG no bigger than LARGEST; ValueError if it isn't one."""
+def mimetype(kind: str) -> str:
+    return "image/png" if kind == "Logo" else "image/jpeg"
+
+
+def _extension(kind: str) -> str:
+    return ".png" if kind == "Logo" else ".jpg"
+
+
+def normalise(data: bytes, kind: str = "Primary") -> bytes:
+    """The picture as a JPEG (a logo: a PNG, see-through parts kept) no
+    bigger than the type's largest size; ValueError if it isn't one."""
     try:
         with Image.open(BytesIO(data)) as probe:
             if probe.width * probe.height > MAX_PIXELS:
                 raise ValueError("That picture is too large")
             probe.verify()
-        image = Image.open(BytesIO(data)).convert("RGB")
+        image = Image.open(BytesIO(data))
+        image = image.convert("RGBA" if kind == "Logo" else "RGB")
     except (UnidentifiedImageError, OSError, SyntaxError) as exc:
         raise ValueError("That file isn't a picture Curatarr can read") from exc
-    image.thumbnail(LARGEST)
+    image.thumbnail(LARGEST_OF.get(kind, LARGEST))
     output = BytesIO()
-    image.save(output, format="JPEG", quality=90, optimize=True)
+    if kind == "Logo":
+        image.save(output, format="PNG", optimize=True)
+    else:
+        image.save(output, format="JPEG", quality=90, optimize=True)
     return output.getvalue()
 
 
-def active(media_id, user_id=None) -> CustomPoster | None:
+def active(media_id, user_id=None, kind="Primary") -> CustomPoster | None:
     return (
         db.session.query(CustomPoster)
-        .filter_by(media_identity_id=media_id, jellyfin_user_id=user_id, active=True)
+        .filter_by(
+            media_identity_id=media_id,
+            jellyfin_user_id=user_id,
+            image_type=kind,
+            active=True,
+        )
         .order_by(CustomPoster.created_at.desc())
         .first()
     )
+
+
+def _noun(kind: str) -> str:
+    return KIND_NAMES.get(kind, "picture")
+
+
+def _current(jellyfin, item_id, kind) -> bytes | None:
+    """The picture Jellyfin shows now, or None when the title has none of
+    that type (most have no logo or banner)."""
+    try:
+        return jellyfin.image(item_id, kind) or None
+    except IntegrationError as exc:
+        if kind == "Primary" or exc.status_code != 404:
+            raise
+        return None
+
+
+def _put_picture(jellyfin, item_id, data, kind, replacing=None):
+    """Upload one of a title's pictures. A background is added to the
+    title's backgrounds rather than replacing one, so copies of
+    ``replacing`` are deleted afterwards and the new one put first."""
+    from .artwork import _put
+
+    if kind == "Logo":
+        return jellyfin.put_image(item_id, data, kind, mimetype="image/png")
+    if kind == "Backdrop" and replacing:
+        return _put(jellyfin, item_id, data, kind, replacing)
+    return jellyfin.put_image(item_id, data, kind)
 
 
 def _same_picture(a: bytes, b: bytes) -> bool:
@@ -115,148 +228,187 @@ def _same_picture(a: bytes, b: bytes) -> bool:
     return _difference(_grey(a, size), _grey(b, size), size) < SAME
 
 
-def _original(media, jellyfin) -> bytes:
-    """The poster from before any custom one: during Leaving Soon, the one
-    saved before the banner went on."""
+def _original(media, jellyfin, kind="Primary") -> bytes | None:
+    """The picture from before any custom one: during Leaving Soon, the one
+    saved before the banner went on. None when the title had none."""
     from .artwork import _jpeg
 
     snapshot = (
         db.session.query(PosterSnapshot)
-        .filter_by(media_identity_id=media.id, image_type="Primary", active=True)
+        .filter_by(media_identity_id=media.id, image_type=kind, active=True)
         .first()
     )
     if snapshot and snapshot.original_image_bytes_path:
         saved = Path(snapshot.original_image_bytes_path)
         if saved.exists():
             return saved.read_bytes()
-    return _jpeg(jellyfin.image(media.jellyfin_id))
+    current = _current(jellyfin, media.jellyfin_id, kind)
+    if current is None:
+        return None
+    return current if kind == "Logo" else _jpeg(current)
 
 
 def apply(
-    media, data: bytes, source: str, *, adopt=False, user_id=None
+    media, data: bytes, source: str, *, adopt=False, user_id=None, kind="Primary"
 ) -> CustomPoster | None:
-    """Put ``data`` on as the title's poster in Jellyfin. With ``adopt`` (an
-    import), a picture already showing is only recorded. Returns the record,
-    or None when nothing changed (the same picture is on already).
+    """Put ``data`` on as the title's poster (or its ``kind`` of picture) in
+    Jellyfin. With ``adopt`` (an import), a picture already showing is only
+    recorded. Returns the record, or None when nothing changed (the same
+    picture is on already).
 
-    With ``user_id`` it's that account's poster only: Jellyfin's own poster
-    stays, and the Curatarr plugin shows this one to that account."""
+    With ``user_id`` it's that account's only: Jellyfin's own picture stays,
+    and the Curatarr plugin shows this one to that account."""
     from .services import audit, client
 
+    if kind not in KINDS:
+        raise ValueError(f"Curatarr doesn't manage {kind} pictures")
     if not media.jellyfin_id:
         raise ValueError(f"{media.title} isn't linked to Jellyfin yet")
-    picture = normalise(data)
+    picture = normalise(data, kind)
     if user_id:
-        return _for_account(media, picture, source, user_id)
+        return _for_account(media, picture, source, user_id, kind)
     jellyfin = client("jellyfin")
-    current = jellyfin.image(media.jellyfin_id)
-    previous = active(media.id)
+    current = _current(jellyfin, media.jellyfin_id, kind)
+    previous = active(media.id, kind=kind)
     showing = bool(current) and _same_picture(picture, current)
     if previous and showing:
-        return None  # this picture is already the custom poster
+        return None  # this picture is already the custom one
     store = _store()
-    record = CustomPoster(id=uuid(), media_identity_id=media.id, source=source)
+    record = CustomPoster(
+        id=uuid(), media_identity_id=media.id, source=source, image_type=kind
+    )
     if previous:
         record.original_path = previous.original_path
     elif not (adopt and showing):
-        original = store / f"{record.id}-original.jpg"
-        original.write_bytes(_original(media, jellyfin))
-        record.original_path = str(original)
-    image = store / f"{record.id}.jpg"
+        before = _original(media, jellyfin, kind)
+        if before is None:
+            record.original_path = ""  # it had none: restoring removes this one
+        else:
+            original = store / f"{record.id}-original{_extension(kind)}"
+            original.write_bytes(before)
+            record.original_path = str(original)
+    image = store / f"{record.id}{_extension(kind)}"
     image.write_bytes(picture)
     record.image_path = str(image)
     db.session.add(record)
     if not showing:
-        jellyfin.put_image(media.jellyfin_id, picture, "Primary")
+        _put_picture(jellyfin, media.jellyfin_id, picture, kind, current)
     if previous:
         previous.active = False
     record.applied_at = utcnow()
     audit(
         "custom_poster_applied",
         media.id,
-        f"Custom poster for {media.title} ({source}).",
+        f"Custom {_noun(kind)} for {media.title} ({source}).",
         f"custom-poster:{record.id}",
-        payload={"source": source},
+        payload={"source": source, "kind": kind},
     )
     db.session.commit()
     return record
 
 
-def _for_account(media, picture, source, user_id) -> CustomPoster:
+def _for_account(media, picture, source, user_id, kind="Primary") -> CustomPoster:
     from .services import audit
 
     record = CustomPoster(
-        id=uuid(), media_identity_id=media.id, source=source, jellyfin_user_id=user_id
+        id=uuid(),
+        media_identity_id=media.id,
+        source=source,
+        jellyfin_user_id=user_id,
+        image_type=kind,
     )
-    image = _store() / f"{record.id}.jpg"
+    image = _store() / f"{record.id}{_extension(kind)}"
     image.write_bytes(picture)
     record.image_path = str(image)
     record.applied_at = utcnow()
-    previous = active(media.id, user_id)
+    previous = active(media.id, user_id, kind)
     if previous:
         previous.active = False
     db.session.add(record)
     audit(
         "custom_poster_applied",
         media.id,
-        f"Custom poster for {media.title}, for {account_name(user_id)} only ({source}).",
+        f"Custom {_noun(kind)} for {media.title}, for {account_name(user_id)} "
+        f"only ({source}).",
         f"custom-poster:{record.id}",
-        payload={"source": source, "user": user_id},
+        payload={"source": source, "user": user_id, "kind": kind},
     )
     db.session.commit()
     return record
 
 
-def import_for_accounts(media, data: bytes, source: str, accounts) -> bool:
+def import_for_accounts(
+    media, data: bytes, source: str, accounts, kind="Primary"
+) -> bool:
     """An imported picture for some accounts only. Each gets it (unless it
-    already has this picture), and if it's everyone's poster in Jellyfin now
-    (put on for everyone before), everyone else gets Jellyfin's usual poster
-    back. Returns whether anything changed."""
+    already has this picture), and if it's everyone's in Jellyfin now (put on
+    for everyone before), everyone else gets Jellyfin's usual one back.
+    Returns whether anything changed."""
     from .services import client
 
     if not media.jellyfin_id:
         raise ValueError(f"{media.title} isn't linked to Jellyfin yet")
-    picture = normalise(data)
+    picture = normalise(data, kind)
     changed = False
     for user_id in accounts:
-        mine = active(media.id, user_id)
+        mine = active(media.id, user_id, kind)
         kept = Path(mine.image_path) if mine else None
         if kept and kept.exists() and _same_picture(picture, kept.read_bytes()):
             continue  # already theirs
-        _for_account(media, picture, source, user_id)
+        _for_account(media, picture, source, user_id, kind)
         changed = True
-    everyone = active(media.id)
+    everyone = active(media.id, kind=kind)
     if everyone and _same_picture(picture, Path(everyone.image_path).read_bytes()):
         restore(everyone)
         return True
     if everyone is None:
-        current = client("jellyfin").image(media.jellyfin_id)
+        current = _current(client("jellyfin"), media.jellyfin_id, kind)
         if current and _same_picture(picture, current):
-            _give_back_usual(media)
+            _give_back_usual(media, kind, current)
             return True
     return changed
 
 
-def _give_back_usual(media) -> None:
-    """Jellyfin's poster is a custom picture Curatarr has no record of (put on
-    for everyone before): the metadata provider's poster goes back on."""
+def _give_back_usual(media, kind="Primary", ours=None) -> None:
+    """Jellyfin's picture is a custom one Curatarr has no record of (put on
+    for everyone before): the metadata provider's goes back on, or, when
+    they offer none, the title goes without (a logo or banner)."""
     from .services import audit, client
 
     jellyfin = client("jellyfin")
-    offered = jellyfin.remote_images(media.jellyfin_id, "Primary")
-    if not offered:
-        raise ValueError(
-            f"Jellyfin's metadata providers offer no poster for {media.title}"
-        )
-    jellyfin.download_remote_image(media.jellyfin_id, offered[0], "Primary")
+    noun = _noun(kind)
+    if not _provider_picture(jellyfin, media, kind, ours):
+        if kind == "Primary":
+            raise ValueError(
+                f"Jellyfin's metadata providers offer no poster for {media.title}"
+            )
+        jellyfin.delete_image(media.jellyfin_id, kind, 0)
     audit(
         "custom_poster_restored",
         media.id,
-        f"Everyone else sees {media.title}'s provider poster again; the custom one "
+        f"Everyone else sees {media.title}'s usual {noun} again; the custom one "
         "is for chosen accounts only.",
-        f"custom-poster-usual:{media.id}:{utcnow().isoformat()}",
+        f"custom-poster-usual:{media.id}:{kind}:{utcnow().isoformat()}",
     )
     db.session.commit()
+
+
+def _provider_picture(jellyfin, media, kind, ours=None) -> bool:
+    """Put the metadata provider's first picture of ``kind`` on; False when
+    they offer none. A background is added beside the others, so the copy of
+    ``ours`` is deleted afterwards."""
+    from .artwork import _backdrops, _tidy_backdrops
+
+    offered = jellyfin.remote_images(media.jellyfin_id, kind)
+    if not offered:
+        return False
+    before = None
+    if kind == "Backdrop" and ours:
+        before = {i.get("ImageTag") for i in _backdrops(jellyfin, media.jellyfin_id)}
+    jellyfin.download_remote_image(media.jellyfin_id, offered[0], kind)
+    if before is not None:
+        _tidy_backdrops(jellyfin, media.jellyfin_id, ours, ours, before)
+    return True
 
 
 def account_name(user_id) -> str:
@@ -265,19 +417,28 @@ def account_name(user_id) -> str:
     return (setting("jellyfin_user_names", {}) or {}).get(user_id) or "one account"
 
 
-def for_title(media_id) -> list[CustomPoster]:
-    """A title's active custom posters: everyone's first, then each account's."""
-    rows = (
-        db.session.query(CustomPoster)
-        .filter_by(media_identity_id=media_id, active=True)
-        .all()
+def for_title(media_id, kind="Primary") -> list[CustomPoster]:
+    """A title's active custom pictures of one type (every type with None):
+    by type, everyone's first, then each account's."""
+    query = db.session.query(CustomPoster).filter_by(
+        media_identity_id=media_id, active=True
     )
-    return sorted(rows, key=lambda p: (p.jellyfin_user_id is not None, p.created_at))
+    if kind:
+        query = query.filter_by(image_type=kind)
+    return sorted(
+        query.all(),
+        key=lambda p: (
+            KINDS.index(p.image_type) if p.image_type in KINDS else len(KINDS),
+            p.jellyfin_user_id is not None,
+            p.created_at,
+        ),
+    )
 
 
-def for_accounts() -> list[CustomPoster]:
-    """Every account's own poster, for the Jellyfin plugin."""
-    return (
+def for_accounts(kind="Primary") -> list[CustomPoster]:
+    """Every account's own pictures of one type (every type with None), for
+    the Jellyfin plugin."""
+    query = (
         db.session.query(CustomPoster)
         .join(MediaIdentity, CustomPoster.media_identity_id == MediaIdentity.id)
         .filter(
@@ -285,8 +446,10 @@ def for_accounts() -> list[CustomPoster]:
             CustomPoster.jellyfin_user_id.isnot(None),
             MediaIdentity.jellyfin_id.isnot(None),
         )
-        .all()
     )
+    if kind:
+        query = query.filter(CustomPoster.image_type == kind)
+    return query.all()
 
 
 def restore(poster: CustomPoster) -> str:
@@ -294,11 +457,13 @@ def restore(poster: CustomPoster) -> str:
     from .services import audit, client
 
     media = poster.media
+    kind = poster.image_type or "Primary"
+    noun = _noun(kind)
     if poster.jellyfin_user_id:
         poster.active = False
         poster.restored_at = utcnow()
         who = account_name(poster.jellyfin_user_id)
-        said = f"{who} sees {media.title}'s usual poster again."
+        said = f"{who} sees {media.title}'s usual {noun} again."
         audit(
             "custom_poster_restored",
             media.id,
@@ -308,19 +473,27 @@ def restore(poster: CustomPoster) -> str:
         db.session.commit()
         return said
     jellyfin = client("jellyfin")
+    try:
+        ours = Path(poster.image_path).read_bytes()
+    except OSError:
+        ours = None
     original = Path(poster.original_path) if poster.original_path else None
     if original and original.exists():
-        jellyfin.put_image(media.jellyfin_id, original.read_bytes(), "Primary")
-        said = f"The original poster of {media.title} is back."
+        _put_picture(jellyfin, media.jellyfin_id, original.read_bytes(), kind, ours)
+        said = f"The original {noun} of {media.title} is back."
+    elif poster.original_path == "":
+        jellyfin.delete_image(media.jellyfin_id, kind, 0)
+        said = f"{media.title} has no {noun} again, as before."
+    elif _provider_picture(jellyfin, media, kind, ours):
+        said = f"{media.title} has its provider's {noun} again."
+    elif kind != "Primary":
+        jellyfin.delete_image(media.jellyfin_id, kind, 0)
+        said = f"{media.title}'s custom {noun} is gone; its providers offer none."
     else:
-        offered = jellyfin.remote_images(media.jellyfin_id, "Primary")
-        if not offered:
-            raise ValueError(
-                f"Curatarr has no copy of {media.title}'s original poster, "
-                "and Jellyfin's metadata providers offer none"
-            )
-        jellyfin.download_remote_image(media.jellyfin_id, offered[0], "Primary")
-        said = f"{media.title} has its provider's poster again."
+        raise ValueError(
+            f"Curatarr has no copy of {media.title}'s original poster, "
+            "and Jellyfin's metadata providers offer none"
+        )
     poster.active = False
     poster.restored_at = utcnow()
     audit(
@@ -340,6 +513,16 @@ def _norm(text: str) -> str:
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     text = text.lower().replace("'", "").replace("&", " and ")
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+def split_kind(filename: str) -> tuple[str, str]:
+    """Which picture a file is, and its name without the word saying so:
+    ``08_film.thumb.jpg`` → ("Thumb", "08_film.jpg"); no word: the poster."""
+    path = Path(filename)
+    stem, _dot, word = path.stem.rpartition(".")
+    if stem and word.lower() in FILE_KINDS:
+        return FILE_KINDS[word.lower()], stem + path.suffix
+    return "Primary", filename
 
 
 def parse_name(filename: str) -> tuple[str, int | None]:
@@ -441,16 +624,19 @@ def sweep(now=None) -> int:
         taken += 1
         if titles is None:
             titles = _titles()
-        media, why = match(path.name, titles)
+        kind, name = split_kind(path.name)
+        media, why = match(name, titles)
         if media is None:
             unmatched[path.name] = why
             seen[path.name] = mtime
             continue
         try:
             if accounts:
-                if import_for_accounts(media, path.read_bytes(), path.name, accounts):
+                if import_for_accounts(
+                    media, path.read_bytes(), path.name, accounts, kind
+                ):
                     changed += 1
-            elif apply(media, path.read_bytes(), path.name, adopt=True):
+            elif apply(media, path.read_bytes(), path.name, adopt=True, kind=kind):
                 changed += 1
         except IntegrationError:
             db.session.rollback()
@@ -474,6 +660,69 @@ def sweep(now=None) -> int:
     return changed
 
 
+def retire_gone() -> int:
+    """Worker cycle: a title that's gone (deleted, by Curatarr or outside it,
+    or no longer in Radarr or Sonarr) shows no pictures any more, so its
+    custom ones are retired and Curatarr's copies deleted; the plugin drops
+    its own at its next sync. The import folder's file stays: it's yours.
+    Returns how many titles were tidied."""
+    from .models import PurgeCandidate
+    from .services import audit
+
+    with_pictures = {
+        media_id
+        for (media_id,) in db.session.query(CustomPoster.media_identity_id).filter_by(
+            active=True
+        )
+    }
+    if not with_pictures:
+        return 0
+    deleted = {
+        media_id
+        for (media_id,) in db.session.query(PurgeCandidate.media_identity_id).filter(
+            PurgeCandidate.media_identity_id.in_(with_pictures),
+            PurgeCandidate.state == "COMPLETED",
+            PurgeCandidate.target_part_ids.is_(None),
+        )
+    }
+    on_disk = {
+        media_id
+        for (media_id,) in db.session.query(MediaPart.media_identity_id).filter(
+            MediaPart.media_identity_id.in_(with_pictures),
+            MediaPart.has_file.is_(True),
+        )
+    }
+    missing = {
+        media.id
+        for media in db.session.query(MediaIdentity).filter(
+            MediaIdentity.id.in_(with_pictures),
+            MediaIdentity.missing_since.isnot(None),
+        )
+    }
+    gone = (deleted - on_disk) | missing
+    for media_id in sorted(gone):
+        media = db.session.get(MediaIdentity, media_id)
+        rows = db.session.query(CustomPoster).filter_by(media_identity_id=media_id)
+        retired = 0
+        for poster in rows:
+            if poster.active:
+                poster.active = False
+                poster.restored_at = utcnow()
+                retired += 1
+            for path in (poster.image_path, poster.original_path):
+                if path:
+                    Path(path).unlink(missing_ok=True)
+        audit(
+            "custom_pictures_retired",
+            media_id,
+            f"{media.title if media else 'A title'} is gone, so its {retired} custom "
+            f"picture{' was' if retired == 1 else 's were'} removed.",
+            f"custom-pictures-retired:{media_id}:{utcnow().date().isoformat()}",
+        )
+        db.session.commit()
+    return len(gone)
+
+
 def gallery() -> list[CustomPoster]:
     return (
         db.session.query(CustomPoster)
@@ -491,8 +740,31 @@ PROMPT_DEFAULTS = {
     "batch": 20,
     "photos": "",
     "people": "",
+    "kinds": ["Primary"],  # which pictures to ask for, as a matching set
 }
 OVERVIEW_CHARS = 280
+# What each picture should be, for the prompts.
+KIND_SPECS = {
+    "Primary": (
+        "Poster: portrait 2:3, at least 1024 × 1536, JPEG, with the title on it."
+    ),
+    "Thumb": (
+        "Wide tile: landscape 16:9, at least 1920 × 1080, JPEG, with the title on "
+        "it, large enough to read when the picture is shown small."
+    ),
+    "Backdrop": (
+        "Background: landscape 16:9, at least 1920 × 1080, JPEG, with no text at "
+        "all; keep the lower left fairly calm, as apps lay the title and plot "
+        "over it."
+    ),
+    "Logo": (
+        "Logo: only the title, as lettering in the film's style, on a transparent "
+        "background, PNG, at least 1000 pixels wide; nothing else in it."
+    ),
+    "Banner": (
+        "Banner: a wide strip, 1000 × 185 (about 5.4:1), JPEG, with the title on it."
+    ),
+}
 
 
 def prompt_options() -> dict:
@@ -506,20 +778,25 @@ def save_prompt_options(form) -> dict:
         batch = max(1, min(int(form.get("batch") or 20), 100))
     except ValueError:
         batch = 20
+    kinds = [k for k in KINDS if k in form.getlist("kinds")] or ["Primary"]
     options = {
         "titles": form.get("titles") or "favourites",
         "skip_done": form.get("skip_done") in {"on", "true", "1"},
         "batch": batch,
         "photos": (form.get("photos") or "").strip(),
         "people": (form.get("people") or "").strip()[:200],
+        "kinds": kinds,
     }
     set_setting(KEY, settings() | {"prompts": options})
     db.session.commit()
     return options
 
 
-def prompt_titles(which: str, skip_done=True) -> list[MediaIdentity]:
-    """The titles to write prompts for, A to Z."""
+def prompt_titles(
+    which: str, skip_done=True, kinds=("Primary",)
+) -> list[MediaIdentity]:
+    """The titles to write prompts for, A to Z. ``skip_done`` leaves out those
+    that already have a custom picture of every type asked for."""
     from .models import UserMediaState
 
     query = (
@@ -546,13 +823,12 @@ def prompt_titles(which: str, skip_done=True) -> list[MediaIdentity]:
         query = query.filter(MediaIdentity.id.in_(favourites))
     titles = query.all()
     if skip_done:
-        done = {
-            row.media_identity_id
-            for row in db.session.query(CustomPoster.media_identity_id).filter_by(
-                active=True
-            )
-        }
-        titles = [m for m in titles if m.id not in done]
+        have: dict[str, set] = {}
+        for media_id, kind in db.session.query(
+            CustomPoster.media_identity_id, CustomPoster.image_type
+        ).filter_by(active=True):
+            have.setdefault(media_id, set()).add(kind)
+        titles = [m for m in titles if not set(kinds) <= have.get(m.id, set())]
     return sorted(titles, key=lambda m: _norm(m.sort_title or m.title))
 
 
@@ -560,8 +836,16 @@ def _slug(text: str) -> str:
     return _norm(text).replace(" ", "-")
 
 
-def describe(titles) -> list[dict]:
-    """Each title with its year, genres, a short plot and the file name to save."""
+def file_name(base: str, kind: str) -> str:
+    """The file name to save a title's picture of ``kind`` under."""
+    if kind == "Primary":
+        return base + ".jpg"
+    return f"{base}.{FILE_WORDS[kind]}{_extension(kind)}"
+
+
+def describe(titles, kinds=("Primary",)) -> list[dict]:
+    """Each title with its year, genres, a short plot and the file names to
+    save (``file``: the poster's; ``files``: each type asked for)."""
     from .services import client
 
     details = {}
@@ -589,6 +873,7 @@ def describe(titles) -> list[dict]:
                 "genres": (item.get("Genres") or media.genres or [])[:3],
                 "overview": overview,
                 "file": name + ".jpg",
+                "files": {kind: file_name(name, kind) for kind in kinds},
             }
         )
     return described
@@ -597,12 +882,17 @@ def describe(titles) -> list[dict]:
 def prompts(described, *, batch, photos, people, output) -> list[str]:
     """One prompt per batch, for Codex or another image-making AI agent."""
     chunks = [described[i : i + batch] for i in range(0, len(described), batch)]
+    kinds = [k for k in KINDS if described and k in described[0]["files"]]
+    if not kinds:
+        kinds = ["Primary"]
+    single = kinds == ["Primary"]
     who = people or "the people in them"
     texts = []
     for index, chunk in enumerate(chunks, 1):
         lines = [
             (
-                f"You're making custom posters for a home media library. "
+                f"You're making custom {'posters' if single else 'artwork'} for a "
+                "home media library. "
                 f"Batch {index} of {len(chunks)}: {len(chunk)} title"
                 f"{'' if len(chunk) == 1 else 's'}."
             ),
@@ -613,21 +903,38 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
                 (
                     f"Reference photos are in {photos}. Use them for the likeness of "
                     f"{who}, with their consent. Where a title's story suits it, cast "
-                    "them as its lead characters; where it doesn't, make the poster "
-                    "without them. Don't use any other real person's likeness, actors "
+                    "them as its lead characters; where it doesn't, make the "
+                    f"{'poster' if single else 'pictures'} without them. Don't use any other real person's likeness, actors "
                     "included."
                 ),
                 "",
             ]
         else:
             lines += ["Don't use any real person's likeness, actors included.", ""]
+        if single:
+            lines += [
+                "For each title below, make one poster:",
+                "- Portrait 2:3, at least 1024 × 1536, saved as JPEG.",
+                (
+                    "- Its tone, setting and key imagery, with the title on it "
+                    "spelled exactly as given. Not a copy of the official poster."
+                ),
+            ]
+        else:
+            lines += [
+                (
+                    "For each title below, make a matching set of pictures: the "
+                    "same cast, look and style in each, but each a different scene "
+                    "or framing (none a crop of another):"
+                ),
+                *(f"- {KIND_SPECS[kind]}" for kind in kinds),
+                (
+                    "- Its tone, setting and key imagery, with the title spelled "
+                    "exactly as given wherever it appears. Not copies of the "
+                    "official artwork."
+                ),
+            ]
         lines += [
-            "For each title below, make one poster:",
-            "- Portrait 2:3, at least 1024 × 1536, saved as JPEG.",
-            (
-                "- Its tone, setting and key imagery, with the title on it spelled "
-                "exactly as given. Not a copy of the official poster."
-            ),
             (
                 f"- Save it in {output} under the file name given. Write each file in "
                 "one go (or write it elsewhere and move it in): it's picked up as soon "
@@ -637,7 +944,12 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
                 "- If one comes out wrong (a misspelled title, an unconvincing face), "
                 "make it again under the same name."
             ),
-            "- When the batch is done, list each file with a line on its concept.",
+            (
+                "- When the batch is done, list each file with a line on its concept."
+                if single
+                else "- When the batch is done, list each title with a line on its "
+                "set's concept."
+            ),
             "",
             "Titles:",
         ]
@@ -647,27 +959,45 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
             lines.append(
                 f"{entry['number']}. {entry['title']}{year}, {entry['kind']}"
                 + (f" ({about})" if about else "")
-                + f" → {entry['file']}"
+                + (f" → {entry['file']}" if single else "")
             )
             if entry["overview"]:
                 lines.append(f"    {entry['overview']}")
+            if not single:
+                lines += [
+                    f"    {KIND_NAMES[kind].capitalize()} → {entry['files'][kind]}"
+                    for kind in kinds
+                ]
         texts.append("\n".join(lines))
     return texts
 
 
 def gallery_groups() -> list[dict]:
-    """The gallery, one tile per picture: a title's posters that are the same
-    picture (one per account, from one import) are shown together. Copies
-    are saved identically, so the file's size tells them apart cheaply."""
+    """The gallery, one tile per picture: a title's pictures that are the same
+    (one per account, from one import) are shown together. Copies are saved
+    identically, so the file's size tells them apart cheaply. Each title's
+    other pictures (wide tile, background, logo, banner) go with its tile as
+    ``extras``, grouped the same way."""
     groups: dict[tuple, dict] = {}
     for poster in gallery():
         try:
             size = Path(poster.image_path).stat().st_size
         except OSError:
             size = None
-        key = (poster.media_identity_id, size if size is not None else poster.id)
+        key = (
+            poster.media_identity_id,
+            poster.image_type,
+            size if size is not None else poster.id,
+        )
         group = groups.setdefault(
-            key, {"media": poster.media, "image": poster, "posters": []}
+            key,
+            {
+                "media": poster.media,
+                "kind": poster.image_type,
+                "noun": _noun(poster.image_type),
+                "image": poster,
+                "posters": [],
+            },
         )
         group["posters"].append(poster)
     for group in groups.values():
@@ -681,11 +1011,31 @@ def gallery_groups() -> list[dict]:
         group["applied_at"] = max(
             (p.applied_at for p in group["posters"] if p.applied_at), default=None
         )
-    return sorted(
-        groups.values(),
-        key=lambda g: g["applied_at"].isoformat() if g["applied_at"] else "",
-        reverse=True,
-    )
+    tiles: dict[str, list[dict]] = {}
+    for group in groups.values():
+        tiles.setdefault(group["media"].id, []).append(group)
+    shown = []
+    for parts in tiles.values():
+        posters = [g for g in parts if g["kind"] == "Primary"]
+        extras = sorted(
+            (g for g in parts if g["kind"] != "Primary"),
+            key=lambda g: KINDS.index(g["kind"]) if g["kind"] in KINDS else 99,
+        )
+        # A title with only other pictures still gets a tile, led by the first.
+        leads = posters or extras[:1]
+        rest = extras if posters else extras[1:]
+        for index, lead in enumerate(leads):
+            tile = lead | {"extras": rest if index == 0 else []}
+            tile["latest"] = max(
+                (
+                    g["applied_at"].isoformat()
+                    for g in [tile, *tile["extras"]]
+                    if g["applied_at"]
+                ),
+                default="",
+            )
+            shown.append(tile)
+    return sorted(shown, key=lambda g: g["latest"], reverse=True)
 
 
 def leaving_label(media_id) -> str | None:
@@ -744,6 +1094,10 @@ RIBBON_DEFAULTS = {
     "household_at": 3,  # this many people's favourite: a household one (0: off)
     "episodes": True,  # favourite episodes' thumbnails too
 }
+# An account's own wide tile and background show Leaving Soon's countdown, as
+# Jellyfin's own do; ribbons go on its wide tile and banner too.
+BADGED_KINDS = {"Thumb", "Backdrop"}
+RIBBON_KINDS = {"Thumb", "Banner"}
 RIBBON_STYLE = "fav-3"  # part of each tag: a new look fetches every ribbon again
 _jellyfin_tags: dict[str, str] = {}  # last known image tags, while Jellyfin is away
 _avatar_tags: dict[str, str] = {}  # Jellyfin profile pictures' tags
@@ -1056,10 +1410,15 @@ def waiting_marks() -> dict[tuple[str, str, str], str]:
     return found
 
 
-def plugin_list() -> list[dict]:
+def plugin_list(version: int = 1) -> list[dict]:
     """What the Curatarr plugin shows each account instead of the usual
     picture: its own custom posters, favourite ribbons on titles and
-    episodes, and Leave after watched's tag."""
+    episodes, and Leave after watched's tag.
+
+    Version 2 (plugin 0.8.0.0 and later) lists each type of picture
+    (``kind``): the poster, and an account's own wide tile, background, logo
+    and banner, or ones made from its poster (``fallbacks``). Version 1 has
+    posters only, each with ``wide``: whether there's a landscape version."""
     import hashlib
     import json
 
@@ -1069,7 +1428,22 @@ def plugin_list() -> list[dict]:
     waiting = waiting_marks()
     keys = set(marked) | set(waiting)
     own = {(p.jellyfin_user_id, p.media_identity_id): p for p in for_accounts()}
-    title_ids = {i for k, _v, i in keys if k == "t"} | {m for _v, m in own}
+    others = (
+        {
+            (p.jellyfin_user_id, p.media_identity_id, p.image_type): p
+            for p in for_accounts(None)
+            if p.image_type != "Primary"
+        }
+        if version >= 2
+        else {}
+    )
+    made = fallbacks()
+    widened = made["Thumb"] == "widened"
+    title_ids = (
+        {i for k, _v, i in keys if k == "t"}
+        | {m for _v, m in own}
+        | {m for _v, m, _k in others}
+    )
     medias = {
         m.id: m
         for m in db.session.query(MediaIdentity).filter(
@@ -1091,6 +1465,17 @@ def plugin_list() -> list[dict]:
         _refresh_avatar_tags()
     leaving: dict[str, str | None] = {}
     entries = []
+    poster_of: dict[tuple[str, str], dict] = {}  # (viewer, title): its entry
+
+    def add(entry, viewer=None, media_id=None, title=True):
+        if version >= 2:
+            entry.pop("wide", None)
+            entry["kind"] = "Primary"
+        elif not title:
+            entry["wide"] = False
+        if viewer and media_id:
+            poster_of[(viewer, media_id)] = entry
+        entries.append(entry)
 
     def label_for(media_id):
         if media_id not in leaving:
@@ -1100,14 +1485,16 @@ def plugin_list() -> list[dict]:
     for (viewer, media_id), poster in own.items():
         media = medias.get(media_id)
         if media and media.jellyfin_id and ("t", viewer, media_id) not in keys:
-            entries.append(
+            add(
                 {
                     "item": bare(media.jellyfin_id),
                     "user": bare(viewer),
                     "id": poster.id,
                     "tag": account_tag(poster, label_for(media_id)),
-                    "wide": True,
-                }
+                    "wide": widened,
+                },
+                viewer,
+                media_id,
             )
     for kind, viewer, item_id in sorted(keys):
         ribbon = marked.get((kind, viewer, item_id))
@@ -1146,7 +1533,7 @@ def plugin_list() -> list[dict]:
             ],
             sort_keys=True,
         )
-        entries.append(
+        add(
             {
                 "item": bare(jellyfin_id),
                 "user": bare(viewer),
@@ -1155,9 +1542,60 @@ def plugin_list() -> list[dict]:
                 # A second picture, listing the names, for where it's shown big.
                 "large": bool(ribbon) and has_large(options, ribbon["household"], kind),
                 # A landscape version, for rows of wide tiles (a title's Thumb).
-                "wide": kind == "t",
-            }
+                "wide": kind == "t" and widened,
+            },
+            *((viewer, item_id) if kind == "t" else (None, None)),
+            title=kind == "t",
         )
+    if version < 2:
+        return entries
+    from .artwork import BADGE_STYLE
+
+    pairs = set(poster_of) | {(v, m) for v, m, _k in others}
+    for viewer, media_id in sorted(pairs):
+        media = medias.get(media_id)
+        if media is None or not media.jellyfin_id:
+            continue
+        poster = poster_of.get((viewer, media_id))
+        ribbon = marked.get(("t", viewer, media_id))
+        for kind in KINDS[1:]:
+            custom = others.get((viewer, media_id, kind))
+            if custom:
+                base = custom.id
+                label = label_for(media_id) if kind in BADGED_KINDS else None
+                drawn = ribbon if kind in RIBBON_KINDS else None
+            elif poster and made.get(kind, "own") != "own":
+                # Made from the poster as this account sees it, ribbon and all.
+                base, label, drawn = f"{made[kind]}:{poster['tag']}", None, None
+            else:
+                continue
+            spec = json.dumps(
+                [
+                    kind,
+                    base,
+                    label,
+                    drawn,
+                    options["position"],
+                    options["list_style"],
+                    options["colour"],
+                    [_avatar_version(u) for u in drawn["users"]]
+                    if drawn and options["list_style"] == "faces"
+                    else None,
+                    RIBBON_STYLE,
+                    BADGE_STYLE,
+                ],
+                sort_keys=True,
+            )
+            entries.append(
+                {
+                    "item": bare(media.jellyfin_id),
+                    "user": bare(viewer),
+                    "kind": kind,
+                    "id": f"{kind.lower()}.{viewer}.{media_id}",
+                    "tag": hashlib.sha1(spec.encode()).hexdigest()[:32],
+                    "large": False,
+                }
+            )
     return entries
 
 
@@ -1175,9 +1613,19 @@ def plugin_picture(
     from .artwork import _jpeg
     from .services import client
 
+    prefix, _dot, rest = entry_id.partition(".")
+    kind = {k.lower(): k for k in KINDS[1:]}.get(prefix)
+    if kind:
+        viewer, _dot, media_id = rest.partition(".")
+        return _other_picture(kind, viewer, media_id)
     if not entry_id.startswith(("v.", "e.")):
         poster = db.session.get(CustomPoster, entry_id)
-        if not poster or not poster.active or not Path(poster.image_path).exists():
+        if (
+            not poster
+            or not poster.active
+            or poster.image_type != "Primary"
+            or not Path(poster.image_path).exists()
+        ):
             return None
         return account_picture(poster, leaving_label(poster.media_identity_id))
     kind, viewer, item_id = entry_id.split(".", 2)
@@ -1219,3 +1667,52 @@ def plugin_picture(
         large=large and kind == "v",
         leaving=leaving,
     )
+
+
+def _poster_as_seen(viewer, media_id) -> bytes | None:
+    """The poster the plugin shows this account: its own, a ribbon's or
+    Leave after watched's tag drawn on; None when it sees Jellyfin's own."""
+    key = ("t", viewer, media_id)
+    if key in ribbons() or key in waiting_marks():
+        return plugin_picture(f"v.{viewer}.{media_id}")
+    poster = active(media_id, viewer)
+    if poster and Path(poster.image_path).exists():
+        return account_picture(poster, leaving_label(media_id))
+    return None
+
+
+def _other_picture(kind, viewer, media_id) -> bytes | None:
+    """An account's wide tile, background, logo or banner as the plugin
+    serves it: its own, with the countdown and ribbon where they go, or one
+    made from its poster (``fallbacks``)."""
+    from .artwork import BANNER_SIZE, badge_poster, blurred_background, widen
+
+    custom = active(media_id, viewer, kind)
+    if custom and Path(custom.image_path).exists():
+        picture = Path(custom.image_path).read_bytes()
+        label = leaving_label(media_id) if kind in BADGED_KINDS else None
+        if label:
+            picture = badge_poster(picture, label, kind)
+        options = ribbon_settings()
+        ribbon = ribbons(options).get(("t", viewer, media_id))
+        if ribbon and kind in RIBBON_KINDS:
+            if label:  # a wide tile's countdown runs along its bottom
+                options = options | {"position": "top"}
+            picture = draw_ribbon(
+                picture,
+                ribbon["users"],
+                ribbon["names"],
+                options,
+                new=ribbon["new"],
+                household=ribbon["household"],
+            )
+        return picture
+    made = fallbacks().get(kind, "own")
+    if made == "own":
+        return None
+    poster = _poster_as_seen(viewer, media_id)
+    if poster is None:
+        return None
+    if kind == "Backdrop":
+        return blurred_background(poster)
+    return widen(poster, BANNER_SIZE) if kind == "Banner" else widen(poster)
