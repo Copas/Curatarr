@@ -66,6 +66,15 @@ Settings → Household. Each of these shows on a title's page, and in Review, as
 - **Favourites.** A title someone favourited in Jellyfin goes to the back of the line. A gold star with the names of everyone who favourited it shows on its page, in Review, Free up space, Browse titles and Shows by size.
 - **Seasonal shelves.** Halloween and Christmas titles, by their TMDB keywords or because they were watched mostly in that season in earlier years, are kept through their season and the two weeks before it. Optionally (off by default), a seasonal film Curatarr removed is added back to Radarr, with its old quality profile and folder, two weeks before its season.
 
+### Leave after watched, and Never compress
+
+On a film's or show's page, under **Flags** (or through the [API](API.md#titles-and-flags)):
+
+- **Leave after watched**, for one last watch: nothing starts when it's set. Once it has been watched (by the account you choose, or by anyone), it's marked Leaving Soon as if asked for on its page, with the usual notice, and playing it, Keep or Never Purge rescue it from then on. A film is watched when Jellyfin marks it played; a show when its last episode on disk is, and it's then trimmed to its always-keep episodes like Reset to minimum. Playing it before then leaves the flag alone; Clear cancels it.
+- **Never compress**, for a film or show, a season or (through the API) one episode: an external transcoder (Tdarr, Unmanic, FileFlows) on the same library leaves these files exactly as they are. Curatarr never re-encodes video itself; it lists the files, one path per line as Sonarr and Radarr see them, at `/api/v1/protected-paths?kind=compress` and, if you set one, in a file it keeps up to date (Settings → Never compress), for the transcoder's skip list. Favourites can be protected automatically.
+
+Setting and clearing either shows in History.
+
 ### Shrink instead of delete
 
 A film of 4 GB or more has **Shrink…** in Review and on its page. Curatarr asks Radarr's indexers for a copy **half the size or smaller**, at the same resolution (1080p for anything bigger), that Radarr would accept once the current file is gone. Only if one exists is the current file deleted and that copy downloaded; the film leaves the review queue, and its page shows the swap until the new file arrives. If nothing is small enough it says so, with the date, and changes nothing. When the film's quality profile allows upgrades, it's unmonitored so Radarr doesn't fetch a big copy again; if the small copy hasn't arrived in two days, the film is monitored again and Radarr searches for any copy.
