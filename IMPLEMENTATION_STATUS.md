@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc19 (2026-10-25): the AI prompts put the cast in about half the titles' backgrounds.
 - v0.2.0rc18 (2026-10-25): the AI prompts ask for the lettering to be made with each picture, not typed on with code.
 - v0.2.0rc17 (2026-10-25): the AI prompts ask for the title's own logo lettering, and no longer forbid drawing on the official artwork.
 - v0.2.0rc16 (2026-10-25): the AI prompts use each title's poster, not extra role portraits, to keep a set's faces the same.

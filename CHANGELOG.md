@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc19 (2026-10-25)
+
+- **The cast is in some backgrounds.** The AI prompts allowed people in a background only if their faces were large enough to recognise, so the agent always left them out. Now about half the titles' backgrounds, where it suits the story, have the cast on the right-hand side, faces large, clear and well lit, with the lower left still kept calm for the title and plot.
+
 ## 0.2.0rc18 (2026-10-25)
 
 - **The AI prompts ask for the lettering to be made with the picture.** In the first sets, every title (on the wide tile, banner and logo alike) was in the same plain serif font: the agent made the pictures without text and typed the titles on with code. The prompts now say to make the lettering with the image tool, as part of each picture, the logo with a transparent background.

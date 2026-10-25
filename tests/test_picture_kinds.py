@@ -363,7 +363,8 @@ def test_prompts_keep_the_reference_people_recognisable(app, client, tmp_path):
     assert "Use all of their photos" in text and "plus the title's poster" in text
     assert "head-and-shoulders" not in text  # nothing made that Jellyfin doesn't use
     assert "a different photo leads each time" in text
-    assert "large and clear enough to recognise" in text  # the background
+    assert "In about half the titles' backgrounds" in text  # sometimes the cast
+    assert "on the right-hand side, faces large" in text
     # A photos folder that isn't there is saved, with a warning.
     response = client.post(
         "/library/posters/prompts",

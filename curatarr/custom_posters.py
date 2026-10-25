@@ -774,8 +774,9 @@ KIND_SPECS = {
     "Backdrop": (
         "Background: landscape 16:9, at least 1920 × 1080, JPEG, with no text at "
         "all; keep the lower left fairly calm, as apps lay the title and plot "
-        "over it. A place or moment from the story; people only if their faces "
-        "are large and clear enough to recognise."
+        "over it. A place or moment from the story. In about half the titles' "
+        "backgrounds, where it suits the story, the cast is in it too: on the "
+        "right-hand side, faces large, clear and well lit; otherwise no people."
     ),
     "Logo": (
         "Logo: only the title, in the title's own lettering (below), on a "
