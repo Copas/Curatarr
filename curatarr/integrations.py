@@ -4,11 +4,18 @@ import base64
 import ipaddress
 import logging
 import time
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _package_version
 from urllib.parse import urlparse
 
 import requests
 
 from .observability import increment, log_operation
+
+try:  # sent to Jellyfin with every request, as the app's version
+    _VERSION = _package_version("curatarr")
+except PackageNotFoundError:  # running from a checkout that isn't installed
+    _VERSION = "dev"
 
 
 class IntegrationError(RuntimeError):
@@ -156,7 +163,7 @@ class JellyfinClient(Client):
     def _client_header(device_id, token=None):
         value = (
             f'MediaBrowser Client="Curatarr", Device="Curatarr", '
-            f'DeviceId="{device_id}", Version="0.2.0rc5"'
+            f'DeviceId="{device_id}", Version="{_VERSION}"'
         )
         if token:
             value += f', Token="{token}"'
