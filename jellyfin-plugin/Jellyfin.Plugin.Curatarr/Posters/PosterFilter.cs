@@ -114,48 +114,83 @@ public sealed class PosterFilter : IAsyncActionFilter
     };
 
     /// <summary>
-    /// Puts the account's poster tags in one item's details: its own poster, and
-    /// its show's or parent's where an app shows that instead (an episode's card).
-    /// Where the poster has a landscape version, its tag goes in for the Thumb too,
-    /// which apps show in rows of wide tiles (in place of the title's own Thumb or,
-    /// when it has none, its backdrop).
+    /// Puts the account's picture tags in one item's details: its poster, wide
+    /// tile (Thumb), background, logo and banner, and its show's or parent's
+    /// where an app shows those instead (an episode's card, a season's page).
+    /// An older Curatarr's poster with a landscape version stands in for the
+    /// Thumb, which apps show in rows of wide tiles (in place of the title's own
+    /// Thumb or, when it has none, its backdrop).
     /// </summary>
-    internal void Swap(BaseItemDto dto, IReadOnlyDictionary<string, string> posters)
+    internal void Swap(BaseItemDto dto, IReadOnlyDictionary<string, IReadOnlyDictionary<ImageType, string>> posters)
     {
-        if (posters.TryGetValue(dto.Id.ToString("N"), out var tag))
+        string? Tag(Guid? id, ImageType type)
+            => id is Guid found
+                && posters.TryGetValue(found.ToString("N"), out var kinds)
+                && kinds.TryGetValue(type, out var tag)
+                ? tag
+                : null;
+
+        string? Thumb(Guid? id)
+            => Tag(id, ImageType.Thumb) ?? (Tag(id, ImageType.Primary) is { } poster && IsWide(poster) ? poster : null);
+
+        void Own(ImageType type, string? tag)
         {
-            dto.ImageTags ??= [];
-            dto.ImageTags[ImageType.Primary] = tag;
-            Blur(dto, tag, ImageType.Primary);
-            if (IsWide(tag))
+            if (tag is null)
             {
-                dto.ImageTags[ImageType.Thumb] = tag;
-                Blur(dto, tag, ImageType.Thumb);
+                return;
             }
+
+            dto.ImageTags ??= [];
+            dto.ImageTags[type] = tag;
+            Blur(dto, tag, type);
         }
 
-        if (dto.SeriesId is Guid series && posters.TryGetValue(series.ToString("N"), out var seriesTag))
+        Own(ImageType.Primary, Tag(dto.Id, ImageType.Primary));
+        Own(ImageType.Thumb, Thumb(dto.Id));
+        Own(ImageType.Logo, Tag(dto.Id, ImageType.Logo));
+        Own(ImageType.Banner, Tag(dto.Id, ImageType.Banner));
+        if (Tag(dto.Id, ImageType.Backdrop) is { } backdrop)
+        {
+            dto.BackdropImageTags = First(backdrop, dto.BackdropImageTags);
+            Blur(dto, backdrop, ImageType.Backdrop);
+        }
+
+        if (Tag(dto.SeriesId, ImageType.Primary) is { } seriesTag)
         {
             dto.SeriesPrimaryImageTag = seriesTag;
-            if (IsWide(seriesTag))
-            {
-                dto.SeriesThumbImageTag = seriesTag;
-            }
         }
 
-        if (dto.ParentPrimaryImageItemId is Guid parentId
-            && posters.TryGetValue(parentId.ToString("N"), out var parentTag))
+        if (Thumb(dto.SeriesId) is { } seriesThumb)
+        {
+            dto.SeriesThumbImageTag = seriesThumb;
+        }
+
+        if (Tag(dto.ParentPrimaryImageItemId, ImageType.Primary) is { } parentTag)
         {
             dto.ParentPrimaryImageTag = parentTag;
         }
 
-        if (dto.ParentThumbItemId is Guid thumbId
-            && posters.TryGetValue(thumbId.ToString("N"), out var thumbTag)
-            && IsWide(thumbTag))
+        if (Thumb(dto.ParentThumbItemId) is { } thumbTag)
         {
             dto.ParentThumbImageTag = thumbTag;
         }
+
+        if (Tag(dto.ParentBackdropItemId, ImageType.Backdrop) is { } parentBackdrop)
+        {
+            dto.ParentBackdropImageTags = First(parentBackdrop, dto.ParentBackdropImageTags);
+        }
+
+        if (Tag(dto.ParentLogoItemId, ImageType.Logo) is { } parentLogo)
+        {
+            dto.ParentLogoImageTag = parentLogo;
+        }
     }
+
+    /// <summary>
+    /// A title's backgrounds with the account's first, in place of Jellyfin's
+    /// first (apps show the first; some rotate through the rest).
+    /// </summary>
+    private static string[] First(string tag, string[]? tags) => [tag, .. (tags ?? []).Skip(1)];
 
     private bool IsWide(string tag) => _store.TryGetByTag(tag, out var poster) && poster.Wide;
 
@@ -166,7 +201,8 @@ public sealed class PosterFilter : IAsyncActionFilter
             return; // the app didn't ask for placeholders
         }
 
-        var file = type == ImageType.Thumb ? PosterSync.WideFileFor(tag) : PosterSync.FileFor(tag);
+        var file = type == ImageType.Thumb && IsWide(tag) ? PosterSync.WideFileFor(tag)
+            : PosterSync.FileFor(tag, type);
         var hash = _store.BlurHashes.GetOrAdd(file, f =>
         {
             try
@@ -190,20 +226,27 @@ public sealed class PosterFilter : IAsyncActionFilter
         var tag = args.TryGetValue("tag", out var raw) ? raw as string : null;
         if (!_store.TryGetByTag(tag, out var poster)
             || !args.TryGetValue("itemId", out var rawId) || rawId is not Guid itemId
-            || !string.Equals(itemId.ToString("N"), poster.Item, StringComparison.OrdinalIgnoreCase)
-            || (args.TryGetValue("imageType", out var type) && type is ImageType kind && kind is not (ImageType.Primary or ImageType.Thumb)))
+            || !string.Equals(itemId.ToString("N"), poster.Item, StringComparison.OrdinalIgnoreCase))
         {
             return null; // not one of ours: Jellyfin serves it
         }
 
-        var wide = type is ImageType.Thumb;
-        if (wide && !poster.Wide)
+        var asked = args.TryGetValue("imageType", out var type) && type is ImageType kind ? kind : ImageType.Primary;
+        string file;
+        if (asked == poster.Type)
+        {
+            file = PosterSync.FileFor(poster.Tag, asked);
+        }
+        else if (asked == ImageType.Thumb && poster.Type == ImageType.Primary && poster.Wide)
+        {
+            file = PosterSync.WideFileFor(poster.Tag); // an older Curatarr's landscape version
+        }
+        else
         {
             return null;
         }
 
-        var file = wide ? PosterSync.WideFileFor(poster.Tag) : PosterSync.FileFor(poster.Tag);
-        if (!wide && poster.Large && IsLarge(args, _config()?.LargePosterWidth ?? PluginConfiguration.DefaultLargePosterWidth)
+        if (asked == ImageType.Primary && poster.Large && IsLarge(args, _config()?.LargePosterWidth ?? PluginConfiguration.DefaultLargePosterWidth)
             && File.Exists(PosterSync.LargeFileFor(poster.Tag)))
         {
             file = PosterSync.LargeFileFor(poster.Tag);
@@ -220,13 +263,16 @@ public sealed class PosterFilter : IAsyncActionFilter
             return null;
         }
 
+        var logo = asked == ImageType.Logo;
+        var fallbackMime = logo ? "image/png" : "image/jpeg";
+
         try
         {
             var options = new ImageProcessingOptions
             {
                 ItemId = itemId,
                 Item = item,
-                Image = new ItemImageInfo { Path = file, Type = wide ? ImageType.Thumb : ImageType.Primary, DateModified = File.GetLastWriteTimeUtc(file) },
+                Image = new ItemImageInfo { Path = file, Type = asked, DateModified = File.GetLastWriteTimeUtc(file) },
                 ImageIndex = 0,
                 Width = Arg<int?>(args, "width"),
                 Height = Arg<int?>(args, "height"),
@@ -235,16 +281,17 @@ public sealed class PosterFilter : IAsyncActionFilter
                 FillWidth = Arg<int?>(args, "fillWidth"),
                 FillHeight = Arg<int?>(args, "fillHeight"),
                 Quality = Arg<int?>(args, "quality") ?? 90,
-                SupportedOutputFormats = [ImageFormat.Jpg],
+                // A logo keeps its see-through background.
+                SupportedOutputFormats = [logo ? ImageFormat.Png : ImageFormat.Jpg],
             };
             var (path, mime, _) = await _imageProcessor.ProcessImage(options).ConfigureAwait(false);
-            return new PhysicalFileResult(path, mime ?? "image/jpeg");
+            return new PhysicalFileResult(path, mime ?? fallbackMime);
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException or NotSupportedException)
         {
             // Resizing failed: the picture as it is still beats the wrong one.
-            _logger.LogWarning(ex, "Couldn't resize the account poster {Tag}; sending it as it is", poster.Tag);
-            return new PhysicalFileResult(file, "image/jpeg");
+            _logger.LogWarning(ex, "Couldn't resize the account picture {Tag}; sending it as it is", poster.Tag);
+            return new PhysicalFileResult(file, fallbackMime);
         }
     }
 

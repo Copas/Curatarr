@@ -463,6 +463,7 @@ ACTION_WORDS = {
     "finished_at_credits": "Marked watched at the credits",
     "custom_poster_applied": "Custom poster put on",
     "custom_poster_restored": "Original poster restored",
+    "custom_pictures_retired": "Custom pictures of a deleted title removed",
     "flag_leave_after_watched_set": "Leave after watched",
     "flag_leave_after_watched_cleared": "Leave after watched ended",
     "flag_never_compress_set": "Never compress",
@@ -1982,7 +1983,9 @@ def title(media_id):
         title_flags=flags.flags_for(media),
         describe_flag=flags.describe,
         flag_accounts=sorted(account_names().items(), key=lambda a: a[1]),
-        title_posters=custom_posters.for_title(media.id),
+        title_posters=custom_posters.for_title(media.id, None),
+        picture_kinds=custom_posters.KINDS,
+        picture_names=custom_posters.KIND_NAMES,
         poster_accounts=sorted(account_names().items(), key=lambda a: a[1]),
         **title_view(media),
     )
