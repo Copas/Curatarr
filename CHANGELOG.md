@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc17 (2026-10-25)
+
+- **The AI prompts ask for the title's own logo lettering.** Asked only for "lettering in the film's style", logos came out in plain fonts. The title, on the logo and wherever else it appears, is now in the lettering of the film's official logo: the same typeface (or the closest match), weight, letter shapes, spacing, colours and effects. The prompts no longer say the pictures mustn't copy the official artwork.
+
 ## 0.2.0rc16 (2026-10-25)
 
 - **The AI prompts no longer ask for role portraits.** To keep faces the same across a title's set, they asked the agent to make a head-and-shoulders portrait of each person in costume first: extra pictures Jellyfin never uses, kept in a folder the agent made up. A title's poster already shows them in costume for that story, so it's the reference instead: each wide tile, background and banner is made from their photos plus the poster, and a poster that's still to be made is made and checked first.
