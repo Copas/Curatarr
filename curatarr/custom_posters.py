@@ -734,7 +734,7 @@ def account_picture(poster: CustomPoster, label: str | None) -> bytes:
 RIBBON_KEY = "favourite_ribbons"
 RIBBON_DEFAULTS = {
     "enabled": False,
-    "position": "bottom",  # or "top_right"
+    "position": "bottom",  # or "top", "top_right"
     "list_style": "faces",  # posters in lists: ★ and faces, "names" or "star"
     "page_style": "names",  # a title's own page: names listed, or "list" (the same)
     "colour": "gold",  # or silver, teal, purple
@@ -780,7 +780,7 @@ def save_ribbon_settings(form, accounts) -> dict:
     ticked = lambda name: form.get(name) in {"on", "true", "1"}
     options = {
         "enabled": ticked("enabled"),
-        "position": "top_right" if form.get("position") == "top_right" else "bottom",
+        "position": _choice(form.get("position"), ("bottom", "top", "top_right")),
         "list_style": _choice(form.get("list_style"), ("faces", "names", "star")),
         "page_style": _choice(form.get("page_style"), ("names", "list")),
         "colour": _choice(form.get("colour"), ("gold", "silver", "teal", "purple")),
@@ -820,7 +820,9 @@ def has_large(options, household: bool = False, kind: str = "t") -> bool:
     return kind == "t" and (options["page_style"] == "names" or household)
 
 
-def draw_ribbon(base, users, names, options, *, new, household, large=False):
+def draw_ribbon(
+    base, users, names, options, *, new, household, large=False, leaving=None
+):
     """A poster or thumbnail with the ribbon these options give it."""
     from .artwork import favourite_ribbon
 
@@ -839,6 +841,7 @@ def draw_ribbon(base, users, names, options, *, new, household, large=False):
         names=names if large and has_large(options, household) else (),
         large=large,
         colour=options["colour"],
+        leaving=leaving,
     )
 
 
@@ -906,6 +909,42 @@ def ribbons(options=None) -> dict[tuple[str, str, str], dict]:
                 "household": household,
             }
     return found
+
+
+_preview: dict[str, bytes] = {}  # Jellyfin id → its poster, for the previews
+
+
+def preview_poster() -> tuple[bytes | None, str | None]:
+    """A poster to show the ribbon previews on, and its Leaving Soon words:
+    the latest favourite's (anything with a poster when there's none yet)."""
+    from .artwork import _jpeg
+    from .models import UserMediaState
+    from .services import client
+
+    media = (
+        db.session.query(MediaIdentity)
+        .join(UserMediaState, UserMediaState.media_identity_id == MediaIdentity.id)
+        .filter(
+            UserMediaState.favorite.is_(True), MediaIdentity.jellyfin_id.isnot(None)
+        )
+        .order_by(UserMediaState.favorite_since.desc().nullslast())
+        .first()
+    ) or (
+        db.session.query(MediaIdentity)
+        .filter(MediaIdentity.jellyfin_id.isnot(None))
+        .order_by(MediaIdentity.id)
+        .first()
+    )
+    if media is None:
+        return None, None
+    if media.jellyfin_id not in _preview:
+        try:
+            picture = client("jellyfin").image(media.jellyfin_id)
+            _preview.clear()
+            _preview[media.jellyfin_id] = _jpeg(picture)
+        except (IntegrationError, OSError, ValueError):
+            return None, None
+    return _preview[media.jellyfin_id], leaving_label(media.id)
 
 
 def _image_tags(jellyfin_ids) -> dict[str, str]:
@@ -1102,15 +1141,16 @@ def plugin_picture(entry_id: str, large: bool = False) -> bytes | None:
         if media is None or not media.jellyfin_id:
             return None
         poster = active(item_id, viewer)
+        leaving = leaving_label(item_id)
         if poster and Path(poster.image_path).exists():
-            base = account_picture(poster, leaving_label(item_id))
+            base = account_picture(poster, leaving)
         else:
             base = _jpeg(client("jellyfin").image(media.jellyfin_id))
     else:
         part = db.session.get(MediaPart, item_id)
         if part is None or not part.jellyfin_id:
             return None
-        base = _jpeg(client("jellyfin").image(part.jellyfin_id))
+        base, leaving = _jpeg(client("jellyfin").image(part.jellyfin_id)), None
     return draw_ribbon(
         base,
         ribbon["users"],
@@ -1119,4 +1159,5 @@ def plugin_picture(entry_id: str, large: bool = False) -> bytes | None:
         new=ribbon["new"],
         household=ribbon["household"],
         large=large and kind == "v",
+        leaving=leaving,
     )

@@ -540,6 +540,10 @@ class DemoClient:
     def repositories(self):
         raise IntegrationError("The demo has no Jellyfin to install plugins in")
 
+    def packages(self):
+        self._check()
+        return []
+
     def sessions(self):
         self._check()
         return []

@@ -129,22 +129,27 @@ def custom_posters_avatar_image(account):
 
 @bp.get("/library/posters/ribbon-preview.jpg")
 def custom_posters_ribbon_preview():
-    """The ribbon as it would look, on a plain stand-in poster."""
+    """The ribbon as it would look, on a real poster from the library (a
+    plain stand-in when Jellyfin can't be reached)."""
     from PIL import Image
 
     options = custom_posters.ribbon_settings()
-    blank = BytesIO()
-    Image.new("RGB", (500, 750), "#2b3a4a").save(blank, format="JPEG")
+    poster, leaving = custom_posters.preview_poster()
+    if poster is None:
+        blank = BytesIO()
+        Image.new("RGB", (500, 750), "#2b3a4a").save(blank, format="JPEG")
+        poster = blank.getvalue()
     people = _accounts()[:2] or [("sam", "Sam")]
     household = request.args.get("household") == "1"
     picture = custom_posters.draw_ribbon(
-        blank.getvalue(),
+        poster,
         [i for i, _name in people],
         [name for _id, name in people],
         options,
         new=bool(options["new_days"]) and not household,
         household=household,
         large=request.args.get("size") == "large",
+        leaving=leaving,
     )
     return send_file(BytesIO(picture), mimetype="image/jpeg", max_age=0)
 
