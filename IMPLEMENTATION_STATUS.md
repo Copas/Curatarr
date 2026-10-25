@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc13 (2026-10-25): the AI prompts use every reference photo; plugin updates can install themselves and restart Jellyfin when nobody's watching; plugin builds get .NET from Microsoft's CDN.
 - v0.2.0rc12 (2026-10-25): the AI prompts keep the people in the reference photos recognisable (best photos, an approved portrait first, image inputs, faces large).
 - v0.2.0rc11 (2026-10-25): background jobs no longer pause for the graphics card load of their own transcription while someone watches.
 - v0.2.0rc10 (2026-10-25): the AI prompts ask each title only for the pictures it lacks, matching the poster it has, and leave out deleted titles.

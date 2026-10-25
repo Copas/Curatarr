@@ -26,7 +26,8 @@ REPOSITORY = {
 #  "version": the version loaded, "waiting": a newer one installed that loads
 #  at Jellyfin's next restart, "latest": the newest in Jellyfin's catalogue,
 #  "restart_when_idle": restart Jellyfin once nobody's watching,
-#  "idle_since": when playback was last seen to stop}
+#  "idle_since": when playback was last seen to stop,
+#  "auto_update": install updates and restart once nobody's watching}
 KEY = "jellyfin_plugin"
 # The plugin version this Curatarr's features are made for.
 WANTED = "0.8.0.0"
@@ -124,6 +125,8 @@ def status() -> dict:
         "pending": bool(stored.get("pending")),
         "curatarr_url": stored.get("curatarr_url"),
         "problem": stored.get("problem"),
+        "auto_update": bool(stored.get("auto_update")),
+        "idle_minutes": IDLE_MINUTES,
     }
     try:
         jellyfin = client("jellyfin")
@@ -310,6 +313,57 @@ def cancel_idle_restart() -> None:
     _store(restart_when_idle=False, idle_since=None)
 
 
+def auto_update() -> bool:
+    return bool(_stored().get("auto_update"))
+
+
+def set_auto_update(on: bool) -> None:
+    _store(auto_update=bool(on))
+    if on:
+        keep_up_to_date()
+
+
+def keep_up_to_date() -> str | None:
+    """With automatic updates on, at each reconciliation: install a newer
+    version from the catalogue, and restart Jellyfin to load it once nobody's
+    watching (as the banner's buttons do). Returns the version installed."""
+    from .services import audit
+
+    if not auto_update():
+        return None
+    stored = _stored()
+    version = stored.get("version")
+    if not version:
+        return None  # not installed, or not loaded: set up does that
+    latest = stored.get("latest")
+    have = max(version, stored.get("waiting") or version, key=version_key)
+    installed = None
+    if latest and version_key(latest) > version_key(have):
+        try:
+            update()
+        except IntegrationError:
+            return None  # Jellyfin away: next time
+        installed = latest
+        audit(
+            "jellyfin_plugin_updated",
+            None,
+            f"Installed the Curatarr plugin {latest} in Jellyfin; it loads when "
+            f"Jellyfin restarts, once nobody has watched anything for "
+            f"{IDLE_MINUTES} minutes.",
+            f"plugin-update:{latest}",
+        )
+        db.session.commit()
+        stored = _stored()
+    waiting = stored.get("waiting")
+    if (
+        waiting
+        and version_key(waiting) > version_key(version)
+        and not stored.get("restart_when_idle")
+    ):
+        restart(when_idle=True)
+    return installed
+
+
 def notice() -> dict | None:
     """For the banner: a newer version to install, or one installed and
     waiting for Jellyfin to restart. From what was last noted (no call to
@@ -355,6 +409,7 @@ def sync() -> None:
             jellyfin.set_repositories([*repositories, REPOSITORY])
     except IntegrationError:
         return
+    keep_up_to_date()
     if _stored().get("curatarr_url") or _stored().get("candidates"):
         configure(jellyfin)
 
