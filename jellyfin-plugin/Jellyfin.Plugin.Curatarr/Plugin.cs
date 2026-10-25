@@ -35,7 +35,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 
     /// <inheritdoc />
     public override string Description =>
-        "Delete in any Jellyfin app marks a film or show Leaving Soon in Curatarr instead.";
+        "Delete in any Jellyfin app marks a film or show Leaving Soon in Curatarr instead; each device plays what it can; each account can have posters of its own.";
 
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages()

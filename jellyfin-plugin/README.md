@@ -17,10 +17,12 @@ Only people Jellyfin already lets delete an item can do any of this.
 
 **Each device plays what it can play as it is.** Jellyfin plays a title's default audio track and its first copy, whatever the device can decode: a browser has AC3 or E-AC3 converted to AAC while a stereo AAC track sits beside it, and with two copies of a film it plays the first though the other would play directly. When a player asks how to play something, the plugin asks Jellyfin's own stream builder, with that device's profile, how each copy and each audio track in the same language would play, and points the player at the one needing the least work (played as it is, then copied into another container, then converted). Commentary tracks and other languages are never chosen, and a track or copy picked by hand is left alone. Curatarr's *Add a stereo AAC track for web browsers* (Settings → Enhance) adds the tracks this makes use of. It can be switched off in the plugin's settings. Deletes made with an API key (by other tools) aren't changed.
 
+**Each account can have posters of its own.** Jellyfin has one poster per title, for every account. With Curatarr's custom posters for one account (a title's Poster panel, *Only for*, or Library → Posters → *Imported posters are for*), that account sees its own in every app (web, phone, TV, Roku), and everyone else sees the usual one. Apps fetch posters from an address with a tag in it, taken from the item details they were sent; the plugin puts a tag standing for the account's poster in what's sent to that account, and when an app asks for an image with that tag, it serves that poster, resized and cached by Jellyfin as its own posters are. The list comes from Curatarr every minute, and the pictures are kept in the plugin's data folder. It can be switched off in the plugin's settings.
+
 ## Requirements
 
 - Jellyfin 12.2
-- Curatarr 0.2.0 or later (the `/api/v1/jellyfin/delete` endpoint)
+- Curatarr 0.2.0 or later (the `/api/v1/jellyfin/delete` endpoint; posters for one account need the `/api/v1/jellyfin/posters` endpoint, from the custom posters release)
 
 ## Install
 
