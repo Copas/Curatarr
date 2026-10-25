@@ -21,7 +21,7 @@ from flask import (
 from markupsafe import Markup
 from sqlalchemy import func
 
-from . import better_copy, db, icons, jellyfin_links
+from . import better_copy, db, flags, icons, jellyfin_links
 from .auth import (
     SignInError,
     current_user,
@@ -36,6 +36,7 @@ from .models import (
     Library,
     LifecycleAction,
     MediaIdentity,
+    MediaPart,
     PurgeCandidate,
     utcnow,
 )
@@ -94,13 +95,17 @@ def security_headers(response):
 # Calls from Jellyfin (the Webhook plugin, the Curatarr plugin) carry the
 # webhook token instead of a sign-in.
 JELLYFIN_PATHS = {"/api/v1/webhook/jellyfin", "/api/v1/jellyfin/delete"}
+# And any path under these (flag_routes' JSON API).
+TOKEN_PATH_PREFIXES: list[str] = []
 
 
 @bp.before_app_request
 def guard_request():
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return
-    if request.path in JELLYFIN_PATHS:
+    if request.path in JELLYFIN_PATHS or request.path.startswith(
+        tuple(TOKEN_PATH_PREFIXES)
+    ):
         token = setting("webhook_token")
         if not token or not hmac.compare_digest(
             request.headers.get("X-Curatarr-Token", ""), token
@@ -458,6 +463,10 @@ ACTION_WORDS = {
     "finished_at_credits": "Marked watched at the credits",
     "custom_poster_applied": "Custom poster put on",
     "custom_poster_restored": "Original poster restored",
+    "flag_leave_after_watched_set": "Leave after watched",
+    "flag_leave_after_watched_cleared": "Leave after watched ended",
+    "flag_never_compress_set": "Never compress",
+    "flag_never_compress_cleared": "Never compress cleared",
 }
 
 
@@ -1049,6 +1058,11 @@ def settings():
                     minutes = None
                 save_reconcile_interval(minutes)
                 flash("Reconciliation interval saved", "success")
+            elif kind == "never_compress":
+                flags.save_settings(
+                    request.form.get("favourites") == "on", request.form.get("file")
+                )
+                flash("Never compress saved.", "success")
             elif kind == "hidden_accounts":
                 from .services import save_hidden_accounts
 
@@ -1107,6 +1121,8 @@ def settings():
         api_key_present=bool(setting("api_key_sha256")),
         household_users=household_users,
         hidden_accounts=hidden_accounts(),
+        never_compress=flags.settings(),
+        never_compress_count=len(flags.protected_paths()),
         hidden_account_names=sorted(
             (setting("jellyfin_user_names", {}) or {}).get(i, "an account")
             for i in setting("jellyfin_hidden_user_ids", []) or []
@@ -1541,6 +1557,39 @@ def title_remove(media_id):
     return redirect(url_for("main.title", media_id=media_id))
 
 
+@bp.post("/titles/<media_id>/flags")
+def title_flags(media_id):
+    """Set or clear Leave after watched or Never compress on a title page."""
+    media = db.session.get(MediaIdentity, media_id)
+    if not media:
+        abort(404)
+    flag, action = request.form.get("flag"), request.form.get("action")
+    season = request.form.get("season") or None
+    part = request.form.get("part") or None
+    try:
+        season = int(season) if season is not None else None
+        part = db.session.get(MediaPart, part) if part else None
+        if action == "set":
+            row = flags.set_flag(
+                media,
+                flag,
+                season=season,
+                part=part,
+                user_id=request.form.get("user") or None,
+                set_by=(current_user() or {}).get("name") or "admin",
+            )
+            flash(f"{media.title}: {flags.describe(row)}.", "success")
+        elif action == "clear":
+            flags.clear_flag(media, flag, season=season, part=part)
+            flash("Flag cleared.", "success")
+        else:
+            abort(400)
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+    return redirect(url_for("main.title", media_id=media_id) + "#flags")
+
+
 @bp.route("/titles/<media_id>/reset", methods=["GET", "POST"])
 def title_reset(media_id):
     from .lifecycle import reset_series
@@ -1898,6 +1947,9 @@ def title(media_id):
         "title.html",
         media=media,
         custom_poster=custom_posters.active(media.id),
+        title_flags=flags.flags_for(media),
+        describe_flag=flags.describe,
+        flag_accounts=sorted(account_names().items(), key=lambda a: a[1]),
         title_posters=custom_posters.for_title(media.id),
         poster_accounts=sorted(account_names().items(), key=lambda a: a[1]),
         **title_view(media),
