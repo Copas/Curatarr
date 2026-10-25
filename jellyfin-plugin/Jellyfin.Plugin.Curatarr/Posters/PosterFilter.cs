@@ -116,6 +116,9 @@ public sealed class PosterFilter : IAsyncActionFilter
     /// <summary>
     /// Puts the account's poster tags in one item's details: its own poster, and
     /// its show's or parent's where an app shows that instead (an episode's card).
+    /// Where the poster has a landscape version, its tag goes in for the Thumb too,
+    /// which apps show in rows of wide tiles (in place of the title's own Thumb or,
+    /// when it has none, its backdrop).
     /// </summary>
     internal void Swap(BaseItemDto dto, IReadOnlyDictionary<string, string> posters)
     {
@@ -123,12 +126,21 @@ public sealed class PosterFilter : IAsyncActionFilter
         {
             dto.ImageTags ??= [];
             dto.ImageTags[ImageType.Primary] = tag;
-            Blur(dto, tag);
+            Blur(dto, tag, ImageType.Primary);
+            if (IsWide(tag))
+            {
+                dto.ImageTags[ImageType.Thumb] = tag;
+                Blur(dto, tag, ImageType.Thumb);
+            }
         }
 
         if (dto.SeriesId is Guid series && posters.TryGetValue(series.ToString("N"), out var seriesTag))
         {
             dto.SeriesPrimaryImageTag = seriesTag;
+            if (IsWide(seriesTag))
+            {
+                dto.SeriesThumbImageTag = seriesTag;
+            }
         }
 
         if (dto.ParentPrimaryImageItemId is Guid parentId
@@ -136,20 +148,30 @@ public sealed class PosterFilter : IAsyncActionFilter
         {
             dto.ParentPrimaryImageTag = parentTag;
         }
+
+        if (dto.ParentThumbItemId is Guid thumbId
+            && posters.TryGetValue(thumbId.ToString("N"), out var thumbTag)
+            && IsWide(thumbTag))
+        {
+            dto.ParentThumbImageTag = thumbTag;
+        }
     }
 
-    private void Blur(BaseItemDto dto, string tag)
+    private bool IsWide(string tag) => _store.TryGetByTag(tag, out var poster) && poster.Wide;
+
+    private void Blur(BaseItemDto dto, string tag, ImageType type)
     {
-        if (dto.ImageBlurHashes is null || !dto.ImageBlurHashes.TryGetValue(ImageType.Primary, out var hashes))
+        if (dto.ImageBlurHashes is null || !dto.ImageBlurHashes.TryGetValue(type, out var hashes))
         {
             return; // the app didn't ask for placeholders
         }
 
-        var hash = _store.BlurHashes.GetOrAdd(tag, t =>
+        var file = type == ImageType.Thumb ? PosterSync.WideFileFor(tag) : PosterSync.FileFor(tag);
+        var hash = _store.BlurHashes.GetOrAdd(file, f =>
         {
             try
             {
-                return _imageProcessor.GetImageBlurHash(PosterSync.FileFor(t));
+                return _imageProcessor.GetImageBlurHash(f);
             }
             catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException)
             {
@@ -169,13 +191,19 @@ public sealed class PosterFilter : IAsyncActionFilter
         if (!_store.TryGetByTag(tag, out var poster)
             || !args.TryGetValue("itemId", out var rawId) || rawId is not Guid itemId
             || !string.Equals(itemId.ToString("N"), poster.Item, StringComparison.OrdinalIgnoreCase)
-            || (args.TryGetValue("imageType", out var type) && type is ImageType kind && kind != ImageType.Primary))
+            || (args.TryGetValue("imageType", out var type) && type is ImageType kind && kind is not (ImageType.Primary or ImageType.Thumb)))
         {
             return null; // not one of ours: Jellyfin serves it
         }
 
-        var file = PosterSync.FileFor(poster.Tag);
-        if (poster.Large && IsLarge(args, _config()?.LargePosterWidth ?? PluginConfiguration.DefaultLargePosterWidth)
+        var wide = type is ImageType.Thumb;
+        if (wide && !poster.Wide)
+        {
+            return null;
+        }
+
+        var file = wide ? PosterSync.WideFileFor(poster.Tag) : PosterSync.FileFor(poster.Tag);
+        if (!wide && poster.Large && IsLarge(args, _config()?.LargePosterWidth ?? PluginConfiguration.DefaultLargePosterWidth)
             && File.Exists(PosterSync.LargeFileFor(poster.Tag)))
         {
             file = PosterSync.LargeFileFor(poster.Tag);
@@ -198,7 +226,7 @@ public sealed class PosterFilter : IAsyncActionFilter
             {
                 ItemId = itemId,
                 Item = item,
-                Image = new ItemImageInfo { Path = file, Type = ImageType.Primary, DateModified = File.GetLastWriteTimeUtc(file) },
+                Image = new ItemImageInfo { Path = file, Type = wide ? ImageType.Thumb : ImageType.Primary, DateModified = File.GetLastWriteTimeUtc(file) },
                 ImageIndex = 0,
                 Width = Arg<int?>(args, "width"),
                 Height = Arg<int?>(args, "height"),

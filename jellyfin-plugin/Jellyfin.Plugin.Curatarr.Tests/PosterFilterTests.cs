@@ -148,6 +148,63 @@ public class PosterFilterTests
     }
 
     [Fact]
+    public async Task Wide_tiles_get_the_landscape_version_when_there_is_one()
+    {
+        _store.Replace(
+        [
+            new AccountPoster(Film.ToString("N"), Sam.ToString("N"), "v.1", "dddd4444", Wide: true),
+            new AccountPoster(Show.ToString("N"), Sam.ToString("N"), "p2", "bbbb2222"),
+        ]);
+        var film = Item(Film);
+        var show = Item(Show);
+        var episode = new BaseItemDto { Id = Guid.NewGuid(), ParentThumbItemId = Film, ParentThumbImageTag = "original" };
+        await SendAsync(Filter(), Sam, new List<BaseItemDto> { film, show, episode });
+        Assert.Equal("dddd4444", film.ImageTags![ImageType.Thumb]);
+        Assert.False(show.ImageTags!.ContainsKey(ImageType.Thumb)); // no landscape version: its own
+        Assert.Equal("dddd4444", episode.ParentThumbImageTag);
+    }
+
+    [Fact]
+    public async Task A_thumb_is_served_from_the_landscape_file()
+    {
+        var tag = "eeee" + Guid.NewGuid().ToString("N")[..12];
+        _store.Replace([new AccountPoster(Film.ToString("N"), Sam.ToString("N"), "v.x", tag, Wide: true)]);
+        Directory.CreateDirectory(PosterSync.Folder);
+        await File.WriteAllTextAsync(PosterSync.FileFor(tag), "poster");
+        await File.WriteAllTextAsync(PosterSync.WideFileFor(tag), "wide");
+        try
+        {
+            var library = new Mock<ILibraryManager>();
+            library.Setup(l => l.GetItemById(Film)).Returns(new MediaBrowser.Controller.Entities.Movies.Movie());
+            var images = new Mock<IImageProcessor>();
+            images.Setup(i => i.ProcessImage(It.IsAny<MediaBrowser.Controller.Drawing.ImageProcessingOptions>()))
+                .ReturnsAsync((MediaBrowser.Controller.Drawing.ImageProcessingOptions o) => (o.Image.Path, "image/jpeg", DateTime.UtcNow));
+            var filter = new PosterFilter(_store, library.Object, images.Object, NullLogger<PosterFilter>.Instance, () => new PluginConfiguration());
+
+            async Task<string?> Served(ImageType type)
+            {
+                var descriptor = new ControllerActionDescriptor { ControllerName = "Image", ActionName = "GetItemImage" };
+                var context = new ActionExecutingContext(
+                    new ActionContext(new DefaultHttpContext(), new RouteData(), descriptor),
+                    [],
+                    new Dictionary<string, object?> { ["itemId"] = Film, ["tag"] = tag, ["imageType"] = type, ["maxWidth"] = 464, ["maxHeight"] = 261 },
+                    controller: new object());
+                await filter.OnActionExecutionAsync(context, () => Task.FromResult<ActionExecutedContext>(null!));
+                return (context.Result as PhysicalFileResult)?.FileName;
+            }
+
+            Assert.Equal(PosterSync.WideFileFor(tag), await Served(ImageType.Thumb));
+            Assert.Equal(PosterSync.FileFor(tag), await Served(ImageType.Primary));
+            Assert.Null(await Served(ImageType.Backdrop));
+        }
+        finally
+        {
+            File.Delete(PosterSync.FileFor(tag));
+            File.Delete(PosterSync.WideFileFor(tag));
+        }
+    }
+
+    [Fact]
     public async Task Switched_off_changes_nothing()
     {
         var filter = new PosterFilter(

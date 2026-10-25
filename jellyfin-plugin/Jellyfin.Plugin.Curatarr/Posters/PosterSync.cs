@@ -50,6 +50,13 @@ public sealed class PosterSync : BackgroundService
     /// <returns>Its path.</returns>
     internal static string LargeFileFor(string tag) => Path.Combine(Folder, tag + ".large.jpg");
 
+    /// <summary>
+    /// The file a poster's landscape version is kept in.
+    /// </summary>
+    /// <param name="tag">The poster's tag.</param>
+    /// <returns>Its path.</returns>
+    internal static string WideFileFor(string tag) => Path.Combine(Folder, tag + ".wide.jpg");
+
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -91,7 +98,10 @@ public sealed class PosterSync : BackgroundService
                     await DownloadAsync(client, config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg?size=large", LargeFileFor(poster.Tag), cancellationToken).ConfigureAwait(false);
                 }
 
-                ready.Add(poster);
+                // Without it, wide tiles show the usual picture.
+                var wide = poster.Wide
+                    && await DownloadAsync(client, config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg?size=wide", WideFileFor(poster.Tag), cancellationToken).ConfigureAwait(false);
+                ready.Add(poster with { Wide = wide });
             }
 
             _store.Replace(ready);
@@ -126,7 +136,7 @@ public sealed class PosterSync : BackgroundService
 
     private static void Tidy(List<AccountPoster> ready)
     {
-        var keep = ready.SelectMany(p => new[] { FileFor(p.Tag), LargeFileFor(p.Tag) }).ToHashSet(StringComparer.Ordinal);
+        var keep = ready.SelectMany(p => new[] { FileFor(p.Tag), LargeFileFor(p.Tag), WideFileFor(p.Tag) }).ToHashSet(StringComparer.Ordinal);
         foreach (var file in Directory.EnumerateFiles(Folder, "*.jpg"))
         {
             if (!keep.Contains(file))
