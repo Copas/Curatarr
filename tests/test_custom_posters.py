@@ -240,3 +240,59 @@ def test_prompts_for_an_ai_in_batches(app, client, monkeypatch, tmp_path):
     )
     page = client.get("/library/posters?prompts=1").text
     assert "Batch 1" in page and "02_the-big-lebowski-1998.jpg" in page
+
+
+def test_a_poster_for_one_account_and_the_plugins_list(app, client, monkeypatch):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    jellyfin = _fake(monkeypatch, _picture("#223344"))
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex"})
+    set_setting("webhook_token", "secret")
+    db.session.commit()
+    response = client.post(
+        f"/titles/{media.id}/poster",
+        data={"poster": (BytesIO(_picture("#cc2222")), "mine.jpg"), "for": "u1"},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 302
+    assert jellyfin.uploads == 0  # Jellyfin's own poster stays for everyone else
+    mine = custom_posters.active(media.id, "u1")
+    assert mine and custom_posters.active(media.id) is None
+    assert "Sam" in client.get(f"/titles/{media.id}").text
+    # The plugin's list and picture, with the webhook token only.
+    assert client.get("/api/v1/jellyfin/posters").status_code == 403
+    listing = client.get(
+        "/api/v1/jellyfin/posters", headers={"X-Curatarr-Token": "secret"}
+    ).get_json()
+    assert listing["posters"] == [
+        {
+            "item": "jffilm",
+            "user": "u1",
+            "id": mine.id,
+            "tag": mine.id.replace("-", ""),
+        }
+    ]
+    picture = client.get(
+        f"/api/v1/jellyfin/posters/{mine.id}.jpg",
+        headers={"X-Curatarr-Token": "secret"},
+    )
+    assert picture.status_code == 200 and picture.mimetype == "image/jpeg"
+    # Another account: refused unless Jellyfin knows it.
+    assert (
+        client.post(
+            f"/titles/{media.id}/poster",
+            data={"poster": (BytesIO(_picture("#cc2222")), "x.jpg"), "for": "nobody"},
+            content_type="multipart/form-data",
+        ).status_code
+        == 400
+    )
+    # Removing it shows the usual poster again, and leaves Jellyfin's alone.
+    client.post(f"/titles/{media.id}/poster/restore", data={"poster": mine.id})
+    assert custom_posters.active(media.id, "u1") is None and jellyfin.downloaded == []
+    assert (
+        client.get(
+            "/api/v1/jellyfin/posters", headers={"X-Curatarr-Token": "secret"}
+        ).get_json()["posters"]
+        == []
+    )

@@ -38,8 +38,8 @@
 {% if posters %}<div class="poster-grid">{% for p in posters %}<div class="poster-tile">
   <a href="{{ url_for('main.title', media_id=p.media_identity_id) }}#poster"><img src="{{ url_for('main.custom_poster_image', poster_id=p.id) }}" alt="" loading="lazy"></a>
   <div class="poster-title" title="{{ p.media.title }}"><a href="{{ url_for('main.title', media_id=p.media_identity_id) }}#poster">{{ p.media.title }}</a></div>
-  <div class="small text-secondary">{{ p.applied_at|when('date') }}</div>
-  <form method="post" action="{{ url_for('main.title_poster_restore', media_id=p.media_identity_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery"><button class="btn btn-sm btn-outline-secondary w-100" data-tip="{{ 'Puts back the poster this title had before.' if p.original_path else 'Curatarr has no copy of the poster from before, so this takes the metadata provider\'s poster.' }}">Restore original</button></form>
+  <div class="small text-secondary">{% if p.jellyfin_user_id %}Only for {{ accounts|selectattr(0, 'equalto', p.jellyfin_user_id)|map(attribute=1)|first or 'one account' }} · {% endif %}{{ p.applied_at|when('date') }}</div>
+  <form method="post" action="{{ url_for('main.title_poster_restore', media_id=p.media_identity_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="gallery"><input type="hidden" name="poster" value="{{ p.id }}"><button class="btn btn-sm btn-outline-secondary w-100" data-tip="{{ 'Shows this account the usual poster again.' if p.jellyfin_user_id else ('Puts back the poster this title had before.' if p.original_path else 'Curatarr has no copy of the poster from before, so this takes the metadata provider\'s poster.') }}">{{ 'Remove' if p.jellyfin_user_id else 'Restore original' }}</button></form>
 </div>{% endfor %}</div>
 {% else %}<div class="empty-state"><h2 class="h6">No custom posters yet</h2><p class="mb-0">Upload one on a title's page under Poster, or set an import folder above.</p></div>{% endif %}
 <script src="{{ url_for('static', filename='copy.js', v='1') }}"></script>

@@ -1,5 +1,6 @@
 using Jellyfin.Plugin.Curatarr.Deletes;
 using Jellyfin.Plugin.Curatarr.Playback;
+using Jellyfin.Plugin.Curatarr.Posters;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jellyfin.Plugin.Curatarr;
 
 /// <summary>
-/// Adds the delete filter to Jellyfin's API, and Leaving Soon to the web app's menus.
+/// Adds the delete, playback and poster filters to Jellyfin's API, and Leaving Soon to the web app's menus.
 /// </summary>
 public class PluginServiceRegistrator : IPluginServiceRegistrator
 {
@@ -20,6 +21,10 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<DeleteFilter>());
         serviceCollection.AddScoped<PlaybackFilter>();
         serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<PlaybackFilter>());
+        serviceCollection.AddSingleton<PosterStore>();
+        serviceCollection.AddScoped<PosterFilter>();
+        serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<PosterFilter>());
+        serviceCollection.AddHostedService<PosterSync>();
         serviceCollection.AddHostedService<WebMenu>();
     }
 }

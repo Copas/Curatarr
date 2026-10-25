@@ -41,4 +41,10 @@ public class PluginConfiguration : BasePluginConfiguration
     /// browser, the copy it can play directly), when the viewer didn't pick one.
     /// </summary>
     public bool ChoosePlayable { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether an account sees the posters Curatarr
+    /// has for it alone (custom posters for one account) instead of the usual ones.
+    /// </summary>
+    public bool CustomPosters { get; set; } = true;
 }

@@ -1817,12 +1817,16 @@ def title(media_id):
         else:
             flash("Title override saved", "success")
         return redirect(url_for("main.title", media_id=media.id))
-    from .custom_posters import active as custom_poster
+    from . import custom_posters
 
     return render_template(
         "title.html",
         media=media,
-        custom_poster=custom_poster(media.id),
+        custom_poster=custom_posters.active(media.id),
+        title_posters=custom_posters.for_title(media.id),
+        poster_accounts=sorted(
+            (setting("jellyfin_user_names", {}) or {}).items(), key=lambda a: a[1]
+        ),
         **title_view(media),
     )
 
