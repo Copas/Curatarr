@@ -50,6 +50,12 @@ def custom_posters_page():
             people=options["people"],
             output=folder or "the folder Curatarr imports posters from",
         )
+    accounts = _accounts()
+    ribbon = custom_posters.ribbon_settings()
+    viewers_of = {
+        who: [v for v, seen in (ribbon["sees"] or {}).items() if who in seen]
+        for who, _name in accounts
+    }
     return render_template(
         "custom_posters.html",
         groups=custom_posters.gallery_groups(),
@@ -58,8 +64,12 @@ def custom_posters_page():
         unmatched=sorted(state["unmatched"].items()),
         checked=state.get("at"),
         options=options,
-        accounts=_accounts(),
-        ribbon=custom_posters.ribbon_settings(),
+        accounts=accounts,
+        ribbon=ribbon,
+        ribbon_viewers_of=viewers_of,
+        ribbon_mixed=any(
+            0 < len(viewers_of[who]) < len(accounts) - 1 for who, _name in accounts
+        ),
         written=written,
         count=count,
     )

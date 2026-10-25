@@ -758,11 +758,13 @@ def save_ribbon_settings(form, accounts) -> dict:
         "position": "top_right" if form.get("position") == "top_right" else "bottom",
         "label": "star" if form.get("label") == "star" else "names",
         "own": form.get("own") in {"on", "true", "1"},
+        # "Everyone sees Sam's favourites", or account by account.
         "sees": {
             viewer: [
                 who
                 for who in known
-                if who != viewer and form.get(f"see-{viewer}-{who}")
+                if who != viewer
+                and (form.get(f"see-{viewer}-{who}") or form.get(f"all-{who}"))
             ]
             for viewer in known
         },

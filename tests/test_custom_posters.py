@@ -547,3 +547,24 @@ def test_the_ribbon_settings_page(app, client):
     assert 'name="see-u1-u1"' not in page  # nobody's set to see themselves here
     preview = client.get("/library/posters/ribbon-preview.jpg")
     assert preview.status_code == 200 and preview.mimetype == "image/jpeg"
+
+
+def test_everyone_sees_one_accounts_favourites_in_one_tick(app, client):
+    from curatarr.services import set_setting
+
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex", "u3": "Kim"})
+    db.session.commit()
+    client.post("/library/posters/ribbons", data={"enabled": "on", "all-u1": "on"})
+    sees = custom_posters.ribbon_settings()["sees"]
+    assert sees == {"u1": [], "u2": ["u1"], "u3": ["u1"]}
+    page = client.get("/library/posters").text
+    assert 'id="all-u1" name="all-u1" data-ribbon-all="u1" checked' in page
+    assert '<details class="mb-2">' in page  # all or nothing: the grid stays shut
+    # Only one account sees Alex's: mixed, so the grid opens.
+    client.post(
+        "/library/posters/ribbons",
+        data={"enabled": "on", "all-u1": "on", "see-u3-u2": "on"},
+    )
+    page = client.get("/library/posters").text
+    assert '<details class="mb-2" open>' in page
+    assert "ribbon-grid.js" in page
