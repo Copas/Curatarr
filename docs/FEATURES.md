@@ -248,7 +248,7 @@ How it works: apps fetch a poster from an address with a tag in it, taken from t
 
 ### Restoring
 
-Before the first custom poster goes on for everyone, the poster it replaces is saved (during Leaving Soon, the one from before the banner), and **Restore original** puts it back. A picture that was already the title's poster when imported is recorded without uploading it again; restoring it takes the metadata provider's poster. An account's own poster is simply removed. On Library → Posters each picture is one tile, listing everyone it's for, with a **Remove** for each and **Remove for all**. During Leaving Soon the countdown is drawn on the custom poster, and the custom poster is what's restored if the title is kept. History records each one.
+Before the first custom poster goes on for everyone, the poster it replaces is saved (during Leaving Soon, the one from before the banner), and **Restore original** puts it back. A picture that was already the title's poster when imported is recorded without uploading it again; restoring it takes the metadata provider's poster. An account's own poster is simply removed. On Library → Posters each picture is one tile, listing everyone it's for, with a **Remove** for each and **Remove for all**. During Leaving Soon the countdown is drawn on the custom poster, an account's own included (its tag changes with the banner's words, so apps fetch it again as the days count down), and the custom poster is what's restored if the title is kept. History records each one.
 
 ### Make them with an AI
 

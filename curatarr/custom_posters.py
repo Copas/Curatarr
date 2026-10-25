@@ -686,3 +686,44 @@ def gallery_groups() -> list[dict]:
         key=lambda g: g["applied_at"].isoformat() if g["applied_at"] else "",
         reverse=True,
     )
+
+
+def leaving_label(media_id) -> str | None:
+    """The Leaving Soon banner's words for a title ("7 DAYS LEFT"), or None
+    when it isn't Leaving Soon: Jellyfin's own poster carries the banner, so
+    an account's own poster must too."""
+    from .artwork import badge_label
+    from .models import PurgeCandidate
+
+    snapshot = (
+        db.session.query(PosterSnapshot)
+        .filter_by(media_identity_id=media_id, image_type="Primary", active=True)
+        .first()
+    )
+    if not snapshot or not snapshot.candidate_id:
+        return None
+    candidate = db.session.get(PurgeCandidate, snapshot.candidate_id)
+    if not candidate or candidate.state not in {"REVIEW", "LEAVING_SOON"}:
+        return None
+    return badge_label(candidate)
+
+
+def account_tag(poster: CustomPoster, label: str | None) -> str:
+    """The image tag the plugin uses: new whenever the banner's words change,
+    so apps fetch the poster again as the days count down."""
+    import hashlib
+
+    from .artwork import BADGE_STYLE
+
+    if not label:
+        return poster.id.replace("-", "")
+    return hashlib.sha1(f"{poster.id}|{BADGE_STYLE}|{label}".encode()).hexdigest()[:32]
+
+
+def account_picture(poster: CustomPoster, label: str | None) -> bytes:
+    """An account's poster as served to it: with the Leaving Soon banner
+    while the title is Leaving Soon."""
+    from .artwork import badge_poster
+
+    picture = Path(poster.image_path).read_bytes()
+    return badge_poster(picture, label, "Primary") if label else picture

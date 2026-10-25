@@ -2,6 +2,7 @@
 list the Curatarr plugin for Jellyfin reads to show an account its own."""
 
 import hmac
+from io import BytesIO
 from pathlib import Path
 
 from flask import (
@@ -180,19 +181,22 @@ def jellyfin_posters():
     """Each account's own posters: which item, whose, and the tag to use."""
     if not _plugin_allowed():
         abort(403)
-    return jsonify(
-        {
-            "posters": [
-                {
-                    "item": _bare(p.media.jellyfin_id),
-                    "user": _bare(p.jellyfin_user_id),
-                    "id": p.id,
-                    "tag": _bare(p.id),
-                }
-                for p in custom_posters.for_accounts()
-            ]
-        }
-    )
+    labels: dict[str, str | None] = {}
+    posters = []
+    for p in custom_posters.for_accounts():
+        if p.media_identity_id not in labels:
+            labels[p.media_identity_id] = custom_posters.leaving_label(
+                p.media_identity_id
+            )
+        posters.append(
+            {
+                "item": _bare(p.media.jellyfin_id),
+                "user": _bare(p.jellyfin_user_id),
+                "id": p.id,
+                "tag": custom_posters.account_tag(p, labels[p.media_identity_id]),
+            }
+        )
+    return jsonify({"posters": posters})
 
 
 @bp.get("/api/v1/jellyfin/posters/<poster_id>.jpg")
@@ -202,4 +206,9 @@ def jellyfin_poster_image(poster_id):
     poster = db.session.get(CustomPoster, poster_id)
     if not poster or not poster.active or not Path(poster.image_path).exists():
         abort(404)
-    return send_file(poster.image_path, mimetype="image/jpeg", max_age=3600)
+    label = custom_posters.leaving_label(poster.media_identity_id)
+    return send_file(
+        BytesIO(custom_posters.account_picture(poster, label)),
+        mimetype="image/jpeg",
+        max_age=300,
+    )
