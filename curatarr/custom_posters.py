@@ -741,7 +741,14 @@ PROMPT_DEFAULTS = {
     "photos": "",
     "people": "",
     "kinds": ["Primary"],  # which pictures to ask for, as a matching set
+    "style": None,  # the look asked for; None: DEFAULT_STYLE, "": none
 }
+DEFAULT_STYLE = (
+    "An extreme, heightened take on the story, like an over-the-top movie "
+    "poster: big, intense facial expressions (terror, joy, rage, grief, "
+    "romantic or sexual tension, whatever the story runs on), pushed further "
+    "than the film itself, with bold, dramatic composition and lighting."
+)
 OVERVIEW_CHARS = 280
 # What each picture should be, for the prompts.
 KIND_SPECS = {
@@ -770,7 +777,10 @@ KIND_SPECS = {
 
 
 def prompt_options() -> dict:
-    return PROMPT_DEFAULTS | (settings().get("prompts") or {})
+    options = PROMPT_DEFAULTS | (settings().get("prompts") or {})
+    if options["style"] is None:
+        options["style"] = DEFAULT_STYLE
+    return options
 
 
 def save_prompt_options(form) -> dict:
@@ -790,6 +800,7 @@ def save_prompt_options(form) -> dict:
         "photos": (form.get("photos") or "").strip(),
         "people": (form.get("people") or "").strip()[:200],
         "kinds": kinds,
+        "style": " ".join((form.get("style") or "").split())[:600],
     }
     set_setting(KEY, settings() | {"prompts": options})
     db.session.commit()
@@ -992,7 +1003,7 @@ def _casting(photos: str, who: str, single: bool) -> list[str]:
     ]
 
 
-def prompts(described, *, batch, photos, people, output) -> list[str]:
+def prompts(described, *, batch, photos, people, output, style="") -> list[str]:
     """One prompt per batch, for Codex or another image-making AI agent."""
     chunks = [described[i : i + batch] for i in range(0, len(described), batch)]
     kinds = [k for k in KINDS if any(k in entry["files"] for entry in described)]
@@ -1015,6 +1026,8 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
             lines += _casting(photos, who, single)
         else:
             lines += ["Don't use any real person's likeness, actors included.", ""]
+        if style:
+            lines += [f"The look: {style}", ""]
         if single:
             lines += [
                 "For each title below, make one poster:",
