@@ -660,6 +660,69 @@ def sweep(now=None) -> int:
     return changed
 
 
+def retire_gone() -> int:
+    """Worker cycle: a title that's gone (deleted, by Curatarr or outside it,
+    or no longer in Radarr or Sonarr) shows no pictures any more, so its
+    custom ones are retired and Curatarr's copies deleted; the plugin drops
+    its own at its next sync. The import folder's file stays: it's yours.
+    Returns how many titles were tidied."""
+    from .models import PurgeCandidate
+    from .services import audit
+
+    with_pictures = {
+        media_id
+        for (media_id,) in db.session.query(CustomPoster.media_identity_id).filter_by(
+            active=True
+        )
+    }
+    if not with_pictures:
+        return 0
+    deleted = {
+        media_id
+        for (media_id,) in db.session.query(PurgeCandidate.media_identity_id).filter(
+            PurgeCandidate.media_identity_id.in_(with_pictures),
+            PurgeCandidate.state == "COMPLETED",
+            PurgeCandidate.target_part_ids.is_(None),
+        )
+    }
+    on_disk = {
+        media_id
+        for (media_id,) in db.session.query(MediaPart.media_identity_id).filter(
+            MediaPart.media_identity_id.in_(with_pictures),
+            MediaPart.has_file.is_(True),
+        )
+    }
+    missing = {
+        media.id
+        for media in db.session.query(MediaIdentity).filter(
+            MediaIdentity.id.in_(with_pictures),
+            MediaIdentity.missing_since.isnot(None),
+        )
+    }
+    gone = (deleted - on_disk) | missing
+    for media_id in sorted(gone):
+        media = db.session.get(MediaIdentity, media_id)
+        rows = db.session.query(CustomPoster).filter_by(media_identity_id=media_id)
+        retired = 0
+        for poster in rows:
+            if poster.active:
+                poster.active = False
+                poster.restored_at = utcnow()
+                retired += 1
+            for path in (poster.image_path, poster.original_path):
+                if path:
+                    Path(path).unlink(missing_ok=True)
+        audit(
+            "custom_pictures_retired",
+            media_id,
+            f"{media.title if media else 'A title'} is gone, so its {retired} custom "
+            f"picture{' was' if retired == 1 else 's were'} removed.",
+            f"custom-pictures-retired:{media_id}:{utcnow().date().isoformat()}",
+        )
+        db.session.commit()
+    return len(gone)
+
+
 def gallery() -> list[CustomPoster]:
     return (
         db.session.query(CustomPoster)

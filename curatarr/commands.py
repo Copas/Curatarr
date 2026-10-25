@@ -293,6 +293,7 @@ def _dispatch_chapters():
         from . import custom_posters
 
         custom_posters.sweep()
+        custom_posters.retire_gone()
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Importing custom posters failed")
