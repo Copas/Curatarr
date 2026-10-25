@@ -306,9 +306,24 @@ def _pressure_selection(now, queue):
     it is covered, so several libraries on one disk never each select enough
     for the whole shortfall. Returns ({media_id: level}, [(disk, deficit)]).
     """
+    from . import compression
+
     groups, _unmeasured = _pressure_groups(now, queue)
     selected, deficits = {}, []
+    held = compression.holding() if groups else None
     for key, group in groups.items():
+        if held and group["level"] == "low":
+            # Compression first: the transcoder may win the space back.
+            audit(
+                "cleanup_held_for_compression",
+                None,
+                f"Low on space ({', '.join(group['libraries'])}), but "
+                f"{held['source']} has {held['pending']} file"
+                f"{'' if held['pending'] == 1 else 's'} to compress: no titles "
+                "were marked Leaving Soon. Below the critical threshold they are.",
+                f"compression-hold:{key}:{now:%Y-%m-%d}",
+            )
+            continue
         picks, deficit = _select_from_group(group, now)
         for item in picks:
             selected[item.media_id] = group["level"]
