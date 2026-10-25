@@ -180,6 +180,24 @@ class EpisodeUserState(db.Model, Timed):
     __table_args__ = (db.UniqueConstraint("media_part_id", "jellyfin_user_id"),)
 
 
+class MediaFlag(db.Model, Timed):
+    """A flag set on a film or show, one of its seasons, or one episode or
+    file: "leave_after_watched" (Leaving Soon once it's been watched) or
+    "never_compress" (an external transcoder leaves its files alone)."""
+
+    __tablename__ = "media_flags"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    media_identity_id = db.Column(
+        db.String(36), db.ForeignKey("media_identities.id"), nullable=False, index=True
+    )
+    season_number = db.Column(db.Integer)  # a season of a show
+    media_part_id = db.Column(db.String(36), db.ForeignKey("media_parts.id"))
+    flag = db.Column(db.String(30), nullable=False)
+    # leave_after_watched: whose watch counts (None: anyone's).
+    jellyfin_user_id = db.Column(db.String(100))
+    set_by = db.Column(db.String(100))  # who set it, for History
+
+
 class AcquisitionState(db.Model, Timed):
     __tablename__ = "acquisition_states"
     id = db.Column(db.String(36), primary_key=True, default=uuid)

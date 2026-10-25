@@ -12,6 +12,9 @@
 | `GET /api/v1/history` | Sign-in or API key | Newest actions, with title, library, Jellyfin item ID and links to Curatarr's pages |
 | `GET /api/v1/transcripts/search?q=…` | Sign-in or API key | Episodes and films where the words were said, with timestamps |
 | `GET /api/v1/identity-flags` | Sign-in or API key | Episodes flagged as possibly the wrong episode (filed as one, sounding like another), with the Sonarr series, whether the two are swapped and whether the other episode's file is confirmed. Empty while the episode check is off |
+| `GET /api/v1/titles/by-jellyfin/<itemId>` | Sign-in, API key or `X-Curatarr-Token` | A film's, show's, season's or episode's state by its Jellyfin id: whether it's up for removal and until when, Never Purge, and its flags. See [Titles and flags](#titles-and-flags) |
+| `POST /api/v1/titles/by-jellyfin/<itemId>` | `X-Curatarr-Token` header | Make a review choice or set or clear a flag (JSON body, below) |
+| `GET /api/v1/protected-paths?kind=compress` | Sign-in, API key or `X-Curatarr-Token` | Never compress: the files an external transcoder must leave alone, one path per line, as Sonarr and Radarr report them |
 | `POST /api/v1/webhook/jellyfin` | `X-Curatarr-Token` header | Jellyfin Webhook plugin events |
 | `POST /api/v1/jellyfin/delete` | `X-Curatarr-Token` header | Used by the Curatarr plugin for Jellyfin before Jellyfin deletes an item. Body `{"itemId", "userName"}`. A film or show Curatarr manages is marked Leaving Soon: `{"handled": true, "result": "leaving_soon" or "already"}`. One it must keep (Never Purge, no file in Radarr) gives `{"handled": true, "refused": "why"}`, and the delete should fail. Anything else gives `{"handled": false}`, and Jellyfin deletes it as usual. `{"check": true}` answers `{"ok": true}` |
 
@@ -26,6 +29,26 @@ curl -H "X-Api-Key: $CURATARR_API_KEY" http://127.0.0.1:8787/api/v1/history?limi
 ```
 
 Generate the key under **Settings → Integrations → API key**. It's shown once, stored only as a hash, and grants nothing but these GET requests.
+
+### Titles and flags
+
+For a TV remote, Home Assistant or another front end: look a title up by the Jellyfin id of what's playing (a film, show, season or episode), and act on it.
+
+```bash
+curl -H "X-Curatarr-Token: $TOKEN" -H "Content-Type: application/json" \
+  -d '{"action": "leave_after_watched", "user": "<jellyfin user id>"}' \
+  http://127.0.0.1:8787/api/v1/titles/by-jellyfin/<itemId>
+```
+
+`action` is one of:
+
+- `keep`, `snooze_30`, `snooze_90`: the household's review choices, for a title that's up for removal (otherwise 409);
+- `never_purge`;
+- `leave_after_watched`: mark it Leaving Soon once it's been watched, by `user` (a Jellyfin user id) or, without one, by anyone. For a whole film or show;
+- `never_compress`: for the film or show, or just the season or episode the id names;
+- `clear`, with `"flag"`: `leave_after_watched`, `never_compress` or `never_purge`.
+
+A season's or episode's review choices and Never Purge apply to its show. The answer is the item's state, as from `GET`; a refusal (Never Purge is on, it's already leaving) is a 409 with `{"error": "why"}`. Changing anything takes the webhook token (Settings → Integrations), which the Curatarr plugin for Jellyfin also uses; the API key only reads.
 
 ## Adding Curatarr to a dashboard
 
