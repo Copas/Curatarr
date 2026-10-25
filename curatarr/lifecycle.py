@@ -491,6 +491,8 @@ def reconcile_candidates():
         reason = None
         if not media or media.missing_since:
             reason = "Media is no longer present."
+        elif candidate.target_part_ids:
+            reason = _targeted_rescue_reason(candidate, media)
         else:
             policy, _ = resolved_policy(media)
             item = _candidate_input(media)
@@ -753,7 +755,7 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
         return "Never Purge is enabled"
     if (
         media.media_type == "series"
-        and candidate.reason_code != MANUAL_RESET
+        and candidate.reason_code not in {MANUAL_RESET, WATCHED_EPISODES}
         and not minimum_satisfied(media.parts, policy)
     ):
         # A requested reset may run with always-keep episodes missing: it only
@@ -761,7 +763,7 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
         return "Minimum TV footprint is not fully present"
     now = utcnow()
     item = _candidate_input(media)
-    if candidate.reason_code == MANUAL_RESET:
+    if candidate.reason_code in {MANUAL_RESET, WATCHED_EPISODES}:
         # Asked for on the title page: the grace period, recent viewing, and
         # Sonarr's series monitored flag do not apply; every other check does.
         if media.sonarr_id is None:
@@ -772,9 +774,12 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
             return "Film is not matched to Radarr"
     elif not eligible(item, policy, now):
         return "Grace, mapping, snooze, or minimum-footprint guard failed"
-    last = item.last_played_at
+    if candidate.target_part_ids:  # only its own episodes' plays count
+        last = _last_target_play(candidate)
+    else:
+        last = item.last_played_at
     snapshot = candidate.last_activity_snapshot
-    if last and (snapshot is None or last > snapshot):
+    if last and (snapshot is None or _aware(last) > _aware(snapshot)):
         return "Playback occurred after candidate creation"
     if candidate.reason_code == "inactivity" and not policy["inactivity_cleanup"]:
         return "Inactivity cleanup is turned off"
@@ -828,7 +833,7 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
         if str(providers.get(provider_key)) != str(expected):
             return "Jellyfin provider identity does not match"
         if kind == "sonarr":
-            _tv_file_targets(media, policy, arr)
+            _tv_file_targets(media, policy, arr, only=candidate.target_part_ids)
     except (TypeError, ValueError) as exc:
         return str(exc)
     except IntegrationError:
@@ -836,9 +841,13 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
     return None
 
 
-def _tv_file_targets(media, policy, arr):
-    """Require current Sonarr mappings to agree before deleting any episode file."""
+def _tv_file_targets(media, policy, arr, only=None):
+    """Require current Sonarr mappings to agree before deleting any episode
+    file. ``only``: just these episodes (MediaPart ids), never one of the
+    always-keep episodes nor a file another episode shares."""
     from .policy import retained
+
+    only = set(only) if only else None
 
     local = {
         part.sonarr_episode_id: part
@@ -848,7 +857,10 @@ def _tv_file_targets(media, policy, arr):
     targets = {
         part.arr_file_id
         for part in media.parts
-        if part.kind == "episode" and part.has_file and not retained(part, policy)
+        if part.kind == "episode"
+        and part.has_file
+        and not retained(part, policy)
+        and (only is None or part.id in only)
     }
     if not targets or None in targets:
         raise ValueError("Target episode files are not fully mapped")
@@ -893,6 +905,8 @@ def _tv_file_targets(media, policy, arr):
                 raise ValueError("Sonarr episode-file mapping changed")
         if file_id in targets and (not part or retained(part, policy)):
             raise ValueError("Sonarr file overlaps retained or unknown episodes")
+        if file_id in targets and only is not None and part.id not in only:
+            raise ValueError("Sonarr file holds an episode that isn't leaving")
     if any(
         part.has_file and episode_id not in seen for episode_id, part in local.items()
     ):
@@ -902,6 +916,100 @@ def _tv_file_targets(media, policy, arr):
 
 MANUAL_RESET = "manual_reset"
 REQUESTED_REMOVAL = "requested"
+WATCHED_EPISODES = "watched_episodes"  # Leave after watched, episode by episode
+
+
+def _last_target_play(candidate):
+    """The latest play, by anyone, of the episodes a candidate is for."""
+    from .models import EpisodeUserState
+
+    plays = [
+        _aware(when)
+        for (when,) in db.session.query(EpisodeUserState.last_played_at).filter(
+            EpisodeUserState.media_part_id.in_(candidate.target_part_ids or [""]),
+            EpisodeUserState.last_played_at.isnot(None),
+        )
+    ]
+    return max(plays, default=None)
+
+
+def _targeted_rescue_reason(candidate, media):
+    """Why an episodes-only Leaving Soon entry no longer applies, or None.
+    Only its own episodes count: watching the next one doesn't rescue it."""
+    policy, _ = resolved_policy(media)
+    if policy["never_purge"]:
+        return "Never Purge is now enabled."
+    if not any(
+        p.has_file for p in media.parts if p.id in set(candidate.target_part_ids)
+    ):
+        return "Its episodes are no longer on disk."
+    last, snapshot = _last_target_play(candidate), candidate.last_activity_snapshot
+    if last and (snapshot is None or last > _aware(snapshot)):
+        return "One of its episodes was played again."
+    return None
+
+
+def request_episode_removal(media, parts, *, where="Leave after watched"):
+    """Mark some of a show's episodes Leaving Soon (not the show): the usual
+    notice, then their files are deleted through Sonarr and they're
+    unmonitored. Always-keep episodes never go. Joins an episodes-only entry
+    already counting down (which then counts down from now); waits, raising
+    LookupError, behind anything else already up for the show."""
+    from .policy import retained
+
+    if media.media_type != "series" or media.sonarr_id is None:
+        raise ValueError(f"{media.title} isn't a show matched to Sonarr.")
+    policy, _ = resolved_policy(media)
+    if policy["never_purge"]:
+        raise ValueError(f"Never Purge is on for {media.title}.")
+    wanted = {
+        p.id: p
+        for p in parts
+        if p.kind == "episode" and p.has_file and not retained(p, policy)
+    }
+    if not wanted:
+        raise ValueError("Only always-keep episodes, or none on disk.")
+    existing = _active_candidate(media.id)
+    if existing and not (existing.target_part_ids and existing.state == "LEAVING_SOON"):
+        raise LookupError(f"{media.title} is already up for removal.")
+    now = utcnow()
+    if existing:
+        wanted |= {
+            p.id: p
+            for p in media.parts
+            if p.id in set(existing.target_part_ids) and p.has_file
+        }
+        candidate = existing
+        candidate.candidate_revision += 1
+    else:
+        candidate = PurgeCandidate(
+            media_identity_id=media.id,
+            state="LEAVING_SOON",
+            reason_code=WATCHED_EPISODES,
+        )
+        db.session.add(candidate)
+    chosen = sorted(wanted.values(), key=lambda p: (p.season_number, p.episode_number))
+    names = ", ".join(
+        f"S{p.season_number:02d}E{p.episode_number or 0:02d}" for p in chosen[:6]
+    ) + (f" and {len(chosen) - 6} more" if len(chosen) > 6 else "")
+    candidate.target_part_ids = [p.id for p in chosen]
+    candidate.reason_text = (
+        f"Marked Leaving Soon from {where}: {names} (watched), not the show."
+    )
+    candidate.reclaimable_bytes = sum(p.size_bytes for p in chosen)
+    candidate.scheduled_delete_at = now + timedelta(days=policy["notice_days"])
+    db.session.flush()
+    candidate.last_activity_snapshot = _last_target_play(candidate) or now
+    audit(
+        "candidate_created",
+        media.id,
+        candidate.reason_text,
+        f"candidate:{candidate.id}:{candidate.candidate_revision}",
+        candidate_id=candidate.id,
+        payload={"reclaimable_bytes": candidate.reclaimable_bytes},
+    )
+    db.session.commit()
+    return candidate
 
 
 def request_removal(media, *, where="its title page"):
@@ -916,7 +1024,11 @@ def request_removal(media, *, where="its title page"):
     if policy["never_purge"]:
         raise ValueError(f"Never Purge is on for {media.title}.")
     existing = _active_candidate(media.id)
-    if existing and existing.state in {"LEAVING_SOON", "APPROVED", "EXECUTING"}:
+    if (
+        existing
+        and existing.state in {"LEAVING_SOON", "APPROVED", "EXECUTING"}
+        and not (existing.target_part_ids and existing.state == "LEAVING_SOON")
+    ):
         raise ValueError(f"{media.title} is already on its way out.")
     item = _candidate_input(media)
     if media.media_type == "series":
@@ -1458,7 +1570,9 @@ def _execute_action(action_id):
             else:
                 arr = client("sonarr")
                 policy, _ = resolved_policy(media)
-                target_files = _tv_file_targets(media, policy, arr)
+                target_files = _tv_file_targets(
+                    media, policy, arr, only=candidate.target_part_ids
+                )
                 _snapshot_watch_state(media)
                 deleted_any = False
                 unmonitored = []

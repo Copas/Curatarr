@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Leave after watched for a season or one episode, and episode by episode** ([#1](https://github.com/Copas/Curatarr/issues/1)). A show or season can go once its last episode on disk is watched, or each episode as it's watched; a single episode once it's watched (from the title page, or the API with a season's or episode's Jellyfin id). Those episodes leave on their own: the show stays, its poster isn't badged, watching on through the show doesn't rescue them (playing one of them again does), their files are deleted through Sonarr and unmonitored first so they don't come back, and the always-keep episodes never go. Removing the whole show takes over from them.
+- **Posters say a title is waiting for a watch**: with the Curatarr plugin, a film or show flagged Leave after watched (or an episode's thumbnail) has an amber "LEAVING AFTER YOU WATCH" tag for the account whose watch counts, or everyone when anyone's does. No plugin update is needed for it. ([#1](https://github.com/Copas/Curatarr/issues/1))
+- **A warning when a Never compress file changes** (Settings → Never compress, and History): its size as Sonarr or Radarr report it is checked at each reconciliation, so a transcoder that ignored the skip list shows up. ([#1](https://github.com/Copas/Curatarr/issues/1))
+- **Leave after I watch in Jellyfin's web menus**, with plugin 0.6.0.0: for a film, show, season or episode, counting the watch of whoever chose it; **Don't leave after watched** undoes it. ([#1](https://github.com/Copas/Curatarr/issues/1))
 - **Free-space thresholds can be a size** (Retention rules → *Low/Critical free-space threshold as a size*), such as "keep 200 GB free", used instead of the percentage where set. On a 10 TB array one whole percent is about 100 GB, too coarse a step. Cleanup, its reasons, the forecast on Overview and the cleanup preview all use it. ([#2](https://github.com/Copas/Curatarr/issues/2))
 - **Leave after watched** (a title's page → Flags, or the API). For one last watch: nothing starts when it's set, and once the film (or a show's last episode on disk) has been watched, by the account you choose or by anyone, it's marked Leaving Soon with the usual notice and rescues. Before, marking it Leaving Soon and then watching it rescued it, so you had to remember to mark it afterwards. ([#1](https://github.com/Copas/Curatarr/issues/1))
 - **Never compress** for an external transcoder such as Tdarr: flag a film, show, season or episode, or protect favourites automatically, and Curatarr lists those files at `/api/v1/protected-paths?kind=compress` and, optionally, in a file, for the transcoder's skip list (Settings → Never compress). ([#1](https://github.com/Copas/Curatarr/issues/1))
@@ -115,6 +119,11 @@
 ## Jellyfin plugin
 
 The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed and updated from Jellyfin's plugin catalogue once Curatarr adds its repository. Each version's notes below are what Jellyfin shows as its changelog, and the release page's notes.
+
+### 0.6.0.0 (2026-10-25)
+
+- **Leave after I watch** in the web app's menus (with the File Transformation plugin), beside Leaving Soon: for a film, show, season or episode Curatarr knows, it's marked Leaving Soon once the account that chose it has watched it. **Don't leave after watched** undoes it. Only for people Jellyfin lets delete the item.
+- Needs a Curatarr newer than 0.2.0rc6 for the new item; with older ones the menu is as before.
 
 ### 0.5.0.0 (2026-10-25)
 

@@ -28,6 +28,7 @@ def _wanted() -> set[str]:
         .join(PurgeCandidate, PurgeCandidate.media_identity_id == MediaIdentity.id)
         .filter(
             PurgeCandidate.state == "LEAVING_SOON",
+            PurgeCandidate.target_part_ids.is_(None),  # the title, not episodes
             MediaIdentity.jellyfin_id.isnot(None),
             MediaIdentity.missing_since.is_(None),
         )

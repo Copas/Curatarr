@@ -1,4 +1,5 @@
-// Curatarr: a "Leaving Soon" item in Jellyfin's web menus, beside Delete.
+// Curatarr: "Leaving Soon" and "Leave after I watch" in Jellyfin's web menus,
+// beside Delete.
 // Added to the web app's page by the Curatarr plugin (through the File
 // Transformation plugin). Delete in the web app then deletes straight away.
 (function () {
@@ -51,9 +52,27 @@
         return client.ajax({ type: method, url: client.getUrl(path), dataType: 'json' });
     }
 
+    // A copy of Delete with another icon, text and action, placed before it.
+    function menuItem(del, key, iconName, label, onClick) {
+        var item = del.cloneNode(true);
+        item.setAttribute('data-id', key);
+        var icon = item.querySelector('.actionsheetMenuItemIcon');
+        if (icon) {
+            icon.classList.remove('delete');
+            icon.classList.add(iconName);
+        }
+        var text = item.querySelector('.actionSheetItemText');
+        if (text) {
+            text.textContent = label;
+        }
+        // The sheet closes itself on any click; this runs first.
+        item.addEventListener('click', onClick);
+        del.parentNode.insertBefore(item, del);
+    }
+
     function addTo(sheet) {
         var del = sheet.querySelector('button.actionSheetMenuItem[data-id="delete"]');
-        if (!del || sheet.querySelector('[data-id="curatarr-leaving-soon"]')) {
+        if (!del || sheet.querySelector('[data-id^="curatarr-"]')) {
             return;
         }
         var id = Date.now() - last.at < 10000 ? last.id : detailsId();
@@ -61,29 +80,29 @@
             return;
         }
         api('GET', 'Curatarr/Items/' + id).then(function (status) {
-            if (!status || !status.canLeave || !del.isConnected) {
+            if (!status || !del.isConnected) {
                 return;
             }
-            var item = del.cloneNode(true);
-            item.setAttribute('data-id', 'curatarr-leaving-soon');
-            var icon = item.querySelector('.actionsheetMenuItemIcon');
-            if (icon) {
-                icon.classList.remove('delete');
-                icon.classList.add('auto_delete');
+            if (status.canLeaveAfterWatched || status.leavesAfterWatched) {
+                var undo = !!status.leavesAfterWatched;
+                menuItem(del, 'curatarr-leave-after', undo ? 'event_available' : 'event_busy',
+                    undo ? "Don't leave after watched" : 'Leave after I watch', function () {
+                        api('POST', 'Curatarr/Items/' + id + '/LeaveAfterWatched' + (undo ? '?undo=true' : '')).then(function (answer) {
+                            toast((answer && answer.message) || 'Done.');
+                        }, function () {
+                            toast("Curatarr couldn't be reached.");
+                        });
+                    });
             }
-            var text = item.querySelector('.actionSheetItemText');
-            if (text) {
-                text.textContent = 'Leaving Soon';
-            }
-            // The sheet closes itself on any click; this runs first.
-            item.addEventListener('click', function () {
-                api('POST', 'Curatarr/Items/' + id + '/LeavingSoon').then(function (answer) {
-                    toast((answer && answer.message) || 'Marked Leaving Soon.');
-                }, function () {
-                    toast("Curatarr couldn't mark it Leaving Soon.");
+            if (status.canLeave) {
+                menuItem(del, 'curatarr-leaving-soon', 'auto_delete', 'Leaving Soon', function () {
+                    api('POST', 'Curatarr/Items/' + id + '/LeavingSoon').then(function (answer) {
+                        toast((answer && answer.message) || 'Marked Leaving Soon.');
+                    }, function () {
+                        toast("Curatarr couldn't mark it Leaving Soon.");
+                    });
                 });
-            });
-            del.parentNode.insertBefore(item, del);
+            }
         }, function () { /* Curatarr or the plugin unreachable: leave the menu as it is */ });
     }
 

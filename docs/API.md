@@ -44,7 +44,7 @@ curl -H "X-Curatarr-Token: $TOKEN" -H "Content-Type: application/json" \
 
 - `keep`, `snooze_30`, `snooze_90`: the household's review choices, for a title that's up for removal (otherwise 409);
 - `never_purge`;
-- `leave_after_watched`: mark it Leaving Soon once it's been watched, by `user` (a Jellyfin user id) or, without one, by anyone. For a whole film or show;
+- `leave_after_watched`: mark it Leaving Soon once it's been watched, by `user` (a Jellyfin user id) or, without one, by anyone. For a film, show, season or episode; a show or season takes `"mode"`: `"all"` (the default) once its last episode on disk is watched, or `"each"` episode as it's watched;
 - `never_compress`: for the film or show, or just the season or episode the id names;
 - `clear`, with `"flag"`: `leave_after_watched`, `never_compress` or `never_purge`.
 

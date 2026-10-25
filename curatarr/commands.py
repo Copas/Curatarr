@@ -150,6 +150,7 @@ def _write_protected_paths():
         from . import flags
 
         flags.write_protected_file()
+        flags.check_protected()
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Writing the protected paths failed")

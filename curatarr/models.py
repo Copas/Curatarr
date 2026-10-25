@@ -193,8 +193,10 @@ class MediaFlag(db.Model, Timed):
     season_number = db.Column(db.Integer)  # a season of a show
     media_part_id = db.Column(db.String(36), db.ForeignKey("media_parts.id"))
     flag = db.Column(db.String(30), nullable=False)
-    # leave_after_watched: whose watch counts (None: anyone's).
+    # leave_after_watched: whose watch counts (None: anyone's), and for a show
+    # or season, "each" episode as it's watched or "all" once the last is.
     jellyfin_user_id = db.Column(db.String(100))
+    mode = db.Column(db.String(20))
     set_by = db.Column(db.String(100))  # who set it, for History
 
 
@@ -241,6 +243,9 @@ class PurgeCandidate(db.Model, Timed):
     snooze_until = db.Column(db.DateTime(timezone=True))
     approved_at = db.Column(db.DateTime(timezone=True))
     completed_at = db.Column(db.DateTime(timezone=True))
+    # Only these episodes (MediaPart ids) leave, not the show: watched ones
+    # flagged Leave after watched. None: the whole title, as the rules say.
+    target_part_ids = db.Column(db.JSON(none_as_null=True))
     media = db.relationship("MediaIdentity")
 
 
