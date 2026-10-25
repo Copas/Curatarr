@@ -42,6 +42,13 @@
                     </div>
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label class="emby-checkbox-label">
+                            <input id="CustomPosters" type="checkbox" is="emby-checkbox" />
+                            <span>Show each account its own posters</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">Curatarr's custom posters for one account: that account sees them in every app, and everyone else sees the usual poster.</div>
+                    </div>
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
                             <input id="WebMenu" type="checkbox" is="emby-checkbox" />
                             <span>Add Leaving Soon to the web app's menus</span>
                         </label>
@@ -70,6 +77,7 @@
                         field('BlockWhenUnreachable').checked = config.BlockWhenUnreachable;
                         field('WebMenu').checked = config.WebMenu;
                         field('ChoosePlayable').checked = config.ChoosePlayable;
+                        field('CustomPosters').checked = config.CustomPosters !== false;
                         Dashboard.hideLoadingMsg();
                     });
                 });
@@ -100,6 +108,7 @@
                         config.BlockWhenUnreachable = field('BlockWhenUnreachable').checked;
                         config.WebMenu = field('WebMenu').checked;
                         config.ChoosePlayable = field('ChoosePlayable').checked;
+                        config.CustomPosters = field('CustomPosters').checked;
                         ApiClient.updatePluginConfiguration(pluginId, config).then(Dashboard.processPluginConfigurationUpdateResult);
                     });
                     return false;
