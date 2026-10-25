@@ -393,6 +393,40 @@ def resume_work():
     return redirect(_safe_next(request.form.get("next")))
 
 
+@bp.post("/jellyfin-plugin/update")
+def jellyfin_plugin_update():
+    """The plugin update banner's buttons."""
+    from . import jellyfin_plugin
+
+    action = request.form.get("action")
+    try:
+        if action == "update":
+            jellyfin_plugin.update()
+            flash(
+                "Jellyfin downloaded the plugin update. It loads when Jellyfin "
+                "restarts.",
+                "success",
+            )
+        elif action in {"restart", "restart_idle"}:
+            jellyfin_plugin.restart(when_idle=action == "restart_idle")
+            flash(
+                f"Jellyfin restarts once nobody's watching (after "
+                f"{jellyfin_plugin.IDLE_MINUTES} quiet minutes) and loads the update."
+                if action == "restart_idle"
+                else "Jellyfin is restarting to load the update; it's back in "
+                "a minute or so.",
+                "success",
+            )
+        elif action == "cancel_idle":
+            jellyfin_plugin.cancel_idle_restart()
+            flash("Jellyfin won't be restarted by Curatarr.", "success")
+        else:
+            abort(400)
+    except IntegrationError as exc:
+        flash(f"Jellyfin couldn't do that: {exc}", "danger")
+    return redirect(_safe_next(request.form.get("next")))
+
+
 def action_name(action):
     """What a history entry did, in words. Cleanup of a series never deletes
     the show: it removes the later episodes and keeps the first ones."""
@@ -454,6 +488,7 @@ def template_values():
         "jellyfin_part_link": jellyfin_links.part_link,
         "jellyfin_url": jellyfin_links.item_url,
         "work_paused": _work_paused() if is_admin else None,
+        "plugin_notice": _plugin_notice() if is_admin else None,
         "dry_run_banner": request.endpoint in DRY_RUN_BANNER_PAGES
         or (
             request.endpoint == "main.rules"
@@ -464,6 +499,19 @@ def template_values():
         if request.cookies.get("curatarr_theme") in {"light", "dark"}
         else "dark",
     }
+
+
+def _plugin_notice():
+    if request.endpoint in (None, "static") or request.path.startswith("/api/"):
+        return None
+    from sqlalchemy.exc import OperationalError
+
+    from . import jellyfin_plugin
+
+    try:
+        return jellyfin_plugin.notice()
+    except OperationalError:
+        return None
 
 
 def _nav_counts(signed_in_user, is_admin) -> dict:

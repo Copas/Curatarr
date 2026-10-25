@@ -389,6 +389,10 @@ class JellyfinClient(Client):
     def repositories(self):
         return self.request("GET", "/Repositories") or []
 
+    def packages(self):
+        """Jellyfin's plugin catalogue, from the repositories it lists."""
+        return self.request("GET", "/Packages") or []
+
     def set_repositories(self, repositories):
         """Jellyfin replaces its whole list of plugin repositories."""
         return self.request("POST", "/Repositories", json=repositories)

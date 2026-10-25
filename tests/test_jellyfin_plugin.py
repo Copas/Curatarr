@@ -23,10 +23,27 @@ class Jellyfin:
         self.missing = False
         self.reachable = {"http://127.0.0.1:8787"}  # where Jellyfin reaches Curatarr
         self.tested = []
+        self.extra = []  # more installed versions of the plugin
+        self.catalogue = ["0.1.0.0"]
+        self.playing = True
 
     def plugins(self):
         others = [{"Id": "webhook", "Status": "Active"}]
-        return others + ([PLUGIN | {"Status": self.status}] if self.status else [])
+        return (
+            others
+            + ([PLUGIN | {"Status": self.status}] if self.status else [])
+            + list(self.extra)
+        )
+
+    def packages(self):
+        return [
+            {"name": "Other", "guid": "x", "versions": [{"version": "9.0.0.0"}]},
+            {
+                "name": "Curatarr",
+                "guid": jellyfin_plugin.PLUGIN_ID,
+                "versions": [{"version": v} for v in self.catalogue],
+            },
+        ]
 
     def repositories(self):
         return list(self.repos)
@@ -53,7 +70,7 @@ class Jellyfin:
         return {"Ok": ok, "Message": "ok" if ok else "couldn't be reached"}
 
     def sessions(self):
-        return [{"NowPlayingItem": {"Name": "A film"}}, {}]
+        return [{"NowPlayingItem": {"Name": "A film"}}, {}] if self.playing else [{}]
 
     def restart(self):
         self.restarts += 1
@@ -175,3 +192,76 @@ def test_unreachable_jellyfin_shows_a_note(app, monkeypatch):
     monkeypatch.setattr("curatarr.services.client", down)
     with app.app_context():
         assert jellyfin_plugin.status()["state"] == "unreachable"
+
+
+def test_a_waiting_update_keeps_the_plugin_counted_as_loaded(app, jellyfin):
+    """Jellyfin lists the loaded version as Superseded while a newer one
+    waits for a restart: the plugin is still there, working."""
+    jellyfin.status = "Superseded"
+    jellyfin.extra = [PLUGIN | {"Version": "0.2.0.0", "Status": "Restart"}]
+    with app.app_context():
+        assert jellyfin_plugin.status()["state"] == "active"
+        assert jellyfin_plugin.active()
+
+
+def test_the_update_banner(app, client, jellyfin):
+    from datetime import timedelta
+
+    from curatarr.models import utcnow
+
+    jellyfin.status = "Active"
+    with app.app_context():
+        jellyfin_plugin.sync()
+        assert jellyfin_plugin.notice() is None  # up to date
+    assert 'id="plugin-banner"' not in client.get("/settings").text
+    # A newer version in Jellyfin's catalogue.
+    jellyfin.catalogue = ["0.1.0.0", "0.3.0.0", "0.2.0.0"]
+    with app.app_context():
+        jellyfin_plugin.sync()
+    page = client.get("/").text
+    assert 'id="plugin-banner"' in page and "has an update:</strong> 0.3.0.0" in page
+    assert "Some of Curatarr's features need it" in page  # 0.1 < WANTED
+    client.post("/jellyfin-plugin/update", data={"action": "update", "next": "/"})
+    assert jellyfin.installed and jellyfin.status == "Restart"
+    # Installed: waiting for a restart (the old version still loaded).
+    jellyfin.status = "Superseded"
+    jellyfin.extra = [PLUGIN | {"Version": "0.3.0.0", "Status": "Restart"}]
+    with app.app_context():
+        jellyfin_plugin.sync()
+    page = client.get("/").text
+    assert "waiting for Jellyfin to restart:</strong> 0.1.0.0 → 0.3.0.0" in page
+    # Restart when nobody's watching: not while a film plays, nor straight after.
+    client.post("/jellyfin-plugin/update", data={"action": "restart_idle"})
+    assert "once nobody's watching" in client.get("/").text
+    with app.app_context():
+        jellyfin_plugin.tick()
+        assert jellyfin.restarts == 0  # someone's watching
+        jellyfin.playing = False
+        jellyfin_plugin.tick()
+        assert jellyfin.restarts == 0  # only just stopped
+        stored = setting(jellyfin_plugin.KEY)
+        stored["idle_since"] = (utcnow() - timedelta(minutes=11)).isoformat()
+        set_setting(jellyfin_plugin.KEY, stored)
+        db.session.commit()
+        jellyfin_plugin.tick()
+        assert jellyfin.restarts == 1
+        jellyfin_plugin.tick()
+        assert jellyfin.restarts == 1  # once
+    # Back with the new version: no banner.
+    jellyfin.status, jellyfin.extra = (
+        None,
+        [PLUGIN | {"Version": "0.3.0.0", "Status": "Active"}],
+    )
+    with app.app_context():
+        jellyfin_plugin.sync()
+        assert jellyfin_plugin.notice() is None
+    # Restart now.
+    jellyfin.extra = [
+        PLUGIN | {"Version": "0.3.0.0", "Status": "Superseded"},
+        PLUGIN | {"Version": "0.4.0.0", "Status": "Restart"},
+    ]
+    jellyfin.catalogue = ["0.4.0.0"]
+    with app.app_context():
+        jellyfin_plugin.sync()
+    client.post("/jellyfin-plugin/update", data={"action": "restart"})
+    assert jellyfin.restarts == 2

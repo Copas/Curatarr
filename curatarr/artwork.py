@@ -45,6 +45,13 @@ def _fit(drawing, label, size, max_width):
         size -= 1
 
 
+def _poster_tag_bottom(drawing, width, height, label) -> int:
+    """Where a poster's Leaving Soon tag (as badge_poster draws it) ends."""
+    size = max(12, round(width * 0.065))
+    _font, box = _fit(drawing, label, size, width * 0.8)
+    return round(height * 0.05) + (box[3] - box[1]) + 2 * round(size * 0.45)
+
+
 def badge_poster(
     source: bytes, label: str = "LEAVING SOON", kind: str = "Primary"
 ) -> bytes:
@@ -176,6 +183,7 @@ def favourite_ribbon(
     names=(),
     large: bool = False,
     colour: str = "gold",
+    leaving: str | None = None,
 ) -> bytes:
     """A gold band marking someone's favourite, or a red one for a household
     favourite, with a red NEW for a recent one.
@@ -184,15 +192,23 @@ def favourite_ribbon(
     favourited it, stacked (``avatars``: (picture or None, name)), or
     ``text`` when there are no faces. ``large`` (the poster on a title's own
     page, where there's room): a star and each full name, one under the
-    other. Along the bottom by default; at the top right it mirrors Leaving
-    Soon's tag (top left), so both fit. Wide pictures (an episode's
-    thumbnail) get a deeper band."""
+    other. Along the bottom by default, or along the top (below the
+    poster's Leaving Soon tag, ``leaving``, when it has one), or at the top
+    right, mirroring Leaving Soon's tag (top left) so both fit. Wide pictures
+    (an episode's thumbnail) get a deeper band."""
     image = Image.open(BytesIO(source)).convert("RGB")
     image.thumbnail((1000, 1500))
+    start = 0
+    if position == "top" and leaving:
+        width, height = image.size
+        start = _poster_tag_bottom(ImageDraw.Draw(image), width, height, leaving)
+        start += round(height * 0.01)
     if large and names:
-        _ribbon_list(image, list(names), position, new, household, colour)
+        _ribbon_list(image, list(names), position, new, household, colour, start)
     else:
-        _ribbon_band(image, text, position, list(avatars), new, household, colour)
+        _ribbon_band(
+            image, text, position, list(avatars), new, household, colour, start
+        )
     output = BytesIO()
     image.save(output, format="JPEG", quality=88)
     return output.getvalue()
@@ -228,19 +244,26 @@ def _pill_width(drawing, size):
     return box[2] - box[0] + 2 * round(size * 0.22)
 
 
-def _ribbon_band(image, text, position, faces, new, household, colour):
+def _edge(drawing, width, height, y):
+    """The thin dark line between a full-width band and the picture."""
+    thick = max(2, round(height * 0.004))
+    drawing.rectangle((0, y - thick, width, y + thick), fill="#111111")
+
+
+def _ribbon_band(image, text, position, faces, new, household, colour, start=0):
     """One line: the star (or heart) and the faces stacked, or the text."""
     width, height = image.size
     drawing = ImageDraw.Draw(image)
     fill, ink = _ribbon_colours(household, colour)
     wide = width > height
-    if position == "bottom":
+    across = position in {"bottom", "top"}
+    if across:
         band = max(24, round(height * (0.15 if wide else 0.085)))
-        top = height - band
-        drawing.rectangle((0, top, width, height), fill=fill)
-        drawing.rectangle(
-            (0, top - max(2, round(height * 0.004)), width, top), fill="#111111"
-        )
+        top = height - band if position == "bottom" else start
+        if start:
+            _edge(drawing, width, height, top)
+        _edge(drawing, width, height, top if position == "bottom" else top + band)
+        drawing.rectangle((0, top, width, top + band), fill=fill)
     else:
         band = max(24, round(width * (0.06 if wide else 0.1)))
         top = round(height * 0.05)
@@ -252,12 +275,7 @@ def _ribbon_band(image, text, position, faces, new, household, colour):
     pill_width = _pill_width(drawing, band) if new else 0
     if faces:
         text = "♥" if household else "★"
-    room = (
-        width * (0.92 if position == "bottom" else 0.44)
-        - faces_width
-        - pill_width
-        - 4 * pad
-    )
+    room = width * (0.92 if across else 0.44) - faces_width - pill_width - 4 * pad
     font, box = _fit(
         drawing, text, round(band * (0.62 if faces else 0.6)), max(room, band)
     )
@@ -267,7 +285,7 @@ def _ribbon_band(image, text, position, faces, new, household, colour):
         + (pad + faces_width if faces else 0)
         + (pad + pill_width if new else 0)
     )
-    if position == "bottom":
+    if across:
         x = (width - content) / 2
     else:
         left = width - content - 2 * pad
@@ -290,7 +308,7 @@ def _ribbon_band(image, text, position, faces, new, household, colour):
 RIBBON_LINES = 5  # names listed on a large ribbon; the rest are "+ N more"
 
 
-def _ribbon_list(image, names, position, new, household, colour):
+def _ribbon_list(image, names, position, new, household, colour, start=0):
     """A star and each full name, one under the other (a household favourite
     says so first)."""
     width, height = image.size
@@ -306,7 +324,8 @@ def _ribbon_list(image, names, position, new, household, colour):
     gap = round(size * 0.35)
     pad = round(size * 0.6)
     pill_width = _pill_width(drawing, size * 1.4) if new else 0
-    room = width * (0.9 if position == "bottom" else 0.75) - 2 * pad
+    across = position in {"bottom", "top"}
+    room = width * (0.9 if across else 0.75) - 2 * pad
     fitted = []
     for index, line in enumerate(lines):
         extra = pill_width + pad if new and index == 0 else 0
@@ -320,12 +339,12 @@ def _ribbon_list(image, names, position, new, household, colour):
         for index, (_f, box) in enumerate(fitted)
     )
     band = block_height + 2 * pad
-    if position == "bottom":
-        top = height - band
-        drawing.rectangle((0, top, width, height), fill=fill)
-        drawing.rectangle(
-            (0, top - max(2, round(height * 0.004)), width, top), fill="#111111"
-        )
+    if across:
+        top = height - band if position == "bottom" else start
+        if start:
+            _edge(drawing, width, height, top)
+        _edge(drawing, width, height, top if position == "bottom" else top + band)
+        drawing.rectangle((0, top, width, top + band), fill=fill)
         x = (width - block_width) / 2
     else:
         top = round(height * 0.05)

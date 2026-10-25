@@ -769,3 +769,39 @@ def test_an_uploaded_picture_goes_on_the_ribbon(app, client, monkeypatch):
     assert (
         client.post("/library/posters/avatar", data={"account": "x"}).status_code == 400
     )
+
+
+def test_a_ribbon_along_the_top_sits_below_leaving_soon(app):
+    from curatarr.artwork import badge_poster, favourite_ribbon
+
+    poster = _picture("#223399", size=(400, 600))
+    shown = Image.open(
+        BytesIO(favourite_ribbon(poster, "★", "top", avatars=[(None, "Sam")]))
+    ).convert("RGB")
+    assert shown.getpixel((3, 3))[2] < 90  # gold at the very top
+    assert shown.getpixel((3, shown.height - 3))[2] > 120  # the poster at the bottom
+    leaving = badge_poster(poster, "7 DAYS LEFT")
+    shown = Image.open(
+        BytesIO(
+            favourite_ribbon(
+                leaving, "★", "top", avatars=[(None, "Sam")], leaving="7 DAYS LEFT"
+            )
+        )
+    ).convert("RGB")
+    red = shown.getpixel((3, round(shown.height * 0.06)))
+    assert red[0] > 200 and red[1] < 60  # Leaving Soon's tag still shows
+
+
+def test_ribbon_previews_use_a_real_poster(app, client, monkeypatch):
+    from curatarr import custom_posters as module
+
+    _library, media, _part = _movie()
+    monkeypatch.setattr(
+        "curatarr.services.client",
+        lambda _kind: RibbonJellyfin(_picture("#22aa22", size=(400, 600))),
+    )
+    module._preview.clear()
+    _favourite(media, "u1")
+    preview = client.get("/library/posters/ribbon-preview.jpg")
+    shown = Image.open(BytesIO(preview.data)).convert("RGB")
+    assert shown.getpixel((shown.width // 2, shown.height // 3))[1] > 150  # its green

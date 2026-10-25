@@ -22,8 +22,20 @@ REPOSITORY = {
     "Enabled": True,
 }
 # {"curatarr_url": the address that worked, "candidates": addresses to try,
-#  "pending": set up was asked for and isn't finished, "active": last seen}
+#  "pending": set up was asked for and isn't finished, "active": last seen,
+#  "version": the version loaded, "waiting": a newer one installed that loads
+#  at Jellyfin's next restart, "latest": the newest in Jellyfin's catalogue,
+#  "restart_when_idle": restart Jellyfin once nobody's watching,
+#  "idle_since": when playback was last seen to stop}
 KEY = "jellyfin_plugin"
+# The plugin version this Curatarr's features are made for.
+WANTED = "0.5.0.0"
+# A restart when nobody's watching waits this long after the last playback,
+# so someone between episodes isn't cut off.
+IDLE_MINUTES = 10
+# Jellyfin's states for an installed version: Active is loaded; Superseded is
+# loaded with a newer version waiting (Restart) for Jellyfin's next restart.
+LOADED = {"Active", "Superseded"}
 
 
 def _norm(value) -> str:
@@ -45,11 +57,50 @@ def _store(**changes) -> None:
         db.session.commit()
 
 
+def _versions(jellyfin) -> list[dict]:
+    return [p for p in jellyfin.plugins() if _norm(p.get("Id")) == _norm(PLUGIN_ID)]
+
+
 def _plugin(jellyfin) -> dict | None:
-    for plugin in jellyfin.plugins():
-        if _norm(plugin.get("Id")) == _norm(PLUGIN_ID):
-            return plugin
-    return None
+    """The version Jellyfin has loaded, else the one it will load."""
+    order = {"Active": 0, "Superseded": 1, "Restart": 2}
+    versions = sorted(_versions(jellyfin), key=lambda p: order.get(p.get("Status"), 3))
+    return versions[0] if versions else None
+
+
+def _loaded(plugin) -> bool:
+    return bool(plugin) and plugin.get("Status") in LOADED
+
+
+def version_key(version) -> tuple[int, ...]:
+    try:
+        return tuple(int(part) for part in str(version or "").split("."))
+    except ValueError:
+        return ()
+
+
+def _check_versions(jellyfin) -> None:
+    """Note the version loaded, one waiting for a restart, and the newest in
+    the catalogue (for the update banner). Never raises."""
+    try:
+        versions = _versions(jellyfin)
+    except IntegrationError:
+        return
+    loaded = next((p for p in versions if p.get("Status") in LOADED), None)
+    waiting = [p.get("Version") for p in versions if p.get("Status") == "Restart"]
+    latest = None
+    try:
+        for package in jellyfin.packages():
+            if _norm(package.get("guid")) == _norm(PLUGIN_ID):
+                found = [v.get("version") for v in package.get("versions") or []]
+                latest = max(found, key=version_key, default=None)
+    except IntegrationError:
+        latest = _stored().get("latest")
+    _store(
+        version=loaded.get("Version") if loaded else None,
+        waiting=max(waiting, key=version_key) if waiting else None,
+        latest=latest,
+    )
 
 
 def _clean(url) -> str | None:
@@ -82,10 +133,15 @@ def status() -> dict:
     if plugin is None:
         _store(active=False)
         return base | {"state": "not_installed"}
-    state = {"Active": "active", "Restart": "restart"}.get(
-        plugin.get("Status"), "disabled"
+    state = (
+        "active"
+        if _loaded(plugin)
+        else "restart"
+        if plugin.get("Status") == "Restart"
+        else "disabled"
     )
     _store(active=state == "active")
+    _check_versions(jellyfin)
     result = base | {"state": state, "version": plugin.get("Version")}
     if state == "active":
         result["configured"] = configure(jellyfin)
@@ -109,7 +165,7 @@ def set_up(candidates, *, restart: bool = True) -> str:
     if not any(r.get("Url") == REPOSITORY["Url"] for r in repositories):
         jellyfin.set_repositories([*repositories, REPOSITORY])
     plugin = _plugin(jellyfin)
-    if plugin and plugin.get("Status") == "Active":
+    if _loaded(plugin):
         if configure(jellyfin):
             return "connected"
         return "unconnected"
@@ -183,19 +239,101 @@ def configure(jellyfin=None) -> bool:
 
 
 def tick() -> None:
-    """Every worker cycle, while a set up is pending: once Jellyfin is back
-    with the plugin loaded, set it up."""
+    """Every worker cycle: once Jellyfin is back with the plugin loaded after
+    a set up, set it up; and restart Jellyfin for a waiting update once
+    nobody's watching, when asked to."""
     from .services import client
 
+    if _stored().get("restart_when_idle"):
+        _restart_if_idle()
     if not _stored().get("pending"):
         return
     try:
         plugin = _plugin(client("jellyfin"))
     except IntegrationError:
         return  # still restarting
-    if plugin and plugin.get("Status") == "Active":
+    if _loaded(plugin):
         _store(active=True)
         configure()
+
+
+def _restart_if_idle() -> None:
+    from datetime import timedelta
+
+    from .models import utcnow
+    from .services import _as_datetime, client
+
+    try:
+        jellyfin = client("jellyfin")
+        if not any(p.get("Status") == "Restart" for p in _versions(jellyfin)):
+            _store(restart_when_idle=False, idle_since=None)  # restarted already
+            _check_versions(jellyfin)
+            return
+        if any(s.get("NowPlayingItem") for s in jellyfin.sessions() or []):
+            _store(idle_since=None)
+            return
+        since = _as_datetime(_stored().get("idle_since"))
+        if since is None:
+            _store(idle_since=utcnow().isoformat())
+            return
+        if utcnow() - since < timedelta(minutes=IDLE_MINUTES):
+            return
+        jellyfin.restart()
+    except IntegrationError:
+        return  # restarting, or away
+    _store(restart_when_idle=False, idle_since=None, pending=True)
+
+
+def update() -> None:
+    """Install the newest version from the catalogue (it loads when Jellyfin
+    next restarts). Raises IntegrationError."""
+    from .services import client
+
+    jellyfin = client("jellyfin")
+    jellyfin.install_package(NAME, PLUGIN_ID, REPOSITORY["Url"])
+    _check_versions(jellyfin)
+
+
+def restart(when_idle: bool) -> None:
+    """Restart Jellyfin to load a waiting update: now, or once nobody's
+    watching (the worker looks every cycle)."""
+    from .services import client
+
+    if when_idle:
+        _store(restart_when_idle=True, idle_since=None)
+        return
+    client("jellyfin").restart()
+    _store(restart_when_idle=False, pending=True)
+
+
+def cancel_idle_restart() -> None:
+    _store(restart_when_idle=False, idle_since=None)
+
+
+def notice() -> dict | None:
+    """For the banner: a newer version to install, or one installed and
+    waiting for Jellyfin to restart. From what was last noted (no call to
+    Jellyfin)."""
+    stored = _stored()
+    version = stored.get("version")
+    if not version:
+        return None
+    waiting, latest = stored.get("waiting"), stored.get("latest")
+    have = max(version, waiting or version, key=version_key)
+    base = {
+        "version": version,
+        # Some of this Curatarr's features need it.
+        "wanted": version_key(version) < version_key(WANTED),
+    }
+    if latest and version_key(latest) > version_key(have):
+        return base | {"kind": "update", "new": latest}
+    if waiting and version_key(waiting) > version_key(version):
+        return base | {
+            "kind": "restart",
+            "new": waiting,
+            "when_idle": bool(stored.get("restart_when_idle")),
+        }
+    return None
 
 
 def sync() -> None:
@@ -207,8 +345,9 @@ def sync() -> None:
     try:
         jellyfin = client("jellyfin")
         plugin = _plugin(jellyfin)
-        loaded = bool(plugin and plugin.get("Status") == "Active")
+        loaded = _loaded(plugin)
         _store(active=loaded)
+        _check_versions(jellyfin)
         if not loaded:
             return
         repositories = jellyfin.repositories()
