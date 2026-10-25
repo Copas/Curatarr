@@ -53,7 +53,12 @@ def _poster_tag_bottom(drawing, width, height, label) -> int:
 
 
 def badge_poster(
-    source: bytes, label: str = "LEAVING SOON", kind: str = "Primary"
+    source: bytes,
+    label: str = "LEAVING SOON",
+    kind: str = "Primary",
+    *,
+    colour: str = BADGE_RED,
+    ink: str = "#FFFFFF",
 ) -> bytes:
     """Posters get a red tag in the top-left corner, like a streaming
     service's, so the film's own title (usually at the bottom) stays visible.
@@ -76,12 +81,12 @@ def badge_poster(
         left = width - tag_width - round(width * 0.14) if backdrop else 0
         drawing.rectangle(
             (left, top, left + tag_width, top + text_height + 2 * pad_y),
-            fill=BADGE_RED,
+            fill=colour,
         )
         drawing.text(
             (left + pad_x - box[0], top + pad_y - box[1]),
             label,
-            fill="#FFFFFF",
+            fill=ink,
             font=font,
         )
     else:
@@ -110,6 +115,8 @@ def badge_poster(
     return output.getvalue()
 
 
+# Leave after watched's tag, where Leaving Soon's would be: it isn't yet.
+WAITING_AMBER = "#F28C28"
 FAVOURITE_GOLD = "#E8B923"
 HOUSEHOLD_RED = "#8E1424"
 NEW_RED = "#D7263D"
@@ -864,6 +871,8 @@ def reconcile_artwork():
         .all()
     )
     for candidate in active:
+        if candidate.target_part_ids:
+            continue  # a few episodes are leaving, not the show
         apply_badge(candidate)
     snapshots = db.session.query(PosterSnapshot).filter_by(active=True).all()
     for snapshot in snapshots:
