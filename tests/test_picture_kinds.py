@@ -220,16 +220,14 @@ def test_the_plugin_lists_each_accounts_pictures_by_type(app, client, monkeypatc
     ).get_json()
     assert listing["version"] == 2
     kinds = {(e["user"], e["kind"]): e for e in listing["posters"]}
-    # Sam: the poster, the background, and a wide tile made from the poster;
-    # Alex: only the logo (no poster of their own to make others from).
-    assert set(kinds) == {
-        ("u1", "Primary"),
-        ("u1", "Backdrop"),
-        ("u1", "Thumb"),
-        ("u2", "Logo"),
-    }
+    # Sam: the poster (with a wide tile made from it, its "wide" version, under
+    # its tag as plugin 0.7.0.0 had it, so those files are kept) and the
+    # background; Alex: only the logo (no poster of their own to make others from).
+    assert set(kinds) == {("u1", "Primary"), ("u1", "Backdrop"), ("u2", "Logo")}
+    assert kinds["u1", "Primary"]["wide"]
+    assert kinds["u1", "Primary"]["tag"] == old[0]["tag"]
     wide = Image.open(
-        BytesIO(custom_posters.plugin_picture(kinds["u1", "Thumb"]["id"]))
+        BytesIO(custom_posters.plugin_picture(kinds["u1", "Primary"]["id"], wide=True))
     )
     assert wide.size == (1280, 720)
     background = custom_posters.plugin_picture(kinds["u1", "Backdrop"]["id"])
@@ -250,7 +248,7 @@ def test_the_plugin_lists_each_accounts_pictures_by_type(app, client, monkeypatc
         "Banner": "widened",
     }
     kinds = {(e["user"], e["kind"]): e for e in custom_posters.plugin_list(2)}
-    assert ("u1", "Thumb") not in kinds
+    assert ("u1", "Thumb") not in kinds and not kinds["u1", "Primary"]["wide"]
     banner = Image.open(
         BytesIO(custom_posters.plugin_picture(kinds["u1", "Banner"]["id"]))
     )
@@ -273,6 +271,8 @@ def test_an_accounts_wide_tile_counts_down_and_carries_the_ribbon(app, monkeypat
         {"enabled": "on", "see-u2-u1": "on"}, [("u1", "Sam"), ("u2", "Alex")]
     )
     entry = next(e for e in custom_posters.plugin_list(2) if e["kind"] == "Thumb")
+    poster = next(e for e in custom_posters.plugin_list(2) if e["kind"] == "Primary")
+    assert not poster["wide"]  # its own wide tile, not one made from the poster
     plain = custom_posters.plugin_picture(entry["id"])
     candidate = PurgeCandidate(
         media_identity_id=media.id,
