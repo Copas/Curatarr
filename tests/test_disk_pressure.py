@@ -319,3 +319,72 @@ def test_unreported_mount_is_measured_directly(app, monkeypatch, tmp_path):
     media = MediaIdentity(media_type="movie", title="Film")
     # 100 more bytes are needed to get back to 15% of 1000 (50 free now).
     assert _disk_pressure(media, _pressure_policy(str(tmp_path))) == (100, "critical")
+
+
+def test_free_space_thresholds_as_a_size(app, client, monkeypatch):
+    """A big disk wants "keep 200 GB free", finer than whole percentages."""
+    from curatarr.policy import SIZE_UNITS, free_target_label
+    from curatarr.services import setting
+
+    tb, gb = SIZE_UNITS["TB"], SIZE_UNITS["GB"]
+
+    class FakeArr:
+        free = 150 * gb
+
+        def diskspace(self):
+            return [{"path": "/media", "totalSpace": 10 * tb, "freeSpace": self.free}]
+
+    arr = FakeArr()
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: arr)
+    with app.app_context():
+        library = Library(jellyfin_library_id="big", name="Films", media_type="movies")
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(library_id=library.id, media_type="movie", title="A Film")
+        db.session.add(media)
+        db.session.commit()
+        values = {
+            "free_space_enabled": True,
+            "disk_path": "/media/films",
+            "low_free_percent": 1,
+            "critical_free_percent": 1,
+        }
+        # 1% of 10 TB is about 102 GB: 150 GB free is fine by percentages.
+        policy, _ = effective_policy(
+            "movie", library_values=values | {"low_free_percent": 2}
+        )
+        assert _disk_pressure(media, policy) == (
+            int(10 * tb * 2 / 100 - 150 * gb),
+            "low",
+        )
+        # 200 GB, set as a size, is used instead of the percentage.
+        policy, _ = effective_policy(
+            "movie",
+            library_values=values
+            | {
+                "low_free_percent": 2,
+                "low_free_bytes": 200 * gb,
+                "critical_free_bytes": 100 * gb,
+            },
+        )
+        assert _disk_pressure(media, policy) == (50 * gb, "low")
+        assert free_target_label(policy) == "200 GB free"
+        arr.free = 90 * gb
+        assert _disk_pressure(media, policy) == (110 * gb, "critical")
+        arr.free = 250 * gb
+        assert _disk_pressure(media, policy) == (0, "normal")
+        with pytest.raises(ValueError, match="Critical"):
+            validate_policy(
+                {"low_free_bytes": 100 * gb, "critical_free_bytes": 200 * gb}
+            )
+    # Set on the retention rules page, in GB.
+    page = client.get("/rules/retention").text
+    assert 'name="low_free_bytes"' in page and 'name="critical_free_bytes"' in page
+    client.post(
+        "/rules/retention",
+        data={"low_free_bytes": "200", "low_free_bytes_unit": "GB"},
+    )
+    with app.app_context():
+        assert setting("global_policy")["low_free_bytes"] == 200 * gb
+    preview = client.get("/cleanup-preview").text
+    assert "clean up below 200 GB free" in preview
