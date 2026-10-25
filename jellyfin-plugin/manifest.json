@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/logo.png",
     "versions": [
       {
+        "version": "0.6.0.0",
+        "changelog": "- Leave after I watch in the web app's menus (with the File Transformation plugin), beside Leaving Soon: for a film, show, season or episode Curatarr knows, it's marked Leaving Soon once the account that chose it has watched it. Don't leave after watched undoes it. Only for people Jellyfin lets delete the item.\n- Needs a Curatarr newer than 0.2.0rc6 for the new item; with older ones the menu is as before.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/Copas/Curatarr/releases/download/plugin-v0.6.0.0/curatarr-jellyfin-plugin_0.6.0.0.zip",
+        "checksum": "5d399e54c421e489601230ccd5791f47",
+        "timestamp": "2026-10-25T14:39:48Z"
+      },
+      {
         "version": "0.5.0.0",
         "changelog": "- A favourite ribbon can look different on a title's own page, where the poster is shown big: Curatarr draws a second version listing each name, and the plugin serves it when an app asks for a poster at least 300 pixels wide (the Roku app asks for 295 in lists and 300 on a title's page). The width is LargePosterWidth in the plugin's settings.\n- Needs a Curatarr newer than 0.2.0rc6 for the second version; with older ones, posters work as before.",
         "targetAbi": "12.2.0.0",
