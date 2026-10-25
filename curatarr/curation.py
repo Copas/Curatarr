@@ -454,11 +454,14 @@ def _load_context():
 
 
 def _favorite_names(states):
-    from .services import setting
+    from .services import left_out_user_ids, setting
 
     names = setting("jellyfin_user_names", {})
+    left_out = left_out_user_ids()
     return sorted(
-        names.get(s.jellyfin_user_id, s.jellyfin_user_id) for s in states if s.favorite
+        names.get(s.jellyfin_user_id, s.jellyfin_user_id)
+        for s in states
+        if s.favorite and s.jellyfin_user_id not in left_out
     )
 
 

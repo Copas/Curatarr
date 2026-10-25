@@ -28,10 +28,9 @@ PUBLIC_ENDPOINTS.update({"main.jellyfin_posters", "main.jellyfin_poster_image"})
 
 
 def _accounts():
-    from .services import setting
+    from .services import account_names
 
-    names = setting("jellyfin_user_names", {}) or {}
-    return sorted(names.items(), key=lambda account: account[1])
+    return sorted(account_names().items(), key=lambda account: account[1])
 
 
 @bp.get("/library/posters")

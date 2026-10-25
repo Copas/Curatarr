@@ -664,6 +664,11 @@ def process_event(event):
         return
     event.media_identity_id = media.id
     user_id = data.get("user_external_id") or "unknown"
+    bare = lambda value: str(value).replace("-", "").lower()
+    if bare(user_id) in {bare(u) for u in ignored_user_ids()}:
+        event.processed_at = utcnow()  # an account Curatarr ignores
+        db.session.commit()
+        return
     state = (
         db.session.query(UserMediaState)
         .filter_by(media_identity_id=media.id, jellyfin_user_id=user_id)
@@ -710,6 +715,67 @@ def process_event(event):
         if media.media_type == "series" and part.season_number is not None:
             _plan_acquisition(media, part.season_number, event)
     event.processed_at = utcnow()
+    db.session.commit()
+
+
+# Accounts hidden from Jellyfin's sign-in screen: "show" them like any other,
+# "leave_out" of Curatarr's pages (their watching still keeps titles), or
+# "ignore" completely (not read from Jellyfin at all).
+HIDDEN_ACCOUNTS_KEY = "hidden_accounts"
+HIDDEN_ACCOUNTS = ("show", "leave_out", "ignore")
+
+
+def hidden_accounts() -> str:
+    mode = setting(HIDDEN_ACCOUNTS_KEY, "show")
+    return mode if mode in HIDDEN_ACCOUNTS else "show"
+
+
+def left_out_user_ids() -> set[str]:
+    """Accounts kept off Curatarr's pages: hidden ones, unless shown."""
+    if hidden_accounts() == "show":
+        return set()
+    return set(setting("jellyfin_hidden_user_ids", []) or [])
+
+
+def ignored_user_ids() -> set[str]:
+    """Accounts Curatarr doesn't read at all."""
+    if hidden_accounts() != "ignore":
+        return set()
+    return set(setting("jellyfin_hidden_user_ids", []) or [])
+
+
+def account_names() -> dict[str, str]:
+    """Jellyfin account id → name, for every account Curatarr's pages show."""
+    left_out = left_out_user_ids()
+    names = setting("jellyfin_user_names", {}) or {}
+    return {i: n for i, n in names.items() if i not in left_out}
+
+
+def counted_users(users) -> list[dict]:
+    """Jellyfin's accounts (from /Users) less any Curatarr ignores; notes
+    which are hidden from the sign-in screen."""
+    users = [u for u in users or [] if isinstance(u, dict) and u.get("Id")]
+    hidden = sorted(
+        str(u["Id"]) for u in users if (u.get("Policy") or {}).get("IsHidden")
+    )
+    if hidden != (setting("jellyfin_hidden_user_ids", []) or []):
+        set_setting("jellyfin_hidden_user_ids", hidden)
+    ignored = ignored_user_ids()
+    return [u for u in users if str(u["Id"]) not in ignored]
+
+
+def save_hidden_accounts(mode) -> None:
+    """Apply the choice; ignoring forgets what was read for those accounts
+    (it's read again from Jellyfin if they're counted later)."""
+    from .models import EpisodeUserState
+
+    set_setting(HIDDEN_ACCOUNTS_KEY, mode if mode in HIDDEN_ACCOUNTS else "show")
+    ignored = ignored_user_ids()
+    if ignored:
+        for model in (UserMediaState, EpisodeUserState):
+            db.session.query(model).filter(model.jellyfin_user_id.in_(ignored)).delete(
+                synchronize_session=False
+            )
     db.session.commit()
 
 
@@ -1002,7 +1068,7 @@ def reconcile_user_state():
     # The first look finds every favourite there is: none of them is "new".
     first_look = setting("last_reconcile_at") is None
     liked_episodes = {}  # (media id, user id) → Jellyfin episodes they favourited
-    users = jellyfin.users()
+    users = counted_users(jellyfin.users())
     set_setting(
         "jellyfin_user_names",
         setting("jellyfin_user_names", {})
@@ -1457,6 +1523,7 @@ def shows_by_size(library_id=None):
     from .policy import reclaimable_bytes, retained
 
     names = setting("jellyfin_user_names", {})
+    left_out = left_out_user_ids()
     query = db.session.query(MediaIdentity).filter(
         MediaIdentity.media_type == "series",
         MediaIdentity.missing_since.is_(None),
@@ -1496,7 +1563,7 @@ def shows_by_size(library_id=None):
                 "last_played": latest.last_played_at if latest else None,
                 "last_watcher": (
                     names.get(latest.jellyfin_user_id, latest.jellyfin_user_id)
-                    if latest
+                    if latest and latest.jellyfin_user_id not in left_out
                     else None
                 ),
                 "resetting": bool(active and active.state in {"APPROVED", "EXECUTING"}),
@@ -1593,6 +1660,7 @@ def review_rows():
     from .policy import retained
 
     names = setting("jellyfin_user_names", {})
+    left_out = left_out_user_ids()
     rows = []
     candidates = (
         db.session.query(PurgeCandidate)
@@ -1641,7 +1709,7 @@ def review_rows():
                 "last_played": item.last_played_at,
                 "last_watcher": (
                     names.get(latest.jellyfin_user_id, latest.jellyfin_user_id)
-                    if latest
+                    if latest and latest.jellyfin_user_id not in left_out
                     else None
                 ),
                 "added_at": media.added_at,
@@ -1841,11 +1909,14 @@ def media_titles_for(rows):
 
 def history_filter_options():
     names = setting("jellyfin_user_names", {})
-    user_ids = {
-        row[0]
-        for row in db.session.query(LifecycleEvent.jellyfin_user_id).distinct()
-        if row[0]
-    } | set(names)
+    user_ids = (
+        {
+            row[0]
+            for row in db.session.query(LifecycleEvent.jellyfin_user_id).distinct()
+            if row[0]
+        }
+        | set(names)
+    ) - left_out_user_ids()
     return {
         "types": sorted(
             row[0] for row in db.session.query(LifecycleAction.action_type).distinct()
@@ -2577,6 +2648,7 @@ def free_space_rows(
     }
     favorites = favorited_by(media_rows)
     names = setting("jellyfin_user_names", {})
+    left_out = left_out_user_ids()
     global_values = setting("global_policy", {})
 
     class _Part:  # what policy.retained reads
@@ -2613,7 +2685,8 @@ def free_space_rows(
         theirs = [p for p in seen if p[1] == viewer] if viewer else seen
         if viewer and not theirs:
             continue
-        last = theirs[0] if theirs else None
+        shown = [p for p in theirs if p[1] not in left_out]
+        last = shown[0] if shown else None
         rows.append(
             {
                 "media": media,
@@ -2623,7 +2696,9 @@ def free_space_rows(
                 "added": media.added_at,
                 "last_played": _as_datetime(last[0]) if last else None,
                 "last_watcher": names.get(last[1], last[1]) if last else None,
-                "viewers": sorted({names.get(p[1], p[1]) for p in seen}),
+                "viewers": sorted(
+                    {names.get(p[1], p[1]) for p in seen if p[1] not in left_out}
+                ),
                 "plays": sum(p[2] for p in seen),
                 "candidate": candidates.get(media_id),
                 "favorites": favorites.get(media_id, []),
@@ -2664,7 +2739,12 @@ def active_viewers(days=90):
         .order_by(func.max(UserMediaState.last_played_at).desc())
         .all()
     )
-    return [(user_id, names.get(user_id, user_id)) for user_id, _last in rows]
+    left_out = left_out_user_ids()
+    return [
+        (user_id, names.get(user_id, user_id))
+        for user_id, _last in rows
+        if user_id not in left_out
+    ]
 
 
 FREE_SPACE_VIEW_KEY = "free_space_view"
@@ -2690,11 +2770,13 @@ def favorited_by(media_ids) -> dict:
     if not ids:
         return {}
     names = setting("jellyfin_user_names", {})
+    left_out = left_out_user_ids()
     found = {}
     for media_id, user_id in db.session.query(
         UserMediaState.media_identity_id, UserMediaState.jellyfin_user_id
     ).filter(
         UserMediaState.media_identity_id.in_(ids), UserMediaState.favorite.is_(True)
     ):
-        found.setdefault(media_id, []).append(names.get(user_id, user_id))
+        if user_id not in left_out:
+            found.setdefault(media_id, []).append(names.get(user_id, user_id))
     return {media_id: sorted(people) for media_id, people in found.items()}

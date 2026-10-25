@@ -25,7 +25,7 @@ def _norm(item_id) -> str:
 
 def refresh(now=None) -> int:
     """Worker cycle: remember the files people will watch next. Returns how many."""
-    from .services import _as_datetime, client, set_setting, setting
+    from .services import _as_datetime, client, counted_users, set_setting, setting
 
     now = now or utcnow()
     stored = setting(KEY) or {}
@@ -35,7 +35,7 @@ def refresh(now=None) -> int:
     jellyfin = client("jellyfin")
     wanted = {}  # Jellyfin item id: the users about to watch it
     try:
-        for user in jellyfin.users() or []:
+        for user in counted_users(jellyfin.users()):
             for item in jellyfin.next_up(user["Id"]) + jellyfin.resume(user["Id"]):
                 wanted.setdefault(_norm(item.get("Id")), set()).add(_norm(user["Id"]))
     except IntegrationError:

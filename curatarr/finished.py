@@ -154,7 +154,14 @@ def _playing(sessions) -> set[tuple[str, str]]:
 
 def sweep(now=None) -> int:
     """Worker cycle: returns how many were marked watched."""
-    from .services import _as_datetime, audit, client, set_setting, setting
+    from .services import (
+        _as_datetime,
+        audit,
+        client,
+        counted_users,
+        set_setting,
+        setting,
+    )
 
     if not enabled():
         return 0
@@ -165,7 +172,7 @@ def sweep(now=None) -> int:
         return 0
     jellyfin = client("jellyfin")
     try:
-        users = jellyfin.users() or []
+        users = counted_users(jellyfin.users())
         playing = _playing(jellyfin.sessions())
         stopped = [
             (user, item)
