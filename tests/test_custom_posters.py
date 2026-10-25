@@ -353,3 +353,34 @@ def test_a_recorded_poster_for_everyone_becomes_one_for_chosen_accounts(
         and custom_posters.active(media.id) is None
     )
     assert custom_posters._same_picture(jellyfin.current, original)  # the real original
+
+
+def test_the_gallery_shows_one_tile_per_picture(app, client, monkeypatch):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    _fake(monkeypatch, _picture("#223344"))
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex", "u3": "Kim"})
+    db.session.commit()
+    mine = _picture("#cc2222")
+    for user in ("u1", "u2", "u3"):
+        custom_posters.apply(media, mine, "01_film.jpg", user_id=user)
+    groups = custom_posters.gallery_groups()
+    assert len(groups) == 1 and len(groups[0]["posters"]) == 3
+    page = client.get("/library/posters").text
+    assert "1 custom poster" in page and "(3 across accounts)" in page
+    assert page.count("Remove for all") == 1
+    # Remove for all: every account's goes in one go.
+    client.post(
+        f"/titles/{media.id}/poster/restore",
+        data={"back": "gallery", "poster": [p.id for p in groups[0]["posters"]]},
+    )
+    assert custom_posters.gallery() == []
+
+
+def test_the_page_title_is_only_words(app, client):
+    import re
+
+    page = client.get("/library/posters").text
+    title = re.search(r"<title>(.*?)</title>", page, re.S).group(1)
+    assert "<" not in title and "Posters" in title

@@ -51,7 +51,7 @@ def custom_posters_page():
         )
     return render_template(
         "custom_posters.html",
-        posters=custom_posters.gallery(),
+        groups=custom_posters.gallery_groups(),
         folder=folder,
         import_accounts=custom_posters.settings().get("accounts") or [],
         unmatched=sorted(state["unmatched"].items()),
@@ -136,19 +136,30 @@ def title_poster_upload(media_id):
 @bp.post("/titles/<media_id>/poster/restore")
 def title_poster_restore(media_id):
     media = db.session.get(MediaIdentity, media_id)
-    chosen = request.form.get("poster")
-    poster = (
-        db.session.get(CustomPoster, chosen)
+    chosen = request.form.getlist("poster")
+    posters = (
+        [db.session.get(CustomPoster, p) for p in chosen]
         if chosen
-        else custom_posters.active(media_id)
+        else [custom_posters.active(media_id)]
     )
-    if not media or not poster or poster.media_identity_id != media.id:
+    if (
+        not media
+        or not posters
+        or any(
+            p is None or p.media_identity_id != media.id or not p.active
+            for p in posters
+        )
+    ):
         abort(404)
-    try:
-        flash(custom_posters.restore(poster), "success")
-    except (ValueError, IntegrationError) as exc:
-        db.session.rollback()
-        flash(f"Couldn't restore the poster: {exc}", "danger")
+    said = []
+    for poster in posters:
+        try:
+            said.append(custom_posters.restore(poster))
+        except (ValueError, IntegrationError) as exc:
+            db.session.rollback()
+            flash(f"Couldn't restore the poster: {exc}", "danger")
+    if said:
+        flash(" ".join(said), "success")
     return _back(media)
 
 

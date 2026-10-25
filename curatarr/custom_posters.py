@@ -653,3 +653,36 @@ def prompts(described, *, batch, photos, people, output) -> list[str]:
                 lines.append(f"    {entry['overview']}")
         texts.append("\n".join(lines))
     return texts
+
+
+def gallery_groups() -> list[dict]:
+    """The gallery, one tile per picture: a title's posters that are the same
+    picture (one per account, from one import) are shown together. Copies
+    are saved identically, so the file's size tells them apart cheaply."""
+    groups: dict[tuple, dict] = {}
+    for poster in gallery():
+        try:
+            size = Path(poster.image_path).stat().st_size
+        except OSError:
+            size = None
+        key = (poster.media_identity_id, size if size is not None else poster.id)
+        group = groups.setdefault(
+            key, {"media": poster.media, "image": poster, "posters": []}
+        )
+        group["posters"].append(poster)
+    for group in groups.values():
+        # Everyone's first, then accounts by name.
+        group["posters"].sort(
+            key=lambda p: (
+                p.jellyfin_user_id is not None,
+                account_name(p.jellyfin_user_id) if p.jellyfin_user_id else "",
+            )
+        )
+        group["applied_at"] = max(
+            (p.applied_at for p in group["posters"] if p.applied_at), default=None
+        )
+    return sorted(
+        groups.values(),
+        key=lambda g: g["applied_at"].isoformat() if g["applied_at"] else "",
+        reverse=True,
+    )
