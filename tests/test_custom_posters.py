@@ -153,6 +153,7 @@ def test_the_pages(app, client, monkeypatch):
     _fake(monkeypatch, _picture("#223344"))
     page = client.get(f"/titles/{media.id}").text
     assert "Use this poster" in page
+    assert 'data-preview="#poster-preview"' in page and "poster-preview.js" in page
     custom_posters.apply(media, _picture("#cc2222"), "Uploaded")
     assert "Restore original" in client.get(f"/titles/{media.id}").text
     gallery = client.get("/library/posters").text

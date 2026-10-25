@@ -29,14 +29,14 @@
 </div>{% endif %}
 {% if is_admin and media.jellyfin_id %}<div class="card p-3 mb-4" id="poster"><h2 class="h5">Poster</h2>
   <div class="d-flex flex-wrap gap-3 align-items-start">
-    <img class="poster poster-large" src="{{ url_for('main.custom_poster_image', poster_id=custom_poster.id) if custom_poster else url_for('main.poster', media_id=media.id) }}" alt="" loading="lazy">
+    <figure class="mb-0"><img class="poster poster-large" id="poster-preview" src="{{ url_for('main.custom_poster_image', poster_id=custom_poster.id) if custom_poster else url_for('main.poster', media_id=media.id) }}" alt="" loading="lazy"><figcaption class="small text-secondary mt-1" id="poster-caption">{{ 'Everyone sees this' if not title_posters|selectattr('jellyfin_user_id')|list else 'Everyone else sees this' }}</figcaption></figure>
     <div class="flex-grow-1">
       {% if not custom_poster %}<p class="mb-2 text-secondary">Jellyfin's own poster. Upload a picture to use instead, for everyone or for one account; the current one is kept to restore.</p>{% endif %}
       {% for p in title_posters %}<div class="d-flex flex-wrap align-items-center gap-2 mb-2">{% if p.jellyfin_user_id %}<img class="poster" src="{{ url_for('main.custom_poster_image', poster_id=p.id) }}" alt="" loading="lazy">{% endif %}
         <span>{% if p.jellyfin_user_id %}<strong>{{ poster_accounts|selectattr(0, 'equalto', p.jellyfin_user_id)|map(attribute=1)|first or 'One account' }}</strong> sees their own{% else %}<strong>Everyone</strong> sees a custom poster{% endif %}{% if p.source and p.source != 'Uploaded' %} from <code>{{ p.source }}</code>{% endif %}, since {{ p.applied_at|when('datetime') }}.</span>
         <form method="post" action="{{ url_for('main.title_poster_restore', media_id=media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="poster" value="{{ p.id }}"><button class="btn btn-sm btn-outline-light" data-tip="{{ 'Shows this account the usual poster again.' if p.jellyfin_user_id else ('Puts back the poster this title had before.' if p.original_path else 'Curatarr has no copy of the poster from before, so this takes the metadata provider\'s poster.') }}">{{ 'Remove' if p.jellyfin_user_id else 'Restore original' }}</button></form>
       </div>{% endfor %}
-      <form method="post" action="{{ url_for('main.title_poster_upload', media_id=media.id) }}" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 align-items-center mt-2"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input class="form-control form-control-sm w-auto" type="file" name="poster" accept="image/jpeg,image/png,image/webp" required aria-label="Poster picture">
+      <form method="post" action="{{ url_for('main.title_poster_upload', media_id=media.id) }}" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 align-items-center mt-2"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input class="form-control form-control-sm w-auto" type="file" name="poster" accept="image/jpeg,image/png,image/webp" required aria-label="Poster picture" data-preview="#poster-preview" data-preview-caption="#poster-caption">
         <select class="form-select form-select-sm w-auto" name="for" aria-label="Who sees it"><option value="">For everyone</option>{% for id, name in poster_accounts %}<option value="{{ id }}">Only for {{ name }}</option>{% endfor %}</select>
         <button class="btn btn-sm btn-primary">Use this poster</button></form>
       <p class="small text-secondary mt-2 mb-0">JPEG, PNG or WebP, portrait (2:3) works best. A poster for one account needs the <a href="https://github.com/Copas/Curatarr/tree/main/jellyfin-plugin">Curatarr plugin for Jellyfin</a>; other accounts keep the usual one. <a href="{{ url_for('main.custom_posters_page') }}">All custom posters</a></p>
@@ -93,4 +93,5 @@
 <h2 class="h5 mt-4">Effective policy</h2><div class="table-responsive"><table class="table"><thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead><tbody>{% for key, value in values.items() %}<tr><td>{{ key.replace('_', ' ')|title }}</td><td>{{ value }}</td><td>{{ sources[key] }}</td></tr>{% endfor %}</tbody></table></div>
 </div></details>
 {% endif %}
+<script src="{{ url_for('static', filename='poster-preview.js', v='1') }}"></script>
 {% endblock %}
