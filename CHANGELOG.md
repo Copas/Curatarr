@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc10 (2026-10-25)
+
+- **The AI prompts ask each title only for what it's missing.** With *Skip titles that have them all*, a title that has its poster but not its other pictures was asked for the whole set again, poster included. Now it's asked only for the pictures it lacks, and where its poster is in the import folder the prompt points the AI to it, to match the rest to its cast and style; the new files are named after it, so they sit beside it.
+- **Fixed: the AI prompts could include deleted titles.** Titles with no file on disk are left out.
+
 ## 0.2.0rc9 (2026-10-25)
 
 - **Every picture of a title, not just its poster.** Custom pictures can be a title's wide tile (the landscape picture in rows such as the Roku app's home rows and Continue Watching), background, logo or banner as well as its poster: uploaded on a title's page (now **Pictures**, choosing which), or imported with a word before the extension (`….thumb.jpg`, `….backdrop.jpg`, `….logo.png`, `….banner.jpg`). Each is for everyone or for chosen accounts, with the original kept to restore; a logo stays a see-through PNG. Library → Posters groups each title's pictures in one tile.
