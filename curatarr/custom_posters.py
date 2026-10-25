@@ -750,6 +750,13 @@ DEFAULT_STYLE = (
     "than the film itself, with bold, dramatic composition and lighting."
 )
 OVERVIEW_CHARS = 280
+# Left to "lettering in the film's style", logos came out as plain fonts.
+LETTERING = (
+    "- The title is in the title's own logo lettering, as on its official "
+    "poster and title card: the same typeface (or the closest match), weight, "
+    "letter shapes, spacing, colours and effects (chrome, cracks, glow, drips, "
+    "whatever it has). Look it up if you can. Never a plain or generic font."
+)
 # What each picture should be, for the prompts.
 KIND_SPECS = {
     "Primary": (
@@ -766,8 +773,9 @@ KIND_SPECS = {
         "are large and clear enough to recognise."
     ),
     "Logo": (
-        "Logo: only the title, as lettering in the film's style, on a transparent "
-        "background, PNG, at least 1000 pixels wide; nothing else in it."
+        "Logo: only the title, in the title's own lettering (below), on a "
+        "transparent background, PNG, at least 1000 pixels wide; nothing else "
+        "in it."
     ),
     "Banner": (
         "Banner: a wide strip, 1000 × 185 (about 5.4:1), JPEG, with the title on "
@@ -1034,8 +1042,9 @@ def prompts(described, *, batch, photos, people, output, style="") -> list[str]:
                 "- Portrait 2:3, at least 1024 × 1536, saved as JPEG.",
                 (
                     "- Its tone, setting and key imagery, with the title on it "
-                    "spelled exactly as given. Not a copy of the official poster."
+                    "spelled exactly as given."
                 ),
+                LETTERING,
             ]
         else:
             lines += [
@@ -1047,9 +1056,9 @@ def prompts(described, *, batch, photos, people, output, style="") -> list[str]:
                 *(f"- {KIND_SPECS[kind]}" for kind in kinds),
                 (
                     "- Its tone, setting and key imagery, with the title spelled "
-                    "exactly as given wherever it appears. Not copies of the "
-                    "official artwork."
+                    "exactly as given wherever it appears."
                 ),
+                LETTERING,
             ]
         lines += [
             (
