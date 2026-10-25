@@ -24,7 +24,7 @@ Only people Jellyfin already lets delete an item can do any of this.
 ## Requirements
 
 - Jellyfin 12.2
-- Curatarr 0.2.0 or later (the `/api/v1/jellyfin/delete` endpoint; posters for one account need Curatarr 0.2.0rc6 or later)
+- Curatarr 0.2.0 or later (the `/api/v1/jellyfin/delete` endpoint; posters for one account need Curatarr 0.2.0rc6 or later, and favourite ribbons' page version and Leave after I watch 0.2.0rc7 or later)
 
 ## Install
 

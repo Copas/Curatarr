@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc7 (2026-10-25): the first community requests (issues #1–#3) — free-space thresholds as sizes, Leave after watched at every level (episodes leave on their own through Sonarr), Never compress with a skip list and change warnings, a JSON API for flags, and Compression first; per-account favourite ribbons with faces, names on a title's page and looks to choose; hidden accounts; a plugin update banner. Release checks passed: 677 tests and lint, the migration round trip and `db check` on SQLite, a scratch native install started in demo mode outside the checkout. Plugin 0.6.0.0 released alongside.
 - Plugin 0.3.0.0 verified live: a browser asking to play a film with AC3 and an added AAC track was pointed at the AAC track and played it directly, instead of converting AC3.
 - Finished at the credits verified live: on its first pass, seven episodes a viewer had stopped in their end credits were marked watched and left Continue Watching; a film stopped twenty minutes from the end was left alone.
 - Misfiled episodes verified live on a real show whose release was numbered one slot off: the misnumbered release is now blocklisted before the vacated episode is searched for, so the search doesn't bring it straight back.
