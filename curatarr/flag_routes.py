@@ -17,9 +17,15 @@ from .models import MediaIdentity, MediaPart
 from .routes import PUBLIC_ENDPOINTS, TOKEN_PATH_PREFIXES, bp
 
 PUBLIC_ENDPOINTS.update(
-    {"main.api_title", "main.api_title_change", "main.api_protected"}
+    {
+        "main.api_title",
+        "main.api_title_change",
+        "main.api_protected",
+        "main.api_compression",
+        "main.api_compression_report",
+    }
 )
-TOKEN_PATH_PREFIXES.append("/api/v1/titles/")
+TOKEN_PATH_PREFIXES.extend(["/api/v1/titles/", "/api/v1/compression"])
 REVIEW_CHOICES = {"keep", "snooze_30", "snooze_90"}
 
 
@@ -181,3 +187,41 @@ def api_protected():
         abort(404)
     text = "".join(f"{path}\n" for path in flags.protected_paths())
     return Response(text, mimetype="text/plain")
+
+
+def _compression_view() -> dict:
+    from . import compression
+
+    current = compression.signal()
+    held = compression.holding()
+    return {
+        "enabled": compression.settings()["enabled"],
+        "pending": current["pending"] if current else 0,
+        "source": current["source"] if current else None,
+        "at": current["at"].isoformat() if current else None,
+        "holding": bool(held),
+    }
+
+
+@bp.get("/api/v1/compression")
+def api_compression():
+    """Compression first: what the transcoder last said, and whether
+    low-space cleanup is on hold."""
+    if not _may_read():
+        abort(401)
+    return jsonify(_compression_view())
+
+
+@bp.post("/api/v1/compression")
+def api_compression_report():
+    """{"pending": files still to compress (or true/false), "source": name}."""
+    from . import compression
+
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict) or "pending" not in body:
+        return jsonify({"error": 'Send {"pending": <files waiting>}.'}), 400
+    try:
+        compression.report(body["pending"], body.get("source"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(_compression_view())

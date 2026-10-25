@@ -132,6 +132,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Household choices](docs/FEATURES.md#what-the-households-choices-change) | Seerr requests stay until whoever asked has watched; favourites and rewatches go to the back of the line; what an import list added goes first. | **On** |
 | [Seasonal shelves](docs/FEATURES.md#what-the-households-choices-change) | Halloween films stay through October, Christmas ones through December; optionally they come back for their season. | **On** (return: Off) |
 | [Leave after watched](docs/FEATURES.md#leave-after-watched-and-never-compress) | One last watch, then it goes: Leaving Soon starts once it's been watched. Also settable from a remote through the API. | Per title |
+| [Compression first](docs/FEATURES.md#compression-first) | While Tdarr or another transcoder still has work queued, low space waits for it instead of marking titles Leaving Soon. | Off |
 | [Never compress](docs/FEATURES.md#leave-after-watched-and-never-compress) | Lists the files Tdarr or another transcoder must leave alone: ones you flag, and favourites if you like. | Per title, season or episode |
 | [Shrink instead of delete](docs/FEATURES.md#shrink-instead-of-delete) | Swaps a big copy of a film you keep for one half the size, only if one exists. | One click |
 | [Free up space](docs/FEATURES.md#tv-one-season-ahead) | Every film and show by what removing it would free, with who has watched it. | **On** |

@@ -15,6 +15,8 @@
 | `GET /api/v1/titles/by-jellyfin/<itemId>` | Sign-in, API key or `X-Curatarr-Token` | A film's, show's, season's or episode's state by its Jellyfin id: whether it's up for removal and until when, Never Purge, and its flags. See [Titles and flags](#titles-and-flags) |
 | `POST /api/v1/titles/by-jellyfin/<itemId>` | `X-Curatarr-Token` header | Make a review choice or set or clear a flag (JSON body, below) |
 | `GET /api/v1/protected-paths?kind=compress` | Sign-in, API key or `X-Curatarr-Token` | Never compress: the files an external transcoder must leave alone, one path per line, as Sonarr and Radarr report them |
+| `GET /api/v1/compression` | Sign-in, API key or `X-Curatarr-Token` | Compression first: what the transcoder last reported and whether low-space cleanup is on hold |
+| `POST /api/v1/compression` | `X-Curatarr-Token` header | A transcoder reports its queue: `{"pending": <files still to compress>, "source": "Tdarr"}` (`0` or `false` when it's done) |
 | `POST /api/v1/webhook/jellyfin` | `X-Curatarr-Token` header | Jellyfin Webhook plugin events |
 | `POST /api/v1/jellyfin/delete` | `X-Curatarr-Token` header | Used by the Curatarr plugin for Jellyfin before Jellyfin deletes an item. Body `{"itemId", "userName"}`. A film or show Curatarr manages is marked Leaving Soon: `{"handled": true, "result": "leaving_soon" or "already"}`. One it must keep (Never Purge, no file in Radarr) gives `{"handled": true, "refused": "why"}`, and the delete should fail. Anything else gives `{"handled": false}`, and Jellyfin deletes it as usual. `{"check": true}` answers `{"ok": true}` |
 
