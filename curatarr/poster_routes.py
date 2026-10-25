@@ -132,26 +132,19 @@ def custom_posters_ribbon_preview():
     """The ribbon as it would look, on a plain stand-in poster."""
     from PIL import Image
 
-    from .artwork import favourite_ribbon
-
     options = custom_posters.ribbon_settings()
     blank = BytesIO()
-    Image.new("RGB", (400, 600), "#2b3a4a").save(blank, format="JPEG")
+    Image.new("RGB", (500, 750), "#2b3a4a").save(blank, format="JPEG")
     people = _accounts()[:2] or [("sam", "Sam")]
     household = request.args.get("household") == "1"
-    picture = favourite_ribbon(
+    picture = custom_posters.draw_ribbon(
         blank.getvalue(),
-        custom_posters.ribbon_text(
-            [name for _id, name in people], options["label"], household
-        ),
-        options["position"],
-        avatars=(
-            [(custom_posters.avatar_picture(i), name) for i, name in people]
-            if options["avatars"]
-            else ()
-        ),
+        [i for i, _name in people],
+        [name for _id, name in people],
+        options,
         new=bool(options["new_days"]) and not household,
         household=household,
+        large=request.args.get("size") == "large",
     )
     return send_file(BytesIO(picture), mimetype="image/jpeg", max_age=0)
 
@@ -282,7 +275,9 @@ def jellyfin_poster_image(poster_id):
     if not _plugin_allowed():
         abort(403)
     try:
-        picture = custom_posters.plugin_picture(poster_id)
+        picture = custom_posters.plugin_picture(
+            poster_id, large=request.args.get("size") == "large"
+        )
     except (IntegrationError, ValueError, OSError):
         abort(503)  # Jellyfin's poster couldn't be read: the plugin tries again
     if picture is None:

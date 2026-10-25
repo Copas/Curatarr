@@ -10,7 +10,9 @@ namespace Jellyfin.Plugin.Curatarr.Posters;
 /// <param name="User">The account's Jellyfin id, without dashes.</param>
 /// <param name="Id">Curatarr's id for the poster (its picture's address).</param>
 /// <param name="Tag">The image tag that stands for this poster.</param>
-public sealed record AccountPoster(string Item, string User, string Id, string Tag);
+/// <param name="Large">Whether there's a second picture for where it's shown big
+/// (a favourite ribbon listing names, on a title's own page).</param>
+public sealed record AccountPoster(string Item, string User, string Id, string Tag, bool Large = false);
 
 /// <summary>
 /// The posters Curatarr has for single accounts, looked up by account and title

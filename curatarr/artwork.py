@@ -107,6 +107,13 @@ FAVOURITE_GOLD = "#E8B923"
 HOUSEHOLD_RED = "#8E1424"
 NEW_RED = "#D7263D"
 INK = "#1A1405"
+# A favourite ribbon's colours: band, writing.
+RIBBON_COLOURS = {
+    "gold": (FAVOURITE_GOLD, INK),
+    "silver": ("#C9CED6", "#15181D"),
+    "teal": ("#127C7A", "#FFFFFF"),
+    "purple": ("#5B2A86", "#FFFFFF"),
+}
 # Initials' circles, picked by name so a person keeps their colour.
 AVATAR_COLOURS = ("#2E86AB", "#7B2CBF", "#2A9D8F", "#E76F51", "#3D5A80", "#BC4749")
 
@@ -166,93 +173,172 @@ def favourite_ribbon(
     avatars=(),
     new: bool = False,
     household: bool = False,
+    names=(),
+    large: bool = False,
+    colour: str = "gold",
 ) -> bytes:
-    """A gold band saying whose favourite this is ("★ Sam and Alex"), with
-    each person's picture or initials (``avatars``: (picture or None, name)),
-    a red NEW for a recent favourite, and a red band for a household
-    favourite. Along the bottom by default; at the top right it mirrors
-    Leaving Soon's tag (top left), so both fit. Wide pictures (an episode's
+    """A gold band marking someone's favourite, or a red one for a household
+    favourite, with a red NEW for a recent one.
+
+    On a poster as it shows in a list: a star and the faces of whoever
+    favourited it, stacked (``avatars``: (picture or None, name)), or
+    ``text`` when there are no faces. ``large`` (the poster on a title's own
+    page, where there's room): a star and each full name, one under the
+    other. Along the bottom by default; at the top right it mirrors Leaving
+    Soon's tag (top left), so both fit. Wide pictures (an episode's
     thumbnail) get a deeper band."""
     image = Image.open(BytesIO(source)).convert("RGB")
     image.thumbnail((1000, 1500))
+    if large and names:
+        _ribbon_list(image, list(names), position, new, household, colour)
+    else:
+        _ribbon_band(image, text, position, list(avatars), new, household, colour)
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=88)
+    return output.getvalue()
+
+
+def _ribbon_colours(household, colour="gold"):
+    if household:
+        return HOUSEHOLD_RED, FAVOURITE_GOLD
+    return RIBBON_COLOURS.get(colour, RIBBON_COLOURS["gold"])
+
+
+def _pill(drawing, x, middle, size):
+    """A red NEW at x, centred on middle; returns its width."""
+    font, box = _fit(drawing, "NEW", round(size * 0.42), size * 2)
+    width = box[2] - box[0] + 2 * round(size * 0.22)
+    height = box[3] - box[1] + 2 * round(size * 0.14)
+    drawing.rounded_rectangle(
+        (x, middle - height / 2, x + width, middle + height / 2),
+        radius=round(height / 2),
+        fill=NEW_RED,
+    )
+    drawing.text(
+        (x + round(size * 0.22) - box[0], middle - (box[3] - box[1]) / 2 - box[1]),
+        "NEW",
+        fill="#FFFFFF",
+        font=font,
+    )
+    return width
+
+
+def _pill_width(drawing, size):
+    _font, box = _fit(drawing, "NEW", round(size * 0.42), size * 2)
+    return box[2] - box[0] + 2 * round(size * 0.22)
+
+
+def _ribbon_band(image, text, position, faces, new, household, colour):
+    """One line: the star (or heart) and the faces stacked, or the text."""
     width, height = image.size
     drawing = ImageDraw.Draw(image)
-    fill, ink = (HOUSEHOLD_RED, FAVOURITE_GOLD) if household else (FAVOURITE_GOLD, INK)
+    fill, ink = _ribbon_colours(household, colour)
     wide = width > height
     if position == "bottom":
         band = max(24, round(height * (0.15 if wide else 0.085)))
-        top, left, right = height - band, 0, width
+        top = height - band
         drawing.rectangle((0, top, width, height), fill=fill)
         drawing.rectangle(
             (0, top - max(2, round(height * 0.004)), width, top), fill="#111111"
         )
     else:
         band = max(24, round(width * (0.06 if wide else 0.1)))
-        top, right = round(height * 0.05), width
-        left = right  # set once the contents' width is known
+        top = round(height * 0.05)
     pad = round(band * 0.18)
     face = round(band * 0.8)
-    faces = list(avatars)[:4]
-    faces_width = (face + (len(faces) - 1) * round(face * 0.7)) if faces else 0
-    pill_font = pill_box = None
-    pill_width = 0
-    if new:
-        pill_font, pill_box = _fit(drawing, "NEW", round(band * 0.42), band * 2)
-        pill_width = pill_box[2] - pill_box[0] + 2 * round(band * 0.22)
+    step = round(face * 0.84)  # each face tucked a little under the next
+    faces = faces[:5]
+    faces_width = (face + (len(faces) - 1) * step) if faces else 0
+    pill_width = _pill_width(drawing, band) if new else 0
+    if faces:
+        text = "♥" if household else "★"
     room = (
-        (width * (0.92 if position == "bottom" else 0.44))
+        width * (0.92 if position == "bottom" else 0.44)
         - faces_width
         - pill_width
         - 4 * pad
     )
     font, box = _fit(
-        drawing, text, round(band * (0.5 if faces else 0.6)), max(room, band)
+        drawing, text, round(band * (0.62 if faces else 0.6)), max(room, band)
     )
     text_width = box[2] - box[0]
     content = (
-        faces_width
-        + (pad if faces else 0)
-        + text_width
+        text_width
+        + (pad + faces_width if faces else 0)
         + (pad + pill_width if new else 0)
     )
     if position == "bottom":
         x = (width - content) / 2
     else:
-        left = right - content - 2 * pad
-        drawing.rectangle((left, top, right, top + band), fill=fill)
+        left = width - content - 2 * pad
+        drawing.rectangle((left, top, width, top + band), fill=fill)
         x = left + pad
     middle = top + band / 2
-    for index, (picture, name) in enumerate(faces):
-        disc = _avatar(picture, name, face)
-        image.paste(
-            disc, (round(x + index * face * 0.7), round(middle - face / 2)), disc
-        )
-    if faces:
-        x += faces_width + pad
-    drawing = ImageDraw.Draw(image)
     drawing.text(
         (x - box[0], middle - (box[3] - box[1]) / 2 - box[1]), text, fill=ink, font=font
     )
+    x += text_width + pad
+    for index, (picture, name) in enumerate(faces):
+        disc = _avatar(picture, name, face)
+        image.paste(disc, (round(x + index * step), round(middle - face / 2)), disc)
+    if faces:
+        x += faces_width + pad
     if new:
-        x += text_width + pad
-        pill_height = pill_box[3] - pill_box[1] + 2 * round(band * 0.14)
-        drawing.rounded_rectangle(
-            (x, middle - pill_height / 2, x + pill_width, middle + pill_height / 2),
-            radius=round(pill_height / 2),
-            fill=NEW_RED,
+        _pill(ImageDraw.Draw(image), x, middle, band)
+
+
+RIBBON_LINES = 5  # names listed on a large ribbon; the rest are "+ N more"
+
+
+def _ribbon_list(image, names, position, new, household, colour):
+    """A star and each full name, one under the other (a household favourite
+    says so first)."""
+    width, height = image.size
+    drawing = ImageDraw.Draw(image)
+    fill, ink = _ribbon_colours(household, colour)
+    wide = width > height
+    lines = [f"★ {name}" for name in names[:RIBBON_LINES]]
+    if len(names) > RIBBON_LINES:
+        lines[-1] = f"+ {len(names) - RIBBON_LINES + 1} more"
+    if household:
+        lines.insert(0, "♥ Household favourite")
+    size = max(12, round(height * (0.06 if wide else 0.042)))
+    gap = round(size * 0.35)
+    pad = round(size * 0.6)
+    pill_width = _pill_width(drawing, size * 1.4) if new else 0
+    room = width * (0.9 if position == "bottom" else 0.75) - 2 * pad
+    fitted = []
+    for index, line in enumerate(lines):
+        extra = pill_width + pad if new and index == 0 else 0
+        fitted.append(_fit(drawing, line, size, room - extra))
+    size = min(font.size for font, _box in fitted)  # every line the same size
+    fitted = [_fit(drawing, line, size, width) for line in lines]
+    line_height = max(box[3] - box[1] for _f, box in fitted)
+    block_height = len(lines) * line_height + (len(lines) - 1) * gap
+    block_width = max(
+        box[2] - box[0] + (pill_width + pad if new and index == 0 else 0)
+        for index, (_f, box) in enumerate(fitted)
+    )
+    band = block_height + 2 * pad
+    if position == "bottom":
+        top = height - band
+        drawing.rectangle((0, top, width, height), fill=fill)
+        drawing.rectangle(
+            (0, top - max(2, round(height * 0.004)), width, top), fill="#111111"
         )
-        drawing.text(
-            (
-                x + round(band * 0.22) - pill_box[0],
-                middle - (pill_box[3] - pill_box[1]) / 2 - pill_box[1],
-            ),
-            "NEW",
-            fill="#FFFFFF",
-            font=pill_font,
-        )
-    output = BytesIO()
-    image.save(output, format="JPEG", quality=88)
-    return output.getvalue()
+        x = (width - block_width) / 2
+    else:
+        top = round(height * 0.05)
+        left = width - block_width - 2 * pad
+        drawing.rectangle((left, top, width, top + band), fill=fill)
+        x = left + pad
+    y = top + pad
+    for index, (line, (font, box)) in enumerate(zip(lines, fitted, strict=True)):
+        middle = y + line_height / 2
+        drawing.text((x, middle), line, fill=ink, font=font, anchor="lm")
+        if new and index == 0:
+            _pill(drawing, x + box[2] + pad, middle, size * 1.4)
+        y += line_height + gap
 
 
 def _recorded(label: str) -> str:

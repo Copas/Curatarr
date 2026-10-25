@@ -43,6 +43,13 @@ public sealed class PosterSync : BackgroundService
     /// <returns>Its path.</returns>
     internal static string FileFor(string tag) => Path.Combine(Folder, tag + ".jpg");
 
+    /// <summary>
+    /// The file a poster's big version is kept in.
+    /// </summary>
+    /// <param name="tag">The poster's tag.</param>
+    /// <returns>Its path.</returns>
+    internal static string LargeFileFor(string tag) => Path.Combine(Folder, tag + ".large.jpg");
+
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -73,19 +80,15 @@ public sealed class PosterSync : BackgroundService
             Directory.CreateDirectory(Folder);
             foreach (var poster in listing?.Posters ?? [])
             {
-                var file = FileFor(poster.Tag);
-                if (!File.Exists(file))
+                if (!await DownloadAsync(client, config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg", FileFor(poster.Tag), cancellationToken).ConfigureAwait(false))
                 {
-                    using var request = Request(config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg");
-                    using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    var partial = file + ".partial";
-                    await File.WriteAllBytesAsync(partial, await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
-                    File.Move(partial, file, true);
+                if (poster.Large)
+                {
+                    // Without it, the usual one shows big too.
+                    await DownloadAsync(client, config, $"/api/v1/jellyfin/posters/{poster.Id}.jpg?size=large", LargeFileFor(poster.Tag), cancellationToken).ConfigureAwait(false);
                 }
 
                 ready.Add(poster);
@@ -101,9 +104,29 @@ public sealed class PosterSync : BackgroundService
         }
     }
 
+    private static async Task<bool> DownloadAsync(HttpClient client, PluginConfiguration config, string path, string file, CancellationToken cancellationToken)
+    {
+        if (File.Exists(file))
+        {
+            return true;
+        }
+
+        using var request = Request(config, path);
+        using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return false;
+        }
+
+        var partial = file + ".partial";
+        await File.WriteAllBytesAsync(partial, await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+        File.Move(partial, file, true);
+        return true;
+    }
+
     private static void Tidy(List<AccountPoster> ready)
     {
-        var keep = ready.Select(p => FileFor(p.Tag)).ToHashSet(StringComparer.Ordinal);
+        var keep = ready.SelectMany(p => new[] { FileFor(p.Tag), LargeFileFor(p.Tag) }).ToHashSet(StringComparer.Ordinal);
         foreach (var file in Directory.EnumerateFiles(Folder, "*.jpg"))
         {
             if (!keep.Contains(file))

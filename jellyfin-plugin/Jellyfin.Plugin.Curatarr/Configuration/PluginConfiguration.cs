@@ -47,4 +47,15 @@ public class PluginConfiguration : BasePluginConfiguration
     /// has for it alone (custom posters for one account) instead of the usual ones.
     /// </summary>
     public bool CustomPosters { get; set; } = true;
+
+    /// <summary>
+    /// The default for <see cref="LargePosterWidth"/>.
+    /// </summary>
+    public const int DefaultLargePosterWidth = 300;
+
+    /// <summary>
+    /// Gets or sets the width, in pixels, from which an app is showing a poster big
+    /// (a title's own page), so it gets a favourite ribbon's version with names.
+    /// </summary>
+    public int LargePosterWidth { get; set; } = DefaultLargePosterWidth;
 }

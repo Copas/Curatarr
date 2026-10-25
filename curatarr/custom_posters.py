@@ -735,15 +735,16 @@ RIBBON_KEY = "favourite_ribbons"
 RIBBON_DEFAULTS = {
     "enabled": False,
     "position": "bottom",  # or "top_right"
-    "label": "names",  # or "star"
+    "list_style": "faces",  # posters in lists: ★ and faces, "names" or "star"
+    "page_style": "names",  # a title's own page: names listed, or "list" (the same)
+    "colour": "gold",  # or silver, teal, purple
     "own": False,  # whether an account sees its own favourites marked
     "sees": {},  # account → the accounts whose favourites it sees
-    "avatars": True,  # each person's picture, or their initials
     "new_days": 7,  # a favourite this recent says NEW (0: never)
     "household_at": 3,  # this many people's favourite: a household one (0: off)
     "episodes": True,  # favourite episodes' thumbnails too
 }
-RIBBON_STYLE = "fav-2"  # part of each tag: a new look fetches every ribbon again
+RIBBON_STYLE = "fav-3"  # part of each tag: a new look fetches every ribbon again
 _jellyfin_tags: dict[str, str] = {}  # last known image tags, while Jellyfin is away
 _avatar_tags: dict[str, str] = {}  # Jellyfin profile pictures' tags
 
@@ -751,7 +752,14 @@ _avatar_tags: dict[str, str] = {}  # Jellyfin profile pictures' tags
 def ribbon_settings() -> dict:
     from .services import setting
 
-    return RIBBON_DEFAULTS | (setting(RIBBON_KEY) or {})
+    saved = dict(setting(RIBBON_KEY) or {})
+    if "label" in saved and "list_style" not in saved:  # settings from 0.2.0rc6
+        star = saved["label"] == "star"
+        saved["list_style"] = (
+            "star" if star else "faces" if saved.get("avatars", True) else "names"
+        )
+        saved["page_style"] = "list" if star else "names"
+    return RIBBON_DEFAULTS | saved
 
 
 def _number(value, default, low, high) -> int:
@@ -759,6 +767,10 @@ def _number(value, default, low, high) -> int:
         return max(low, min(int(value), high))
     except (TypeError, ValueError):
         return default
+
+
+def _choice(value, allowed):
+    return value if value in allowed else allowed[0]
 
 
 def save_ribbon_settings(form, accounts) -> dict:
@@ -769,7 +781,9 @@ def save_ribbon_settings(form, accounts) -> dict:
     options = {
         "enabled": ticked("enabled"),
         "position": "top_right" if form.get("position") == "top_right" else "bottom",
-        "label": "star" if form.get("label") == "star" else "names",
+        "list_style": _choice(form.get("list_style"), ("faces", "names", "star")),
+        "page_style": _choice(form.get("page_style"), ("names", "list")),
+        "colour": _choice(form.get("colour"), ("gold", "silver", "teal", "purple")),
         "own": ticked("own"),
         # "Everyone sees Sam's favourites", or account by account.
         "sees": {
@@ -781,7 +795,6 @@ def save_ribbon_settings(form, accounts) -> dict:
             ]
             for viewer in known
         },
-        "avatars": ticked("avatars"),
         "new_days": _number(form.get("new_days"), 7, 0, 60) if ticked("new") else 0,
         "household_at": (
             _number(form.get("household_at"), 3, 2, 20) if ticked("household") else 0
@@ -793,12 +806,40 @@ def save_ribbon_settings(form, accounts) -> dict:
     return options
 
 
-def ribbon_text(names: list[str], label: str, household: bool = False) -> str:
+def ribbon_text(names: list[str], style: str, household: bool = False) -> str:
     if household:
         return "♥ Household favourite"
-    if label == "star" or not names:
+    if style == "star" or not names:
         return "★"
     return f"★ {names[0]}" + (f" + {len(names) - 1}" if len(names) > 1 else "")
+
+
+def has_large(options, household: bool = False, kind: str = "t") -> bool:
+    """Whether a title's ribbon looks different on its own page (names
+    listed). Episodes' thumbnails show in one size only."""
+    return kind == "t" and (options["page_style"] == "names" or household)
+
+
+def draw_ribbon(base, users, names, options, *, new, household, large=False):
+    """A poster or thumbnail with the ribbon these options give it."""
+    from .artwork import favourite_ribbon
+
+    faces = (
+        [(avatar_picture(u), name) for u, name in zip(users, names, strict=True)]
+        if options["list_style"] == "faces"
+        else ()
+    )
+    return favourite_ribbon(
+        base,
+        ribbon_text(names, options["list_style"], household),
+        options["position"],
+        avatars=faces,
+        new=new,
+        household=household,
+        names=names if large and has_large(options, household) else (),
+        large=large,
+        colour=options["colour"],
+    )
 
 
 def _since(value):
@@ -971,7 +1012,7 @@ def plugin_list() -> list[dict]:
         if k == "t" and (v, i) not in own and i in medias
     } | {parts[i].jellyfin_id for k, _v, i in marked if k == "e" and i in parts}
     tags = _image_tags(needs_tag) if needs_tag else _jellyfin_tags
-    if marked and options["avatars"]:
+    if marked and options["list_style"] == "faces":
         _refresh_avatar_tags()
     leaving: dict[str, str | None] = {}
     entries = []
@@ -1017,9 +1058,11 @@ def plugin_list() -> list[dict]:
                 banner,
                 ribbon,
                 options["position"],
-                options["label"],
+                options["list_style"],
+                options["page_style"],
+                options["colour"],
                 [_avatar_version(u) for u in ribbon["users"]]
-                if options["avatars"]
+                if options["list_style"] == "faces"
                 else None,
                 RIBBON_STYLE,
             ],
@@ -1031,14 +1074,17 @@ def plugin_list() -> list[dict]:
                 "user": bare(viewer),
                 "id": f"{'v' if kind == 't' else 'e'}.{viewer}.{item_id}",
                 "tag": hashlib.sha1(spec.encode()).hexdigest()[:32],
+                # A second picture, listing the names, for where it's shown big.
+                "large": has_large(options, ribbon["household"], kind),
             }
         )
     return entries
 
 
-def plugin_picture(entry_id: str) -> bytes | None:
-    """The picture for one of plugin_list's entries, or None if it's gone."""
-    from .artwork import _jpeg, favourite_ribbon
+def plugin_picture(entry_id: str, large: bool = False) -> bytes | None:
+    """The picture for one of plugin_list's entries, or None if it's gone.
+    ``large``: a ribbon as shown big (on a title's own page), with names."""
+    from .artwork import _jpeg
     from .services import client
 
     if not entry_id.startswith(("v.", "e.")):
@@ -1065,16 +1111,12 @@ def plugin_picture(entry_id: str) -> bytes | None:
         if part is None or not part.jellyfin_id:
             return None
         base = _jpeg(client("jellyfin").image(part.jellyfin_id))
-    faces = (
-        [(avatar_picture(u), account_name(u)) for u in ribbon["users"]]
-        if options["avatars"]
-        else ()
-    )
-    return favourite_ribbon(
+    return draw_ribbon(
         base,
-        ribbon_text(ribbon["names"], options["label"], ribbon["household"]),
-        options["position"],
-        avatars=faces,
+        ribbon["users"],
+        ribbon["names"],
+        options,
         new=ribbon["new"],
         household=ribbon["household"],
+        large=large and kind == "v",
     )
