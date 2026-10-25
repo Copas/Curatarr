@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Free-space thresholds can be a size** (Retention rules → *Low/Critical free-space threshold as a size*), such as "keep 200 GB free", used instead of the percentage where set. On a 10 TB array one whole percent is about 100 GB, too coarse a step. Cleanup, its reasons, the forecast on Overview and the cleanup preview all use it. ([#2](https://github.com/Copas/Curatarr/issues/2))
 - **Hidden Jellyfin accounts can be kept out of Curatarr** (Settings → Integrations → Hidden Jellyfin accounts). Accounts hidden from Jellyfin's sign-in screen can be shown like any other (the default), left out of Curatarr's pages (never listed or named, while their watching still keeps titles), or ignored completely (not read at all, so a title only they watch can become Leaving Soon).
 - **A banner says when the Jellyfin plugin has an update**, on every page for admins: **Update** has Jellyfin download it, and then **Restart when nobody's watching** restarts Jellyfin to load it once nothing has played for 10 minutes (or **Restart now**). It says when Curatarr's features need the new version.
 - **Fixed: a plugin update waiting for a restart switched off what needs the plugin.** Jellyfin lists the version still loaded as "Superseded" until it restarts, which Curatarr took for the plugin being disabled, so AAC tracks for browsers stopped being added and Settings said the plugin was off.

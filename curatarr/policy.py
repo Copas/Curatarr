@@ -30,6 +30,9 @@ DEFAULTS: dict[str, Any] = {
     "disk_path": None,
     "low_free_percent": 15,
     "critical_free_percent": 8,
+    # Absolute thresholds in bytes: where set, used instead of the percentage.
+    "low_free_bytes": None,
+    "critical_free_bytes": None,
     "low_pressure_review_mode": "automatic",
     "critical_pressure_review_mode": "automatic",
     "never_purge": False,
@@ -73,6 +76,13 @@ BOOL_FIELDS = {
     "dry_run",
 }
 
+SIZE_FIELDS = {
+    "high_water_bytes",
+    "low_water_bytes",
+    "low_free_bytes",
+    "critical_free_bytes",
+}
+
 WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:[/\\]")
 
 
@@ -92,9 +102,7 @@ def validate_policy(values: dict[str, Any], *, complete: bool = True) -> dict[st
         elif key in BOOL_FIELDS:
             if type(value) is not bool:
                 raise ValueError(f"Invalid {key}")
-        elif key in {"high_water_bytes", "low_water_bytes"} and (
-            type(value) is not int or value < 0
-        ):
+        elif key in SIZE_FIELDS and (type(value) is not int or value < 0):
             raise ValueError(f"Invalid {key}")
         elif key == "disk_path" and (
             not isinstance(value, str)
@@ -108,6 +116,17 @@ def validate_policy(values: dict[str, Any], *, complete: bool = True) -> dict[st
         if high is None or low is None or high <= low:
             raise ValueError("High-water bytes must exceed low-water bytes")
     if complete and combined["critical_free_percent"] >= combined["low_free_percent"]:
+        raise ValueError("Critical free-space threshold must be below low threshold")
+    low_bytes, critical_bytes = (
+        combined["low_free_bytes"],
+        combined["critical_free_bytes"],
+    )
+    if (
+        complete
+        and low_bytes is not None
+        and critical_bytes is not None
+        and critical_bytes >= low_bytes
+    ):
         raise ValueError("Critical free-space threshold must be below low threshold")
     if complete and combined["free_space_enabled"] and not combined["disk_path"]:
         raise ValueError("Disk path is required when free-space enforcement is enabled")
@@ -327,7 +346,6 @@ def select_to_low_water(items: list[CandidateInput], current: int, high: int, lo
     return selected, max(0, required - reclaimed)
 
 
-SIZE_FIELDS = {"high_water_bytes", "low_water_bytes"}
 INTEGER_FIELDS = set(BOUNDS)
 # Binary units, as Sonarr, Radarr, Jellyfin, and df label them (1 TB = 1024 GB).
 SIZE_UNITS = {"MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
@@ -376,3 +394,29 @@ def merge_policy_form(existing: dict, form, keys) -> dict:
         else:
             merged[key] = raw
     return validate_policy(merged, complete=False)
+
+
+def free_targets(policy, total) -> tuple[float, float]:
+    """The free space, in bytes, below which a disk is low and critical: a
+    size where one is set, else the percentage of the disk."""
+    low, critical = policy.get("low_free_bytes"), policy.get("critical_free_bytes")
+    return (
+        low if low is not None else total * policy["low_free_percent"] / 100,
+        critical
+        if critical is not None
+        else total * policy["critical_free_percent"] / 100,
+    )
+
+
+def free_target_label(policy) -> str:
+    """The low threshold in words: "200 GB free" or "15% free"."""
+    low = policy.get("low_free_bytes")
+    if low is None:
+        return f"{policy['low_free_percent']}% free"
+    unit = best_size_unit(low)
+    amount = low / SIZE_UNITS[unit]
+    return (
+        f"{amount:g} {unit} free"
+        if amount == round(amount, 1)
+        else (f"{amount:.1f} {unit} free")
+    )

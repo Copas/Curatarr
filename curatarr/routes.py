@@ -1688,6 +1688,11 @@ POLICY_FIELDS = {
         "number",
     ),
     "critical_free_percent": ("Critical free-space threshold %", "number"),
+    "low_free_bytes": ("Low free-space threshold as a size (instead of %)", "size"),
+    "critical_free_bytes": (
+        "Critical free-space threshold as a size (instead of %)",
+        "size",
+    ),
     "low_pressure_review_mode": ("Below low free space", MODES),
     "critical_pressure_review_mode": ("Below critical free space (no notice)", MODES),
     "dry_run": ("Dry run", ["true", "false"]),
@@ -1772,6 +1777,7 @@ def _policy_page(section, title, keys, library):
 def cleanup_preview():
     from .lifecycle import preview_cleanup
     from .policy import effective_policy as resolve
+    from .policy import free_target_label
 
     defaults, _ = resolve("series", setting("global_policy", {}), {})
     disk_path = request.args.get("path", defaults["disk_path"] or "").strip()
@@ -1790,8 +1796,14 @@ def cleanup_preview():
         "cleanup_preview.html",
         free=free if free is not None else max(defaults["low_free_percent"] - 1, 0),
         disk_path=disk_path,
-        low=defaults["low_free_percent"],
-        critical=defaults["critical_free_percent"],
+        low=free_target_label(defaults).removesuffix(" free"),
+        critical=free_target_label(
+            defaults
+            | {
+                "low_free_percent": defaults["critical_free_percent"],
+                "low_free_bytes": defaults["critical_free_bytes"],
+            }
+        ).removesuffix(" free"),
         result=result,
         error=error,
     )
