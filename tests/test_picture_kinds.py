@@ -173,6 +173,7 @@ def test_the_plugin_lists_each_accounts_pictures_by_type(app, client, monkeypatc
     custom_posters.apply(media, _logo(), "01_film.logo.png", user_id="u2", kind="Logo")
     gallery = client.get("/library/posters").text
     assert "Background · Sam" in gallery and "Logo · Alex" in gallery
+    assert gallery.count("data-full=") == 3 and "lightbox.js" in gallery
     page = client.get(f"/titles/{media.id}").text
     assert "sees their own background" in page and "sees their own logo" in page
     # Version 1 (plugins before 0.8.0.0): posters only.
