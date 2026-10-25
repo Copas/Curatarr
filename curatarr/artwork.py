@@ -1,6 +1,7 @@
 """Reversible Leaving Soon posters, stored only under application data."""
 
 import hashlib
+import re
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
@@ -103,49 +104,151 @@ def badge_poster(
 
 
 FAVOURITE_GOLD = "#E8B923"
+HOUSEHOLD_RED = "#8E1424"
+NEW_RED = "#D7263D"
+INK = "#1A1405"
+# Initials' circles, picked by name so a person keeps their colour.
+AVATAR_COLOURS = ("#2E86AB", "#7B2CBF", "#2A9D8F", "#E76F51", "#3D5A80", "#BC4749")
 
 
-def favourite_ribbon(source: bytes, text: str, position: str = "bottom") -> bytes:
-    """A gold tag saying whose favourite this is ("★ Sam and Alex"). At the
-    top right it mirrors Leaving Soon's tag (top left), so both fit; along
-    the bottom it's a band across the poster's foot."""
+def initials(name: str) -> str:
+    """ "Alex and Sam" → "AS", "Pat" → "P"."""
+    words = [w for w in re.split(r"[\s&+,]+", name) if w and w.lower() != "and"]
+    return "".join(w[0] for w in words[:2]).upper() or "?"
+
+
+def avatar_colour(name: str) -> str:
+    return AVATAR_COLOURS[sum(map(ord, name)) % len(AVATAR_COLOURS)]
+
+
+def _avatar(picture: bytes | None, name: str, size: int) -> Image.Image:
+    """A round picture of a person, or their initials in a coloured circle."""
+    scale = 4  # drawn large, then shrunk, for smooth edges
+    big = size * scale
+    if picture:
+        face = Image.open(BytesIO(picture)).convert("RGB")
+        side = min(face.size)
+        left, top = (face.width - side) // 2, (face.height - side) // 3
+        face = face.crop((left, top, left + side, top + side)).resize((big, big))
+    else:
+        face = Image.new("RGB", (big, big), avatar_colour(name))
+        drawing = ImageDraw.Draw(face)
+        letters = initials(name)
+        font, box = _fit(drawing, letters, round(big * 0.46), big * 0.78)
+        drawing.text(
+            (
+                (big - (box[2] - box[0])) / 2 - box[0],
+                (big - (box[3] - box[1])) / 2 - box[1],
+            ),
+            letters,
+            fill="#FFFFFF",
+            font=font,
+        )
+    mask = Image.new("L", (big, big), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, big - 1, big - 1), fill=255)
+    ring = Image.new("RGB", (big, big), "#111111")
+    inner = round(big * 0.06)
+    ring.paste(
+        face.resize((big - 2 * inner, big - 2 * inner)),
+        (inner, inner),
+        mask.resize((big - 2 * inner, big - 2 * inner)),
+    )
+    round_face = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    round_face.paste(ring, (0, 0), mask)
+    return round_face.resize((size, size), Image.LANCZOS)
+
+
+def favourite_ribbon(
+    source: bytes,
+    text: str,
+    position: str = "bottom",
+    *,
+    avatars=(),
+    new: bool = False,
+    household: bool = False,
+) -> bytes:
+    """A gold band saying whose favourite this is ("★ Sam and Alex"), with
+    each person's picture or initials (``avatars``: (picture or None, name)),
+    a red NEW for a recent favourite, and a red band for a household
+    favourite. Along the bottom by default; at the top right it mirrors
+    Leaving Soon's tag (top left), so both fit. Wide pictures (an episode's
+    thumbnail) get a deeper band."""
     image = Image.open(BytesIO(source)).convert("RGB")
     image.thumbnail((1000, 1500))
     width, height = image.size
     drawing = ImageDraw.Draw(image)
+    fill, ink = (HOUSEHOLD_RED, FAVOURITE_GOLD) if household else (FAVOURITE_GOLD, INK)
+    wide = width > height
     if position == "bottom":
-        band = max(24, round(height * 0.075))
-        top = height - band
-        drawing.rectangle((0, top, width, height), fill=FAVOURITE_GOLD)
+        band = max(24, round(height * (0.15 if wide else 0.085)))
+        top, left, right = height - band, 0, width
+        drawing.rectangle((0, top, width, height), fill=fill)
         drawing.rectangle(
             (0, top - max(2, round(height * 0.004)), width, top), fill="#111111"
         )
-        font, box = _fit(drawing, text, round(band * 0.6), width * 0.92)
+    else:
+        band = max(24, round(width * (0.06 if wide else 0.1)))
+        top, right = round(height * 0.05), width
+        left = right  # set once the contents' width is known
+    pad = round(band * 0.18)
+    face = round(band * 0.8)
+    faces = list(avatars)[:4]
+    faces_width = (face + (len(faces) - 1) * round(face * 0.7)) if faces else 0
+    pill_font = pill_box = None
+    pill_width = 0
+    if new:
+        pill_font, pill_box = _fit(drawing, "NEW", round(band * 0.42), band * 2)
+        pill_width = pill_box[2] - pill_box[0] + 2 * round(band * 0.22)
+    room = (
+        (width * (0.92 if position == "bottom" else 0.44))
+        - faces_width
+        - pill_width
+        - 4 * pad
+    )
+    font, box = _fit(
+        drawing, text, round(band * (0.5 if faces else 0.6)), max(room, band)
+    )
+    text_width = box[2] - box[0]
+    content = (
+        faces_width
+        + (pad if faces else 0)
+        + text_width
+        + (pad + pill_width if new else 0)
+    )
+    if position == "bottom":
+        x = (width - content) / 2
+    else:
+        left = right - content - 2 * pad
+        drawing.rectangle((left, top, right, top + band), fill=fill)
+        x = left + pad
+    middle = top + band / 2
+    for index, (picture, name) in enumerate(faces):
+        disc = _avatar(picture, name, face)
+        image.paste(
+            disc, (round(x + index * face * 0.7), round(middle - face / 2)), disc
+        )
+    if faces:
+        x += faces_width + pad
+    drawing = ImageDraw.Draw(image)
+    drawing.text(
+        (x - box[0], middle - (box[3] - box[1]) / 2 - box[1]), text, fill=ink, font=font
+    )
+    if new:
+        x += text_width + pad
+        pill_height = pill_box[3] - pill_box[1] + 2 * round(band * 0.14)
+        drawing.rounded_rectangle(
+            (x, middle - pill_height / 2, x + pill_width, middle + pill_height / 2),
+            radius=round(pill_height / 2),
+            fill=NEW_RED,
+        )
         drawing.text(
             (
-                (width - (box[2] - box[0])) / 2 - box[0],
-                top + (band - (box[3] - box[1])) / 2 - box[1],
+                x + round(band * 0.22) - pill_box[0],
+                middle - (pill_box[3] - pill_box[1]) / 2 - pill_box[1],
             ),
-            text,
-            fill="#1A1405",
-            font=font,
-        )
-    else:
-        size = max(12, round(width * 0.055))
-        # At most just under half the width: Leaving Soon's tag is opposite.
-        font, box = _fit(drawing, text, size, width * 0.44)
-        text_width, text_height = box[2] - box[0], box[3] - box[1]
-        pad_x, pad_y = round(size * 0.5), round(size * 0.45)
-        tag_width = text_width + 2 * pad_x
-        top, left = round(height * 0.05), width - tag_width
-        drawing.rectangle(
-            (left, top, width, top + text_height + 2 * pad_y), fill=FAVOURITE_GOLD
-        )
-        drawing.text(
-            (left + pad_x - box[0], top + pad_y - box[1]),
-            text,
-            fill="#1A1405",
-            font=font,
+            "NEW",
+            fill="#FFFFFF",
+            font=pill_font,
         )
     output = BytesIO()
     image.save(output, format="JPEG", quality=88)

@@ -521,6 +521,8 @@ def normalize_event(payload):
         )
         or 0,
         "favorite": _flag(_first(payload, "favorite", "Favorite", "IsFavorite")),
+        # From Curatarr's own first look at a server: these favourites are old.
+        "first_look": payload.get("first_look") is True,
         "payload_hash": digest,
     }
 
@@ -682,7 +684,12 @@ def process_event(event):
             event_id=event.id,
         )
     if data.get("favorite") is not None:
-        state.favorite = bool(data["favorite"])
+        favourite = bool(data["favorite"])
+        if favourite and not state.favorite and not data.get("first_look"):
+            state.favorite_since = when  # a new favourite, not one found on day one
+        if not favourite:
+            state.favorite_since = None
+        state.favorite = favourite
     part = _part_for_event(media, data)
     if part and data.get("played") and data["event_type"] == "item_played":
         episode_state = (
@@ -992,6 +999,9 @@ def reconcile_user_state():
     jellyfin = client("jellyfin")
     generated = 0
     plays = {}  # (media id, user id): play_count, see UserMediaState
+    # The first look finds every favourite there is: none of them is "new".
+    first_look = setting("last_reconcile_at") is None
+    liked_episodes = {}  # (media id, user id) → Jellyfin episodes they favourited
     users = jellyfin.users()
     set_setting(
         "jellyfin_user_names",
@@ -1049,9 +1059,12 @@ def reconcile_user_state():
                                 "series_external_id": item.get("SeriesId"),
                                 "user_external_id": user_id,
                                 "favorite": favorite,
+                                "first_look": first_look,
                             }
                         )
                         generated += 1
+                    if kind == "Episode" and favorite:
+                        liked_episodes.setdefault((media.id, user_id), []).append(item)
                     last = _as_datetime(user_data.get("LastPlayedDate"))
                     current = _as_datetime(state.last_played_at) if state else None
                     new_completion = False
@@ -1112,7 +1125,57 @@ def reconcile_user_state():
                     break
     process_pending_events(limit=max(100, generated))
     _save_play_counts(plays)
+    _save_episode_favourites(liked_episodes, {str(u["Id"]) for u in users}, first_look)
     return generated
+
+
+def _save_episode_favourites(liked, user_ids, first_look):
+    """Which episodes each person has favourited (favourite ribbons on
+    episode thumbnails), from what Jellyfin lists. The first time, like
+    Curatarr's first look at a server, finds old favourites, not new ones."""
+    now = utcnow()
+    first_look = first_look or not setting("episode_favourites_synced")
+    set_setting("episode_favourites_synced", now.isoformat())
+    found = set()
+    for (media_id, user_id), items in liked.items():
+        for item in items:
+            part = (
+                db.session.query(MediaPart)
+                .filter_by(media_identity_id=media_id, jellyfin_id=str(item.get("Id")))
+                .first()
+            ) or (
+                db.session.query(MediaPart)
+                .filter_by(
+                    media_identity_id=media_id,
+                    kind="episode",
+                    season_number=item.get("ParentIndexNumber"),
+                    episode_number=item.get("IndexNumber"),
+                )
+                .first()
+            )
+            if part is None:
+                continue
+            found.add((part.id, user_id))
+            state = (
+                db.session.query(EpisodeUserState)
+                .filter_by(media_part_id=part.id, jellyfin_user_id=user_id)
+                .first()
+            )
+            if state is None:
+                state = EpisodeUserState(
+                    media_part_id=part.id, jellyfin_user_id=user_id
+                )
+                db.session.add(state)
+            if not state.favorite:
+                state.favorite = True
+                state.favorite_since = None if first_look else now
+    for state in db.session.query(EpisodeUserState).filter(
+        EpisodeUserState.favorite.is_(True),
+        EpisodeUserState.jellyfin_user_id.in_(user_ids or {""}),
+    ):
+        if (state.media_part_id, state.jellyfin_user_id) not in found:
+            state.favorite, state.favorite_since = False, None
+    db.session.commit()
 
 
 def _save_play_counts(plays):

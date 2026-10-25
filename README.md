@@ -170,7 +170,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** |
 | [Custom posters](docs/FEATURES.md#custom-posters) | Your own poster for any title, uploaded or picked up from a folder, with the original kept to restore. | One click |
 | [Posters for one account](docs/FEATURES.md#for-everyone-or-for-chosen-accounts) | A poster only chosen accounts see, in every app (Roku included); everyone else keeps the usual one. | With the plugin |
-| [Favourite ribbons](docs/FEATURES.md#favourite-ribbons) | A gold "★ Sam" tag on the posters of the titles someone favourited, shown to the accounts you choose. | Off, with the plugin |
+| [Favourite ribbons](docs/FEATURES.md#favourite-ribbons) | A gold "★ Sam" band with Sam's picture on what someone favourited, shown to the accounts you choose; NEW for a week, "♥ Household favourite" for everyone's, and on favourite episodes too. | Off, with the plugin |
 | [Make them with an AI](docs/FEATURES.md#make-them-with-an-ai) | Prompts in batches for an image-making AI agent, with each title's plot and file name, and your household cast as the leads where it suits. | One click |
 | [Posters in your language](docs/FEATURES.md#collections-and-suggestions) | A new release that arrived with a foreign poster gets one in your language once TMDB has it. | **On** |
 

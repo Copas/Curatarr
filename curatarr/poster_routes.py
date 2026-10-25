@@ -22,7 +22,7 @@ from .models import CustomPoster, MediaIdentity
 from .routes import NAV_SECTIONS, PUBLIC_ENDPOINTS, UPLOAD_ENDPOINTS, bp
 
 NAV_SECTIONS["main.custom_posters_page"] = "library"
-UPLOAD_ENDPOINTS.add("main.title_poster_upload")
+UPLOAD_ENDPOINTS.update({"main.title_poster_upload", "main.custom_posters_avatar"})
 # The plugin signs these with the webhook token instead of a sign-in.
 PUBLIC_ENDPOINTS.update({"main.jellyfin_posters", "main.jellyfin_poster_image"})
 
@@ -67,6 +67,9 @@ def custom_posters_page():
         accounts=accounts,
         ribbon=ribbon,
         ribbon_viewers_of=viewers_of,
+        avatar_uploaded={
+            who: custom_posters.has_uploaded_avatar(who) for who, _name in accounts
+        },
         ribbon_mixed=any(
             0 < len(viewers_of[who]) < len(accounts) - 1 for who, _name in accounts
         ),
@@ -87,6 +90,43 @@ def custom_posters_ribbons():
     return redirect(url_for("main.custom_posters_page") + "#ribbons")
 
 
+@bp.post("/library/posters/avatar")
+def custom_posters_avatar():
+    """An account's picture on ribbons: uploaded, or removed (back to its
+    Jellyfin profile picture, or its initials)."""
+    who = request.form.get("account") or ""
+    if who not in dict(_accounts()):
+        abort(400)
+    upload = request.files.get("picture")
+    try:
+        if request.form.get("remove"):
+            custom_posters.save_avatar(who, None)
+            flash("Picture removed.", "success")
+        elif upload and upload.filename:
+            custom_posters.save_avatar(who, upload.read())
+            flash(
+                "Picture saved; ribbons show it within a couple of minutes.", "success"
+            )
+        else:
+            flash("Choose a picture first.", "warning")
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("main.custom_posters_page") + "#ribbons")
+
+
+@bp.get("/library/posters/avatar/<account>.jpg")
+def custom_posters_avatar_image(account):
+    from .artwork import _avatar
+
+    if account not in dict(_accounts()):
+        abort(404)
+    picture = custom_posters.avatar_picture(account)
+    disc = _avatar(picture, custom_posters.account_name(account), 96)
+    output = BytesIO()
+    disc.save(output, format="PNG")
+    return send_file(BytesIO(output.getvalue()), mimetype="image/png", max_age=0)
+
+
 @bp.get("/library/posters/ribbon-preview.jpg")
 def custom_posters_ribbon_preview():
     """The ribbon as it would look, on a plain stand-in poster."""
@@ -97,11 +137,21 @@ def custom_posters_ribbon_preview():
     options = custom_posters.ribbon_settings()
     blank = BytesIO()
     Image.new("RGB", (400, 600), "#2b3a4a").save(blank, format="JPEG")
-    names = sorted(name for _id, name in _accounts())[:2] or ["Sam"]
+    people = _accounts()[:2] or [("sam", "Sam")]
+    household = request.args.get("household") == "1"
     picture = favourite_ribbon(
         blank.getvalue(),
-        custom_posters.ribbon_text(names, options["label"]),
+        custom_posters.ribbon_text(
+            [name for _id, name in people], options["label"], household
+        ),
         options["position"],
+        avatars=(
+            [(custom_posters.avatar_picture(i), name) for i, name in people]
+            if options["avatars"]
+            else ()
+        ),
+        new=bool(options["new_days"]) and not household,
+        household=household,
     )
     return send_file(BytesIO(picture), mimetype="image/jpeg", max_age=0)
 
