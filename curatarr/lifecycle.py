@@ -27,6 +27,8 @@ from .policy import (
     CandidateInput,
     _aware,
     eligible,
+    free_target_label,
+    free_targets,
     inactivity_due,
     minimum_satisfied,
     rank,
@@ -195,11 +197,11 @@ def _disk_pressure(media, policy):
     if measured is None:
         return None
     total, free, _key = measured
-    percent = free / total * 100
-    if percent >= policy["low_free_percent"]:
+    low, critical = free_targets(policy, total)
+    if free >= low:
         return (0, "normal")
-    level = "critical" if percent < policy["critical_free_percent"] else "low"
-    required = max(0, int(total * policy["low_free_percent"] / 100 - free))
+    level = "critical" if free < critical else "low"
+    required = max(0, int(low - free))
     return required, level
 
 
@@ -242,11 +244,11 @@ def _pressure_groups(now, queue, *, free_percent=None, disk_path=None):
             continue
         total, actual_free, key = measured
         free = total * free_percent / 100 if preview else actual_free
-        percent = free / total * 100
-        if percent >= policy["low_free_percent"]:
+        low, critical = free_targets(policy, total)
+        if free >= low:
             continue
-        needed = max(0, int(total * policy["low_free_percent"] / 100 - free))
-        level = "critical" if percent < policy["critical_free_percent"] else "low"
+        needed = max(0, int(low - free))
+        level = "critical" if free < critical else "low"
         group = groups.setdefault(
             key,
             {
@@ -627,7 +629,7 @@ def _evaluate_retention_locked():
                 else (
                     f"Library exceeds {policy['high_water_bytes']} bytes; selection targets {policy['low_water_bytes']} bytes."
                     if quota
-                    else f"Disk pressure is {pressure_level}; selection targets {policy['low_free_percent']}% free space."
+                    else f"Disk pressure is {pressure_level}; selection targets {free_target_label(policy)} space."
                 )
             )
             score, detail = weighted_score(item, now, policy["meaningful_threshold"])
@@ -1737,7 +1739,7 @@ def update_forecast():
             {
                 "total": total,
                 "free": free,
-                "low": int(total * policy["low_free_percent"] / 100),
+                "low": int(free_targets(policy, total)[0]),
                 "libraries": [],
                 "library_ids": [],
                 "items": [],
