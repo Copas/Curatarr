@@ -2,12 +2,16 @@
 
 ## Unreleased
 
-## 0.2.0rc12 (2026-10-25)
+## 0.2.0rc13 (2026-10-25)
 
-- **The AI prompts keep the people in your reference photos recognisable.** Cast in place of a story's actors, they came out as generic faces with their general look, or small and turned away. The prompts now ask the agent to use all of each person's photos across the pictures (a different one leading each time, chosen to suit the picture), make an approved head-and-shoulders portrait of each of them in costume first, build every picture from images rather than a description, keep their own faces, age, build, hair and beards, show faces large and clear (a background or banner goes without people rather than with unrecognisable ones), and compare each face with the photos before saving.
-- A reference photos folder that isn't there gets a warning when the prompt options are saved.
+- **The AI prompts use every reference photo.** They asked for each person's two or three best photos, so the same ones led every picture; the photos are different on purpose. Now each picture leads with the photos that suit it (a different one each time), and photos with a hidden or small face are paired with a clear one.
 - **Plugin updates can install themselves** (Settings → Curatarr plugin for Jellyfin → *Install plugin updates automatically*, off by default): when Jellyfin's catalogue has a newer plugin, Curatarr installs it and restarts Jellyfin to load it once nobody has watched anything for 10 minutes, as the banner's buttons do. History records each one.
 - The plugin's release can be built again by hand from GitHub Actions for an existing tag, and its builds get .NET from Microsoft's CDN: the usual download server refused every version for hours, so plugin 0.8.0.0's release failed.
+
+## 0.2.0rc12 (2026-10-25)
+
+- **The AI prompts keep the people in your reference photos recognisable.** Cast in place of a story's actors, they came out as generic faces with their general look, or small and turned away. The prompts now ask the agent to pick each person's clearest photos (no sunglasses, nothing far away), make an approved head-and-shoulders portrait of each of them in costume first, build every picture from images rather than a description, keep their own faces, age, build, hair and beards, show faces large and clear (a background or banner goes without people rather than with unrecognisable ones), and compare each face with the photos before saving.
+- A reference photos folder that isn't there gets a warning when the prompt options are saved.
 
 ## 0.2.0rc11 (2026-10-25)
 
