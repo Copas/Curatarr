@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/logo.png",
     "versions": [
       {
+        "version": "0.8.1.0",
+        "changelog": "- After Jellyfin restarts, the account pictures already downloaded show straight away, and new ones as they arrive. Before, nobody saw their own pictures until every download had finished, which after the update to 0.8.0.0 took several minutes.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/Copas/Curatarr/releases/download/plugin-v0.8.1.0/curatarr-jellyfin-plugin_0.8.1.0.zip",
+        "checksum": "c586e3b5f38ef5cda32be9d43d75bd0e",
+        "timestamp": "2026-10-25T21:09:19Z"
+      },
+      {
         "version": "0.8.0.0",
         "changelog": "- An account can have each of a title's pictures of its own, not just the poster: its wide tile (Thumb), background (Backdrop), logo and banner, swapped into what's sent to that account, including a show's background, logo and wide tile on its episodes and seasons. An account's background goes first among the title's backgrounds. A logo is served as a PNG, keeping its see-through background.\n- Needs Curatarr 0.2.0rc9 or later for pictures other than the poster; with older ones, it works as 0.7.0.0 did.",
         "targetAbi": "12.2.0.0",
