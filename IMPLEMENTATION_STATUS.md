@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc15 (2026-10-25): wide tiles made from the poster keep the poster's tag (no download of them all again); plugin 0.8.1.0 shows pictures it has straight away after a restart.
 - v0.2.0rc14 (2026-10-25): pressing play moves a file and the five episodes after it to the front of every queue; the Roku seek index repair keeps a file's track order, and retries the 201 files it gave up on.
 - v0.2.0rc13 (2026-10-25): the AI prompts use every reference photo; plugin updates can install themselves and restart Jellyfin when nobody's watching; plugin builds get .NET from Microsoft's CDN.
 - v0.2.0rc12 (2026-10-25): the AI prompts keep the people in the reference photos recognisable (best photos, an approved portrait first, image inputs, faces large).
