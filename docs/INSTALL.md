@@ -44,7 +44,7 @@ Requirements: a systemd-based distribution, **Python 3.12 or newer** with the `v
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc9
+git checkout v0.2.0rc10
 sudo ./scripts/install.sh
 ```
 
@@ -119,7 +119,7 @@ sudo systemctl restart curatarr-web curatarr-worker
 ```bash
 cd curatarr-release
 git fetch --tags
-git checkout v0.2.0rc9                 # the new release
+git checkout v0.2.0rc10                 # the new release
 git status --short                     # must print nothing
 sudo ./scripts/install.sh              # add EXTRAS=… again if you use chapters
 sudo systemctl is-active curatarr-web curatarr-worker
@@ -158,7 +158,7 @@ Requirements: Docker Engine with the Compose plugin, and Git.
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 cd curatarr-deploy
-git checkout v0.2.0rc9
+git checkout v0.2.0rc10
 cp .env.example .env
 ```
 
@@ -225,7 +225,7 @@ Open **PowerShell** in a folder where you keep apps (for example `C:\Apps`) and 
 ```powershell
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 Set-Location curatarr-deploy
-git checkout v0.2.0rc9
+git checkout v0.2.0rc10
 Copy-Item .env.example .env
 notepad .env
 ```

@@ -45,7 +45,7 @@ def custom_posters_page():
         )
         count = len(titles)
         written = custom_posters.prompts(
-            custom_posters.describe(titles, options["kinds"]),
+            custom_posters.describe(titles, options["kinds"], options["skip_done"]),
             batch=options["batch"],
             photos=options["photos"],
             people=options["people"],
