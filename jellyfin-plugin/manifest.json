@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/logo.png",
     "versions": [
       {
+        "version": "0.4.0.0",
+        "changelog": "See https://github.com/Copas/Curatarr/releases/tag/plugin-v0.4.0.0",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/Copas/Curatarr/releases/download/plugin-v0.4.0.0/curatarr-jellyfin-plugin_0.4.0.0.zip",
+        "checksum": "984745d03720d11d5ac73de4d92237d6",
+        "timestamp": "2026-10-25T00:58:59Z"
+      },
+      {
         "version": "0.3.0.0",
         "changelog": "See https://github.com/Copas/Curatarr/releases/tag/plugin-v0.3.0.0",
         "targetAbi": "12.2.0.0",
