@@ -945,21 +945,25 @@ def _casting(photos: str, who: str, single: bool) -> list[str]:
         "",
         "Likeness matters most: they must still be themselves.",
         (
-            "- Choose each person's two or three best photos: face large, sharp, "
-            "well lit, front or three-quarter view. Leave out ones with "
-            "sunglasses, hats or hands over the face, and ones taken from far away."
+            "- Use all of their photos across the pictures: they're different on "
+            "purpose. For each picture, choose the photos whose angle, expression "
+            "and look suit it, so a different photo leads each time rather than "
+            "the same one. Photos where the face is hidden (sunglasses) or small "
+            "still show hair, build and style; pair them with one where the face "
+            "is clear."
         ),
         (
             "- For each title, first make a head-and-shoulders portrait of each of "
             "them as their character (costume and hair styling for the role, "
-            "plain background), using those photos as image inputs. Compare it "
-            "with the photos and redo it until it's clearly them. Keep it as a "
-            "working reference, outside the folder the pictures are saved in."
+            "plain background), from several of their photos as image inputs. "
+            "Compare it with the photos and redo it until it's clearly them. Keep "
+            "it as a working reference, outside the folder the pictures are "
+            "saved in."
         ),
         (
             "- Make every picture with them in it from image inputs, never from a "
-            "description of them: their best photos and the approved portrait, so "
-            "the faces stay the same across the set."
+            "description of them: the photos chosen for that picture, plus the "
+            "approved portrait so the faces stay the same across the set."
         ),
         (
             "- Keep what makes them recognisable, as in the photos: face shape, "

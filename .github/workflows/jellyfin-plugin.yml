@@ -15,9 +15,16 @@ jobs:
         working-directory: jellyfin-plugin
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: "10.0.x"
+      - name: .NET 10
+        # From Microsoft's CDN: setup-dotnet's default download server answered
+        # 409 for every version for hours on 2026-10-25, failing every build.
+        working-directory: .
+        run: |
+          curl -sSL --retry 3 https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          bash "$RUNNER_TEMP/dotnet-install.sh" --channel 10.0 \
+            --azure-feed https://builds.dotnet.microsoft.com/dotnet --install-dir "$HOME/.dotnet"
+          echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+          echo "DOTNET_ROOT=$HOME/.dotnet" >> "$GITHUB_ENV"
       - name: Notes for this version
         # The version in Directory.Build.props needs notes in CHANGELOG.md
         # before it can be released (scripts/notes.py); say so on the push.

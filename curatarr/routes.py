@@ -464,6 +464,7 @@ ACTION_WORDS = {
     "custom_poster_applied": "Custom poster put on",
     "custom_poster_restored": "Original poster restored",
     "custom_pictures_retired": "Custom pictures of a deleted title removed",
+    "jellyfin_plugin_updated": "Jellyfin plugin updated",
     "flag_leave_after_watched_set": "Leave after watched",
     "flag_leave_after_watched_cleared": "Leave after watched ended",
     "flag_never_compress_set": "Never compress",
@@ -1087,6 +1088,18 @@ def settings():
                 flash("Compression first saved.", "success")
             elif kind == "never_compress_dismiss":
                 flags.dismiss_changed()
+            elif kind == "plugin_auto_update":
+                from . import jellyfin_plugin
+
+                on = request.form.get("auto_update") == "on"
+                jellyfin_plugin.set_auto_update(on)
+                flash(
+                    "Plugin updates install by themselves; Jellyfin restarts to "
+                    "load them once nobody's watching."
+                    if on
+                    else "Plugin updates wait for you, in the banner.",
+                    "success",
+                )
             elif kind == "hidden_accounts":
                 from .services import save_hidden_accounts
 
