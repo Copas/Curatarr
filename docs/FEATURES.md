@@ -9,7 +9,8 @@
 - [Continue Watching and what's next](#continue-watching-and-whats-next)
 - [Problems: burned-in subtitles and broken files](#problems-burned-in-subtitles-and-broken-files)
 - [Search what was said](#search-what-was-said)
-- [Collections and suggestions](#collections-and-suggestions): and custom posters
+- [Collections and suggestions](#collections-and-suggestions)
+- [Custom posters](#custom-posters): for everyone or chosen accounts, and prompts for an AI
 - [Fun facts](#fun-facts)
 - [Sharing the machine with playback](#sharing-the-machine-with-playback)
 - [Playing smoothly on every device](#playing-smoothly-on-every-device): audio every device plays, seeking on Roku
@@ -226,11 +227,32 @@ The row shows where the request is: "Looking for a better copy…" with **Cancel
 
 Below, **Suggested for you** takes Radarr's recommendations (films TMDB links to ones in the library), drops anything already there, unreleased or hidden, and ranks the rest by rating and by how well their genres match the films the household has favourited in Jellyfin. Tick and add, or hide a film with **Not for us**.
 
-**Custom posters** (Library → Posters, administrators). A title's page has a **Poster** panel: upload a picture (JPEG, PNG or WebP, up to 25 MB; portrait 2:3 works best) and it becomes the title's poster in Jellyfin, for everyone. Or set an **import folder**: every couple of minutes Curatarr looks there for new pictures and matches each file's name to a title, so `The Big Lebowski (1998).jpg`, `the-big-lebowski-1998.png` and `08_the-big-lebowski.jpg` (a leading number is ignored) all work. The year is needed only when titles share a name, and a year either side counts, since sources differ by one. A file saved again later replaces the poster it put on; files it couldn't match are listed with the reason. **Imported posters are for** can name accounts instead of everyone: each picture then becomes those accounts' own poster (with the Curatarr plugin for Jellyfin), and everyone else keeps the usual one, including where the picture was everyone's poster before. A title's Poster panel likewise uploads a picture *Only for* one account. Before the first custom poster goes on, the poster it replaces is saved (during Leaving Soon, the one from before the banner), and **Restore original** puts it back; a picture that was already the title's poster when imported is recorded without uploading it again, and restoring it takes the metadata provider's poster. During Leaving Soon the countdown is drawn on the custom poster, and the custom poster is what's restored when the title is kept. History records each one.
-
-**Make them with an AI.** The Posters page writes prompts for an image-making AI agent that can read and save files (Codex, for example): choose the titles (anyone's or one account's favourites, every film or every TV show, skipping those that have a custom poster), how many per batch, and optionally a folder of reference photos and who's in them. Each batch's prompt lists its titles with year, genres, plot and the file name to save, and says to save into the import folder, where Curatarr puts them on as they arrive. The photos are read by the agent, never by Curatarr; only use photos of people who've agreed.
-
 **Posters in your language** (Settings → Household, on by default): Jellyfin takes a title's poster when it arrives, and a new release often has only foreign posters on TMDB at first, so it keeps a Chinese or Persian one even after an English one appears. Once a day Curatarr compares the poster of each film and show released in the last year with the ones TMDB offers. When it's one in another language and there's one in Jellyfin's metadata language now, Jellyfin is told to use that one. Posters that match none of TMDB's (chosen by hand, or from another source) and Leaving Soon posters are left alone; a title with no poster in the metadata language yet is looked at again every few days. A plugin that rotates posters will undo this.
+
+---
+
+## Custom posters
+
+Your own picture as a title's poster: for everyone, or for chosen accounts only, with the original always kept. **Library → Posters** (administrators) has the import folder, the AI prompt writer and every custom poster; a title's page has a **Poster** panel.
+
+### Putting one on
+
+- **Upload** on a title's Poster panel: a JPEG, PNG or WebP up to 25 MB (portrait 2:3 works best). The picture shows in the panel as soon as it's picked, before anything is sent.
+- **Import folder.** Every couple of minutes Curatarr looks in a folder you name for new pictures and matches each file's name to a title: `The Big Lebowski (1998).jpg`, `the-big-lebowski-1998.png` and `08_the-big-lebowski.jpg` (a leading number is ignored) all work. The year is needed only when titles share a name, and a year either side counts, since sources differ by one. A file saved again later replaces the poster it put on (make it again under the same name to redo one), and files that couldn't be matched are listed with the reason. The folder must be readable by Curatarr's worker.
+
+### For everyone, or for chosen accounts
+
+Jellyfin has one poster per title for every account. A custom poster can be that poster, or, with the [Curatarr plugin for Jellyfin](../jellyfin-plugin/README.md) (0.4.0.0 or later), belong to chosen accounts only: they see it in every app (web, phone, TV, Roku), and everyone else sees the usual poster. Choose *Only for* an account when uploading, or tick accounts under **Imported posters are for** to make every imported picture theirs. Where an imported picture was everyone's poster before, everyone else gets the usual one back. Changing which accounts looks at every picture in the folder again.
+
+How it works: apps fetch a poster from an address with a tag in it, taken from the item details they were sent. The plugin puts a tag standing for the account's poster in what's sent to that account (the title itself, and a show's poster on its episodes' cards), and when an app asks for an image with that tag, it serves that poster, resized and cached by Jellyfin like its own. It reads the list from Curatarr every minute (`/api/v1/jellyfin/posters`, with the webhook token).
+
+### Restoring
+
+Before the first custom poster goes on for everyone, the poster it replaces is saved (during Leaving Soon, the one from before the banner), and **Restore original** puts it back. A picture that was already the title's poster when imported is recorded without uploading it again; restoring it takes the metadata provider's poster. An account's own poster is simply removed. On Library → Posters each picture is one tile, listing everyone it's for, with a **Remove** for each and **Remove for all**. During Leaving Soon the countdown is drawn on the custom poster, and the custom poster is what's restored if the title is kept. History records each one.
+
+### Make them with an AI
+
+The Posters page writes prompts for an image-making AI agent that can read and save files (Codex, for example). Choose the titles (anyone's or one account's favourites, every film or every TV show, skipping those that have a custom poster), how many per batch, and optionally a folder of reference photos and who's in them, to cast as the lead characters where a story suits it. Each batch's prompt lists its titles with year, genres, plot and the file name to save, and says to save into the import folder, where Curatarr puts them on as they arrive, for the accounts you chose. The photos are read by the agent, never by Curatarr; only use photos of people who've agreed, and if the agent is a cloud service, they're sent there.
 
 ---
 
