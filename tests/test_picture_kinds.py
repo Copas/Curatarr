@@ -154,6 +154,42 @@ def test_prompts_ask_for_a_matching_set(app, monkeypatch):
     assert custom_posters.prompt_titles("favourites", True, ["Primary"]) == []
 
 
+def test_prompts_ask_only_for_whats_missing(app, monkeypatch, tmp_path):
+    from curatarr.models import UserMediaState
+
+    _library, media, part = _movie("/movies/The Big Lebowski (1998)/Film.mkv")
+    media.title = "The Big Lebowski"
+    db.session.add(
+        UserMediaState(media_identity_id=media.id, jellyfin_user_id="u1", favorite=True)
+    )
+    db.session.commit()
+    _fake(monkeypatch, Primary=_picture("#223344"))
+    custom_posters.save_settings(str(tmp_path))
+    (tmp_path / "07_the-big-lebowski.jpg").write_bytes(_picture("#cc2222"))
+    custom_posters.apply(media, _picture("#cc2222"), "07_the-big-lebowski.jpg")
+    kinds = ["Primary", "Thumb", "Logo"]
+    titles = custom_posters.prompt_titles("favourites", True, kinds)
+    entry = custom_posters.describe(titles, kinds, skip_done=True)[0]
+    # The poster's done: not asked for again; the others go beside it.
+    assert entry["files"] == {
+        "Thumb": "07_the-big-lebowski.thumb.jpg",
+        "Logo": "07_the-big-lebowski.logo.png",
+    }
+    assert entry["made"] == "07_the-big-lebowski.jpg"
+    text = custom_posters.prompts(
+        [entry], batch=5, photos="", people="", output=str(tmp_path)
+    )[0]
+    assert "Its poster is already made" in text and "Poster →" not in text
+    assert "Poster:" not in text  # its description isn't asked for either
+    # Without skipping, the whole set is asked for again.
+    again = custom_posters.describe(titles, kinds)[0]
+    assert set(again["files"]) == set(kinds) and again["made"] is None
+    # A deleted title needs no pictures.
+    part.has_file = False
+    db.session.commit()
+    assert custom_posters.prompt_titles("favourites", False, kinds) == []
+
+
 def test_the_plugin_lists_each_accounts_pictures_by_type(app, client, monkeypatch):
     from curatarr.services import set_setting
 

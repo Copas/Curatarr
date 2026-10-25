@@ -194,6 +194,10 @@ def test_prompts_for_an_ai_in_batches(app, client, monkeypatch, tmp_path):
     ]
     db.session.add_all(others)
     db.session.flush()
+    db.session.add_all(
+        MediaPart(media_identity_id=m.id, kind="movie_file", has_file=True)
+        for m in others
+    )
     for media in [film, *others[:2]]:  # favourites: three of the four
         db.session.add(
             UserMediaState(
