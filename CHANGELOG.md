@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0rc16 (2026-10-25)
+
+- **The AI prompts no longer ask for role portraits.** To keep faces the same across a title's set, they asked the agent to make a head-and-shoulders portrait of each person in costume first: extra pictures Jellyfin never uses, kept in a folder the agent made up. A title's poster already shows them in costume for that story, so it's the reference instead: each wide tile, background and banner is made from their photos plus the poster, and a poster that's still to be made is made and checked first.
+- **The AI prompts ask for an extreme take by default**: a new *The look* box on Library → Posters, filled in with an over-the-top movie-poster take (big, intense expressions: terror, joy, rage, romantic or sexual tension, bold composition and lighting), which goes into every prompt. Change it, or empty it for none.
+- **The AI prompts ask for only the files listed**: no drafts, test images, extra versions or working references, as image generation is slow and costly and Jellyfin uses nothing else; a picture is made again only when it comes out wrong.
+
 ## 0.2.0rc15 (2026-10-25)
 
 - **Fixed: updating to plugin 0.8.0.0 fetched every wide tile again.** A wide tile made from an account's poster was listed as a picture of its own, under a new tag, so the plugin downloaded all of them again (about 700), each drawn afresh, while it already had them. It's the poster's wide version again, as plugin 0.7.0.0 had it, so those files are kept; an account's own wide tile still takes its place. With plugin 0.8.1.0, pictures it already has show straight away after Jellyfin restarts.

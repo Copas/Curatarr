@@ -49,6 +49,7 @@ def custom_posters_page():
             batch=options["batch"],
             photos=options["photos"],
             people=options["people"],
+            style=options["style"],
             output=folder or "the folder Curatarr imports posters from",
         )
     accounts = _accounts()
