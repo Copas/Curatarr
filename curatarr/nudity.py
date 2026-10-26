@@ -605,7 +605,8 @@ def facts() -> dict | None:
     if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
         return hit[1]
     value = _facts()
-    _cache["facts"] = (time.monotonic(), value)
+    if value:  # not before the first film's read: it'd hide it for a while
+        _cache["facts"] = (time.monotonic(), value)
     return value
 
 

@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc22 (2026-10-26): Fun facts shows the nudity rankings as soon as the first film is read.
 - v0.2.0rc21 (2026-10-25): fixes Settings → Enhance, broken in rc20.
 - v0.2.0rc20 (2026-10-25): the nudity index (films, NudeNet on the server, admin-only Fun facts rankings and a timeline per film).
 - v0.2.0rc19 (2026-10-25): the AI prompts put the cast in about half the titles' backgrounds.

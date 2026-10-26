@@ -118,8 +118,9 @@ def test_off_by_default(app, monkeypatch):
 def test_rankings_on_fun_facts_and_the_films_page(indexing, client):
     _read, _jellyfin = indexing
     _library, media, _part = _movie()
-    nudity.sweep()
     nudity._cache.clear()
+    assert nudity.facts() is None
+    nudity.sweep()
     facts = nudity.facts()
     assert facts["films"] == 1 and facts["clean"] == 0
     titles = {c["title"]: c for c in facts["categories"]}

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc22 (2026-10-26)
+
+- **Fixed: Fun facts could miss the first nudity rankings for ten minutes.** A visit before the first film was read remembered "nothing yet"; the rankings now show as soon as there's one.
+
 ## 0.2.0rc21 (2026-10-25)
 
 - **Fixed: Settings → Enhance failed to open** ("Internal Server Error") in 0.2.0rc20: an apostrophe in the nudity index's description broke the page.
