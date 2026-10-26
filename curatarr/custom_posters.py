@@ -742,6 +742,7 @@ PROMPT_DEFAULTS = {
     "people": "",
     "kinds": ["Primary"],  # which pictures to ask for, as a matching set
     "style": None,  # the look asked for; None: DEFAULT_STYLE, "": none
+    "originals": True,  # point the AI to each title's original art
 }
 DEFAULT_STYLE = (
     "An extreme, heightened take on the story, like an over-the-top movie "
@@ -762,6 +763,14 @@ LETTERING = (
     "with a transparent background), not typed on afterwards with code or a "
     "font file."
 )
+# How the prompts name a title's original pictures.
+ORIGINAL_NAMES = {
+    "Primary": "poster",
+    "Backdrop": "background",
+    "Thumb": "wide tile",
+    "Logo": "logo",
+    "Banner": "banner",
+}
 # What each picture should be, for the prompts.
 KIND_SPECS = {
     "Primary": (
@@ -815,6 +824,7 @@ def save_prompt_options(form) -> dict:
         "people": (form.get("people") or "").strip()[:200],
         "kinds": kinds,
         "style": " ".join((form.get("style") or "").split())[:600],
+        "originals": form.get("originals") in {"on", "true", "1"},
     }
     set_setting(KEY, settings() | {"prompts": options})
     db.session.commit()
@@ -895,7 +905,56 @@ def _made(titles) -> dict[str, dict[str, CustomPoster]]:
     return found
 
 
-def describe(titles, kinds=("Primary",), skip_done=False) -> list[dict]:
+# The original pictures Jellyfin keeps beside a film or show (its metadata
+# savers' names), first found wins.
+ORIGINAL_FILES = {
+    "Primary": ("folder.jpg", "poster.jpg", "cover.jpg", "folder.png", "poster.png"),
+    "Backdrop": ("backdrop.jpg", "fanart.jpg", "background.jpg", "backdrop.png"),
+    "Thumb": ("landscape.jpg", "thumb.jpg", "landscape.png"),
+    "Logo": ("logo.png", "clearlogo.png"),
+    "Banner": ("banner.jpg", "banner.png"),
+}
+SEASON_FOLDER = re.compile(r"^(season\s*\d+|specials)$", re.IGNORECASE)
+
+
+def _title_folder(media) -> Path | None:
+    """The folder a film's file or a show's season folders are in."""
+    from .enrichment import local_path
+
+    for part in media.parts:
+        path = local_path(part.file_path) if part.file_path else None
+        if not path:
+            continue
+        folder = Path(path).parent
+        if media.media_type == "series" and SEASON_FOLDER.match(folder.name):
+            folder = folder.parent
+        return folder
+    return None
+
+
+def originals(media) -> dict[str, str]:
+    """{picture type: path} of the title's original art on disk, for the prompts
+    to point the AI at: written from the story alone, the pictures lost the
+    feel of the film."""
+    folder = _title_folder(media)
+    found = {}
+    if folder is None:
+        return found
+    for kind, names in ORIGINAL_FILES.items():
+        for name in names:
+            candidate = folder / name
+            try:
+                if candidate.is_file():
+                    found[kind] = str(candidate)
+                    break
+            except OSError:
+                break  # the share is unreachable: no references
+    return found
+
+
+def describe(
+    titles, kinds=("Primary",), skip_done=False, with_originals=True
+) -> list[dict]:
     """Each title with its year, genres, a short plot and the file names to
     save (``file``: the poster's; ``files``: each type asked for). With
     ``skip_done``, only the types it has no custom picture of yet; ``made``
@@ -939,6 +998,7 @@ def describe(titles, kinds=("Primary",), skip_done=False) -> list[dict]:
                 "overview": overview,
                 "file": name + ".jpg",
                 "files": {kind: file_name(name, kind) for kind in needed},
+                "originals": originals(media) if with_originals else {},
                 "made": source
                 if source
                 and "Primary" not in needed
@@ -1042,6 +1102,20 @@ def prompts(described, *, batch, photos, people, output, style="") -> list[str]:
             lines += ["Don't use any real person's likeness, actors included.", ""]
         if style:
             lines += [f"The look: {style}", ""]
+        if any(entry.get("originals") for entry in chunk):
+            lines += [
+                (
+                    "Original art: where a title lists its original art, look at it "
+                    "before making the title's pictures, and use it as a tonal "
+                    "reference alongside the story. Carry over its spirit: the mood, "
+                    "colour palette, era, genre feel and visual motifs, so the new "
+                    "pictures feel like the same film or show. They're new scenes "
+                    "with the cast above, so take the feel rather than the layout, "
+                    "and none of the actors' faces. Its logo shows the lettering to "
+                    "match."
+                ),
+                "",
+            ]
         if single:
             lines += [
                 "For each title below, make one poster:",
@@ -1100,6 +1174,14 @@ def prompts(described, *, batch, photos, people, output, style="") -> list[str]:
             )
             if entry["overview"]:
                 lines.append(f"    {entry['overview']}")
+            if entry.get("originals"):
+                lines.append(
+                    "    Original art: "
+                    + ", ".join(
+                        f"{ORIGINAL_NAMES[kind]} {path}"
+                        for kind, path in entry["originals"].items()
+                    )
+                )
             if not single:
                 if entry.get("made"):
                     lines.append(

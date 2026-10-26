@@ -410,3 +410,43 @@ def test_prompts_ask_for_an_extreme_take_unless_told_otherwise(app, client, tmp_
         [entry], batch=5, photos="", people="", output="/out", style=""
     )[0]
     assert "The look" not in plain
+
+
+def test_prompts_point_to_the_original_art_as_a_tonal_reference(
+    app, monkeypatch, tmp_path
+):
+    """Made from the story alone, the pictures lost the film's feel: each title
+    lists its original art beside the file, for the AI to carry over."""
+    from curatarr.models import UserMediaState
+
+    folder = tmp_path / "Blazing Saddles (1974)"
+    folder.mkdir()
+    for name in ("folder.jpg", "backdrop.jpg", "logo.png"):
+        (folder / name).write_bytes(b"x")
+    _library, media, _part = _movie(str(folder / "Film.mkv"))
+    media.title = "Blazing Saddles"
+    db.session.add(
+        UserMediaState(media_identity_id=media.id, jellyfin_user_id="u1", favorite=True)
+    )
+    db.session.commit()
+    _fake(monkeypatch, Primary=_picture("#223344"))
+    kinds = ["Primary", "Backdrop"]
+    titles = custom_posters.prompt_titles("favourites", False, kinds)
+    described = custom_posters.describe(titles, kinds)
+    assert described[0]["originals"] == {
+        "Primary": str(folder / "folder.jpg"),
+        "Backdrop": str(folder / "backdrop.jpg"),
+        "Logo": str(folder / "logo.png"),
+    }
+    text = custom_posters.prompts(
+        described, batch=10, photos="", people="", output="/p"
+    )[0]
+    assert "tonal reference" in text and "colour palette, era" in text
+    assert (
+        f"Original art: poster {folder}/folder.jpg, background {folder}/backdrop.jpg"
+        in text
+    )
+    # Off: no references.
+    plain = custom_posters.describe(titles, kinds, with_originals=False)
+    text = custom_posters.prompts(plain, batch=10, photos="", people="", output="/p")[0]
+    assert "Original art" not in text

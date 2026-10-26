@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc26 (2026-10-26)
+
+- **Picture prompts point the AI to each title's original art** (on by default: *Use each title's original art as a reference*). Each title lists its original poster, background, wide tile, logo and banner found beside its file, and the AI is asked to carry over their mood, colour palette, era, genre feel and visual motifs, taking the feel rather than the layout and none of the actors' faces. Written from the story alone, the pictures lost the feel of the film.
+
 ## 0.2.0rc25 (2026-10-26)
 
 - **Changed: shows Sonarr has unmonitored are treated like any other.** Curatarr used to leave them alone (unless it had trimmed them itself), so a show added unmonitored never got its always-keep episodes or the next season as you watched. Now a request monitors the show and only the episodes it asks for, so Sonarr still doesn't download the rest. Shows just added to Sonarr are taken on before Jellyfin lists them whether they're monitored or not. Daily shows are still left alone.
