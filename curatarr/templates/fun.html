@@ -29,9 +29,4 @@
 {% if facts.names %}<section class="card p-3 mt-4" id="names"><h2 class="h5 mb-0">Who gets talked about</h2><p class="small text-secondary">The name each show says most, in several of its episodes and not in the show's own title. Shows you watch most come first.</p>
 <ul class="fun-list fun-phrases">{% for n in facts.names %}<li><span class="fun-name"><a href="{{ url_for('main.title', media_id=n.media.id) }}">{{ n.media.title }}</a>{{ jellyfin_link_for(n.media) }}</span><span class="fun-value">“{{ n.name }}” <small>{{ number(n.per_hour) }} times an hour, in {{ n.episodes }} of {{ n.of }} episodes</small></span></li>{% endfor %}</ul></section>{% endif %}
 {% endif %}
-{% if nudity %}<section class="mt-4" id="nudity"><h2 class="h4">Nudity <small class="text-secondary fs-6">administrators only</small></h2>
-<p class="small text-secondary">From the nudity index: {{ nudity.films|commas }} film{{ '' if nudity.films == 1 else 's' }} read so far, {{ nudity.clean|commas }} with none{% if nudity.skipped %}; {{ nudity.skipped.values()|sum|commas }} skipped (animated, or rated for all ages){% endif %}. A detector reads a frame a second, so a moment or two can be missed or mistaken.</p>
-<div class="fun-grid">{% for c in nudity.categories %}<section class="card p-3 fun-card" id="{{ c.id }}"><h3 class="h5 mb-0">{{ c.title }}</h3><p class="small text-secondary">{{ c.blurb }}</p>
-<ol class="fun-list">{% for f in c.films %}<li><span class="fun-name"><a href="{{ url_for('main.title', media_id=f.media.id) }}#nudity">{{ f.media.title }}</a>{{ jellyfin_link_for(f.media) }}</span><span class="fun-value">{{ f.value }}{% if f.unit %} <small>{{ f.unit }}</small>{% endif %}</span></li>{% endfor %}</ol></section>{% endfor %}</div>
-</section>{% endif %}
 {% endblock %}

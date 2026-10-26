@@ -89,12 +89,6 @@ def _managed_libraries():
     ]
 
 
-def _nudity_status() -> dict:
-    from . import nudity
-
-    return {"available": nudity.available(), **nudity.progress()}
-
-
 @bp.route("/chapters/settings", methods=["GET", "POST"])
 def chapter_settings():
     scope = request.args.get("scope", "global")
@@ -134,7 +128,6 @@ def chapter_settings():
         whisper_models=sorted(WHISPER_MODELS),
         max_concurrency=MAX_CONCURRENCY,
         environment=environment_status(),
-        nudity=_nudity_status() if not library else None,
     )
 
 

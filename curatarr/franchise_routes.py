@@ -89,17 +89,5 @@ def collections_dismiss():
 
 @bp.get("/fun")
 def fun():
-    """Library superlatives from what's said in it, and (administrators only)
-    from the nudity index."""
-    from flask import current_app, session
-
-    from . import nudity
-
-    user = session.get("user")
-    admin = current_app.config["ALLOW_UNAUTHENTICATED"] or bool(
-        user and user.get("role", "admin") == "admin"
-    )
-    nude = nudity.facts() if admin else None
-    return render_template(
-        "fun.html", facts=trivia.facts(), nudity=nude, clock=nudity.clock
-    )
+    """Library superlatives from what's said in it."""
+    return render_template("fun.html", facts=trivia.facts())

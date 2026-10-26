@@ -8,9 +8,7 @@
 #   config  $CONFIG_DIR   (default /etc/curatarr; created once, never overwritten)
 #   data    $DATA_DIR     (default /var/lib/curatarr; database and posters)
 # EXTRAS installs optional features, e.g. EXTRAS=chapters (Smart Chapters
-# transcription) or EXTRAS=chapters-gpu (the same, with CUDA libraries), and
-# nudity (the nudity index's detector); several with commas:
-# EXTRAS=chapters-gpu,nudity.
+# transcription) or EXTRAS=chapters-gpu (the same, with CUDA libraries).
 # The choice is remembered in $PREFIX/extras, so later upgrades keep it without
 # repeating EXTRAS; pass EXTRAS= (empty) to drop them.
 # Re-running the script upgrades in place, backing up the SQLite database first.
@@ -41,6 +39,8 @@ as_service_user() {
 if [ "${EXTRAS+set}" != set ]; then
     if [ -f "$PREFIX/extras" ]; then
         EXTRAS=$(cat "$PREFIX/extras")
+        # The nudity index was removed in 0.2.0rc23; its extra with it.
+        EXTRAS=$(printf '%s' "$EXTRAS" | tr ',' '\n' | { grep -vx nudity || true; } | paste -sd, -)
     elif "$PREFIX/current/bin/python" -c "import nvidia.cudnn, faster_whisper" 2>/dev/null; then
         EXTRAS=chapters-gpu
     elif "$PREFIX/current/bin/python" -c "import faster_whisper" 2>/dev/null; then

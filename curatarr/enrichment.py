@@ -262,7 +262,6 @@ def parse_options(form) -> dict:
         "finish_at_credits",
         "seek_repair",
         "pace_rebuilds",
-        "nudity_index",
     ):
         if f"{key}_shown" in form:
             values[key] = form.get(key) in {"true", "on", "1"}

@@ -118,12 +118,6 @@
     {{ option('file_replace_automatically', 'Replace problem files automatically', 'Blocklists the release in Radarr or Sonarr, deletes the file and searches again, instead of listing it under Problems.') }}
   </div>
 {% endcall %}
-{% if nudity %}{% call card('nudity', 'tools', 'Nudity index', ((nudity.indexed ~ ' film' ~ ('' if nudity.indexed == 1 else 's') ~ ' indexed' ~ (', ' ~ nudity.waiting ~ ' to go' if nudity.waiting else '')) if opts.nudity_index else 'Off'), opts.nudity_index) %}
-  <div class="setting-grid">
-    {{ option('nudity_index', 'Index nudity in films', 'Notes when each film first shows breasts, full-frontal female nudity and bare bottoms, and how much, for Fun facts and each film\'s page (administrators only). Samples a frame a second with a small detector and checks what it flags with a larger one (downloaded once, 100 MB), both run here; no picture is kept, only what was seen and when. One film at a time, never while Jellyfin is transcoding. Animated films and those rated G, PG or Approved are skipped.') }}
-  </div>
-  {% if not nudity.available %}<p class="small text-warning mb-0">The detector isn't installed. Reinstall with <code>EXTRAS={{ environment.extras }},nudity</code>.</p>{% endif %}
-{% endcall %}{% endif %}
 {% call card('performance', 'gauge', 'Performance', 'Up to ' ~ opts.concurrency ~ ' job' ~ ('' if opts.concurrency == 1 else 's') ~ ' at once' ~ (' · makes room for viewers' if opts.pause_during_playback else '')) %}
   <div class="setting-grid">
     {{ option('pause_during_playback', 'Make room for people watching', 'Runs fewer jobs while people watch and pauses them if playback needs the room. Off, it only watches CPU and GPU load.') }}

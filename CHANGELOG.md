@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.0rc23 (2026-10-26)
+
+- **Removed: the nudity index** (added in 0.2.0rc20). On real films it missed scenes with nudity and flagged clean ones (a shirtless man, a woman at a kitchen table), and neither a larger reading nor a second opinion from a local vision model made it trustworthy. Its setting, the Fun facts section, the card on film pages and the stored results are gone; the `nudity` install extra is dropped from remembered extras on upgrade.
+
+## 0.2.0rc23 (2026-10-26)
+
+- **Removed: the nudity index** (added in 0.2.0rc20). Tested further, its detector missed real scenes and saw ones that weren't there about as surely, so its rankings and timelines couldn't be trusted. The setting, the Fun facts section, the card on each film's page and what it had stored are gone; installs that had the `nudity` extra drop it on upgrade. The downloaded detector (`models/nudenet-640m.onnx` in the data folder) can be deleted.
+
 ## 0.2.0rc22 (2026-10-26)
 
 - **Fixed: Fun facts could miss the first nudity rankings for ten minutes.** A visit before the first film was read remembered "nothing yet"; the rankings now show as soon as there's one.

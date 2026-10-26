@@ -448,9 +448,6 @@ class ChapterState(db.Model, Timed):
     default_audio = db.Column(db.JSON)
     # Seek index repair for files Roku players couldn't seek in (seek_repair.py).
     seek_layout_size = db.Column(db.BigInteger)  # the file that was checked
-    # The nudity index (nudity.py): what was seen, when, and the file indexed.
-    nudity = db.Column(db.JSON)
-    nudity_size = db.Column(db.BigInteger)
     seek_layout = db.Column(db.JSON)
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")

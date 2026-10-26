@@ -11,7 +11,7 @@
 - [Search what was said](#search-what-was-said)
 - [Collections and suggestions](#collections-and-suggestions)
 - [Custom posters](#custom-posters): for everyone or chosen accounts, favourite ribbons, and prompts for an AI
-- [Fun facts](#fun-facts): and the nudity index
+- [Fun facts](#fun-facts)
 - [Sharing the machine with playback](#sharing-the-machine-with-playback)
 - [Playing smoothly on every device](#playing-smoothly-on-every-device): audio every device plays, seeking on Roku
 
@@ -305,16 +305,6 @@ The Posters page writes prompts for an image-making AI agent that can read and s
 ## Fun facts
 
 **Library → Fun facts** (everyone, household accounts included) ranks films and shows by what's said in them, from the Smart Chapters transcripts. Every figure is a rate (per hour or per minute), so a show with hundreds of episodes doesn't win by size: swearing and f-bombs, squeaky-clean talkative films and the shows that swear least (handy for picking something for the kids), kill-and-blood talk, "help!" and "run!", the chattiest and quietest, "I love you", pleases and thank-yous, questions, shouting, the biggest vocabularies, the longest wait for the first word, the longest silence and the longest stretch of non-stop talk. **Who gets talked about** lists the names said most per hour. **Catchphrases** gives each show's longest phrase that recurs across its episodes (never the show's own name), shows people watch first. Theme songs, transcripts in other languages and generic phrases are left out. Each transcript is counted once in the background, with no GPU, and the page grows as more files are transcribed. Every title links to Jellyfin.
-
-### The nudity index
-
-**Settings → Enhance → Nudity index** (off by default) notes when each film first shows bare breasts, full-frontal female nudity and bare bottoms, and how much of each. It samples one frame a second (decoded on the NVIDIA card where there is one, shrunk there, so only 1280 × 720 frames reach the processor) and runs [NudeNet](https://github.com/notAI-tech/NudeNet)'s small detector (12 MB, part of the install) on each; every frame it flags is checked again by NudeNet's large detector (100 MB, downloaded once on first use and checked against a fixed checksum). Both run on the processor. Nothing leaves the server and no picture is kept: only what was seen, when, and how sure each detector was.
-
-A detection counts when the large detector agrees (more surely for genitals), and a "breast" doesn't count when it's a man's bare chest or only men's faces are in the frame; it then counts when it holds across two sampled seconds, or is a confident one on its own. On a test of twelve films with and without nudity, every film with nudity was found and the clean ones came out clean but for one moment each in two (a shirtless man, a shop mannequin). Male full-frontal nudity is noted but not shown: neither detector told it apart from hands and fingers well enough. What's stored is every detection with both scores, so the rules can be tuned without reading the films again.
-
-It reads one film at a time, about three minutes for a two-hour film, and never while Jellyfin is transcoding (they'd share the card's video decoder); it pauses with chapter work. Animated films (the detector reads cartoons poorly) and films rated G, PG or Approved (Jellyfin's age rating) are skipped. A film is read again only when its file is replaced. It needs the `nudity` install extra: `EXTRAS=chapters-gpu,nudity`.
-
-What it finds is for administrators only: a **Nudity** section on Fun facts (soonest breasts, most breasts, full frontal, bare bottoms, soonest nudity of any kind, most nudity an hour, and how many films have none), each film linking to a **Nudity** card on its page with when each kind first appears, how many scenes and how long, and a timeline of every moment. A detector can miss or mistake a moment, and the page says so.
 
 ---
 
