@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc21 (2026-10-25): fixes Settings → Enhance, broken in rc20.
 - v0.2.0rc20 (2026-10-25): the nudity index (films, NudeNet on the server, admin-only Fun facts rankings and a timeline per film).
 - v0.2.0rc19 (2026-10-25): the AI prompts put the cast in about half the titles' backgrounds.
 - v0.2.0rc18 (2026-10-25): the AI prompts ask for the lettering to be made with each picture, not typed on with code.

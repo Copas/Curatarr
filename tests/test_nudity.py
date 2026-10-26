@@ -158,3 +158,9 @@ def test_a_model_that_wont_download_leaves_films_for_later(indexing, monkeypatch
     assert nudity.sweep() == 0
     assert nudity.for_title(media.id) is None  # not failed: tried again later
     assert nudity._due().count() == 1
+
+
+def test_the_setting_shows_on_enhance(app, client, monkeypatch):
+    monkeypatch.setattr(nudity, "available", lambda: True)
+    page = client.get("/chapters/settings")
+    assert page.status_code == 200 and "Index nudity in films" in page.text
