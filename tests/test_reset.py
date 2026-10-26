@@ -307,14 +307,14 @@ def test_a_reset_unmonitored_show_is_refilled_and_remonitored_when_watched(
         assert media.arr_monitored is True
 
 
-def test_untouched_unmonitored_shows_are_still_left_alone(app):
+def test_untouched_unmonitored_shows_get_the_next_season_too(app):
     with app.app_context():
         media, parts = _show()
         media.arr_monitored = False
         parts[(2, 1)].has_file = False
         db.session.commit()
         _watched(parts[(1, 4)], days_ago=1)
-        assert reconcile_acquisition() == 0
+        assert reconcile_acquisition() == 1
 
 
 def test_reset_button_queues_the_reset_for_the_worker(app, client, monkeypatch):

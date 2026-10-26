@@ -35,13 +35,13 @@
 </div>{% endfor %}
 {% endif %}
 {% if missing_shows %}<h2 class="section-title" id="missing-episodes">Missing episodes a show always keeps</h2>
-<p class="text-secondary small">Every show keeps its first episodes, even when nobody's watching. These never downloaded: every release failed, or none matched the show. Sonarr doesn't look again for a show it has unmonitored.</p>
+<p class="text-secondary small">Every show keeps its first episodes, even when nobody's watching. These never downloaded: every release failed, or none matched the show.</p>
 {% for row in missing_shows %}<div class="card p-3 mb-3" data-missing-show="{{ row.media.id }}">
   <div class="d-flex flex-wrap justify-content-between gap-2">
     <div><a class="h5" href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media.id) }} <span class="text-secondary small">{{ row.media.library.name }}</span></div>
     <div class="d-flex flex-wrap gap-2 align-items-center">{{ search_actions(row.media.id, row.state, row.searched) }}</div>
   </div>
-  <p class="mb-1 mt-2">Missing {{ row.codes }}.{% if row.unmonitored %} Sonarr has the show unmonitored, so nothing will fetch them.{% endif %}</p>
+  <p class="mb-1 mt-2">Missing {{ row.codes }}.</p>
   {% if row.state == 'new' %}<p class="small text-secondary mb-0">Never searched for by Curatarr.</p>{% endif %}
 </div>{% endfor %}
 <h2 class="section-title">Files</h2>

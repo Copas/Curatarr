@@ -76,7 +76,7 @@ def test_search_once_asks_for_just_the_missing_episodes(app, client, monkeypatch
         monitored=False,
     )
     page = client.get("/chapters/problems").text
-    assert "Missing S01E02, S01E03." in page and "nothing will fetch them" in page
+    assert "Missing S01E02, S01E03." in page and "nothing will fetch them" not in page
     page = client.post(
         f"/chapters/problems/show/{media.id}/search", follow_redirects=True
     ).text

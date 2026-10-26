@@ -904,12 +904,7 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "icon": "tools",
                 "tone": "warning",
                 "title": row["media"].title,
-                "detail": f"Missing {row['codes']}, which it always keeps"
-                + (
-                    "; Sonarr has the show unmonitored, so nothing will fetch them."
-                    if row["unmonitored"]
-                    else "."
-                ),
+                "detail": f"Missing {row['codes']}, which it always keeps.",
                 "missing_show": row["media"].id,
                 "search_state": row["state"],
                 "searched": row["searched"],

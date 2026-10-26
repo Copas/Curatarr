@@ -288,18 +288,18 @@ NEW_SHOW_DAYS = 30
 
 
 def _just_added(series, now, taken_on=False):
-    """A show added to Sonarr lately, monitored, with nothing downloaded yet.
+    """A show added to Sonarr lately with nothing downloaded yet (monitored or
+    not: Curatarr treats both the same).
 
     Older shows with no files have been searched for already; a show with files
     that Jellyfin doesn't list is a matching problem, and taking it on here
-    would make a second title for it; unmonitored ones Curatarr leaves alone."""
+    would make a second title for it."""
     from datetime import timedelta
 
     added = _as_datetime(series.get("added"))
     files = (series.get("statistics") or {}).get("episodeFileCount")
     return (
-        series.get("monitored") is True
-        and (files == 0 or taken_on)
+        (files == 0 or taken_on)
         and added is not None
         and now - added <= timedelta(days=NEW_SHOW_DAYS)
     )
@@ -1707,8 +1707,6 @@ def _missing_minimum_reason(media):
     )
     what = ", ".join(f"S{s:02}E{e:02}" for s, e in missing) or "Season 1"
     reason = f"Missing always-keep episodes ({what})"
-    if media.arr_monitored is False:
-        reason += "; Sonarr has the show unmonitored, so nothing will fetch them"
     return reason
 
 
@@ -2281,28 +2279,11 @@ def _caught_up(media, season):
     return not premieres or min(premieres) > _as_datetime(watched_at)
 
 
-def _trimmed_by_curatarr(media):
-    """A show Curatarr reset or cleaned up stays Curatarr's to refill, even when
-    Sonarr has it unmonitored (a nightly job unmonitors complete, ended shows)."""
-    if media.viewing_reset_at is not None:
-        return True
-    return (
-        db.session.query(LifecycleAction.id)
-        .filter_by(
-            media_identity_id=media.id, action_type="delete_media", state="SUCCEEDED"
-        )
-        .first()
-        is not None
-    )
-
-
 def _skip_reason(media):
     if media.media_type != "series" or media.sonarr_id is None:
         return "Only TV shows matched to Sonarr can be requested."
     if media.missing_since is not None:
         return "This show is no longer in Jellyfin."
-    if media.arr_monitored is False and not _trimmed_by_curatarr(media):
-        return "Sonarr has this show unmonitored, so Curatarr leaves it alone."
     if media.series_type == "daily":
         return "Daily shows are numbered by date, so Curatarr does not request them."
     return None
@@ -2313,7 +2294,8 @@ def reconcile_acquisition():
 
     Covers what event-driven planning misses: always-keep episodes that were
     never downloaded, and a next season that appeared after viewers caught up.
-    Shows Sonarr has unmonitored, and daily shows, are left alone.
+    A show Sonarr has unmonitored is treated like any other: a request monitors
+    the show and only the episodes asked for. Daily shows are left alone.
     """
     now = utcnow()
     budget = ACQUISITION_SEARCHES_PER_RUN

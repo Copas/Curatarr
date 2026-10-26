@@ -5,6 +5,7 @@ Phase 9 — Playback on every device and household polish, running live; prepari
 
 ## Completed
 - v0.2.0rc23 (2026-10-26): removes the nudity index (unreliable).
+- v0.2.0rc25 (2026-10-26): shows Sonarr has unmonitored are treated like monitored ones.
 - v0.2.0rc24 (2026-10-26): shows just added to Sonarr get their always-keep episodes before Jellyfin lists them.
 - v0.2.0rc23 (2026-10-26): the nudity index is removed: its detector missed real scenes and flagged clean ones.
 - v0.2.0rc22 (2026-10-26): Fun facts shows the nudity rankings as soon as the first film is read.

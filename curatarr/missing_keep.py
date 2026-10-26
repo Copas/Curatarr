@@ -2,8 +2,8 @@
 
 Every show keeps its first episodes (the minimum) even when nobody is watching.
 When one of them never downloads (every release failed, or none matched the
-show), nothing says so: Sonarr only retries what it monitors, and Curatarr
-leaves a show Sonarr has unmonitored alone. These are listed on Enhance →
+show), nothing says so: Sonarr only retries what it monitors. These are
+listed on Enhance →
 Problems, with a button to search for them once.
 """
 

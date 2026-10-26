@@ -271,7 +271,7 @@ def test_a_show_just_added_to_sonarr_is_taken_on_before_jellyfin_lists_it(
         [
             _new_show(77, 777, "Flipping Bangers"),
             _new_show(78, 778, "Long Ago", added=utcnow() - timedelta(days=400)),
-            _new_show(79, 779, "Unmonitored", monitored=False),
+            _new_show(79, 779, "Unmonitored", monitored=False),  # treated the same
             _new_show(80, 780, "Has Files Jellyfin Lacks", files=3),
         ]
     )
@@ -280,7 +280,7 @@ def test_a_show_just_added_to_sonarr_is_taken_on_before_jellyfin_lists_it(
     monkeypatch.setattr("curatarr.services.client", lambda kind: clients[kind])
     discover()
     titles = {m.title: m for m in db.session.query(MediaIdentity)}
-    assert set(titles) == {"Sample Series", "Flipping Bangers"}
+    assert set(titles) == {"Sample Series", "Flipping Bangers", "Unmonitored"}
     new = titles["Flipping Bangers"]
     assert new.library_id == titles["Sample Series"].library_id  # same root folder
     assert new.sonarr_id == 77 and new.jellyfin_id is None and new.missing_since is None

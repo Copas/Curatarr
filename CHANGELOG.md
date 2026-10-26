@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc25 (2026-10-26)
+
+- **Changed: shows Sonarr has unmonitored are treated like any other.** Curatarr used to leave them alone (unless it had trimmed them itself), so a show added unmonitored never got its always-keep episodes or the next season as you watched. Now a request monitors the show and only the episodes it asks for, so Sonarr still doesn't download the rest. Shows just added to Sonarr are taken on before Jellyfin lists them whether they're monitored or not. Daily shows are still left alone.
+
 ## 0.2.0rc24 (2026-10-26)
 
 - **Fixed: a show just added to Sonarr never got its always-keep episodes.** Curatarr learned of shows only from Jellyfin, which lists a show once it has a file, and the always-keep fill is what would have fetched the first one. A show added to Sonarr in the last 30 days, monitored and with nothing downloaded, is now taken on from Sonarr straight away, in the TV library holding other shows from its Sonarr root folder (or the only TV library), and filled on the next hourly check. Once Jellyfin lists it, it's the same title.

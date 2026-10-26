@@ -91,8 +91,7 @@ def test_missing_always_keep_episodes_are_requested(app):
     assert reconcile_acquisition() == 0  # never queued twice
 
 
-def test_unmonitored_daily_and_opted_out_shows_are_left_alone(app):
-    _show("Switched Off", [(1, 1, False)], monitored=False)
+def test_daily_and_opted_out_shows_are_left_alone(app):
     _show("Talk Nightly", [(1, 1, False)], series_type="daily")
     opted_out, _ = _show("Late Show", [(1, 1, False)])
     db.session.add(
@@ -246,10 +245,19 @@ def test_request_now_sends_immediately_even_for_older_viewing(app, client, monke
     assert "Nothing to request" in again
 
 
-def test_request_now_explains_shows_it_will_not_touch(app, client):
+def test_unmonitored_shows_are_filled_like_any_other(app):
+    """Unmonitoring a show in Sonarr doesn't keep Curatarr away: the request
+    monitors the show, and only the episodes it asks for."""
     media, _ = _show("Switched Off", [(1, 1, False)], monitored=False)
+    assert reconcile_acquisition() == 1
+    (action,) = _requests(media)
+    assert action.payload_json["monitor_series"] is True
+
+
+def test_request_now_explains_shows_it_will_not_touch(app, client):
+    media, _ = _show("Talk Nightly", [(1, 1, False)], series_type="daily")
     page = client.post(f"/titles/{media.id}/request", follow_redirects=True).text
-    assert "Sonarr has this show unmonitored" in page
+    assert "Daily shows are numbered by date" in page
     assert _requests() == []
 
 
