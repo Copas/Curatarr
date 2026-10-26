@@ -241,6 +241,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Starting the file check failed")
     try:
+        from . import nudity
+
+        nudity.start()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Starting the nudity index failed")
+    try:
         from .enrichment import resolve_missing_failures
 
         resolve_missing_failures()

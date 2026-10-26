@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc20 (2026-10-25)
+
+- **The nudity index** (Settings → Enhance → Nudity index, off by default; the `nudity` install extra). Curatarr reads each film a frame a second with NudeNet's small detector, checks every frame it flags with NudeNet's large one (downloaded once, 100 MB), both on the server, and notes when bare breasts, full-frontal female nudity and bare bottoms first appear, how many scenes and how long. Tested on twelve films with and without nudity. No picture is kept. One film at a time, about three minutes each, never while Jellyfin is transcoding; animated films and those rated G, PG or Approved are skipped. For administrators: a Nudity section on Fun facts (soonest, most, nudity an hour, films with none) linking to each film's page, where a Nudity card has the details and a timeline.
+
 ## 0.2.0rc19 (2026-10-25)
 
 - **The cast is in some backgrounds.** The AI prompts allowed people in a background only if their faces were large enough to recognise, so the agent always left them out. Now about half the titles' backgrounds, where it suits the story, have the cast on the right-hand side, faces large, clear and well lit, with the lower left still kept calm for the title and plot.

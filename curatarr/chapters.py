@@ -82,6 +82,7 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "finish_at_credits": True,
     "seek_repair": True,
     "pace_rebuilds": True,
+    "nudity_index": False,
     "settle_minutes": 10,
     "scene_threshold": 0.3,
     "ollama_url": "http://127.0.0.1:11434",
@@ -251,6 +252,8 @@ def validate_global_options(values: dict) -> dict:
         raise ChapterConfigError("Invalid dub replacement setting")
     if type(merged["dub_remove_other_languages"]) is not bool:
         raise ChapterConfigError("Invalid setting for removing other languages")
+    if type(merged["nudity_index"]) is not bool:
+        raise ChapterConfigError("Invalid nudity index setting")
     if type(merged["file_check"]) is not bool:
         raise ChapterConfigError("Invalid file check setting")
     if type(merged["file_replace_automatically"]) is not bool:

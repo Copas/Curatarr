@@ -12,6 +12,7 @@ import signal
 import subprocess
 import threading
 import time
+from contextlib import contextmanager
 
 _paused = threading.Event()
 _stopping = threading.Event()  # all work paused on request: tools are ended
@@ -150,3 +151,41 @@ def run(args, timeout, env=None) -> subprocess.CompletedProcess:
     if _stopping.is_set() and process.returncode != 0:
         raise Interrupted
     return subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
+
+
+@contextmanager
+def stream(args):
+    """A tool whose output is read as it's made (frames from FFmpeg), with
+    binary pipes, paused and ended like run's. The caller reads stdout (and
+    stderr, from another thread); ending early kills it."""
+    if _stopping.is_set():
+        raise Interrupted
+    process = subprocess.Popen(
+        args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    pausable = _pausable()
+    with _lock:
+        _children.add(process)
+        if pausable:
+            _suspendable.add(process)
+            if _paused.is_set():
+                os.killpg(process.pid, signal.SIGSTOP)
+    try:
+        yield process
+    finally:
+        if process.poll() is None:
+            for sig in (signal.SIGCONT, signal.SIGKILL):
+                try:
+                    os.killpg(process.pid, sig)
+                except ProcessLookupError:
+                    pass
+        process.wait()
+        with _lock:
+            _children.discard(process)
+            _suspendable.discard(process)
+    if _stopping.is_set():
+        raise Interrupted

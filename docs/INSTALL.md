@@ -44,7 +44,7 @@ Requirements: a systemd-based distribution, **Python 3.12 or newer** with the `v
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc19
+git checkout v0.2.0rc20
 sudo ./scripts/install.sh
 ```
 
@@ -82,6 +82,7 @@ Chapters, subtitles, recap and preview detection, and dub checks need a few more
    sudo EXTRAS=chapters ./scripts/install.sh       # CPU only (much slower)
    ```
    Not sure which? The installer says when it finds an NVIDIA card, and **Settings → Enhance → Paths & tools** shows the card and whether transcription uses it (Enhance also points out a card going unused). Upgrades keep the choice, remembered in `/opt/curatarr/extras`; give `EXTRAS` only to change it. The model (about 1.5 GB for `medium`) downloads to `/var/lib/curatarr/models` on first use.
+   For the [nudity index](FEATURES.md#the-nudity-index), add `nudity` after a comma: `sudo EXTRAS=chapters-gpu,nudity ./scripts/install.sh`. Its 12 MB detector comes with it; nothing is downloaded later.
 3. **Ollama** with a model, for Smart Chapters' chapter names and recap endings:
    ```bash
    curl -fsSL https://ollama.com/install.sh | sh
@@ -119,7 +120,7 @@ sudo systemctl restart curatarr-web curatarr-worker
 ```bash
 cd curatarr-release
 git fetch --tags
-git checkout v0.2.0rc19                 # the new release
+git checkout v0.2.0rc20                 # the new release
 git status --short                     # must print nothing
 sudo ./scripts/install.sh              # add EXTRAS=… again if you use chapters
 sudo systemctl is-active curatarr-web curatarr-worker
@@ -158,7 +159,7 @@ Requirements: Docker Engine with the Compose plugin, and Git.
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 cd curatarr-deploy
-git checkout v0.2.0rc19
+git checkout v0.2.0rc20
 cp .env.example .env
 ```
 
@@ -225,7 +226,7 @@ Open **PowerShell** in a folder where you keep apps (for example `C:\Apps`) and 
 ```powershell
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 Set-Location curatarr-deploy
-git checkout v0.2.0rc19
+git checkout v0.2.0rc20
 Copy-Item .env.example .env
 notepad .env
 ```

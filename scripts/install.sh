@@ -8,7 +8,9 @@
 #   config  $CONFIG_DIR   (default /etc/curatarr; created once, never overwritten)
 #   data    $DATA_DIR     (default /var/lib/curatarr; database and posters)
 # EXTRAS installs optional features, e.g. EXTRAS=chapters (Smart Chapters
-# transcription) or EXTRAS=chapters-gpu (the same, with CUDA libraries).
+# transcription) or EXTRAS=chapters-gpu (the same, with CUDA libraries), and
+# nudity (the nudity index's detector); several with commas:
+# EXTRAS=chapters-gpu,nudity.
 # The choice is remembered in $PREFIX/extras, so later upgrades keep it without
 # repeating EXTRAS; pass EXTRAS= (empty) to drop them.
 # Re-running the script upgrades in place, backing up the SQLite database first.
@@ -266,7 +268,8 @@ fi
 completed=1
 # Smart Chapters transcribes several times faster on an NVIDIA card, but only
 # with the CUDA libraries of the chapters-gpu extra.
-if [ "$EXTRAS" != chapters-gpu ] && command -v nvidia-smi >/dev/null 2>&1 \
+case ",$EXTRAS," in *,chapters-gpu,*) gpu_extras=1 ;; *) gpu_extras= ;; esac
+if [ -z "$gpu_extras" ] && command -v nvidia-smi >/dev/null 2>&1 \
     && nvidia-smi -L >/dev/null 2>&1; then
     say "Found an NVIDIA graphics card. For Smart Chapters and subtitles, install with EXTRAS=chapters-gpu so transcription uses it."
 fi

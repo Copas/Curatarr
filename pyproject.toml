@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curatarr"
-version = "0.2.0rc19"
+version = "0.2.0rc20"
 description = "A deterministic media lifecycle manager for Jellyfin, Sonarr, and Radarr"
 requires-python = ">=3.12"
 dependencies = [
@@ -24,6 +24,8 @@ dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
 # that PyAV 16 removed. chapters-gpu adds the CUDA runtime libraries
 # (cuBLAS 12, cuDNN 9) for transcription on an NVIDIA GPU.
 chapters = ["faster-whisper>=1.1,<2", "av>=11,<16"]
+# The nudity index's detector (NudeNet: a 12 MB model, run on the processor).
+nudity = ["nudenet>=3.4,<4"]
 chapters-gpu = [
   "curatarr[chapters]",
   "nvidia-cublas-cu12>=12,<13",

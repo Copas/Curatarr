@@ -1998,10 +1998,27 @@ def title(media_id):
         flag_accounts=sorted(account_names().items(), key=lambda a: a[1]),
         title_posters=custom_posters.for_title(media.id, None),
         picture_kinds=custom_posters.KINDS,
+        nudity_found=_nudity_for(media),
+        nudity_clock=_clock,
         picture_names=custom_posters.KIND_NAMES,
         poster_accounts=sorted(account_names().items(), key=lambda a: a[1]),
         **title_view(media),
     )
+
+
+def _clock(seconds):
+    from .nudity import clock
+
+    return clock(seconds)
+
+
+def _nudity_for(media):
+    """A film's nudity index, for administrators."""
+    from . import nudity
+
+    if media.media_type != "movie" or not nudity.enabled():
+        return None
+    return nudity.for_title(media.id)
 
 
 @bp.get("/more")
