@@ -209,3 +209,112 @@ def test_discovery_without_radarr_matches_the_shows(app, monkeypatch):
     with app.app_context():
         assert discover() == 1
         assert db.session.query(MediaIdentity).one().sonarr_id == 42
+
+
+class SonarrWithNewShows(FakeSonarr):
+    """Sample Series (in Jellyfin) and shows Jellyfin doesn't list yet."""
+
+    def __init__(self, extra):
+        self.extra = extra
+
+    def series(self):
+        return [
+            {"id": 42, "tvdbId": 123, "rootFolderPath": "/tv/"},
+            *self.extra,
+        ]
+
+    def episodes(self, series_id):
+        if series_id == 42:
+            return super().episodes(series_id)
+        return [
+            {
+                "id": series_id * 100 + n,
+                "seasonNumber": s,
+                "episodeNumber": n,
+                "hasFile": False,
+            }
+            for s in (1, 2)
+            for n in range(1, 7)
+        ]
+
+    def episode_files(self, series_id):
+        return super().episode_files(series_id) if series_id == 42 else []
+
+
+def _new_show(series_id, tvdb, title, *, added=None, monitored=True, files=0):
+    from datetime import timedelta
+
+    from curatarr.models import utcnow
+
+    return {
+        "id": series_id,
+        "tvdbId": tvdb,
+        "title": title,
+        "monitored": monitored,
+        "rootFolderPath": "/tv",
+        "added": (added or utcnow() - timedelta(hours=1)).isoformat(),
+        "statistics": {"episodeFileCount": files},
+    }
+
+
+def test_a_show_just_added_to_sonarr_is_taken_on_before_jellyfin_lists_it(
+    app, monkeypatch
+):
+    """Jellyfin lists a show only once it has a file, and only the always-keep
+    fill would fetch one: a new show must be known from Sonarr alone."""
+    from datetime import timedelta
+
+    from curatarr.models import utcnow
+    from curatarr.services import _skip_reason
+
+    sonarr = SonarrWithNewShows(
+        [
+            _new_show(77, 777, "Flipping Bangers"),
+            _new_show(78, 778, "Long Ago", added=utcnow() - timedelta(days=400)),
+            _new_show(79, 779, "Unmonitored", monitored=False),
+            _new_show(80, 780, "Has Files Jellyfin Lacks", files=3),
+        ]
+    )
+    jellyfin = FakeJellyfin()
+    clients = {"jellyfin": jellyfin, "sonarr": sonarr, "radarr": FakeRadarr()}
+    monkeypatch.setattr("curatarr.services.client", lambda kind: clients[kind])
+    discover()
+    titles = {m.title: m for m in db.session.query(MediaIdentity)}
+    assert set(titles) == {"Sample Series", "Flipping Bangers"}
+    new = titles["Flipping Bangers"]
+    assert new.library_id == titles["Sample Series"].library_id  # same root folder
+    assert new.sonarr_id == 77 and new.jellyfin_id is None and new.missing_since is None
+    assert db.session.query(MediaPart).filter_by(media_identity_id=new.id).count() == 12
+    assert _skip_reason(new) is None  # the always-keep fill can request it
+    from curatarr.models import LifecycleAction
+    from curatarr.services import reconcile_acquisition
+
+    assert reconcile_acquisition() >= 1
+    asked = db.session.query(LifecycleAction).filter_by(media_identity_id=new.id).all()
+    assert asked and "always keeps" in asked[0].reason_text
+
+    # Its first files arrive, then Jellyfin lists it: still the same title.
+    sonarr.extra[0]["statistics"]["episodeFileCount"] = 2
+    discover()
+    assert db.session.get(MediaIdentity, new.id).missing_since is None
+
+    class JellyfinListsIt(FakeJellyfin):
+        def items(self, library_id, start, limit):
+            page = super().items(library_id, start, limit)
+            if not start:
+                page["Items"] = page["Items"] + [
+                    {
+                        "Id": "series-2",
+                        "Type": "Series",
+                        "Name": "Flipping Bangers",
+                        "ProviderIds": {"Tvdb": "777"},
+                    }
+                ]
+            return page
+
+    clients["jellyfin"] = JellyfinListsIt()
+    discover()
+    shows = db.session.query(MediaIdentity).filter_by(title="Flipping Bangers").all()
+    assert (
+        len(shows) == 1 and shows[0].id == new.id and shows[0].jellyfin_id == "series-2"
+    )

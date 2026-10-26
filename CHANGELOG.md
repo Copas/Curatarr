@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc24 (2026-10-26)
+
+- **Fixed: a show just added to Sonarr never got its always-keep episodes.** Curatarr learned of shows only from Jellyfin, which lists a show once it has a file, and the always-keep fill is what would have fetched the first one. A show added to Sonarr in the last 30 days, monitored and with nothing downloaded, is now taken on from Sonarr straight away, in the TV library holding other shows from its Sonarr root folder (or the only TV library), and filled on the next hourly check. Once Jellyfin lists it, it's the same title.
+
 ## 0.2.0rc23 (2026-10-26)
 
 - **Removed: the nudity index** (added in 0.2.0rc20). On real films it missed scenes with nudity and flagged clean ones (a shirtless man, a woman at a kitchen table), and neither a larger reading nor a second opinion from a local vision model made it trustworthy. Its setting, the Fun facts section, the card on film pages and the stored results are gone; the `nudity` install extra is dropped from remembered extras on upgrade.

@@ -241,6 +241,139 @@ def _upsert_part(media, kind, season, episode, item):
     return part
 
 
+def _sync_series(media, match, sonarr, curation, from_lists):
+    """A show's Sonarr side: its ids and monitoring, and every episode with its file."""
+    media.sonarr_id = match["id"]
+    media.arr_monitored = match.get("monitored")
+    media.series_type = match.get("seriesType")
+    curation.remember_tags(media, match)
+    from_lists.observe(media, match)
+    episode_files = {
+        entry["id"]: entry for entry in sonarr.episode_files(media.sonarr_id)
+    }
+    for episode in sonarr.episodes(media.sonarr_id):
+        file_entry = episode_files.get(episode.get("episodeFileId"))
+        part = _upsert_part(
+            media,
+            "episode",
+            episode.get("seasonNumber"),
+            episode.get("episodeNumber"),
+            {
+                "HasFile": episode.get("hasFile", False),
+                "AddedAt": (file_entry or {}).get("dateAdded"),
+            },
+        )
+        part.sonarr_episode_id = episode.get("id")
+        part.arr_file_id = episode.get("episodeFileId") or None
+        part.file_path = (file_entry or {}).get("path")
+        size = (file_entry or {}).get("size", 0) if part.arr_file_id else 0
+        part.size_bytes = size if type(size) is int and size >= 0 else 0
+        part.air_date = _as_datetime(episode.get("airDateUtc"))
+
+
+def _series_folder(series):
+    """The folder Sonarr keeps a show in (its root folder)."""
+    import posixpath
+
+    root = series.get("rootFolderPath")
+    if root:
+        return root.rstrip("/")
+    path = (series.get("path") or "").rstrip("/")
+    return posixpath.dirname(path) if path else None
+
+
+# How recently a show must have been added to Sonarr for Curatarr to take it
+# on before Jellyfin lists it.
+NEW_SHOW_DAYS = 30
+
+
+def _just_added(series, now, taken_on=False):
+    """A show added to Sonarr lately, monitored, with nothing downloaded yet.
+
+    Older shows with no files have been searched for already; a show with files
+    that Jellyfin doesn't list is a matching problem, and taking it on here
+    would make a second title for it; unmonitored ones Curatarr leaves alone."""
+    from datetime import timedelta
+
+    added = _as_datetime(series.get("added"))
+    files = (series.get("statistics") or {}).get("episodeFileCount")
+    return (
+        series.get("monitored") is True
+        and (files == 0 or taken_on)
+        and added is not None
+        and now - added <= timedelta(days=NEW_SHOW_DAYS)
+    )
+
+
+def _discover_sonarr_only(sonarr_series, sonarr, curation, from_lists):
+    """Shows just added to Sonarr that Jellyfin doesn't list yet: with nothing
+    downloaded, Jellyfin has nothing to show. Without them Curatarr never filled
+    a new show's always-keep episodes (it waited for a file only its fill would
+    fetch). Each goes in the TV library holding other shows from the same Sonarr
+    root folder, or the only TV library there is. Once Jellyfin lists the show
+    it's the same title (matched by its TVDB id). Returns the ids of the titles
+    seen."""
+    seen = set()
+    if not sonarr_series:
+        return seen
+    tv_libraries = (
+        db.session.query(Library)
+        .filter(Library.media_type == "tv", Library.enabled.is_(True))
+        .all()
+    )
+    if not tv_libraries:
+        return seen
+    known = {
+        str(m.tvdb_id): m
+        for m in db.session.query(MediaIdentity).filter(
+            MediaIdentity.media_type == "series", MediaIdentity.tvdb_id.isnot(None)
+        )
+    }
+    by_id = {s.get("id"): s for s in sonarr_series}
+    folders = {}  # Sonarr root folder -> library ids of shows Jellyfin lists from it
+    for media in known.values():
+        series = by_id.get(media.sonarr_id)
+        if series and media.jellyfin_id and media.missing_since is None:
+            folders.setdefault(_series_folder(series), set()).add(media.library_id)
+    now = utcnow()
+    for series in sonarr_series:
+        tvdb = series.get("tvdbId")
+        if not tvdb:
+            continue
+        media = known.get(str(tvdb))
+        if media is not None and media.jellyfin_id:
+            continue  # Jellyfin lists it (or did, and it's gone: left as missing)
+        # Taken on only while new and empty; kept up, once taken on, until
+        # Jellyfin lists it (its first files arrive before Jellyfin's scan).
+        if not _just_added(series, now, taken_on=media is not None):
+            continue
+        if media is None:
+            candidates = folders.get(_series_folder(series), set())
+            if len(candidates) == 1:
+                library_id = next(iter(candidates))
+            elif len(tv_libraries) == 1:
+                library_id = tv_libraries[0].id
+            else:
+                continue  # no telling which library: wait for Jellyfin to list it
+            media = MediaIdentity(
+                library_id=library_id,
+                media_type="series",
+                title=series.get("title") or "Untitled",
+                tvdb_id=int(tvdb),
+            )
+            db.session.add(media)
+        media.title = series.get("title") or media.title
+        media.tmdb_id = series.get("tmdbId") or media.tmdb_id
+        media.imdb_id = series.get("imdbId") or media.imdb_id
+        media.added_at = media.added_at or _as_datetime(series.get("added"))
+        media.last_seen_at = utcnow()
+        media.missing_since = None
+        db.session.flush()
+        _sync_series(media, series, sonarr, curation, from_lists)
+        seen.add(media.id)
+    return seen
+
+
 def _library_type(collection_type):
     return {"tvshows": "tv", "movies": "movies"}.get(
         (collection_type or "").lower(), "other"
@@ -298,39 +431,7 @@ def discover():
                 if media_type == "series" and media.tvdb_id:
                     match = series_by_tvdb.get(str(media.tvdb_id))
                     if match:
-                        media.sonarr_id = match["id"]
-                        media.arr_monitored = match.get("monitored")
-                        media.series_type = match.get("seriesType")
-                        curation.remember_tags(media, match)
-                        from_lists.observe(media, match)
-                        episode_files = {
-                            entry["id"]: entry
-                            for entry in sonarr.episode_files(media.sonarr_id)
-                        }
-                        file_sizes = {
-                            file_id: entry.get("size", 0)
-                            for file_id, entry in episode_files.items()
-                        }
-                        for episode in sonarr.episodes(media.sonarr_id):
-                            file_entry = episode_files.get(episode.get("episodeFileId"))
-                            part = _upsert_part(
-                                media,
-                                "episode",
-                                episode.get("seasonNumber"),
-                                episode.get("episodeNumber"),
-                                {
-                                    "HasFile": episode.get("hasFile", False),
-                                    "AddedAt": (file_entry or {}).get("dateAdded"),
-                                },
-                            )
-                            part.sonarr_episode_id = episode.get("id")
-                            part.arr_file_id = episode.get("episodeFileId") or None
-                            part.file_path = (file_entry or {}).get("path")
-                            size = file_sizes.get(part.arr_file_id, 0)
-                            part.size_bytes = (
-                                size if type(size) is int and size >= 0 else 0
-                            )
-                            part.air_date = _as_datetime(episode.get("airDateUtc"))
+                        _sync_series(media, match, sonarr, curation, from_lists)
                 if media_type == "movie" and media.tmdb_id:
                     match = movies_by_tmdb.get(str(media.tmdb_id))
                     if match:
@@ -371,6 +472,7 @@ def discover():
                     item,
                 )
         library.last_scanned_at = utcnow()
+    seen |= _discover_sonarr_only(sonarr_series, sonarr, curation, from_lists)
     for media in db.session.query(MediaIdentity).all():
         if media.id not in seen and media.missing_since is None:
             media.missing_since = utcnow()
