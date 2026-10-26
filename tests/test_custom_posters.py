@@ -154,8 +154,13 @@ def test_the_pages(app, client, monkeypatch):
     page = client.get(f"/titles/{media.id}").text
     assert "Use this picture" in page and "As its wide tile" in page
     assert 'data-preview="#poster-preview"' in page and "poster-preview.js" in page
+    # Its poster (Jellyfin's own here) opens full screen.
+    assert f'data-full="/posters/{media.id}"' in page and "lightbox.js" in page
     custom_posters.apply(media, _picture("#cc2222"), "Uploaded")
-    assert "Restore original" in client.get(f"/titles/{media.id}").text
+    page = client.get(f"/titles/{media.id}").text
+    assert "Restore original" in page
+    poster = custom_posters.active(media.id)
+    assert f'data-full="/library/posters/{poster.id}' in page  # and the custom one
     gallery = client.get("/library/posters").text
     assert "1 title with custom pictures" in gallery and media.title in gallery
 

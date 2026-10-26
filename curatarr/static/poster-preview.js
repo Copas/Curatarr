@@ -7,6 +7,8 @@ document.addEventListener("change", (event) => {
   const reader = new FileReader();
   reader.onload = () => {
     target.src = reader.result;
+    const opener = target.closest("[data-full]");  // full screen shows the preview too
+    if (opener) opener.dataset.full = reader.result;
     const caption = document.querySelector(input.dataset.previewCaption);
     if (caption) caption.textContent = "Preview: not saved until you press Use this picture";
   };

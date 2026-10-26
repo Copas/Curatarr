@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc27 (2026-10-26)
+
+- **A title page's pictures open full screen** when clicked, as on the Posters page: its poster (Jellyfin's own or a custom one, and a picture picked for upload before it's saved) and each custom wide tile, background, logo, banner and per-account picture listed beside it. A click anywhere or Esc closes it.
+
 ## 0.2.0rc26 (2026-10-26)
 
 - **Picture prompts point the AI to each title's original art** (on by default: *Use each title's original art as a reference*). Each title lists its original poster, background, wide tile, logo and banner found beside its file, and the AI is asked to carry over their mood, colour palette, era, genre feel and visual motifs, taking the feel rather than the layout and none of the actors' faces. Written from the story alone, the pictures lost the feel of the film.
