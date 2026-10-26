@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc28 (2026-10-26)
+
+- **Search shows the titles straight away**, then adds *What was said* below them as the transcript search finishes, instead of waiting for both before showing anything.
+
 ## 0.2.0rc27 (2026-10-26)
 
 - **A title page's pictures open full screen** when clicked, as on the Posters page: its poster (Jellyfin's own or a custom one, and a picture picked for upload before it's saved) and each custom wide tile, background, logo, banner and per-account picture listed beside it. A click anywhere or Esc closes it.

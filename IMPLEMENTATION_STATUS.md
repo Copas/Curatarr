@@ -5,6 +5,7 @@ Phase 9 — Playback on every device and household polish, running live; prepari
 
 ## Completed
 - v0.2.0rc23 (2026-10-26): removes the nudity index (unreliable).
+- v0.2.0rc28 (2026-10-26): search shows title matches at once, then what was said.
 - v0.2.0rc27 (2026-10-26): a title page's pictures open full screen when clicked.
 - v0.2.0rc26 (2026-10-26): picture prompts point the AI to each title's original art as a tonal reference.
 - v0.2.0rc25 (2026-10-26): shows Sonarr has unmonitored are treated like monitored ones.

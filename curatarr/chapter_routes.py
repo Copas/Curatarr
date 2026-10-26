@@ -816,8 +816,19 @@ def search():
         "search.html",
         query=query,
         titles=titles,
-        results=search_transcripts(query, 15) if query else [],
         searchable=transcripts_searchable(),
+    )
+
+
+@bp.get("/search/said")
+def search_said():
+    """The search page's "What was said", fetched after the titles are shown:
+    the transcript search is what kept the whole page waiting."""
+    query = (request.args.get("q") or "").strip()[:200]
+    return render_template(
+        "search_said.html",
+        results=search_transcripts(query, 15) if query else [],
+        titles_found=request.args.get("titles", "0") not in ("", "0"),
     )
 
 

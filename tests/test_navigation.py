@@ -83,7 +83,11 @@ def test_search_finds_titles_and_says_when_nothing_matches(app, client):
     seed_demo()
     page = client.get("/search?q=Demo+Movie+07").text
     assert "Demo Movie 07" in page and ">Titles<" in page
-    assert "No matches" in client.get("/search?q=zzzz-nothing").text
+    # What was said follows, fetched by the page: titles don't wait for it.
+    assert 'data-said="/search/said?q=Demo+Movie+07&amp;titles=1"' in page
+    assert "search-said.js" in page and "Searching what was said" in page
+    assert "No matches" not in client.get("/search/said?q=Demo+Movie+07&titles=1").text
+    assert "No matches" in client.get("/search/said?q=zzzz-nothing&titles=0").text
 
 
 def test_overview_lists_what_needs_someone(app, client):
