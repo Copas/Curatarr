@@ -28,7 +28,7 @@ Only people Jellyfin already lets delete an item can do any of this.
 
 ## Install
 
-**From Curatarr** (easiest): Settings → **Curatarr plugin for Jellyfin** → **Install in Jellyfin**. Curatarr adds the plugin's repository to Jellyfin, installs the plugin and restarts Jellyfin; as soon as Jellyfin is back, it finds an address Jellyfin can reach it at (tested through the plugin) and gives the plugin that address and the webhook token, again whenever the token changes. A plugin installed by hand is connected with **Connect** on the same page.
+**From Curatarr** (easiest): Settings → **Curatarr plugin for Jellyfin** → **Install in Jellyfin**. Curatarr adds the plugin's repository to Jellyfin, installs the plugin and restarts Jellyfin; as soon as Jellyfin is back, it finds an address Jellyfin can reach it at (tested through the plugin) and gives the plugin that address and the webhook token, again whenever the token changes. A plugin installed by hand is connected with **Connect** on the same page. With **Install plugin updates automatically** on (the same page), a newer plugin is installed as soon as Curatarr needs it, and Jellyfin is restarted once nobody has watched anything for a while.
 
 **By hand**: in Jellyfin, **Dashboard → Plugins → Repositories → +**, add
 

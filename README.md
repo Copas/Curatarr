@@ -80,10 +80,9 @@ Curatarr checks every file so you don't find out halfway through a film:
 - **The wrong show entirely**: a 1987 namesake filed under your 2019 series
 - **No English audio** on a film that was sold as an English dub
 - **Wrong episodes**: a file whose dialogue matches a different episode's summary
-
 - **Misfiled episodes**: an episode Sonarr filed in another's slot is moved back where it belongs
 
-When Curatarr can be sure, it fixes these by itself. Every **Replace** first checks that a better copy actually exists; only then does it blocklist the bad release, delete the file and grab the new one. If nothing better is out there, it keeps what you have and tells you so.
+Each problem is listed with a button to fix it, and once you trust a kind of fix, Settings → Automatic lets Curatarr do it by itself whenever it can be sure. Every **Replace** first checks that a better copy actually exists; only then does it blocklist the bad release, delete the file and grab the new one. If nothing better is out there, it keeps what you have and tells you so.
 
 ![Problems: each with a fix, and a status once you've clicked](docs/images/problems.png)
 
@@ -99,12 +98,12 @@ When Curatarr can be sure, it fixes these by itself. Every **Replace** first che
 - **Seeking that works on Roku**: files whose seek index sits where Roku players don't look are rebuilt (nothing re-encoded), so skipping ahead doesn't start the episode over.
 - **Posters in your language**: a new release that arrived with only a foreign poster gets one in your language once TMDB has it.
 
-The picture is never re-encoded; the only thing ever encoded is an extra audio track, with the original kept beside it. Chapters and subtitles wait until you switch them on; the fixes Curatarr can be sure of are on from the start.
+The picture is never re-encoded; the only thing ever encoded is an extra audio track, with the original kept beside it. Chapters and subtitles wait until you switch them on. The checks run from the start, but anything that would change a file waits for your OK until you make that fix automatic.
 
 ![Enhance: what Curatarr has done for your library so far](docs/images/chapters.png)
 
 ### 🖼️ Posters starring your household
-Give any title your own poster: upload one, or drop a folder of pictures and Curatarr matches each to its title. Curatarr can even write the prompts for an image-making AI to make them, in batches, with the two of you cast as the leads of your favourite films. With the Curatarr plugin, a poster can be for chosen accounts only: you see yourselves on the Roku, the kids' account sees the usual art. And favourite ribbons put a gold star and Sam's face on the posters of what someone else in the house loves. The original is always kept, one click away.
+Give any title your own poster: upload one, or drop a folder of pictures and Curatarr matches each to its title. Curatarr can even write the prompts for an image-making AI to make them, in batches, with the two of you cast as the leads of your favourite films. With the Curatarr plugin, a poster can be for chosen accounts only: you see yourselves on the Roku, the kids' account sees the usual art. Each title's original art is handed to the AI as a reference, so the new pictures keep the film's feel. And favourite ribbons put a gold star and Sam's face on the posters of what someone else in the house loves. The original is always kept, one click away, and the **Gallery** lays every picture out, title by title, with a slideshow for showing them off.
 
 ### 🎉 Fun facts the whole household will argue about
 Which film swears most per hour? Which show says "I love you" most? Who talks longest without a pause, and what's each show's catchphrase? **Fun facts** ranks your library by what's actually said in it, all per hour or per minute so a long-running show doesn't win just by being long. Handy, too, for finding the films that don't swear at all when the kids are around.
@@ -175,7 +174,8 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Custom posters](docs/FEATURES.md#custom-posters) | Your own poster for any title, and its wide tile, background, logo and banner, uploaded or picked up from a folder (or made by an AI from prompts Curatarr writes), with the originals kept to restore. | One click |
 | [Posters for one account](docs/FEATURES.md#for-everyone-or-for-chosen-accounts) | A poster only chosen accounts see, in every app (Roku included); everyone else keeps the usual one. | With the plugin |
 | [Favourite ribbons](docs/FEATURES.md#favourite-ribbons) | A gold band with a star and Sam's face on what someone favourited (and "★ Sam" on its page), shown to the accounts you choose; NEW for a week, "♥ Household favourite" for everyone's, and on favourite episodes too. | Off, with the plugin |
-| [Make them with an AI](docs/FEATURES.md#make-them-with-an-ai) | Prompts in batches for an image-making AI agent, with each title's plot and file name, and your household cast as the leads where it suits. | One click |
+| [Make them with an AI](docs/FEATURES.md#make-them-with-an-ai) | Prompts in batches for an image-making AI agent, with each title's plot, original art for reference and file name, and your household cast as the leads where it suits. | One click |
+| [Gallery](docs/FEATURES.md#gallery) | Every picture made, laid out to show people: a page per title (its background and logo, then its poster, wide tile and banner), full screen and a slideshow. | **On** |
 | [Posters in your language](docs/FEATURES.md#collections-and-suggestions) | A new release that arrived with a foreign poster gets one in your language once TMDB has it. | **On** |
 
 ### ▶️ Plays smoothly everywhere

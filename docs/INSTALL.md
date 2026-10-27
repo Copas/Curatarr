@@ -31,7 +31,7 @@ You need:
 - A Jellyfin account with the **Administrator** permission to sign in to Curatarr.
 - Optional: Jellyfin's **Webhook** plugin (Dashboard → Plugins → Catalog) for instant playback updates, the **Intro Skipper** plugin if you want recap and preview skip buttons, and **Seerr** (or Jellyseerr/Overseerr) so requested titles are kept until whoever asked has watched them.
 
-Always install a **tagged release** (the newest is `v0.2.0rc7`; see [CHANGELOG.md](../CHANGELOG.md)), not the `main` branch.
+Always install a **tagged release** (the newest is at the top of [CHANGELOG.md](../CHANGELOG.md), and in the commands below), not the `main` branch.
 
 ---
 
@@ -121,7 +121,7 @@ cd curatarr-release
 git fetch --tags
 git checkout v0.2.0rc33                 # the new release
 git status --short                     # must print nothing
-sudo ./scripts/install.sh              # add EXTRAS=… again if you use chapters
+sudo ./scripts/install.sh              # remembers your EXTRAS; pass EXTRAS=… to change them
 sudo systemctl is-active curatarr-web curatarr-worker
 ```
 
@@ -317,7 +317,8 @@ Logs: `docker compose logs --tail=100 web worker`. Don't use `docker compose dow
    **Optional: the Curatarr plugin for Jellyfin.** With it, Delete in any Jellyfin app marks a film or show Leaving Soon instead of deleting its files behind Radarr's and Sonarr's backs. In Settings → Integrations, under *Curatarr plugin for Jellyfin*, click **Install in Jellyfin**. Curatarr installs it, restarts Jellyfin and sets it up when Jellyfin is back, so there's nothing to type or copy. See [jellyfin-plugin](../jellyfin-plugin/README.md).
 4. **Discover.** Click **Discover** on Overview. It runs in the background; a large library takes about a minute. Settings → Operations shows when it's done.
 5. **Review the rules.** Look over Settings → Acquisition and Settings → Retention. Every library starts in **dry run**: Curatarr goes through the whole process and records what it *would* remove in History, but deletes nothing. Turn dry run off globally or per library when you're happy.
-6. **Optional:** switch on chapters per library in Settings → Enhance, allow household members in Settings → Integrations → Household access, connect Seerr on the same page, and look over Settings → Household (requests, import lists, seasonal shelves).
+6. **Look at what it finds.** The checks (problem files, wrong dubs, the wrong show, files Roku can't seek in, …) start straight away, and what they find waits on **Enhance → Problems** with a button to fix each one. Once you trust a kind of fix, switch it on in **Settings → Automatic** and Curatarr does it by itself from then on. Find Favorites, which adds the rest of a favourite film's series to Radarr, is there too.
+7. **Optional:** switch on chapters per library in Settings → Enhance, allow household members in Settings → Integrations → Household access, connect Seerr on the same page, and look over Settings → Household choices (requests, import lists, seasonal shelves).
 
 ---
 

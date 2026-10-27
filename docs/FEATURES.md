@@ -10,7 +10,7 @@
 - [Problems: burned-in subtitles and broken files](#problems-burned-in-subtitles-and-broken-files)
 - [Search what was said](#search-what-was-said)
 - [Collections and suggestions](#collections-and-suggestions)
-- [Custom posters](#custom-posters): for everyone or chosen accounts, favourite ribbons, and prompts for an AI
+- [Custom posters](#custom-posters): for everyone or chosen accounts, favourite ribbons, prompts for an AI, and the Gallery
 - [Fun facts](#fun-facts)
 - [Sharing the machine with playback](#sharing-the-machine-with-playback)
 - [Playing smoothly on every device](#playing-smoothly-on-every-device): audio every device plays, seeking on Roku
@@ -64,7 +64,7 @@ The transcoder, or a small script beside it, says how many files are waiting wit
 
 ### What the household's choices change
 
-Settings → Household. Each of these shows on a title's page, and in Review, as a short note saying why.
+Settings → Household choices. Each of these shows on a title's page, and in Review, as a short note saying why.
 
 - **Requested.** With Seerr (or Jellyseerr/Overseerr) connected, a title someone asked for isn't cleaned up until that person has played it, for up to 90 days. Declined requests don't count.
 - **Rewatched.** A film played twice or more (by one person or several), or a show someone has rewatched three episodes of or two people each follow, goes to the back of the line, like a favourite. Play counts come from Jellyfin.
@@ -216,7 +216,7 @@ On by default; settings in Settings → Enhance → File problems. A background 
 | **Goes quiet** (films) | Nobody speaks after the first 60% of a film that has a transcript. |
 | **Decoding errors** | Errors from the video or audio decoder at two or more of six points through the file. |
 
-Problem files are listed on **Enhance → Problems** and on Overview, to **Replace** (blocklist the release in Radarr or Sonarr, delete the file, search again), **Check again** or **Keep**. **Replace problem files automatically** is on by default (Settings → Automatic); dry run is respected. A film that's one part of a split release ("Part.2", "CD1", "Part.II") is flagged as such, and replacing it has Radarr ignore split releases for that film.
+Problem files are listed on **Enhance → Problems** and on Overview, to **Replace** (blocklist the release in Radarr or Sonarr, delete the file, search again), **Check again** or **Keep**. **Replace problem files automatically** (Settings → Automatic, off on a new installation) does that as soon as one is found; dry run is respected. A film that's one part of a split release ("Part.2", "CD1", "Part.II") is flagged as such, and replacing it has Radarr ignore split releases for that film.
 
 ### Shows that are another show with the same name
 
@@ -224,7 +224,7 @@ Sonarr sometimes grabs a namesake: a remake, or a foreign show with the same tit
 
 ### Episodes filed under the wrong episode
 
-A release numbered one way and read another (scene numbering applied to a release already numbered the TVDB way, a special counted into the season) lands on another episode's slot, and Sonarr renames it to match. Every half hour Curatarr looks at the last two weeks of Sonarr's imports for files whose download name carries another episode's title. It then compares what's said in the file (its transcript, from chapter, skip-marker or subtitle work) with every episode's title and summary. When both clues point at the same episode, the file is moved there in Sonarr and renamed, and the episode it was filed under is searched for again (or unmonitored, when the show uses scene numbering and a search would bring the same mix-up back). If that episode already has a file, it has to be shown to be the same episode before the worse copy is deleted; a file there that is itself waiting to move goes first, so a whole season shifted by one slot is put right one episode at a time. When what's said fits where the file is filed, the name was wrong and nothing is listed. Anything less certain is on Problems, with Move, Delete this copy and It's right.
+A release numbered one way and read another (scene numbering applied to a release already numbered the TVDB way, a special counted into the season) lands on another episode's slot, and Sonarr renames it to match. Every half hour Curatarr looks at the last two weeks of Sonarr's imports for files whose download name carries another episode's title. It then compares what's said in the file (its transcript, from chapter, skip-marker or subtitle work) with every episode's title and summary. When both clues point at the same episode, the file is listed to **Move** (or, with Settings → Automatic's switch on, moved straight away): it's moved there in Sonarr and renamed, and the episode it was filed under is searched for again (or unmonitored, when the show uses scene numbering and a search would bring the same mix-up back). If that episode already has a file, it has to be shown to be the same episode before the worse copy is deleted; a file there that is itself waiting to move goes first, so a whole season shifted by one slot is put right one episode at a time. When what's said fits where the file is filed, the name was wrong and nothing is listed. Anything less certain is on Problems, with Move, Delete this copy and It's right.
 
 ### Automatic fixes
 
@@ -254,7 +254,7 @@ The row shows where the request is: "Looking for a better copy…" with **Cancel
 
 Below, **Suggested for you** takes Radarr's recommendations (films TMDB links to ones in the library), drops anything already there, unreleased or hidden, and ranks the rest by rating and by how well their genres match the films the household has favourited in Jellyfin. Tick and add, or hide a film with **Not for us**.
 
-**Posters in your language** (Settings → Household, on by default): Jellyfin takes a title's poster when it arrives, and a new release often has only foreign posters on TMDB at first, so it keeps a Chinese or Persian one even after an English one appears. Once a day Curatarr compares the poster of each film and show released in the last year with the ones TMDB offers. When it's one in another language and there's one in Jellyfin's metadata language now, Jellyfin is told to use that one. Posters that match none of TMDB's (chosen by hand, or from another source) and Leaving Soon posters are left alone; a title with no poster in the metadata language yet is looked at again every few days. A plugin that rotates posters will undo this.
+**Posters in your language** (Settings → Household choices, on by default): Jellyfin takes a title's poster when it arrives, and a new release often has only foreign posters on TMDB at first, so it keeps a Chinese or Persian one even after an English one appears. Once a day Curatarr compares the poster of each film and show released in the last year with the ones TMDB offers. When it's one in another language and there's one in Jellyfin's metadata language now, Jellyfin is told to use that one. Posters that match none of TMDB's (chosen by hand, or from another source) and Leaving Soon posters are left alone; a title with no poster in the metadata language yet is looked at again every few days. A plugin that rotates posters will undo this.
 
 ---
 
@@ -302,9 +302,11 @@ It needs the Curatarr plugin for Jellyfin (0.4.0.0 or later) and works like post
 
 ### Make them with an AI
 
-**Posters → Gallery** lays out every picture made to show people: **Sets** gives each title a hero card (its background, with its poster and logo over it) that opens the title's own page (its background across the top with its logo over it, then its poster, wide tile and banner, large; ‹ › or the arrow keys step through the titles), and **Backgrounds**, **Posters** and **Wide tiles** show every picture of one type on its own. Any picture opens full screen with arrows (or swiping) to look through the rest, and **Slideshow** plays them by themselves.
-
 The Posters page writes prompts for an image-making AI agent that can read and save files (Codex, for example). Choose the titles (anyone's or one account's favourites, every film or every TV show; titles with no file on disk are left out), which pictures to make (the poster, wide tile, background, logo and banner; more than one makes a matching set, the same cast and style, each a different scene), how many per batch, *The look* (by default an extreme, over-the-top movie-poster take with big, intense expressions; change it or empty it), whether to point the AI to each title's original art (on by default: its poster, background, wide tile, logo and banner found beside the file, as a tonal reference for mood, palette, era and motifs), and optionally a folder of reference photos (named after who's in each) and who's in them, to cast as the main characters in place of the actors where a story suits it. To keep them recognisable, the prompt has the agent use all of each person's photos across the pictures (a different one leading each time), build every picture from images rather than a description (their photos plus the title's poster, made and checked first where it's new, so a set's faces match), and keep faces large; Curatarr warns if the folder isn't there. Each batch's prompt lists its titles with year, genres, plot and the file name to save, and says to save into the import folder, where Curatarr puts them on as they arrive, for the accounts you chose. With *Skip titles that have them all*, a title is asked only for the pictures it lacks; where its poster is already in the import folder, the prompt points the AI to it so the rest match it, and the new files are named after it. The photos are read by the agent, never by Curatarr; only use photos of people who've agreed, and if the agent is a cloud service, they're sent there.
+
+### Gallery
+
+**Library → Posters → Gallery** lays out every picture made, to show people: **Sets** gives each title a hero card (its background, with its poster and logo over it) that opens the title's own page (its background across the top with its logo over it, then its poster, wide tile and banner, large; ‹ › or the arrow keys step through the titles), and **Backgrounds**, **Posters** and **Wide tiles** show every picture of one type on its own. Any picture opens full screen with arrows (or swiping) to look through the rest, and **Slideshow** plays them by themselves. A title page's own pictures open full screen too.
 
 ---
 
