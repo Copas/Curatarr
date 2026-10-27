@@ -233,6 +233,7 @@ def chapter_activity_fragment():
         activity=job_activity(),
         action_labels=ACTION_LABELS,
         file_label=file_label,
+        thumbs=_thumbnail_status(),
     )
 
 

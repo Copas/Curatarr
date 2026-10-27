@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0rc36 (2026-10-27)
+
+- **Enhance says when it's waiting for Jellyfin.** While Jellyfin remakes the scrubbing thumbnails of files Curatarr rebuilt, the next rebuilds wait, and the activity panel said "Idle: nothing is queued" beside hours of work left, as if nothing were happening. It now says it's waiting for Jellyfin, for how many files.
+
+- **Fixed: an out-of-range Library title page said no titles had been discovered**, and a very large page number caused a server error. Browse titles now shows the last available page.
+
 ## 0.2.0rc34 (2026-10-27)
 
 Found by end-to-end testing: every page and form, odd input to every route, a copy of a real library, and a week of a live installation's logs.

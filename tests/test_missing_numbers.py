@@ -77,3 +77,15 @@ def test_the_activity_panel_takes_a_subtitle_check_with_no_status_yet(app, clien
     db.session.commit()
     page = client.get("/chapters/activity")
     assert page.status_code == 200
+
+
+def test_the_activity_panel_says_when_its_waiting_for_jellyfin(app, client):
+    """While Jellyfin remakes thumbnails, rebuilds pause; "Idle: nothing is
+    queued" with hours left read as if Curatarr had stalled."""
+    from curatarr import thumbnails
+    from curatarr.services import set_setting
+
+    set_setting(thumbnails.KEY, ["a", "b", "c", "d"])
+    page = client.get("/chapters/activity").text
+    assert "Waiting for Jellyfin" in page and "4 files Curatarr rebuilt" in page
+    assert "Idle: nothing is queued" not in page

@@ -53,6 +53,12 @@ def test_library_browse_filters_and_paginates(app, client):
     assert "Demo Movie 01" in first
     second = client.get("/titles?page=2").text
     assert "Previous" in second
+    for page in ("3", "9" * 24):
+        last = client.get(f"/titles?page={page}")
+        assert last.status_code == 200
+        assert "70 titles" in last.text
+        assert "Previous" in last.text
+        assert "No titles discovered yet" not in last.text
     movies = client.get("/titles?type=movie&q=Demo+Movie+07").text
     assert "Demo Movie 07" in movies and "1 title" in movies
     assert client.get("/titles?type=unknown").status_code == 400

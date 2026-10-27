@@ -2022,6 +2022,7 @@ def titles():
     if media_type:
         rows_query = rows_query.filter(MediaIdentity.media_type == media_type)
     total = rows_query.count()
+    page = min(page, max((total + 47) // 48, 1))
     rows = (
         rows_query.order_by(MediaIdentity.title).offset((page - 1) * 48).limit(48).all()
     )
