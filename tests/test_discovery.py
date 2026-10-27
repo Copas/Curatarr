@@ -331,7 +331,7 @@ def test_a_show_removed_from_sonarr_is_no_longer_sonarrs(app, monkeypatch):
     discover()
     media = db.session.query(MediaIdentity).filter_by(title="Sample Series").one()
     assert media.sonarr_id == 42
-    sonarr.series = lambda: []  # removed from Sonarr; Jellyfin still lists it
+    sonarr.series = list  # removed from Sonarr; Jellyfin still lists it
     discover()
     db.session.refresh(media)
     assert media.sonarr_id is None and media.missing_since is None
