@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc33 (2026-10-26)
+
+- **Each title has its own page in the Gallery**: its background fills the top of the page with its logo over it, then its poster, wide tile and banner, large, each opening full screen. ‹ › (or the arrow keys) step to the titles before and after it, **Slideshow** plays its pictures, and *Next* at the bottom leads on. A title's card on **Sets** opens it.
+
 ## 0.2.0rc32 (2026-10-26)
 
 - **Posters → Gallery**: every title's custom pictures laid out to show people. **Sets** shows each title as a hero card (its background, with its poster and logo over it); **Backgrounds**, **Posters** and **Wide tiles** show every picture of that type on its own. Any picture opens full screen, with the arrow keys, swiping or the buttons to look through the rest, and **Slideshow** plays them by themselves.

@@ -49,6 +49,43 @@ def custom_posters_gallery():
     )
 
 
+@bp.get("/library/posters/gallery/<media_id>")
+def custom_posters_gallery_title(media_id):
+    """One title's pictures, the whole page: its background and logo as a hero,
+    then the rest, with the titles before and after it in the Gallery."""
+    cards = custom_posters.showcase()
+    at = next((i for i, c in enumerate(cards) if c["media"].id == media_id), None)
+    if at is None:
+        abort(404)
+    pictures = cards[at]["pictures"]
+    # The hero: its background, or else the widest picture it has.
+    hero = next(
+        (k for k in ("Backdrop", "Thumb", "Primary", "Banner") if k in pictures), None
+    )
+    rest = [
+        (kind, PIECE_NAMES[kind])
+        for kind in ("Primary", "Thumb", "Banner", "Backdrop")
+        if kind in pictures and kind != hero
+    ]
+    return render_template(
+        "poster_gallery_title.html",
+        card=cards[at],
+        hero=hero,
+        hero_name=PIECE_NAMES.get(hero, "picture").lower(),
+        rest=rest,
+        before=cards[at - 1] if at > 0 else None,
+        after=cards[at + 1] if at + 1 < len(cards) else None,
+        place=at + 1,
+        count=len(cards),
+    )
+
+
+PIECE_NAMES = {
+    "Primary": "Poster",
+    "Thumb": "Wide tile",
+    "Banner": "Banner",
+    "Backdrop": "Background",
+}
 # view -> (tab, the picture type shown alone (None: each title's set), its noun)
 GALLERY_VIEWS = {
     "sets": ("Sets", None, "picture"),

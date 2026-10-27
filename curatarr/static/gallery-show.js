@@ -64,7 +64,15 @@
     else if (event.target.closest("[data-close]") || event.target === viewer) viewer.close();
   });
   viewer.addEventListener("close", () => { stop(); big.removeAttribute("src"); });
+  // On a title's own page the arrow keys step to the titles before and after
+  // it, until a picture is open full screen.
+  const page = document.querySelector("[data-before], [data-after]");
   document.addEventListener("keydown", (event) => {
+    if (!viewer.open && page && !event.target.closest("input, textarea, select")) {
+      const to = event.key === "ArrowRight" ? page.dataset.after : event.key === "ArrowLeft" ? page.dataset.before : "";
+      if (to) window.location.href = to;
+      return;
+    }
     if (!viewer.open) return;
     if (event.key === "ArrowRight") { stop(); show(index + 1); }
     if (event.key === "ArrowLeft") { stop(); show(index - 1); }

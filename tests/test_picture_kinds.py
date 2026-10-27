@@ -469,6 +469,16 @@ def test_the_gallery_shows_each_titles_set_once(app, client, monkeypatch):
     assert page.count('class="showcase-card"') == 1
     assert 'class="showcase-poster"' in page and 'class="showcase-logo"' in page
     assert "The Big Lebowski, its background" in page and "data-slideshow" in page
+    show = f"/library/posters/gallery/{media.id}"
+    assert f'href="{show}"' in page  # a card opens the title's own page
+    one = client.get(show).text
+    assert 'class="title-show-logo"' in one and "1 / 1" in one
+    assert (
+        "The Big Lebowski, its background" in one
+        and "The Big Lebowski, its poster" in one
+    )
+    assert 'class="title-show-piece piece-primary"' in one
+    assert client.get("/library/posters/gallery/not-a-title").status_code == 404
     backgrounds = client.get("/library/posters/gallery?view=backgrounds").text
     assert "1 title with backgrounds made for them" in backgrounds
     assert (

@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}{{ card.media.title }} · Gallery · Curatarr{% endblock %}
+{% block content %}{% set pics = card.pictures %}{% set title = card.media.title %}
+{% macro picture_url(p) %}{{ url_for('main.custom_poster_image', poster_id=p.id) }}{% endmacro %}
+<article class="title-show" data-before="{{ url_for('main.custom_posters_gallery_title', media_id=before.media.id) if before }}" data-after="{{ url_for('main.custom_posters_gallery_title', media_id=after.media.id) if after }}">
+  <header class="title-show-hero{{ ' title-show-hero-plain' if hero not in ('Backdrop', 'Thumb') }}">
+    {% if hero %}<button type="button" class="title-show-backdrop" data-full="{{ picture_url(pics[hero]) }}" data-alt="{{ title }}, its {{ hero_name }}" aria-label="Show the {{ hero_name }} full screen"><img src="{{ picture_url(pics[hero]) }}" alt=""></button>{% endif %}
+    <nav class="title-show-nav" aria-label="Gallery">
+      <a class="title-show-pill" href="{{ url_for('main.custom_posters_gallery') }}">← Gallery</a>
+      <span class="title-show-steps">{% if before %}<a class="title-show-pill" href="{{ url_for('main.custom_posters_gallery_title', media_id=before.media.id) }}" aria-label="Before: {{ before.media.title }}">‹</a>{% endif %}<span class="title-show-count">{{ place }} / {{ count }}</span>{% if after %}<a class="title-show-pill" href="{{ url_for('main.custom_posters_gallery_title', media_id=after.media.id) }}" aria-label="Next: {{ after.media.title }}">›</a>{% endif %}</span>
+    </nav>
+    <div class="title-show-heading">
+      {% if pics.Logo %}<button type="button" class="title-show-logo" data-full="{{ picture_url(pics.Logo) }}" data-alt="{{ title }}, its logo" aria-label="Show the logo full screen"><img src="{{ picture_url(pics.Logo) }}" alt="{{ title }}"></button>
+      {% else %}<h1 class="title-show-name">{{ title }}</h1>{% endif %}
+      <div class="title-show-actions"><button type="button" class="btn btn-light" data-slideshow>▶ Slideshow</button><a class="btn btn-outline-light" href="{{ url_for('main.title', media_id=card.media.id) }}">Title page</a></div>
+    </div>
+  </header>
+  {% if rest %}<section class="title-show-art{{ ' title-show-art-poster' if rest|map(attribute=0)|select('in', ['Primary', 'Thumb'])|list|length == 2 }}" aria-label="{{ title }}'s other pictures">
+    {% for kind, label in rest %}<figure class="title-show-piece piece-{{ kind|lower }}"><button type="button" data-full="{{ picture_url(pics[kind]) }}" data-alt="{{ title }}, its {{ label|lower }}" aria-label="Show the {{ label|lower }} full screen"><img src="{{ picture_url(pics[kind]) }}" alt="" loading="lazy"></button><figcaption>{{ label }}</figcaption></figure>{% endfor %}
+  </section>{% endif %}
+  {% if after %}<a class="title-show-next" href="{{ url_for('main.custom_posters_gallery_title', media_id=after.media.id) }}"><span class="title-show-next-label">Next</span>{% if after.pictures.Logo %}<img src="{{ picture_url(after.pictures.Logo) }}" alt="{{ after.media.title }}" loading="lazy">{% else %}<span class="title-show-next-name">{{ after.media.title }}</span>{% endif %}</a>{% endif %}
+</article>
+<script src="{{ url_for('static', filename='gallery-show.js', v='2') }}"></script>
+{% endblock %}

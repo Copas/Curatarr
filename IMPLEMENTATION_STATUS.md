@@ -5,6 +5,7 @@ Phase 9 — Playback on every device and household polish, running live; prepari
 
 ## Completed
 - v0.2.0rc23 (2026-10-26): removes the nudity index (unreliable).
+- v0.2.0rc33 (2026-10-26): each title gets its own full-page showcase in the Gallery.
 - v0.2.0rc32 (2026-10-26): Posters → Gallery, every picture made laid out to show people.
 - v0.2.0rc31 (2026-10-26): More lists Household choices and Automatic.
 - v0.2.0rc30 (2026-10-26): Find Favorites moved to Settings → Automatic.
