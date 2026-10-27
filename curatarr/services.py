@@ -241,6 +241,15 @@ def _upsert_part(media, kind, season, episode, item):
     return part
 
 
+def _unlink(media, field):
+    """Removed from Sonarr (or Radarr) but still in Jellyfin (its folder left
+    behind, say): no longer theirs to manage. Keeping the old id had Curatarr
+    ask Sonarr for a show it no longer has."""
+    if getattr(media, field) is not None:
+        setattr(media, field, None)
+        media.arr_monitored = None
+
+
 def _sync_series(media, match, sonarr, curation, from_lists):
     """A show's Sonarr side: its ids and monitoring, and every episode with its file."""
     media.sonarr_id = match["id"]
@@ -433,8 +442,12 @@ def discover():
                     match = series_by_tvdb.get(str(media.tvdb_id))
                     if match:
                         _sync_series(media, match, sonarr, curation, from_lists)
+                    elif sonarr is not None:
+                        _unlink(media, "sonarr_id")
                 if media_type == "movie" and media.tmdb_id:
                     match = movies_by_tmdb.get(str(media.tmdb_id))
+                    if not match and radarr is not None:
+                        _unlink(media, "radarr_id")
                     if match:
                         media.radarr_id = match["id"]
                         media.arr_monitored = match.get("monitored")

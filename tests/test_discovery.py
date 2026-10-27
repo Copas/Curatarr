@@ -318,3 +318,21 @@ def test_a_show_just_added_to_sonarr_is_taken_on_before_jellyfin_lists_it(
     assert (
         len(shows) == 1 and shows[0].id == new.id and shows[0].jellyfin_id == "series-2"
     )
+
+
+def test_a_show_removed_from_sonarr_is_no_longer_sonarrs(app, monkeypatch):
+    """Deleted in Sonarr, its empty folder kept it in Jellyfin; Curatarr still
+    had its Sonarr id and asked Sonarr for its always-keep episodes."""
+    from curatarr.services import _skip_reason
+
+    sonarr = SonarrWithNewShows([])
+    clients = {"jellyfin": FakeJellyfin(), "sonarr": sonarr, "radarr": FakeRadarr()}
+    monkeypatch.setattr("curatarr.services.client", lambda kind: clients[kind])
+    discover()
+    media = db.session.query(MediaIdentity).filter_by(title="Sample Series").one()
+    assert media.sonarr_id == 42
+    sonarr.series = lambda: []  # removed from Sonarr; Jellyfin still lists it
+    discover()
+    db.session.refresh(media)
+    assert media.sonarr_id is None and media.missing_since is None
+    assert "matched to Sonarr" in _skip_reason(media)
