@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.2.0rc34 (2026-10-27)
+
+Found by end-to-end testing: every page and form, odd input to every route, a copy of a real library, and a week of a live installation's logs.
+
+- **Fixed: some shows' title pages failed to open** ("Internal Server Error"). Jellyfin lists a few episodes without a season or episode number, and sorting them beside numbered ones broke the page; the same could break the hourly always-keep fill, Leave after watched and a few labels. They now sort first and show as "S?E05".
+- **Fixed: background jobs often failed with "database is locked"**, and a Jellyfin webhook could be lost. The hourly reconciliation kept one transaction open for the whole library (minutes, while Sonarr was asked about every show), and refreshing a title in Jellyfin after a file change held SQLite's write lock for the whole call; other writers gave up after 30 seconds. Each title is now saved as it's read, and changes are saved before Jellyfin is called.
+- **Fixed: Enhance's live activity could fail** while a subtitle check was being saved.
+- **Faster Enhance and Problems pages** (about 3.5 s to 1 s on an 8,000-file library): the lists of files waiting for Fix were read file by file.
+- **A clear message when the secret key doesn't match**: a database used with a different `CURATARR_SECRET_KEY` (a restored backup, a changed config) made every page fail; it now says what's wrong and how to put it right.
+- **Fixed: demo mode** failed on Search once and when writing picture prompts, and anything else the demo doesn't pretend to do now answers as an unreachable server would.
+
 ## 0.2.0rc33 (2026-10-26)
 
 - **Each title has its own page in the Gallery**: its background fills the top of the page with its logo over it, then its poster, wide tile and banner, large, each opening full screen. ‹ › (or the arrow keys) step to the titles before and after it, **Slideshow** plays its pictures, and *Next* at the bottom leads on. A title's card on **Sets** opens it.

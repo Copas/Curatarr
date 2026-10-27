@@ -122,22 +122,23 @@ def _automatic() -> bool:
 
 def found_rows() -> list:
     """Files found that Roku can't seek in, waiting for Fix (or Leave it)."""
+    # Filtered in the database: every checked file has a record, and loading
+    # them all (and each one's file) took over a second per page.
+    from sqlalchemy.orm import contains_eager
+
     rows = (
         db.session.query(ChapterState)
         .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
         .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .options(contains_eager(ChapterState.part))
         .filter(
-            ChapterState.seek_layout.isnot(None), MediaIdentity.missing_since.is_(None)
+            ChapterState.seek_layout["found"].as_boolean().is_(True),
+            ChapterState.seek_layout_size == MediaPart.size_bytes,
+            MediaIdentity.missing_since.is_(None),
         )
         .all()
     )
-    return [
-        r
-        for r in rows
-        if (r.seek_layout or {}).get("found")
-        and not (r.seek_layout or {}).get("dismissed")
-        and r.seek_layout_size == r.part.size_bytes
-    ]
+    return [r for r in rows if not (r.seek_layout or {}).get("dismissed")]
 
 
 def _mark(state_id, **changes) -> None:

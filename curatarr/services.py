@@ -370,6 +370,7 @@ def _discover_sonarr_only(sonarr_series, sonarr, curation, from_lists):
         media.missing_since = None
         db.session.flush()
         _sync_series(media, series, sonarr, curation, from_lists)
+        db.session.commit()
         seen.add(media.id)
     return seen
 
@@ -454,6 +455,10 @@ def discover():
                             },
                         )
                         movie_part.file_path = file_data.get("path")
+                # One title at a time: a single transaction for the whole
+                # library held SQLite's write lock for minutes (while Sonarr was
+                # asked about every show), and other jobs' writes failed.
+                db.session.commit()
             offset += len(entries)
             if not entries or offset >= page.get("TotalRecordCount", offset):
                 break
@@ -895,13 +900,25 @@ def user_display_name(user_id):
 
 
 def episode_label(season, episode):
-    return f"S{season:02d}E{episode:02d}"
+    """S01E02; Jellyfin lists some episodes without a season or episode number."""
+    s = f"{season:02d}" if season is not None else "?"
+    e = f"{episode:02d}" if episode is not None else "?"
+    return f"S{s}E{e}"
+
+
+def episode_order(part):
+    """Sort key for episodes, those missing a season or episode number first
+    (comparing a missing number with a real one broke title pages)."""
+    return (
+        part.season_number if part.season_number is not None else -1,
+        part.episode_number if part.episode_number is not None else -1,
+    )
 
 
 def _episode_span(parts):
     labels = [
         episode_label(p.season_number, p.episode_number)
-        for p in sorted(parts, key=lambda p: (p.season_number, p.episode_number))
+        for p in sorted(parts, key=episode_order)
     ]
     return labels[0] if len(labels) == 1 else f"{labels[0]}–{labels[-1]}"
 
@@ -2618,7 +2635,8 @@ def title_view(media):
         .order_by(LifecycleAction.created_at.desc())
         .limit(10)
         .all(),
-        "chapter_rows": _chapter_rows(media),
+        "chapter_rows": (rows := _chapter_rows(media)),
+        "chapter_seasons": _by_season(rows),
         "requested": requested_waiting(media),
         "signals": curation.signals(media),
         "shrink": shrink.view(media),
@@ -2671,6 +2689,18 @@ def _chapter_rows(media):
         key=lambda p: (p.season_number or 0, p.episode_number or 0),
     )
     return [(part, describe(states.get(part.id))) for part in parts]
+
+
+def _by_season(rows):
+    """[(season, rows)] in order; an episode Jellyfin lists without a season
+    goes with Season 0 (grouping in the template sorted the raw numbers, and
+    a missing one next to a real one broke the page)."""
+    from itertools import groupby
+
+    return [
+        (season, list(group))
+        for season, group in groupby(rows, key=lambda row: row[0].season_number or 0)
+    ]
 
 
 FREE_SPACE_SORTS = {

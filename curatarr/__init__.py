@@ -82,6 +82,22 @@ def create_app(test_config=None):
                 }
             ), 503
 
+    from .secrets import WrongKey
+
+    @app.errorhandler(WrongKey)
+    def wrong_key(_exc):
+        # Every page that reads a saved password or token would fail with an
+        # Internal Server Error; say once, plainly, what's wrong instead.
+        return jsonify(
+            {
+                "error": "Curatarr's secret key doesn't match the one its saved "
+                "passwords and tokens were encrypted with",
+                "action": "Put back the CURATARR_SECRET_KEY this database was "
+                "used with (in curatarr.env, or the .env beside a Docker install), "
+                "then restart Curatarr.",
+            }
+        ), 503
+
     from . import (
         chapter_routes,  # noqa: F401  (adds the chapter pages to bp)
         flag_routes,  # noqa: F401  (adds the flags API)

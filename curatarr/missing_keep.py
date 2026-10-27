@@ -21,7 +21,9 @@ JUST_AIRED = timedelta(days=1)
 
 
 def _codes(parts):
-    return ", ".join(f"S{p.season_number:02}E{p.episode_number:02}" for p in parts)
+    from .services import episode_label
+
+    return ", ".join(episode_label(p.season_number, p.episode_number) for p in parts)
 
 
 def or_none(column, excluded):

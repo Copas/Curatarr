@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc34 (2026-10-27): fixes from end-to-end testing: title pages of shows with an unnumbered episode, SQLite lock failures, slow Enhance pages, demo mode.
 - v0.2.0rc33 (2026-10-26): each title gets its own full-page showcase in the Gallery.
 - v0.2.0rc32 (2026-10-26): Posters → Gallery, every picture made laid out to show people.
 - v0.2.0rc31 (2026-10-26): More lists Household choices and Automatic.

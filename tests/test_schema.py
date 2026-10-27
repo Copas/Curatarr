@@ -119,3 +119,36 @@ def test_find_favorites_switched_on_where_it_was_keeps_on_under_automatic(tmp_pa
         db.session.expire_all()
         assert autofix.automatic("favourites")
         assert setting("curation") == {"seasonal": False}
+
+
+def test_a_secret_key_that_doesnt_match_says_so(tmp_path):
+    from flask_migrate import upgrade
+
+    from curatarr import db
+    from curatarr.services import set_setting
+
+    path = tmp_path / "keys.db"
+    first = create_app(
+        {
+            "TESTING": False,
+            "ALLOW_UNAUTHENTICATED": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{path}",
+            "SECRET_KEY": "the-first-key",
+        }
+    )
+    with first.app_context():
+        upgrade()
+        set_setting("webhook_token", "a-token")
+        db.session.commit()
+    second = create_app(
+        {
+            "TESTING": False,
+            "ALLOW_UNAUTHENTICATED": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{path}",
+            "SECRET_KEY": "another-key",
+        }
+    )
+    response = second.test_client().get("/")
+    assert response.status_code == 503
+    assert "secret key doesn't match" in response.json["error"]
+    assert "CURATARR_SECRET_KEY" in response.json["action"]

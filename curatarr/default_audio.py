@@ -88,22 +88,20 @@ def _automatic() -> bool:
 def found_rows() -> list:
     """Files found playing an extra first, waiting for Fix (or Leave it), when
     the fix isn't automatic (Settings → Automatic)."""
+    from sqlalchemy.orm import contains_eager
+
     rows = (
         db.session.query(ChapterState)
         .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
         .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .options(contains_eager(ChapterState.part))
         .filter(
-            ChapterState.default_audio.isnot(None),
+            ChapterState.default_audio["found"].as_boolean().is_(True),
             MediaIdentity.missing_since.is_(None),
         )
         .all()
     )
-    return [
-        r
-        for r in rows
-        if (r.default_audio or {}).get("found")
-        and not (r.default_audio or {}).get("dismissed")
-    ]
+    return [r for r in rows if not (r.default_audio or {}).get("dismissed")]
 
 
 def _mark(state_id, **changes) -> None:

@@ -578,6 +578,47 @@ class DemoClient:
         self._check()
         return [self._demo_user(name) for name in DEMO_USERS]
 
+    # What the pages ask for directly; the demo has nothing to say.
+    def item_details(self, _item_ids):
+        self._check()
+        return []
+
+    def items_trickplay(self, _item_ids):
+        return []
+
+    def requests(self, *_args, **_kwargs):
+        self._check()
+        return []
+
+    def releases(self, *_args, **_kwargs):
+        self._check()
+        return []
+
+    def episode_search(self, _episode_ids):
+        self._check()
+        return {"id": 1, "status": "queued"}
+
+    def search_movie(self, _movie_id):
+        self._check()
+        return {"id": 1, "status": "queued"}
+
+    def rescan_movie(self, _movie_id):
+        return {"id": 1, "status": "queued"}
+
+    def refresh_images(self, _item_id):
+        return None
+
+    def __getattr__(self, name):
+        """Anything else a real server does: answer as a server that can't,
+        which every caller already handles, instead of crashing the page."""
+        if name.startswith("_"):
+            raise AttributeError(name)
+
+        def unavailable(*_args, **_kwargs):
+            raise IntegrationError(f"Not available in demo mode ({self.kind}.{name})")
+
+        return unavailable
+
 
 def demo_client(kind):
     if not current_app.config["DEMO_MODE"]:

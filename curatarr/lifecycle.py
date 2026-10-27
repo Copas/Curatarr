@@ -36,7 +36,14 @@ from .policy import (
     select_to_low_water,
     weighted_score,
 )
-from .services import _active_candidate, audit, client, resolved_policy
+from .services import (
+    _active_candidate,
+    audit,
+    client,
+    episode_label,
+    episode_order,
+    resolved_policy,
+)
 
 
 def _candidate_input(media, active_queue=False):
@@ -1003,9 +1010,9 @@ def request_episode_removal(media, parts, *, where="Leave after watched"):
             reason_code=WATCHED_EPISODES,
         )
         db.session.add(candidate)
-    chosen = sorted(wanted.values(), key=lambda p: (p.season_number, p.episode_number))
+    chosen = sorted(wanted.values(), key=episode_order)
     names = ", ".join(
-        f"S{p.season_number:02d}E{p.episode_number or 0:02d}" for p in chosen[:6]
+        episode_label(p.season_number, p.episode_number) for p in chosen[:6]
     ) + (f" and {len(chosen) - 6} more" if len(chosen) > 6 else "")
     candidate.target_part_ids = [p.id for p in chosen]
     candidate.reason_text = (

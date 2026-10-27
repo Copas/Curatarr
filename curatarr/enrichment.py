@@ -1259,6 +1259,10 @@ def _refresh_jellyfin(part, media):
     item_id = jellyfin_item_id(part, media)
     if not item_id:
         return "No Jellyfin item is linked to this file"
+    # What the caller changed is saved first: the lookup above wrote it, so
+    # SQLite's write lock would otherwise be held for the whole call to
+    # Jellyfin (up to its timeout), and every other job's write fails meanwhile.
+    db.session.commit()
     try:
         client("jellyfin").refresh_item(item_id)
     except IntegrationError as exc:

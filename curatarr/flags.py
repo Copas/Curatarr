@@ -172,10 +172,12 @@ def clear_flag(media, flag, *, season=None, part=None, why="cleared") -> bool:
 
 
 def _where(row) -> str:
+    from .services import episode_label
+
     if row.media_part_id:
         part = db.session.get(MediaPart, row.media_part_id)
         if part and part.season_number is not None:
-            return f" (S{part.season_number:02d}E{part.episode_number or 0:02d})"
+            return f" ({episode_label(part.season_number, part.episode_number)})"
         return " (one file)"
     if row.season_number is not None:
         return f" (season {row.season_number})"
@@ -283,6 +285,7 @@ def _sweep_one(media, row, jellyfin) -> int:
     """Act on one Leave after watched flag; returns 1 when something was
     marked Leaving Soon."""
     from .lifecycle import request_episode_removal, request_removal
+    from .services import episode_order
 
     where = "Leave after watched"
     if media.media_type == "movie":
@@ -315,7 +318,7 @@ def _sweep_one(media, row, jellyfin) -> int:
             go = lambda: request_episode_removal(media, chosen, where=where)
             done = False  # stays for the episodes still to be watched
         else:
-            last = max(scope, key=lambda p: (p.season_number, p.episode_number or 0))
+            last = max(scope, key=episode_order)
             if not _played_since([last], row):
                 return 0
             if row.season_number is None:

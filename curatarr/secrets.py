@@ -23,6 +23,11 @@ def _cipher():
     return Fernet(base64.urlsafe_b64encode(derived))
 
 
+class WrongKey(ValueError):
+    """A secret saved with a different CURATARR_SECRET_KEY: the key was changed,
+    or a database was restored onto an installation with another key."""
+
+
 def encrypt_secret(value: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError("Secret must be a nonempty string")
@@ -35,7 +40,7 @@ def decrypt_secret(value: str) -> str:
     try:
         return _cipher().decrypt(value[len(PREFIX) :].encode("ascii")).decode("utf-8")
     except (InvalidToken, UnicodeDecodeError) as exc:
-        raise ValueError(
+        raise WrongKey(
             "Database secret cannot be decrypted; check application key"
         ) from exc
 

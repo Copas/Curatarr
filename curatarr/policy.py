@@ -163,7 +163,11 @@ def retained(part, policy: dict) -> bool:
         return True
     if policy["minimum_mode"] == "season_1":
         return part.season_number == 1
-    return part.season_number == 1 and part.episode_number <= policy["minimum_episodes"]
+    return (
+        part.season_number == 1
+        and part.episode_number is not None  # Jellyfin lists a few without one
+        and part.episode_number <= policy["minimum_episodes"]
+    )
 
 
 def reclaimable_bytes(parts, policy: dict) -> int:
