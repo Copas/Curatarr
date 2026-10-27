@@ -450,3 +450,32 @@ def test_prompts_point_to_the_original_art_as_a_tonal_reference(
     plain = custom_posters.describe(titles, kinds, with_originals=False)
     text = custom_posters.prompts(plain, batch=10, photos="", people="", output="/p")[0]
     assert "Original art" not in text
+
+
+def test_the_gallery_shows_each_titles_set_once(app, client, monkeypatch):
+    _library, media, _part = _movie("/movies/The Big Lebowski (1998)/Film.mkv")
+    media.title = "The Big Lebowski"
+    db.session.commit()
+    _fake(monkeypatch, Primary=_picture("#223344"))
+    custom_posters.apply(media, _picture("#cc2222"), "Uploaded")
+    custom_posters.apply(
+        media, _picture("#22cc22", (1920, 1080)), "Uploaded", kind="Backdrop"
+    )
+    custom_posters.apply(media, _logo(), "Uploaded", kind="Logo")
+    posters = client.get("/library/posters").text
+    assert 'href="/library/posters/gallery"' in posters
+    page = client.get("/library/posters/gallery").text
+    assert "1 title with pictures made for them" in page and "gallery-show.js" in page
+    assert page.count('class="showcase-card"') == 1
+    assert 'class="showcase-poster"' in page and 'class="showcase-logo"' in page
+    assert "The Big Lebowski, its background" in page and "data-slideshow" in page
+    backgrounds = client.get("/library/posters/gallery?view=backgrounds").text
+    assert "1 title with backgrounds made for them" in backgrounds
+    assert (
+        "The Big Lebowski, its background" in backgrounds
+        and "showcase-card" not in backgrounds
+    )
+    tiles = client.get("/library/posters/gallery?view=tiles").text
+    assert "0 titles with wide tiles" in tiles  # it has none
+    empty = custom_posters.showcase()
+    assert set(empty[0]["pictures"]) == {"Primary", "Backdrop", "Logo"}

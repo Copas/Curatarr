@@ -33,6 +33,31 @@ def _accounts():
     return sorted(account_names().items(), key=lambda account: account[1])
 
 
+@bp.get("/library/posters/gallery")
+def custom_posters_gallery():
+    """Every title's custom pictures, laid out to show people: each title's
+    set, or every picture of one type on its own."""
+    view = request.args.get("view", "sets")
+    if view not in GALLERY_VIEWS:
+        view = "sets"
+    cards = custom_posters.showcase()
+    kind = GALLERY_VIEWS[view][1]
+    if kind:
+        cards = [c for c in cards if kind in c["pictures"]]
+    return render_template(
+        "poster_gallery.html", cards=cards, view=view, views=GALLERY_VIEWS, kind=kind
+    )
+
+
+# view -> (tab, the picture type shown alone (None: each title's set), its noun)
+GALLERY_VIEWS = {
+    "sets": ("Sets", None, "picture"),
+    "backgrounds": ("Backgrounds", "Backdrop", "background"),
+    "posters": ("Posters", "Primary", "poster"),
+    "tiles": ("Wide tiles", "Thumb", "wide tile"),
+}
+
+
 @bp.get("/library/posters")
 def custom_posters_page():
     state = custom_posters.import_state()

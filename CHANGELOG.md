@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc32 (2026-10-26)
+
+- **Posters → Gallery**: every title's custom pictures laid out to show people. **Sets** shows each title as a hero card (its background, with its poster and logo over it); **Backgrounds**, **Posters** and **Wide tiles** show every picture of that type on its own. Any picture opens full screen, with the arrow keys, swiping or the buttons to look through the rest, and **Slideshow** plays them by themselves.
+
 ## 0.2.0rc31 (2026-10-26)
 
 - **Fixed: Household choices and Automatic were missing from More**, so on a phone they could only be reached through other settings pages' tabs.

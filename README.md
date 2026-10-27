@@ -232,7 +232,7 @@ Quick start on Linux:
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc31
+git checkout v0.2.0rc32
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 

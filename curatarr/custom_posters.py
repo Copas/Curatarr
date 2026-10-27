@@ -1263,6 +1263,21 @@ def gallery_groups() -> list[dict]:
     return sorted(shown, key=lambda g: g["latest"], reverse=True)
 
 
+def showcase() -> list[dict]:
+    """The Gallery: one card per title with each of its pictures once (the
+    one everyone sees, or else the first account's), newest first:
+    {"media", "pictures": {type: poster}, "latest"}."""
+    cards: dict[str, dict] = {}
+    for tile in gallery_groups():
+        card = cards.setdefault(
+            tile["media"].id,
+            {"media": tile["media"], "pictures": {}, "latest": tile["latest"]},
+        )
+        for group in [tile, *tile["extras"]]:
+            card["pictures"].setdefault(group["kind"], group["image"])
+    return list(cards.values())
+
+
 def leaving_label(media_id) -> str | None:
     """The Leaving Soon banner's words for a title ("7 DAYS LEFT"), or None
     when it isn't Leaving Soon: Jellyfin's own poster carries the banner, so
