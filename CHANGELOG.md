@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc31 (2026-10-26)
+
+- **Fixed: Household choices and Automatic were missing from More**, so on a phone they could only be reached through other settings pages' tabs.
+
 ## 0.2.0rc30 (2026-10-26)
 
 - **Find Favorites moved to Settings → Automatic**, with the other things Curatarr does by itself (off by default). Off, the films are listed on Library → Collections to add by hand. A choice made on Household choices in 0.2.0rc29 is carried over.

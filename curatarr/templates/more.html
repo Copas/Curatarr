@@ -14,6 +14,8 @@
   {{ row(url_for('main.settings'), 'settings', 'Integrations', 'Jellyfin, Sonarr, Radarr, household access') }}
   {{ row(url_for('main.rules', section='acquisition'), 'library', 'Acquisition', 'What gets downloaded next') }}
   {{ row(url_for('main.rules', section='retention'), 'shield', 'Retention', 'Cleanup rules and dry run') }}
+  {{ row(url_for('main.rules', section='household'), 'heart', 'Household choices', 'Requests, seasonal shelves, Leaving Soon, posters') }}
+  {{ row(url_for('main.rules', section='automatic'), 'progress', 'Automatic', 'Fixes and Find Favorites Curatarr does by itself') }}
   {{ row(url_for('main.chapter_settings'), 'enhance', 'Enhance', 'Chapters, subtitles, skip markers, dubs') }}
   {{ row(url_for('main.operations'), 'gauge', 'Operations', 'Health, jobs and metrics') }}
   {{ row(url_for('main.setup'), 'tools', 'Setup', 'First-run checklist') }}

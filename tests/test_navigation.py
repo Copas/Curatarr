@@ -72,7 +72,14 @@ def test_phone_tab_bar_and_more_page(app, client):
     ]
     assert [href for active, href in tabs if active] == ["/review"]
     more = client.get("/more").text
-    for href in ("/history", "/settings", "/chapters/settings", "/operations"):
+    for href in (
+        "/history",
+        "/settings",
+        "/chapters/settings",
+        "/operations",
+        "/rules/household",
+        "/rules/automatic",
+    ):
         assert f'href="{href}"' in more
     # Activity and Settings live under More on a phone.
     assert 'class="app-tab active" href="/more"' in client.get("/history").text
