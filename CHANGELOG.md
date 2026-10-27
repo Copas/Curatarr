@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.2.0rc29 (2026-10-26)
+
+- **Find Favorites** (Settings → Household, off by default). When anyone favourites a film that's part of a series (a TMDB collection in Radarr), Curatarr adds the series' other released films to Radarr with the favourite's quality profile and folder, and searches for them, a few each hour. Films excluded in Radarr, hidden on the film series page, or added once before are left out; History says which favourite brought each one in.
+- **Changed: a new installation starts with every automatic fix off.** The checks still run, and what they find waits on Enhance → Problems with a button to fix it, so nothing is deleted, downloaded again, edited or rebuilt until the owner has seen what Curatarr does and switched that fix on in Settings → Automatic. **Existing installations keep their fixes as they were** (a migration writes down what they did).
+- **The default-audio fix and seek repair can ask first.** Files playing a commentary or audio description first, and files Roku can't seek in, are listed on Problems with **Fix**, **Fix all** and **Leave it**, unless their new switches in Settings → Automatic are on.
+- **Fixed: Problems' "Files" heading only showed when a show was missing episodes.**
+
 ## 0.2.0rc28 (2026-10-26)
 
 - **Search shows the titles straight away**, then adds *What was said* below them as the transcript search finishes, instead of waiting for both before showing anything.

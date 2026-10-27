@@ -7,9 +7,11 @@ episode over (mediafile.seek_index_hidden). Curatarr's own edits now rebuild
 such files straight away; this finds the ones already like that.
 
 When Settings → Enhance → Seeking on Roku is on (the default), each MKV file's
-first few hundred kilobytes are read once (again only if the file changes),
-and affected files are rebuilt with mkvmerge, one or two per worker cycle, in
-the background, never one that's playing. Nothing is re-encoded.
+first few hundred kilobytes are read once (again only if the file changes).
+Affected files are listed on Problems with Fix and Leave it, unless rebuilding
+is automatic (Settings → Automatic, off by default); either way they're rebuilt
+with mkvmerge, one or two per worker cycle, in the background, never one that's
+playing. Nothing is re-encoded.
 """
 
 import threading
@@ -112,19 +114,93 @@ def _run(app):
             db.session.remove()
 
 
+def _automatic() -> bool:
+    from . import autofix
+
+    return autofix.automatic("seek")
+
+
+def found_rows() -> list:
+    """Files found that Roku can't seek in, waiting for Fix (or Leave it)."""
+    rows = (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            ChapterState.seek_layout.isnot(None), MediaIdentity.missing_since.is_(None)
+        )
+        .all()
+    )
+    return [
+        r
+        for r in rows
+        if (r.seek_layout or {}).get("found")
+        and not (r.seek_layout or {}).get("dismissed")
+        and r.seek_layout_size == r.part.size_bytes
+    ]
+
+
+def _mark(state_id, **changes) -> None:
+    state = db.session.get(ChapterState, state_id)
+    if state is None or not (state.seek_layout or {}).get("found"):
+        raise ValueError("Nothing waiting for that file")
+    state.seek_layout = dict(state.seek_layout) | changes
+    db.session.commit()
+
+
+def approve(state_id) -> None:
+    """Rebuild it in the background, soon."""
+    _mark(state_id, approved=True)
+
+
+def approve_all() -> int:
+    rows = found_rows()
+    for state in rows:
+        state.seek_layout = dict(state.seek_layout) | {"approved": True}
+    db.session.commit()
+    return len(rows)
+
+
+def dismiss(state_id) -> None:
+    _mark(state_id, dismissed=True)
+
+
 def sweep(checks=CHECKS_PER_RUN, rebuilds=REBUILDS_PER_RUN) -> int:
     """Check up to ``checks`` files and rebuild up to ``rebuilds``; returns how
     many were rebuilt."""
     e = _enrichment()
     done = 0
-    for part in _due().limit(checks).all():
+    automatic = _automatic()
+    waiting = [
+        s.part
+        for s in found_rows()
+        if automatic or (s.seek_layout or {}).get("approved")
+    ]
+    seen = set()
+    for part in waiting[:rebuilds] + _due().limit(checks).all():
+        if part.id in seen:
+            continue  # approved, and due as well: once is enough
+        seen.add(part.id)
         path = e.local_path(part.file_path)
         if not path or not e.file_exists(path):
             continue  # unreachable for now; try again later
         state = e.state_for(part)
+        previous = state.seek_layout or {}
+        if state.seek_layout_size != part.size_bytes:
+            previous = {}  # a new copy: an earlier Fix or Leave it was for the old one
         if not seek_index_hidden(path):
             state.seek_layout_size = part.size_bytes
             state.seek_layout = {"ok": True, "at": utcnow().isoformat()}
+            db.session.commit()
+            continue
+        if not automatic and not previous.get("approved"):
+            # Ask first: listed on Problems with Fix and Leave it.
+            state.seek_layout_size = part.size_bytes
+            state.seek_layout = {
+                "found": True,
+                "dismissed": previous.get("dismissed", False),
+                "at": utcnow().isoformat(),
+            }
             db.session.commit()
             continue
         if (
@@ -277,6 +353,7 @@ def progress() -> dict | None:
         "on": on,
         "checked": checked,
         "rebuilt": rebuilt,
+        "found": len(found_rows()),
         "left": left,
         "total": checked + left,
     }

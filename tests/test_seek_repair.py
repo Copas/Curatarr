@@ -148,7 +148,14 @@ def test_the_sweep_rebuilds_hidden_files_once_and_checks_the_rest(app, monkeypat
         return mediafile.MediaInfo(path, 120, 2.0, 60.0, "matroska,webm")
 
     monkeypatch.setattr(seek_repair, "rebuild_layout", rebuild)
+    # Not automatic (a new installation): found and listed, nothing rebuilt.
+    assert seek_repair.sweep() == 0
+    (found,) = seek_repair.found_rows()
+    assert seek_repair.progress()["found"] == 1
+    assert "Roku players can" in app.test_client().get("/chapters/problems").text
+    app.test_client().post(f"/chapters/problems/seek/{found.id}/fix")
     assert seek_repair.sweep() == 1
+    assert seek_repair.found_rows() == []
     state = db.session.query(ChapterState).one()
     assert state.seek_layout["rebuilt"] and state.seek_layout_size == 120
     assert db.session.query(MediaPart).one().size_bytes == 120
@@ -176,8 +183,29 @@ def test_a_playing_file_waits(app, monkeypatch):
     monkeypatch.setattr(
         seek_repair, "rebuild_layout", lambda p: pytest.fail("rebuilt while playing")
     )
+    from curatarr.services import set_setting
+
+    set_setting("auto_fixes", {"seek": True})  # automatic: it would rebuild, but waits
     assert seek_repair.sweep() == 0
     assert db.session.query(ChapterState).one().seek_layout is None
+
+
+def test_left_alone_once_told_to(app, monkeypatch):
+    from test_enrichment import _movie
+
+    from curatarr.models import MediaPart
+
+    _movie("/movies/Loud (2020)/Loud.mkv")
+    db.session.query(MediaPart).one().size_bytes = 100
+    db.session.commit()
+    monkeypatch.setattr(enrichment, "file_exists", lambda p: True)
+    monkeypatch.setattr(seek_repair, "seek_index_hidden", lambda p: True)
+    monkeypatch.setattr(seek_repair, "rebuild_layout", lambda p: pytest.fail("rebuilt"))
+    seek_repair.sweep()
+    (found,) = seek_repair.found_rows()
+    app.test_client().post(f"/chapters/problems/seek/{found.id}/dismiss")
+    assert seek_repair.found_rows() == []
+    assert seek_repair.sweep() == 0
 
 
 def test_on_by_default(app):

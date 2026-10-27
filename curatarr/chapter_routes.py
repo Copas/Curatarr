@@ -650,10 +650,20 @@ def chapter_failed_action(state_id, action):
 @bp.get("/chapters/problems")
 def chapter_problems():
     """Burned-in subtitles and broken files (filecheck.py)."""
-    from . import autofix, filecheck_jobs, misfiled, missing_keep, wrong_version
+    from . import (
+        autofix,
+        default_audio,
+        filecheck_jobs,
+        misfiled,
+        missing_keep,
+        seek_repair,
+        wrong_version,
+    )
 
     return render_template(
         "chapter_problems.html",
+        audio_found=default_audio.found_rows(),
+        seek_found=seek_repair.found_rows(),
         misfiled=[r for r in misfiled.rows() if r["plan"] != "wait"],
         misfiled_waiting=[r for r in misfiled.rows() if r["plan"] == "wait"],
         misfiled_auto=autofix.automatic("misfiled"),
@@ -664,6 +674,34 @@ def chapter_problems():
         describe=filecheck_jobs.describe,
         file_label=file_label,
     )
+
+
+@bp.post("/chapters/problems/<kind>/<state_id>/<action>")
+def found_file_action(kind, state_id, action):
+    """Fix, or Leave it, a file found playing an extra first ("audio") or that
+    Roku can't seek in ("seek"); state_id "all" with Fix does every one."""
+    from . import default_audio, seek_repair
+
+    module = {"audio": default_audio, "seek": seek_repair}.get(kind)
+    if module is None or action not in ("fix", "dismiss"):
+        abort(404)
+    try:
+        if state_id == "all" and action == "fix":
+            count = module.approve_all()
+            flash(
+                f"{count} file{'' if count == 1 else 's'} will be fixed shortly.",
+                "success",
+            )
+        elif action == "fix":
+            module.approve(state_id)
+            flash("It will be fixed shortly, in the background.", "success")
+        else:
+            module.dismiss(state_id)
+            flash("Left as it is. It won't be listed again.", "success")
+    except ValueError as exc:
+        db.session.rollback()
+        flash(f"Couldn't do that: {exc}", "danger")
+    return redirect(url_for("main.chapter_problems") + f"#found-{kind}")
 
 
 def _request_replace(target, kind) -> str:

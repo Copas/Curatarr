@@ -149,17 +149,18 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [What's next is ready first](docs/FEATURES.md#continue-watching-and-whats-next) | The next episodes of shows people are watching get their chapters, subtitles and skip markers before the back catalogue. | **On** |
 | [Finished at the credits](docs/FEATURES.md#continue-watching-and-whats-next) | Something stopped in its end credits, or after its last line with only the ending left, is marked watched, so it leaves Continue Watching. | **On** |
 | [Collections and suggestions](docs/FEATURES.md#collections-and-suggestions) | The film series you have part of, and films ranked by how well they fit what the household favourites. | **On** |
+| [Find Favorites](docs/FEATURES.md#collections-and-suggestions) | Someone favourites a film in a series, and the rest of the series is added to Radarr and searched for. | Off |
 
 ### 🛠️ Bad downloads, caught and fixed
 
 | Feature | What it does | Default |
 |---|---|---|
-| [File problems](docs/FEATURES.md#problems-burned-in-subtitles-and-broken-files) | Burned-in subtitles, files cut short or cut off, decoding errors, films that go quiet. | **On** |
-| [The wrong show](docs/FEATURES.md#shows-that-are-another-show-with-the-same-name) | A namesake (a remake, a foreign show) filed under your series. | **On** |
-| [Misfiled episodes](docs/FEATURES.md#episodes-filed-under-the-wrong-episode) | An episode Sonarr filed in another's slot is moved back, when what's said in it agrees with its download's name. | **On** |
-| [English dubs](docs/FEATURES.md#english-dubs) | Listens to films sold as English dubs: relabels wrong tracks, makes real English the default, replaces ones with none. | **On** |
+| [File problems](docs/FEATURES.md#problems-burned-in-subtitles-and-broken-files) | Burned-in subtitles, files cut short or cut off, decoding errors, films that go quiet. | **On** (asks first) |
+| [The wrong show](docs/FEATURES.md#shows-that-are-another-show-with-the-same-name) | A namesake (a remake, a foreign show) filed under your series. | **On** (asks first) |
+| [Misfiled episodes](docs/FEATURES.md#episodes-filed-under-the-wrong-episode) | An episode Sonarr filed in another's slot is moved back, when what's said in it agrees with its download's name. | **On** (asks first) |
+| [English dubs](docs/FEATURES.md#english-dubs) | Listens to films sold as English dubs: relabels wrong tracks, makes real English the default, replaces ones with none. | **On** (asks first) |
 | [Wrong episodes](docs/FEATURES.md#recaps-previews-and-skip-markers) | Flags an episode whose dialogue fits another episode's summary. Experimental. | Off |
-| [Automatic fixes](docs/FEATURES.md#automatic-fixes) | The fixes above happen by themselves when Curatarr can be confident, each switchable. | **On** |
+| [Automatic fixes](docs/FEATURES.md#automatic-fixes) | The fixes above happen by themselves when Curatarr can be confident, each switchable. Until then, each problem waits on Problems with a button to fix it. | Off |
 | [Replace checks first](docs/FEATURES.md#replace-checks-first) | A file is only deleted once a better copy is confirmed to exist. | Always |
 
 ### ✨ Every file nicer to watch
@@ -170,7 +171,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Subtitles](docs/FEATURES.md#chapters-and-subtitles) | English subtitles from the soundtrack, for files with none, or with only picture subtitles a Roku can't draw. | Off until you choose |
 | [Recaps and previews](docs/FEATURES.md#recaps-previews-and-skip-markers) | "Previously on…" and "Next time on…" get Jellyfin's Skip button. | With Intro Skipper |
 | [Better skip markers](docs/FEATURES.md#recaps-previews-and-skip-markers) | Intro Skipper guesses that are plainly wrong are hidden, each undoable; films keep only their credits. | With Intro Skipper |
-| [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** |
+| [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** (asks first) |
 | [Custom posters](docs/FEATURES.md#custom-posters) | Your own poster for any title, and its wide tile, background, logo and banner, uploaded or picked up from a folder (or made by an AI from prompts Curatarr writes), with the originals kept to restore. | One click |
 | [Posters for one account](docs/FEATURES.md#for-everyone-or-for-chosen-accounts) | A poster only chosen accounts see, in every app (Roku included); everyone else keeps the usual one. | With the plugin |
 | [Favourite ribbons](docs/FEATURES.md#favourite-ribbons) | A gold band with a star and Sam's face on what someone favourited (and "★ Sam" on its page), shown to the accounts you choose; NEW for a week, "♥ Household favourite" for everyone's, and on favourite episodes too. | Off, with the plugin |
@@ -184,7 +185,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [The right copy and track for each device](docs/FEATURES.md#playing-smoothly-on-every-device) | Each player is pointed at the copy and audio track it plays as it is, instead of having Jellyfin convert. | With the plugin |
 | [Audio for web browsers](docs/FEATURES.md#playing-smoothly-on-every-device) | A stereo AAC track beside AC3, E-AC3 and DTS, for the files browser viewers are about to watch. TVs keep their surround. | **On**, with the plugin |
 | [Audio every TV plays](docs/FEATURES.md#playing-smoothly-on-every-device) | An AC3 copy beside DTS, TrueHD or FLAC, so Rokus and TVs don't stumble over conversion. | Off |
-| [Seeking on Roku](docs/FEATURES.md#seeking-on-roku) | Files Roku can't seek in are rebuilt (nothing re-encoded), so skipping ahead doesn't start over. | **On** |
+| [Seeking on Roku](docs/FEATURES.md#seeking-on-roku) | Files Roku can't seek in are rebuilt (nothing re-encoded), so skipping ahead doesn't start over. | **On** (asks first) |
 | [Makes room for viewers](docs/FEATURES.md#sharing-the-machine-with-playback) | Measures CPU, GPU and who's watching, and backs off when someone starts a stream. | **On** |
 
 ### 🎉 Just for fun
@@ -231,7 +232,7 @@ Quick start on Linux:
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc28
+git checkout v0.2.0rc29
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 

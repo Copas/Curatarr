@@ -5,7 +5,9 @@ narrator describing the picture, for blind viewers) the default audio track,
 so that's what Jellyfin plays. When the default track is one of those, by its
 flags or its name, and the file has its own soundtrack in the same language,
 that soundtrack becomes the default instead: in place, with mkvpropedit, no
-re-encode (Settings → Enhance, on by default).
+re-encode (Settings → Enhance). Unless the fix is automatic (Settings →
+Automatic, off by default), a file found like this is listed on Problems with
+Fix and Leave it, and changed only once Fix is pressed.
 
 Every file is looked at once, a few each worker cycle (it means reading each
 file's track list), and again when it's replaced. Files being played, and
@@ -77,6 +79,58 @@ def _due():
     )
 
 
+def _automatic() -> bool:
+    from . import autofix
+
+    return autofix.automatic("default_audio")
+
+
+def found_rows() -> list:
+    """Files found playing an extra first, waiting for Fix (or Leave it), when
+    the fix isn't automatic (Settings → Automatic)."""
+    rows = (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            ChapterState.default_audio.isnot(None),
+            MediaIdentity.missing_since.is_(None),
+        )
+        .all()
+    )
+    return [
+        r
+        for r in rows
+        if (r.default_audio or {}).get("found")
+        and not (r.default_audio or {}).get("dismissed")
+    ]
+
+
+def _mark(state_id, **changes) -> None:
+    state = db.session.get(ChapterState, state_id)
+    if state is None or not (state.default_audio or {}).get("found"):
+        raise ValueError("Nothing waiting for that file")
+    state.default_audio = dict(state.default_audio) | changes
+    db.session.commit()
+
+
+def approve(state_id) -> None:
+    """Fix it on the next worker cycle."""
+    _mark(state_id, approved=True)
+
+
+def approve_all() -> int:
+    rows = found_rows()
+    for state in rows:
+        state.default_audio = dict(state.default_audio) | {"approved": True}
+    db.session.commit()
+    return len(rows)
+
+
+def dismiss(state_id) -> None:
+    _mark(state_id, dismissed=True)
+
+
 def sweep() -> int:
     """Worker cycle: look at a few files; returns how many were fixed."""
     from .compat_audio import _playing
@@ -96,9 +150,19 @@ def sweep() -> int:
     if not enabled():
         return 0
     started, fixed = time.monotonic(), 0
-    for part in _due().limit(200).all():
+    automatic = _automatic()
+    waiting = [
+        s.part
+        for s in found_rows()
+        if automatic or (s.default_audio or {}).get("approved")
+    ]
+    seen = set()
+    for part in waiting[:20] + _due().limit(200).all():
         if time.monotonic() - started > RUN_SECONDS:
             break
+        if part.id in seen:
+            continue  # approved, and due as well: once is enough
+        seen.add(part.id)
         path = local_path(part.file_path)
         if not path or not file_exists(path):
             continue  # unreachable for now
@@ -109,15 +173,27 @@ def sweep() -> int:
             continue
         choice = better_default(info.streams)
         record = {"at": utcnow().isoformat()}
+        previous = state.default_audio or {}
+        if state.default_audio_size != info.size:
+            previous = {}  # a new copy of the file: an earlier Fix or Leave it was for the old one
         if choice is not None:
             writable, reason = can_write(info)
+            audio = [s for s in info.streams if s.get("codec_type") == "audio"]
+            before = next((s for s in audio if s.get("default")), audio[0])
             if not writable or _dry_run(part.media):
                 record["skipped"] = reason or "dry run"
+            elif not automatic and not previous.get("approved"):
+                # Ask first: listed on Problems with Fix and Leave it.
+                after = next(s for s in info.streams if s["index"] == choice)
+                record |= {
+                    "found": True,
+                    "from": before.get("title") or before.get("codec_name"),
+                    "to": after.get("title") or after.get("codec_name"),
+                    "dismissed": previous.get("dismissed", False),
+                }
             elif _playing(part):
                 continue  # look again once it's stopped
             else:
-                audio = [s for s in info.streams if s.get("codec_type") == "audio"]
-                before = next((s for s in audio if s.get("default")), audio[0])
                 in_sync = (state.chapter_file_size, state.chapter_file_mtime) == (
                     info.size,
                     info.mtime,

@@ -122,10 +122,15 @@ def _forecast():
 
 
 def _curate():
-    """Seerr requests, and seasonal films due back; neither stops a reconcile."""
-    from . import curation
+    """Seerr requests, seasonal films due back and Find Favorites; none stops a
+    reconcile."""
+    from . import curation, franchises
 
-    for step in (curation.sync_requests, curation.return_seasonal):
+    for step in (
+        curation.sync_requests,
+        curation.return_seasonal,
+        franchises.find_favourites,
+    ):
         try:
             step()
         except Exception:

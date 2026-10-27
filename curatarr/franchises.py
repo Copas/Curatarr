@@ -186,8 +186,9 @@ def _placement(radarr, collection_tmdb_id=None) -> tuple[int, str]:
     return profiles.most_common(1)[0][0], roots.most_common(1)[0][0]
 
 
-def add(tmdb_ids, collection_tmdb_id=None) -> list[str]:
-    """Add films to Radarr and search for them. Returns the titles added."""
+def add(tmdb_ids, collection_tmdb_id=None, because=None) -> list[str]:
+    """Add films to Radarr and search for them. Returns the titles added.
+    ``because`` finishes History's sentence ("… because Sam favourited Saw")."""
     radarr = client("radarr")
     profile, root = _placement(radarr, collection_tmdb_id)
     added = []
@@ -210,7 +211,8 @@ def add(tmdb_ids, collection_tmdb_id=None) -> list[str]:
         audit(
             "film_added",
             None,
-            f"Added {title} to Radarr and started a search.",
+            f"Added {title} to Radarr and started a search"
+            + (f", because {because}." if because else "."),
             f"film-added:{tmdb_id}:{int(time.time())}",
             payload={"tmdb_id": int(tmdb_id), "collection": collection_tmdb_id},
         )
@@ -244,3 +246,84 @@ def follow(collection_id: int) -> str:
     )
     db.session.commit()
     return title
+
+
+# --- Find Favorites -------------------------------------------------------------
+
+
+def _names(user_ids) -> str:
+    from .services import account_names
+
+    names = account_names()
+    known = sorted({names.get(i) for i in user_ids if names.get(i)})
+    if not known:
+        return "someone"
+    return known[0] if len(known) == 1 else ", ".join(known[:-1]) + " and " + known[-1]
+
+
+FOUND_KEY = "find_favourites_added"  # TMDB ids Find Favorites has added, never again
+FIND_PER_RUN = 5  # films added per reconciliation, so a long series can't flood
+
+
+def find_favourites() -> list[str]:
+    """When anyone favourites a film in a series (a TMDB collection in Radarr),
+    add the series' missing released films with the favourite's quality profile
+    and folder, and search for them. Films excluded in Radarr (deleting one in
+    Jellyfin excludes it), dismissed on the film series page, or added by Find
+    Favorites before (then removed some other way) are left out. Settings →
+    Household rules, off by default. Returns the titles added."""
+    from . import curation
+
+    if not curation.options()["find_favourites"]:
+        return []
+    favourites = {}  # TMDB id -> (title, who favourited it)
+    rows = (
+        db.session.query(MediaIdentity, UserMediaState.jellyfin_user_id)
+        .join(UserMediaState, UserMediaState.media_identity_id == MediaIdentity.id)
+        .filter(
+            UserMediaState.favorite.is_(True),
+            MediaIdentity.media_type == "movie",
+            MediaIdentity.tmdb_id.isnot(None),
+        )
+    )
+    for media, user_id in rows:
+        title, who = favourites.get(media.tmdb_id, (media.title, []))
+        favourites[media.tmdb_id] = (title, who + [user_id])
+    if not favourites:
+        return []
+    raw = _cached("collections", lambda: client("radarr").collections() or [])
+    dismissed = _dismissed()
+    done = set(setting(FOUND_KEY, []) or [])
+    today = datetime.now(UTC).date().isoformat()
+    wanted = []  # (collection TMDB id, film TMDB id, because)
+    for collection in raw:
+        if collection.get("tmdbId") in dismissed["collections"]:
+            continue
+        films = collection.get("movies") or []
+        liked = [
+            favourites[f["tmdbId"]] for f in films if f.get("tmdbId") in favourites
+        ]
+        if not liked:
+            continue
+        title, who = liked[0]
+        because = f"{_names(who)} favourited {title}"
+        for film in films:
+            tmdb = film.get("tmdbId")
+            if (
+                not tmdb
+                or film.get("isExisting")
+                or film.get("isExcluded")
+                or tmdb in dismissed["films"]
+                or tmdb in done
+                or not _released(film, today)
+            ):
+                continue
+            wanted.append((collection.get("tmdbId"), tmdb, because))
+    added = []
+    for collection_tmdb, tmdb, because in wanted[:FIND_PER_RUN]:
+        added += add([tmdb], collection_tmdb, because=because)
+        done.add(tmdb)  # tried once, added or not (TMDB may not know it)
+    if wanted:
+        set_setting(FOUND_KEY, sorted(done))
+        db.session.commit()
+    return added

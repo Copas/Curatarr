@@ -1,15 +1,22 @@
 """Automatic fixes: do the safe thing instead of asking, once.
 
-Each kind of fix can be switched off in Settings → Automatic. All are on by
-default: each only acts when it can be confident (a better copy is checked to
-exist first, or two independent pieces of evidence agree). When it's on, Curatarr starts the fix itself as soon as it finds the
-problem, and also for problems found before it was switched on:
+Each kind of fix can be switched on in Settings → Automatic. All are off for
+a new installation, so nothing is deleted, downloaded again or rebuilt before
+its owner has seen what Curatarr finds (installations from before 0.2.0rc29
+keep them on). Each only acts when it can be confident (a better copy is
+checked to exist first, or two independent pieces of evidence agree). When
+it's on, Curatarr starts the fix itself as soon as it finds the problem, and
+also for problems found before it was switched on:
 
 - **files**: replace problem files (filecheck_jobs);
 - **dubs**: replace films with no English audio (dub_jobs);
 - **wrong_show**: replace files of another show with the same name (wrong_version);
 - **missing**: search once for always-keep episodes that never arrived (missing_keep);
-- **misfiled**: move episodes Sonarr filed under the wrong episode (misfiled).
+- **misfiled**: move episodes Sonarr filed under the wrong episode (misfiled);
+- **default_audio**: make a file's own soundtrack the default (default_audio);
+- **seek**: rebuild files Roku players can't seek in (seek_repair).
+
+Those last two only edit or rebuild the file: nothing is deleted or downloaded.
 
 Replacing is safe to do unattended because it checks a better copy exists
 before anything is deleted (better_copy). A fix is tried once: when nothing
@@ -23,7 +30,7 @@ from datetime import timedelta
 from . import db
 
 KEY = "auto_fixes"
-ON_BY_DEFAULT = True
+ON_BY_DEFAULT = False
 KINDS = {
     "files": "Replace problem files (cut short, broken, burned-in subtitles)",
     "dubs": "Replace films with no English audio",
@@ -31,6 +38,9 @@ KINDS = {
     "missing": "Search once for always-keep episodes that never arrived",
     "misfiled": "Move episodes Sonarr filed under the wrong episode, when what's "
     "said in them agrees with their download's name",
+    "default_audio": "Make a file's own soundtrack its default audio when it plays "
+    "a commentary or audio description first (the file is edited, not re-encoded)",
+    "seek": "Rebuild files Roku players can't seek in (copied, not re-encoded)",
 }
 # The first two were Enhance options before this page existed; they stay there.
 ENHANCE_OPTION = {

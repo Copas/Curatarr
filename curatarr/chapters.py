@@ -70,10 +70,10 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "movie_credits_only": True,
     "episode_identity_check": False,
     "dub_check": True,
-    "dub_replace_automatically": True,
+    "dub_replace_automatically": False,  # listed for approval (Settings → Automatic)
     "dub_remove_other_languages": False,
     "file_check": True,
-    "file_replace_automatically": True,
+    "file_replace_automatically": False,  # likewise
     "compat_audio": False,
     # A stereo AAC track for browsers (with the Curatarr plugin for Jellyfin,
     # which points them at it; without it the track would go unused).

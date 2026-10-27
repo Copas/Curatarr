@@ -188,3 +188,66 @@ def test_collections_page_and_actions(client, radarr):
     )
     assert evil.location.endswith("/collections")
     assert "Funny Pick" not in client.get("/collections").text
+
+
+def _favourited(tmdb_id, title="Slasher", user="u1"):
+    library = db.session.query(Library).first() or Library(
+        jellyfin_library_id="lib", name="Films", media_type="movies"
+    )
+    db.session.add(library)
+    db.session.flush()
+    media = MediaIdentity(
+        library_id=library.id, media_type="movie", title=title, tmdb_id=tmdb_id
+    )
+    db.session.add(media)
+    db.session.flush()
+    db.session.add(
+        UserMediaState(media_identity_id=media.id, jellyfin_user_id=user, favorite=True)
+    )
+    db.session.commit()
+    return media
+
+
+def test_find_favorites_completes_a_favourite_films_series(radarr, monkeypatch):
+    from curatarr import curation
+    from curatarr.services import set_setting
+
+    _favourited(1)
+    assert franchises.find_favourites() == []  # off by default
+    set_setting("curation", {"find_favourites": True})
+    set_setting("jellyfin_user_names", {"u1": "Sam"})
+    db.session.commit()
+    assert curation.options()["find_favourites"]
+    added = franchises.find_favourites()
+    # Slasher III: released and missing. Not the announced one, and nothing
+    # from series nobody favourited.
+    assert added == ["Film 3 (1984)"]
+    assert [m["tmdbId"] for m in radarr.added] == [3]
+    assert radarr.added[0]["qualityProfileId"] == 4  # the series' own profile
+    history = (
+        db.session.query(LifecycleAction).filter_by(action_type="film_added").one()
+    )
+    assert history.reason_text.endswith("because Sam favourited Slasher.")
+    # Added once: removed from Radarr later, it isn't added again.
+    franchises.forget()
+    assert franchises.find_favourites() == []
+
+
+def test_find_favorites_leaves_out_excluded_and_dismissed_films(radarr, monkeypatch):
+    from curatarr.services import set_setting
+
+    original = radarr.collections
+
+    def collections():
+        found = original()
+        found[3]["movies"][1]["isExcluded"] = True  # deleted in Jellyfin: excluded
+        return found
+
+    radarr.collections = collections
+    _favourited(7, "A")
+    set_setting("curation", {"find_favourites": True})
+    db.session.commit()
+    franchises.dismiss("films", 9)
+    added = franchises.find_favourites()
+    assert [m["tmdbId"] for m in radarr.added] == [10]
+    assert added == ["Film 10 (1984)"]

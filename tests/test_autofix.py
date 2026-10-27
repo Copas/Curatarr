@@ -32,6 +32,8 @@ def test_each_can_be_switched_off(app, client):
         "wrong_show": False,
         "missing": True,
         "misfiled": False,
+        "default_audio": False,
+        "seek": False,
     }
     assert setting("chapter_options")["file_replace_automatically"] is True
 

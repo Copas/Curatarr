@@ -86,6 +86,17 @@ def test_the_film_plays_its_own_soundtrack(app, media_env, monkeypatch, tmp_path
     monkeypatch.setattr(enrichment, "_refresh_jellyfin", lambda part, media: None)
     monkeypatch.setattr("curatarr.compat_audio._playing", lambda part: False)
     monkeypatch.setattr("curatarr.filecheck_jobs._dry_run", lambda media: False)
+    # Not automatic (a new installation): found and listed, the file untouched.
+    assert default_audio.sweep() == 0
+    (found,) = default_audio.found_rows()
+    assert found.default_audio["from"] == "Commentary with the director"
+    assert next(s for s in probe(path).streams if s["codec_type"] == "audio")["default"]
+    page = app.test_client().get("/chapters/problems").text
+    assert (
+        "play a commentary or audio description first" in page and "Fix all 1" in page
+    )
+    assert default_audio.sweep() == 0  # still waiting: not looked at again
+    app.test_client().post(f"/chapters/problems/audio/{found.id}/fix")
     assert default_audio.sweep() == 1
     audio = [s for s in probe(path).streams if s["codec_type"] == "audio"]
     assert [s["default"] for s in audio] == [False, True]
