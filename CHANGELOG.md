@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc37 (2026-10-27)
+
+- **Fixed: the installed app reported the wrong version.** The published v0.2.0rc36 tag still packaged v0.2.0rc34, and the install instructions named that older tag. This release gives the package and install commands the same version.
+
 ## 0.2.0rc36 (2026-10-27)
 
 - **Enhance says when it's waiting for Jellyfin.** While Jellyfin remakes the scrubbing thumbnails of files Curatarr rebuilt, the next rebuilds wait, and the activity panel said "Idle: nothing is queued" beside hours of work left, as if nothing were happening. It now says it's waiting for Jellyfin, for how many files.
