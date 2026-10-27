@@ -99,3 +99,23 @@ def test_an_existing_installation_keeps_its_automatic_fixes(tmp_path):
         assert enabled["default_audio"] and enabled["misfiled"]
         assert not enabled["dubs"] and not enabled["missing"]  # chosen before: kept
         assert options()["concurrency"] == 2
+
+
+def test_find_favorites_switched_on_where_it_was_keeps_on_under_automatic(tmp_path):
+    from flask_migrate import upgrade
+
+    from curatarr import autofix, db
+    from curatarr.models import Library
+    from curatarr.services import set_setting, setting
+
+    with _app(tmp_path, "rc29.db").app_context():
+        upgrade(revision="a6c4e2f8b931")
+        db.session.add(
+            Library(jellyfin_library_id="lib", name="Films", media_type="movies")
+        )
+        set_setting("curation", {"find_favourites": True, "seasonal": False})
+        db.session.commit()
+        upgrade()
+        db.session.expire_all()
+        assert autofix.automatic("favourites")
+        assert setting("curation") == {"seasonal": False}

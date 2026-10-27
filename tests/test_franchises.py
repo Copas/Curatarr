@@ -209,15 +209,13 @@ def _favourited(tmdb_id, title="Slasher", user="u1"):
 
 
 def test_find_favorites_completes_a_favourite_films_series(radarr, monkeypatch):
-    from curatarr import curation
     from curatarr.services import set_setting
 
     _favourited(1)
     assert franchises.find_favourites() == []  # off by default
-    set_setting("curation", {"find_favourites": True})
+    set_setting("auto_fixes", {"favourites": True})
     set_setting("jellyfin_user_names", {"u1": "Sam"})
     db.session.commit()
-    assert curation.options()["find_favourites"]
     added = franchises.find_favourites()
     # Slasher III: released and missing. Not the announced one, and nothing
     # from series nobody favourited.
@@ -245,7 +243,7 @@ def test_find_favorites_leaves_out_excluded_and_dismissed_films(radarr, monkeypa
 
     radarr.collections = collections
     _favourited(7, "A")
-    set_setting("curation", {"find_favourites": True})
+    set_setting("auto_fixes", {"favourites": True})
     db.session.commit()
     franchises.dismiss("films", 9)
     added = franchises.find_favourites()

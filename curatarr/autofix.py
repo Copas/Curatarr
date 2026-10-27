@@ -14,7 +14,8 @@ also for problems found before it was switched on:
 - **missing**: search once for always-keep episodes that never arrived (missing_keep);
 - **misfiled**: move episodes Sonarr filed under the wrong episode (misfiled);
 - **default_audio**: make a file's own soundtrack the default (default_audio);
-- **seek**: rebuild files Roku players can't seek in (seek_repair).
+- **seek**: rebuild files Roku players can't seek in (seek_repair);
+- **favourites**: Find Favorites, the rest of a favourite film's series (franchises).
 
 Those last two only edit or rebuild the file: nothing is deleted or downloaded.
 
@@ -41,6 +42,8 @@ KINDS = {
     "default_audio": "Make a file's own soundtrack its default audio when it plays "
     "a commentary or audio description first (the file is edited, not re-encoded)",
     "seek": "Rebuild files Roku players can't seek in (copied, not re-encoded)",
+    "favourites": "Find Favorites: add the rest of a favourite film's series to "
+    "Radarr and search for it",
 }
 # The first two were Enhance options before this page existed; they stay there.
 ENHANCE_OPTION = {

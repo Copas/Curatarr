@@ -271,10 +271,11 @@ def find_favourites() -> list[str]:
     and folder, and search for them. Films excluded in Radarr (deleting one in
     Jellyfin excludes it), dismissed on the film series page, or added by Find
     Favorites before (then removed some other way) are left out. Settings →
-    Household rules, off by default. Returns the titles added."""
-    from . import curation
+    Automatic, off by default; off, the films are still listed on the film
+    series page to add by hand. Returns the titles added."""
+    from . import autofix
 
-    if not curation.options()["find_favourites"]:
+    if not autofix.automatic("favourites"):
         return []
     favourites = {}  # TMDB id -> (title, who favourited it)
     rows = (

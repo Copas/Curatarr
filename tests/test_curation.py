@@ -265,17 +265,6 @@ def test_household_choices_page_saves(app, client):
         "leaving_collection": False,  # an unticked box
         "poster_language": False,
     }
-    assert "Find Favorites" in page and not curation.options()["find_favourites"]
-    client.post(
-        "/rules/household",
-        data={
-            "request_hold_days": "30",
-            "list_grace_days": "3",
-            "season_lead_days": "7",
-            "find_favourites": "on",
-        },
-    )
-    assert curation.options()["find_favourites"]
 
 
 def test_the_title_page_says_why_a_title_is_kept(app, client):

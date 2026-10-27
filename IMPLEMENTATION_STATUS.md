@@ -5,6 +5,7 @@ Phase 9 — Playback on every device and household polish, running live; prepari
 
 ## Completed
 - v0.2.0rc23 (2026-10-26): removes the nudity index (unreliable).
+- v0.2.0rc30 (2026-10-26): Find Favorites moved to Settings → Automatic.
 - v0.2.0rc29 (2026-10-26): Find Favorites; new installations start with automatic fixes off (problems wait on Problems with a Fix button).
 - v0.2.0rc28 (2026-10-26): search shows title matches at once, then what was said.
 - v0.2.0rc27 (2026-10-26): a title page's pictures open full screen when clicked.
