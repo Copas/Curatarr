@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Job · Posters · Curatarr{% endblock %}
+{% block content %}
+{% set name = job.media.title if job.media else (job.options.details.title if job.options and job.options.details else 'Benchmark') %}
+<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.artwork_jobs') }}">Jobs</a></div><h1>{{ name }}</h1><p class="text-secondary mb-0">{% if job.media %}<a href="{{ url_for('main.title', media_id=job.media.id) }}">The title's page</a> · {% endif %}asked for {{ job.created_at|when }}{% if job.created_by %} by {{ job.created_by }}{% endif %}.</p></div></header>
+{% set here = 'main.artwork_jobs' %}{% include '_posters_nav.html' %}
+{% include '_artwork_job.html' %}
+<script src="{{ url_for('static', filename='lightbox.js', v='1') }}"></script>
+<script src="{{ url_for('static', filename='artwork-live.js', v='1') }}"></script>
+{% endblock %}

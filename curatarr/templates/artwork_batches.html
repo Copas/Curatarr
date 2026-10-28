@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Batches · Posters · Curatarr{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Missing artwork</h1><p class="text-secondary mb-0">Make the pictures a whole library is missing. A batch queues a few titles at a time and can be paused, resumed or cancelled; each picture still waits for your review.</p></div></header>
+{% set here = 'main.artwork_batches' %}{% include '_posters_nav.html' %}
+{% include '_artwork_status.html' %}
+<form method="get" class="card p-3 mb-4"><h2 class="h5">New batch</h2>
+  <div class="row g-3 mb-3">
+    <div class="col-md-6"><label class="form-label" for="b-titles">Titles</label>
+      {% set which = spec.titles if spec else options.titles %}
+      <select class="form-select" name="titles" id="b-titles"><option value="favourites"{{ ' selected' if which == 'favourites' }}>Anyone's favourites</option>{% for id, name in accounts %}<option value="favourites:{{ id }}"{{ ' selected' if which == 'favourites:' ~ id }}>{{ name }}'s favourites</option>{% endfor %}<option value="movies"{{ ' selected' if which == 'movies' }}>All films</option><option value="shows"{{ ' selected' if which == 'shows' }}>All TV shows</option></select></div>
+    <div class="col-md-6"><label class="form-label" for="b-name">Name (optional)</label><input class="form-control" type="text" name="name" id="b-name" value="{{ request.args.get('name', '') }}" placeholder="Missing artwork"></div>
+    <fieldset class="col-12"><legend class="form-label mb-1">Pictures</legend><div class="d-flex flex-wrap gap-3">{% for kind in kinds %}<div class="form-check"><input class="form-check-input" type="checkbox" name="kinds" value="{{ kind }}" id="b-kind-{{ kind }}"{% if kind in (spec.kinds if spec else options.kinds) %} checked{% endif %}><label class="form-check-label" for="b-kind-{{ kind }}">{{ kind_names[kind]|capitalize }}</label></div>{% endfor %}</div></fieldset>
+    <fieldset class="col-12"><legend class="form-label mb-1">For</legend>{% if accounts %}<div class="d-flex flex-wrap gap-3">{% for id, name in accounts %}<div class="form-check"><input class="form-check-input" type="checkbox" name="accounts" value="{{ id }}" id="b-acc-{{ id }}"{% if spec and id in spec.accounts %} checked{% endif %}><label class="form-check-label" for="b-acc-{{ id }}">{{ name }}</label></div>{% endfor %}</div><div class="form-text">None ticked: everyone.</div>{% endif %}</fieldset>
+    <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="skip_done" id="b-skip"{% if (spec.skip_done if spec else true) %} checked{% endif %}><label class="form-check-label" for="b-skip">Only the pictures each title is missing (skip titles that have them all, and never replace pictures already chosen)</label></div></div>
+  </div>
+  {% include '_artwork_job_fields.html' %}
+  <input type="hidden" name="preview" value="1">
+  <div><button class="btn btn-outline-light">Preview</button> <span class="small text-secondary ms-2">Shows exactly which titles it would make pictures for, before anything is queued.</span></div>
+</form>
+{% if preview is not none %}
+<section class="card p-3 mb-4" id="preview"><h2 class="h5">{{ preview.count }} title{{ '' if preview.count == 1 else 's' }} would get pictures</h2>
+  {% if preview.count %}<p class="small text-secondary">{% for k in spec.kinds %}{{ kind_names[k] }}{{ ', ' if not loop.last }}{% endfor %}, for {{ 'chosen accounts' if spec.accounts else 'everyone' }}, made by {{ engine_label(spec.engine) }}.{% if preview.count > preview.titles|length %} The first {{ preview.titles|length }}:{% endif %}</p>
+  <ol class="small artwork-preview-list">{% for m in preview.titles %}<li>{{ m.title }}</li>{% endfor %}</ol>
+  <form method="post" action="{{ url_for('main.artwork_batch_create') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% for key in ['titles', 'name', 'engine', 'worker'] %}<input type="hidden" name="{{ key }}" value="{{ request.args.get(key, '') }}">{% endfor %}
+    {% for k in spec.kinds %}<input type="hidden" name="kinds" value="{{ k }}">{% endfor %}{% for a in spec.accounts %}<input type="hidden" name="accounts" value="{{ a }}">{% endfor %}
+    {% if spec.skip_done %}<input type="hidden" name="skip_done" value="1">{% endif %}{% if spec.options.originals %}<input type="hidden" name="originals" value="1">{% endif %}{% if spec.options.external_ok %}<input type="hidden" name="external_ok" value="1">{% endif %}
+    <input type="hidden" name="photos" value="{{ spec.options.photos }}"><input type="hidden" name="cast" value="{{ spec.options.cast|join(', ') }}"><input type="hidden" name="style" value="{{ spec.options.style }}">
+    <button class="btn btn-primary">Start this batch</button>
+  </form>{% else %}<p class="mb-0 text-secondary">Every title chosen has these pictures already (or has a job under way).</p>{% endif %}
+</section>{% endif %}
+<h2 class="h5">Batches</h2>
+{% if batches %}<div class="table-responsive"><table class="table align-middle">
+<thead><tr><th>Batch</th><th>Progress</th><th>State</th><th></th></tr></thead>
+<tbody>{% for b in batches %}{% set p = progress[b.id] %}<tr>
+  <td>{{ b.name }}<div class="small text-secondary">{{ p.total }} title{{ '' if p.total == 1 else 's' }} · started {{ b.created_at|when }}</div></td>
+  <td><progress class="artwork-progress" max="{{ [p.total, 1]|max }}" value="{{ p.queued }}" aria-label="Titles queued">{{ p.queued }}</progress>
+    <div class="small text-secondary">{{ p.queued }} of {{ p.total }} queued · {{ p.counts.get('review', 0) }} to review · {{ p.counts.get('completed', 0) }} done{% if p.counts.get('failed') %} · {{ p.counts.failed }} failed{% endif %}{% if p.remaining and b.state == 'active' %} · {{ p.remaining }} picture{{ '' if p.remaining == 1 else 's' }} left{% if p.estimate %}, about {{ (p.estimate / 3600)|round(1) if p.estimate >= 3600 else (p.estimate / 60)|round|int }} {{ 'hours' if p.estimate >= 3600 else 'minutes' }}{% endif %}{% endif %}</div></td>
+  <td>{{ {'active': 'Running', 'paused': 'Paused', 'cancelled': 'Cancelled', 'done': 'Finished'}[b.state] }}</td>
+  <td class="text-end"><form method="post" class="d-inline-flex gap-1"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if b.state == 'active' %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='pause') }}">Pause</button>{% elif b.state == 'paused' %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='resume') }}">Resume</button>{% endif %}
+    {% if p.counts.get('failed') %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='retry') }}">Retry failed</button>{% endif %}
+    {% if b.state in ('active', 'paused') %}<button class="btn btn-sm btn-outline-danger" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='cancel') }}">Cancel</button>{% endif %}
+  </form></td></tr>{% endfor %}</tbody></table></div>
+{% else %}<p class="text-secondary">None yet.</p>{% endif %}
+{% endblock %}

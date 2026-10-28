@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curatarr"
-version = "0.2.0rc38"
+version = "0.2.0rc39"
 description = "A deterministic media lifecycle manager for Jellyfin, Sonarr, and Radarr"
 requires-python = ">=3.12"
 dependencies = [
@@ -18,8 +18,13 @@ dependencies = [
   "cryptography>=45,<51",
 ]
 
+[project.scripts]
+curatarr-artwork-worker = "curatarr.artwork_worker.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+# The artwork worker: cleaner transparent logos (it works without).
+artwork = ["numpy>=1.26"]
 # Smart Chapters transcription. faster-whisper 1.2 still passes an argument
 # that PyAV 16 removed. chapters-gpu adds the CUDA runtime libraries
 # (cuBLAS 12, cuDNN 9) for transcription on an NVIDIA GPU.

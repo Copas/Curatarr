@@ -451,3 +451,164 @@ class ChapterState(db.Model, Timed):
     seek_layout = db.Column(db.JSON)
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")
+
+
+class ArtworkWorker(db.Model, Timed):
+    """A computer that makes pictures for Curatarr (artwork_jobs.py). It asks
+    for work with its token; only the token's hash is kept."""
+
+    __tablename__ = "artwork_workers"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    name = db.Column(db.String(100), nullable=False)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False)
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+    # What it can make: [{"engine", "label", "kinds", "references", "external"}]
+    capabilities = db.Column(db.JSON)
+    info = db.Column(db.JSON)  # host, processor, graphics card, memory
+    status = db.Column(db.JSON)  # each backend's readiness, as last reported
+    max_jobs = db.Column(db.Integer, default=1, nullable=False)
+    last_seen_at = db.Column(db.DateTime(timezone=True))
+    last_error = db.Column(db.Text)
+
+
+class ArtworkBatch(db.Model, Timed):
+    """Pictures for many titles at once (a library's missing artwork), or a
+    benchmark: its titles are queued a few jobs at a time."""
+
+    __tablename__ = "artwork_batches"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    name = db.Column(db.String(200), nullable=False)
+    purpose = db.Column(db.String(20), default="library", nullable=False)
+    spec = db.Column(db.JSON, nullable=False)  # what was asked for
+    state = db.Column(db.String(20), default="active", nullable=False)
+    media_ids = db.Column(db.JSON)  # the titles, in order
+    queued = db.Column(db.Integer, default=0, nullable=False)  # how many so far
+    created_by = db.Column(db.String(100))
+    finished_at = db.Column(db.DateTime(timezone=True))
+
+
+class ArtworkJob(db.Model, Timed):
+    """Pictures asked for one title (or one benchmark scenario): one
+    ArtworkImage per type, each reviewed on its own."""
+
+    __tablename__ = "artwork_jobs"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    media_identity_id = db.Column(
+        db.String(36), db.ForeignKey("media_identities.id"), index=True
+    )
+    batch_id = db.Column(db.String(36), db.ForeignKey("artwork_batches.id"), index=True)
+    purpose = db.Column(db.String(20), default="library", nullable=False)
+    accounts = db.Column(db.JSON)  # Jellyfin accounts it's for; empty: everyone
+    kinds = db.Column(db.JSON, nullable=False)
+    engine = db.Column(db.String(100), default="auto", nullable=False)
+    worker_id = db.Column(db.String(36), db.ForeignKey("artwork_workers.id"))
+    options = db.Column(db.JSON)  # the look, references, title details
+    priority = db.Column(db.Integer, default=0, nullable=False)
+    state = db.Column(db.String(20), default="pending", nullable=False, index=True)
+    error = db.Column(db.Text)
+    created_by = db.Column(db.String(100))
+    finished_at = db.Column(db.DateTime(timezone=True))
+    media = db.relationship("MediaIdentity")
+    batch = db.relationship("ArtworkBatch", backref="jobs")
+    worker = db.relationship("ArtworkWorker")
+    images = db.relationship(
+        "ArtworkImage", backref="job", order_by="ArtworkImage.position"
+    )
+
+
+class ArtworkImage(db.Model, Timed):
+    """One picture asked for (a poster, a wide tile…) and its progress. Each
+    try leaves an ArtworkCandidate for review."""
+
+    __tablename__ = "artwork_images"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    job_id = db.Column(
+        db.String(36), db.ForeignKey("artwork_jobs.id"), nullable=False, index=True
+    )
+    kind = db.Column(db.String(20), nullable=False)
+    position = db.Column(db.Integer, default=0, nullable=False)
+    state = db.Column(db.String(20), default="pending", nullable=False, index=True)
+    engine = db.Column(db.String(100))  # the one it ran on
+    worker_id = db.Column(db.String(36), db.ForeignKey("artwork_workers.id"))
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    lease_expires_at = db.Column(db.DateTime(timezone=True))
+    not_before = db.Column(db.DateTime(timezone=True))
+    progress = db.Column(db.Integer, default=0, nullable=False)
+    message = db.Column(db.String(500))
+    prompt = db.Column(db.Text)  # the last one sent
+    task = db.Column(db.JSON)  # the rest of it, with its references
+    feedback = db.Column(db.Text)  # for the next try
+    seed = db.Column(db.BigInteger)
+    candidate_id = db.Column(db.String(36))  # the one approved
+    started_at = db.Column(db.DateTime(timezone=True))
+    finished_at = db.Column(db.DateTime(timezone=True))
+    error = db.Column(db.Text)
+    worker = db.relationship("ArtworkWorker")
+    candidates = db.relationship(
+        "ArtworkCandidate", backref="image", order_by="ArtworkCandidate.version"
+    )
+
+
+class ArtworkCandidate(db.Model, Timed):
+    """A picture a worker made, waiting in staging until it's approved
+    (put on through custom_posters) or rejected."""
+
+    __tablename__ = "artwork_candidates"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    image_id = db.Column(
+        db.String(36), db.ForeignKey("artwork_images.id"), nullable=False, index=True
+    )
+    version = db.Column(db.Integer, default=1, nullable=False)
+    path = db.Column(db.String(512))  # None once retention has removed it
+    width = db.Column(db.Integer)
+    height = db.Column(db.Integer)
+    has_alpha = db.Column(db.Boolean, default=False, nullable=False)
+    size_bytes = db.Column(db.Integer)
+    engine = db.Column(db.String(100))
+    worker_id = db.Column(db.String(36), db.ForeignKey("artwork_workers.id"))
+    seed = db.Column(db.BigInteger)
+    prompt = db.Column(db.Text)
+    params = db.Column(db.JSON)  # model, workflow, steps, sizes, references
+    steps = db.Column(db.JSON)  # what was done to it after generation
+    metrics = db.Column(db.JSON)  # measured checks, each marked how reliable
+    duration_s = db.Column(db.Float)
+    peak_vram_mb = db.Column(db.Integer)
+    peak_ram_mb = db.Column(db.Integer)
+    decision = db.Column(db.String(20))  # approved, rejected, superseded
+    decided_at = db.Column(db.DateTime(timezone=True))
+    feedback = db.Column(db.Text)
+    worker = db.relationship("ArtworkWorker")
+
+
+class ArtworkRating(db.Model, Timed):
+    """A person's score (1–5) for one aspect of a picture: overall, likeness,
+    lettering or how it fits its set."""
+
+    __tablename__ = "artwork_ratings"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    candidate_id = db.Column(
+        db.String(36),
+        db.ForeignKey("artwork_candidates.id"),
+        nullable=False,
+        index=True,
+    )
+    aspect = db.Column(db.String(20), nullable=False)
+    score = db.Column(db.Integer, nullable=False)
+    notes = db.Column(db.Text)
+    created_by = db.Column(db.String(100))
+
+
+class ArtworkComparison(db.Model, Timed):
+    """A blind choice between two pictures made for the same thing."""
+
+    __tablename__ = "artwork_comparisons"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    left_id = db.Column(
+        db.String(36), db.ForeignKey("artwork_candidates.id"), nullable=False
+    )
+    right_id = db.Column(
+        db.String(36), db.ForeignKey("artwork_candidates.id"), nullable=False
+    )
+    winner = db.Column(db.String(10), nullable=False)  # left, right, tie
+    notes = db.Column(db.Text)
+    created_by = db.Column(db.String(100))

@@ -1,0 +1,8 @@
+{# The Generate pages' dashboard: needs `overview`. #}
+<div class="artwork-status mb-4">
+  <a class="artwork-stat" href="{{ url_for('main.artwork_jobs', state='pending') }}"><span class="artwork-stat-number">{{ overview.waiting }}</span><span class="artwork-stat-label">waiting</span></a>
+  <a class="artwork-stat" href="{{ url_for('main.artwork_jobs', state='generating') }}"><span class="artwork-stat-number">{{ overview.running }}</span><span class="artwork-stat-label">being made</span></a>
+  <a class="artwork-stat{{ ' artwork-stat-attention' if overview.review }}" href="{{ url_for('main.artwork_review') }}"><span class="artwork-stat-number">{{ overview.review }}</span><span class="artwork-stat-label">to review</span></a>
+  <a class="artwork-stat{{ ' artwork-stat-problem' if overview.failed }}" href="{{ url_for('main.artwork_jobs', state='failed') }}"><span class="artwork-stat-number">{{ overview.failed }}</span><span class="artwork-stat-label">failed</span></a>
+  <a class="artwork-stat" href="{{ url_for('main.artwork_workers') }}"><span class="artwork-stat-number">{{ overview.online|length }}/{{ overview.workers|length }}</span><span class="artwork-stat-label">workers online</span></a>
+</div>

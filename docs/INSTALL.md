@@ -44,7 +44,7 @@ Requirements: a systemd-based distribution, **Python 3.12 or newer** with the `v
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc38
+git checkout v0.2.0rc39
 sudo ./scripts/install.sh
 ```
 
@@ -95,6 +95,10 @@ Chapters, subtitles, recap and preview detection, and dub checks need a few more
 
 Then switch it on per library in **Settings → Enhance**. If Sonarr and Radarr see the files under a different path than this machine does, add a path mapping there (for example `/tv => /mnt/media/tv`).
 
+### Optional: generating artwork
+
+**Library → Posters → Generate** needs a worker: a program on this machine or another one with a graphics card, running ComfyUI with a local image model, or Codex. It's part of the installed package (`/opt/curatarr/current/bin/curatarr-artwork-worker` here) and runs as an ordinary user, apart from Curatarr. Setting it up, the models it uses and what leaves the machine: [ARTWORK.md](ARTWORK.md).
+
 ### Change settings
 
 Edit `/etc/curatarr/curatarr.env`, then restart:
@@ -119,7 +123,7 @@ sudo systemctl restart curatarr-web curatarr-worker
 ```bash
 cd curatarr-release
 git fetch --tags
-git checkout v0.2.0rc38                 # the new release
+git checkout v0.2.0rc39                 # the new release
 git status --short                     # must print nothing
 sudo ./scripts/install.sh              # remembers your EXTRAS; pass EXTRAS=… to change them
 sudo systemctl is-active curatarr-web curatarr-worker
@@ -158,7 +162,7 @@ Requirements: Docker Engine with the Compose plugin, and Git.
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 cd curatarr-deploy
-git checkout v0.2.0rc38
+git checkout v0.2.0rc39
 cp .env.example .env
 ```
 
@@ -225,7 +229,7 @@ Open **PowerShell** in a folder where you keep apps (for example `C:\Apps`) and 
 ```powershell
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 Set-Location curatarr-deploy
-git checkout v0.2.0rc38
+git checkout v0.2.0rc39
 Copy-Item .env.example .env
 notepad .env
 ```

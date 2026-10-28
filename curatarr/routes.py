@@ -99,9 +99,18 @@ JELLYFIN_PATHS = {"/api/v1/webhook/jellyfin", "/api/v1/jellyfin/delete"}
 TOKEN_PATH_PREFIXES: list[str] = []
 
 
+# The artwork workers' API (artwork_routes): each request carries the
+# worker's own token, checked by the endpoint, so no sign-in or form token.
+WORKER_PATH_PREFIX = "/api/v1/artwork/worker/"
+WORKER_UPLOAD_LIMIT = 48 * 1024 * 1024
+
+
 @bp.before_app_request
 def guard_request():
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return
+    if request.path.startswith(WORKER_PATH_PREFIX):
+        request.max_content_length = WORKER_UPLOAD_LIMIT
         return
     if request.path in JELLYFIN_PATHS or request.path.startswith(
         tuple(TOKEN_PATH_PREFIXES)

@@ -175,6 +175,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Posters for one account](docs/FEATURES.md#for-everyone-or-for-chosen-accounts) | A poster only chosen accounts see, in every app (Roku included); everyone else keeps the usual one. | With the plugin |
 | [Favourite ribbons](docs/FEATURES.md#favourite-ribbons) | A gold band with a star and Sam's face on what someone favourited (and "★ Sam" on its page), shown to the accounts you choose; NEW for a week, "♥ Household favourite" for everyone's, and on favourite episodes too. | Off, with the plugin |
 | [Make them with an AI](docs/FEATURES.md#make-them-with-an-ai) | Prompts in batches for an image-making AI agent, with each title's plot, original art for reference and file name, and your household cast as the leads where it suits. | One click |
+| [Generate with AI](docs/FEATURES.md#generate-with-ai) | Curatarr makes the pictures itself, on a local image model (through ComfyUI) or Codex's image tool, on this computer or another: matching sets, your household as the cast, titles checked for spelling, every picture reviewed before it goes on, and library-wide batches for what's missing. Benchmarks compare the engines. | Off until a [worker](docs/ARTWORK.md) is set up |
 | [Gallery](docs/FEATURES.md#gallery) | Every picture made, laid out to show people: a page per title (its background and logo, then its poster, wide tile and banner), full screen and a slideshow. | **On** |
 | [Posters in your language](docs/FEATURES.md#collections-and-suggestions) | A new release that arrived with a foreign poster gets one in your language once TMDB has it. | **On** |
 
@@ -232,7 +233,7 @@ Quick start on Linux:
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc38
+git checkout v0.2.0rc39
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 

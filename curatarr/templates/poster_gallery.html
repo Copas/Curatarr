@@ -2,6 +2,7 @@
 {% block title %}Gallery · Posters · Curatarr{% endblock %}
 {% block content %}
 <header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Gallery</h1><p class="text-secondary mb-0">{{ cards|length }} title{{ '' if cards|length == 1 else 's' }} with {{ 'pictures' if not kind else views[view][0]|lower }} made for them. {{ 'Open a title to see all its pictures, or play them all.' if not kind else 'Click any picture to see it full screen, then use the arrows to look through them all.' }}</p></div>{% if cards %}<button type="button" class="btn btn-primary" data-slideshow>Slideshow</button>{% endif %}</header>
+{% set here = 'main.custom_posters_gallery' %}{% include '_posters_nav.html' %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4"><ul class="nav nav-pills gap-2" aria-label="What to show">{% for key, (label, _k, _n) in views.items() %}<li class="nav-item"><a class="nav-link{{ ' active' if key == view }}" href="{{ url_for('main.custom_posters_gallery', view=key) }}"{% if key == view %} aria-current="page"{% endif %}>{{ label }}</a></li>{% endfor %}</ul>
 {% if cards|length > 1 %}{% macro sort_url(key) %}{{ url_for('main.custom_posters_gallery', view=view, sort=key) }}{% endmacro %}{% include '_gallery_sort.html' %}{% endif %}</div>
 {% if cards and kind %}<div class="picture-wall picture-wall-{{ kind|lower }}">{% for c in cards %}{% set p = c.pictures[kind] %}{% set src = url_for('main.custom_poster_image', poster_id=p.id) %}

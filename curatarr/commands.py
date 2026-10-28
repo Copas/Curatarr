@@ -303,6 +303,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Importing custom posters failed")
     try:
+        from . import artwork_jobs
+
+        artwork_jobs.tick()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Looking after artwork generation failed")
+    try:
         from . import finished
 
         finished.sweep()

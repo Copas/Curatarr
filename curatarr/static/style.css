@@ -489,3 +489,55 @@ body:has(.title-show) { overflow-x: clip; }
   .title-show-backdrop img { object-position: 68% center; }
   .title-show-logo img { max-height: 22vh; }
 }
+/* Posters → Generate, Jobs, Review, Batches, Workers, Benchmarks */
+.posters-nav { margin-top: -.5rem; }
+.artwork-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .75rem; }
+.artwork-stat { display: flex; flex-direction: column; padding: .75rem 1rem; border: 1px solid var(--app-border); border-radius: .75rem; background: var(--app-surface); color: var(--bs-body-color); text-decoration: none; }
+.artwork-stat-number { font-size: 1.5rem; font-weight: 650; line-height: 1.1; }
+.artwork-stat-label { font-size: .8rem; color: var(--app-muted); }
+.artwork-stat-attention { border-color: var(--app-warning); }
+.artwork-stat-problem { border-color: var(--app-danger); }
+@media (hover: hover) { .artwork-stat:hover { border-color: var(--app-accent); } }
+.artwork-state { background: var(--app-raised); color: var(--bs-body-color); border: 1px solid var(--app-border); font-weight: 550; }
+.artwork-state-assigned, .artwork-state-preparing, .artwork-state-generating, .artwork-state-validating { border-color: var(--app-accent); color: var(--app-accent); }
+.artwork-state-review { border-color: var(--app-warning); color: var(--app-warning); }
+.artwork-state-completed, .artwork-state-approved { border-color: var(--app-success); color: var(--app-success); }
+.artwork-state-failed { border-color: var(--app-danger); color: var(--app-danger); }
+.artwork-state-cancelled { color: var(--app-muted); }
+.artwork-job-state { font-weight: 600; }
+.artwork-job-generating { color: var(--app-accent); }
+.artwork-job-review { color: var(--app-warning); }
+.artwork-job-completed { color: var(--app-success); }
+.artwork-job-failed { color: var(--app-danger); }
+.artwork-job-cancelled, .artwork-job-pending { color: var(--app-muted); }
+.artwork-progress { width: 10rem; max-width: 100%; height: .6rem; accent-color: var(--app-accent); }
+.artwork-compare { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; margin-bottom: .75rem; }
+.artwork-open { padding: 0; border: 0; background: none; cursor: zoom-in; display: block; }
+.artwork-pic { display: block; max-width: 100%; height: auto; border-radius: .5rem; border: 1px solid var(--app-border); }
+.artwork-pic-primary { width: 15rem; }
+.artwork-pic-thumb, .artwork-pic-backdrop { width: 26rem; }
+.artwork-pic-banner { width: 32rem; }
+.artwork-pic-logo { width: 22rem; }
+.artwork-refs, .artwork-versions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-start; }
+.artwork-ref { display: block; width: 6rem; height: auto; border-radius: .35rem; border: 1px solid var(--app-border); }
+.artwork-gone { display: flex; align-items: center; justify-content: center; height: 4rem; font-size: .75rem; color: var(--app-muted); }
+.artwork-checker { background-color: #ccc; background-image: linear-gradient(45deg, #999 25%, transparent 25%), linear-gradient(-45deg, #999 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #999 75%), linear-gradient(-45deg, transparent 75%, #999 75%); background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0; }
+.artwork-facts { display: grid; grid-template-columns: max-content 1fr; gap: .1rem .75rem; }
+.artwork-facts dt { font-weight: 550; color: var(--app-muted); }
+.artwork-facts dd { margin: 0; }
+.artwork-prompt { white-space: pre-wrap; word-break: break-word; font-size: .8rem; background: var(--app-bg); border: 1px solid var(--app-border); border-radius: .5rem; padding: .6rem .75rem; max-height: 22rem; overflow: auto; }
+.artwork-chip { display: inline-flex; align-items: center; font-size: .85rem; padding: .4rem .6rem; }
+.artwork-results:empty { display: none; }
+.artwork-number { width: 5rem; }
+.artwork-preview-list { columns: 2 16rem; }
+.artwork-bench-grid { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+.artwork-bench-item { max-width: 26rem; }
+.artwork-bench-item .artwork-pic-primary { width: 12rem; }
+.artwork-rate { display: flex; flex-wrap: wrap; gap: .35rem; align-items: end; margin-top: .35rem; }
+.artwork-rate select { width: 4rem; }
+.artwork-ab { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1.25rem; align-items: start; }
+.artwork-ab .artwork-pic { width: 100%; }
+@media (max-width: 576px) {
+  .artwork-pic-thumb, .artwork-pic-backdrop, .artwork-pic-banner, .artwork-pic-logo, .artwork-pic-primary { width: 100%; }
+  .artwork-facts { grid-template-columns: 1fr; }
+}

@@ -53,6 +53,7 @@
         <select class="form-select form-select-sm w-auto" name="kind" aria-label="Which picture">{% for kind in picture_kinds %}<option value="{{ kind }}">As its {{ picture_names[kind] }}</option>{% endfor %}</select>
         <select class="form-select form-select-sm w-auto" name="for" aria-label="Who sees it"><option value="">For everyone</option>{% for id, name in poster_accounts %}<option value="{{ id }}">Only for {{ name }}</option>{% endfor %}</select>
         <button class="btn btn-sm btn-primary">Use this picture</button></form>
+      <p class="small mt-2 mb-0"><a href="{{ url_for('main.artwork_generate', media=media.id) }}">Generate with AI</a>: have a worker make its pictures, for you to review before they go on.</p>
       <p class="small text-secondary mt-2 mb-0">JPEG, PNG or WebP. A poster is portrait (2:3); a wide tile and background landscape (16:9); a logo the title alone on a see-through PNG; a banner a wide strip (about 5.4:1). One for one account needs the <a href="https://github.com/Copas/Curatarr/tree/main/jellyfin-plugin">Curatarr plugin for Jellyfin</a> (0.8.0.0 or later for pictures other than the poster); other accounts keep the usual one. <a href="{{ url_for('main.custom_posters_page') }}">All custom pictures</a></p>
     </div>
   </div>

@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}Review · Posters · Curatarr{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Review artwork</h1><p class="text-secondary mb-0">Pictures made and waiting for you, oldest first. Approving one puts it on in Jellyfin (the picture it replaces is kept, to restore); turning one down leaves Jellyfin as it is.</p></div></header>
+{% set here = 'main.artwork_review' %}{% include '_posters_nav.html' %}
+{% set back = url_for('main.artwork_review', page=page) %}
+{% if images %}<p class="small text-secondary">{{ total }} waiting{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}.</p>
+{% for image in images %}{% set existing = existing_by_image.get(image.id) %}
+<h2 class="h5 mt-4"><a href="{{ url_for('main.artwork_job', job_id=image.job_id) }}">{{ image.job.media.title if image.job.media else 'Untitled' }}</a></h2>
+{% include '_artwork_image.html' with context %}
+{% endfor %}
+{% if pages > 1 %}<nav class="d-flex justify-content-between mt-3" aria-label="Pages">{% if page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_review', page=page - 1) }}">Previous</a>{% else %}<span></span>{% endif %}{% if page < pages %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_review', page=page + 1) }}">Next</a>{% endif %}</nav>{% endif %}
+{% else %}<div class="empty-state"><h2 class="h6">Nothing to review</h2><p class="mb-0">Pictures appear here as workers make them. See <a href="{{ url_for('main.artwork_jobs') }}">Jobs</a> for what's under way.</p></div>{% endif %}
+<script src="{{ url_for('static', filename='lightbox.js', v='1') }}"></script>
+{% endblock %}

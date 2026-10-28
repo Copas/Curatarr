@@ -99,6 +99,7 @@ def create_app(test_config=None):
         ), 503
 
     from . import (
+        artwork_routes,  # noqa: F401  (adds Posters → Generate and its workers)
         chapter_routes,  # noqa: F401  (adds the chapter pages to bp)
         flag_routes,  # noqa: F401  (adds the flags API)
         franchise_routes,  # noqa: F401  (adds Library → Collections)

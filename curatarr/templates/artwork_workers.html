@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Workers · Posters · Curatarr{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Models &amp; workers</h1><p class="text-secondary mb-0">Workers make the pictures: a program on this computer or another, with a local image model (through ComfyUI) or Codex's image tool. A worker asks Curatarr for work, so it needs no open port; it signs in with its own token.</p></div></header>
+{% set here = 'main.artwork_workers' %}{% include '_posters_nav.html' %}
+{% if token %}
+<section class="alert alert-success" id="new-token"><h2 class="h5">{{ new_worker.name }}'s token</h2>
+  <p>Copy it now: Curatarr keeps only a fingerprint of it, so it can't show it again (make a new one if it's lost). On the computer the worker runs on, save it in a file only you can read, then start the worker:</p>
+  <pre class="artwork-prompt" id="worker-token">{{ token }}</pre>
+  <button type="button" class="btn btn-sm btn-outline-dark mb-2" data-copy="#worker-token">Copy the token</button>
+  <pre class="artwork-prompt" id="worker-setup">curatarr-artwork-worker setup --server {{ server }} --name "{{ new_worker.name }}"
+curatarr-artwork-worker run</pre>
+  <button type="button" class="btn btn-sm btn-outline-dark" data-copy="#worker-setup">Copy the commands</button>
+  <p class="small mb-0 mt-2"><code>setup</code> asks for the token and finds what the computer can run (ComfyUI and its models, Codex). See <a href="https://github.com/Copas/Curatarr/blob/main/docs/ARTWORK.md">docs/ARTWORK.md</a> for running it as a service.</p>
+</section>{% endif %}
+<section class="card p-3 mb-4"><h2 class="h5">Workers</h2>
+{% if workers %}<div class="table-responsive"><table class="table align-middle">
+<thead><tr><th>Worker</th><th>Engines</th><th>Computer</th><th class="text-end"></th></tr></thead>
+<tbody>{% for w in workers %}<tr>
+  <td><strong>{{ w.name }}</strong><div class="small">{% if not w.enabled %}<span class="text-secondary">Turned off</span>{% elif online(w) %}<span class="text-success">Online</span>{% elif w.last_seen_at %}<span class="text-warning">Last seen {{ w.last_seen_at|when }}</span>{% else %}<span class="text-secondary">Not connected yet</span>{% endif %} · up to {{ w.max_jobs }} at once</div>{% if w.last_error %}<div class="small text-danger">{{ w.last_error }}</div>{% endif %}</td>
+  <td class="small">{% for e in w.capabilities or [] %}<div>{% if e.ready %}<span class="text-success" aria-label="Ready">●</span>{% else %}<span class="text-warning" aria-label="Not ready">●</span>{% endif %} {{ e.label }}{% if e.external %} <span class="badge text-bg-warning">outside service</span>{% endif %}{% if e.references %} <span class="badge text-bg-secondary">reference photos</span>{% endif %}{% if not e.ready and e.why %}<div class="text-secondary">{{ e.why }}</div>{% endif %}</div>{% else %}<span class="text-secondary">None reported</span>{% endfor %}</td>
+  <td class="small">{% set i = w.info or {} %}{{ i.host or '' }}{% if i.gpu %}<div>{{ i.gpu }}{% if i.vram_mb %}, {{ (i.vram_mb / 1024)|round(1) }} GB{% endif %}</div>{% endif %}{% if i.ram_mb %}<div>{{ (i.ram_mb / 1024)|round|int }} GB memory{% if i.cpus %}, {{ i.cpus }} processors{% endif %}</div>{% endif %}</td>
+  <td class="text-end"><form method="post" class="d-inline-flex flex-wrap gap-1 justify-content-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="visually-hidden" for="jobs-{{ w.id }}">At once</label><input class="form-control form-control-sm artwork-number" type="number" min="1" max="8" name="max_jobs" id="jobs-{{ w.id }}" value="{{ w.max_jobs }}"><button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.artwork_worker_action', worker_id=w.id, action='jobs') }}">Save</button>
+    <button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.artwork_worker_action', worker_id=w.id, action='token') }}">New token</button>
+    {% if w.enabled %}<button class="btn btn-sm btn-outline-danger" formaction="{{ url_for('main.artwork_worker_action', worker_id=w.id, action='disable') }}">Turn off</button>{% else %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.artwork_worker_action', worker_id=w.id, action='enable') }}">Turn on</button>{% endif %}
+  </form></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-secondary">No workers yet.</p>{% endif %}
+  <form method="post" action="{{ url_for('main.artwork_worker_create') }}" class="d-flex flex-wrap gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div><label class="form-label small" for="w-name">Add a worker</label><input class="form-control" type="text" name="name" id="w-name" placeholder="Living room PC" maxlength="100" required></div>
+    <div><label class="form-label small" for="w-jobs">Pictures at once</label><input class="form-control artwork-number" type="number" min="1" max="8" name="max_jobs" id="w-jobs" value="1"></div>
+    <button class="btn btn-primary">Add</button>
+  </form>
+</section>
+<section class="card p-3 mb-4"><h2 class="h5">Settings</h2>
+<form method="post" action="{{ url_for('main.artwork_settings_save') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6 col-lg-3"><label class="form-label" for="s-conc">At once, all workers</label><input class="form-control" type="number" min="1" max="16" name="concurrency" id="s-conc" value="{{ settings.concurrency }}"></div>
+    <div class="col-sm-6 col-lg-3"><label class="form-label" for="s-att">Tries per picture</label><input class="form-control" type="number" min="1" max="10" name="max_attempts" id="s-att" value="{{ settings.max_attempts }}"></div>
+    <div class="col-sm-6 col-lg-3"><label class="form-label" for="s-ret">Keep turned-down pictures (days)</label><input class="form-control" type="number" min="1" max="365" name="retention_days" id="s-ret" value="{{ settings.retention_days }}"></div>
+    <div class="col-sm-6 col-lg-3"><label class="form-label" for="s-win">A batch's titles queued at once</label><input class="form-control" type="number" min="1" max="50" name="batch_window" id="s-win" value="{{ settings.batch_window }}"></div>
+  </div>
+  <h3 class="h6">Engine for each picture type</h3>
+  <p class="small text-secondary">Used when a job leaves the engine to Curatarr ("Best available"). Choose from what <a href="{{ url_for('main.artwork_benchmarks') }}">Benchmarks</a> showed works best. Left at Automatic, Curatarr picks a local engine that can.</p>
+  <div class="row g-3 mb-3">{% for kind in kinds %}<div class="col-sm-6 col-lg"><label class="form-label small" for="d-{{ kind }}">{{ kind_names[kind]|capitalize }}</label><select class="form-select form-select-sm" name="default-{{ kind }}" id="d-{{ kind }}"><option value="">Automatic</option>{% for e in engines if kind in e.kinds %}<option value="{{ e.engine }}"{% if settings.defaults.get(kind) == e.engine %} selected{% endif %}>{{ e.label }}</option>{% endfor %}</select></div>{% endfor %}</div>
+  <button class="btn btn-primary">Save</button>
+</form></section>
+<script src="{{ url_for('static', filename='copy.js', v='1') }}"></script>
+{% endblock %}

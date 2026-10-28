@@ -1,0 +1,16 @@
+{# The fields Generate and Batches share: engine, worker, cast and look.
+   Needs engines, workers, options. #}
+<div class="row g-3 mb-3">
+  <div class="col-md-6"><label class="form-label" for="f-engine">Engine</label>
+    <select class="form-select" name="engine" id="f-engine"><option value="auto">Best available</option>{% for e in engines %}<option value="{{ e.engine }}"{% if spec and spec.engine == e.engine %} selected{% endif %}>{{ e.label }}{% if e.external %} (outside service){% endif %}</option>{% endfor %}</select></div>
+  <div class="col-md-6"><label class="form-label" for="f-worker">Worker</label>
+    <select class="form-select" name="worker" id="f-worker"><option value="">Any that can make it</option>{% for w in workers %}<option value="{{ w.id }}"{% if spec and spec.worker == w.id %} selected{% endif %}>{{ w.name }}</option>{% endfor %}</select></div>
+  <div class="col-md-6"><label class="form-label" for="f-photos">Reference photos folder</label>
+    <input class="form-control" type="text" name="photos" id="f-photos" value="{{ spec.options.photos if spec else options.photos }}" placeholder="/path/to/photos"></div>
+  <div class="col-md-6"><label class="form-label" for="f-cast">Who's in them</label>
+    <input class="form-control" type="text" name="cast" id="f-cast" value="{{ spec.options.cast|join(', ') if spec else '' }}" placeholder="Everyone in the folder"></div>
+  <div class="col-12"><label class="form-label" for="f-style">The look</label>
+    <textarea class="form-control" name="style" id="f-style" rows="2">{{ spec.options.style if spec else options.style }}</textarea></div>
+  <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="originals" id="f-originals"{% if (spec.options.originals if spec else options.originals) %} checked{% endif %}><label class="form-check-label" for="f-originals">Use each title's original art as a reference</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" name="external_ok" id="f-external"{% if spec and spec.options.external_ok %} checked{% endif %}><label class="form-check-label" for="f-external">Allow the reference photos to be sent to an outside service (Codex sends them to OpenAI)</label></div></div>
+</div>

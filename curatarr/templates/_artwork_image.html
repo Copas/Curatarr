@@ -1,0 +1,41 @@
+{# One picture asked for, with what was made for it and the review buttons.
+   Needs `image`, `existing` (the picture it would replace, or None), `back`. #}
+{% set waiting = image.candidates|selectattr('decision', 'none')|selectattr('path')|list %}
+{% set latest = waiting[-1] if waiting else None %}
+{% set approved = image.candidates|selectattr('decision', 'equalto', 'approved')|list %}
+<section class="card p-3 mb-3 artwork-image" id="image-{{ image.id }}">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+    <h3 class="h6 mb-0">{{ kind_names[image.kind]|capitalize }} <span class="badge artwork-state artwork-state-{{ image.state }}">{{ state_names[image.state] }}</span></h3>
+    {% if image.state in ('generating', 'preparing', 'validating', 'assigned') %}<progress class="artwork-progress" max="100" value="{{ image.progress }}" aria-label="{{ kind_names[image.kind] }} progress">{{ image.progress }}%</progress>{% endif %}
+  </div>
+  {% if image.message %}<p class="small text-secondary mb-2">{{ image.message }}</p>{% endif %}
+  {% if image.error and image.state == 'failed' %}<div class="alert alert-danger small py-2">{{ image.error }}</div>{% endif %}
+  {% set shown = latest or (approved[-1] if approved else None) %}
+  {% if shown %}
+  <div class="artwork-compare">
+    <figure class="mb-0"><button type="button" class="artwork-open" data-full="{{ url_for('main.artwork_candidate_image', candidate_id=shown.id, ext='png' if shown.has_alpha else 'jpg') }}" data-alt="The new {{ kind_names[image.kind] }}" aria-label="Show the new {{ kind_names[image.kind] }} full screen"><img class="artwork-pic artwork-pic-{{ image.kind|lower }}{{ ' artwork-checker' if shown.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=shown.id, ext='png' if shown.has_alpha else 'jpg') }}" alt=""></button><figcaption class="small text-secondary">New, version {{ shown.version }}{{ ' (approved)' if shown.decision == 'approved' }}</figcaption></figure>
+    {% if existing %}<figure class="mb-0"><button type="button" class="artwork-open" data-full="{{ url_for('main.custom_poster_image', poster_id=existing.id) }}" data-alt="The {{ kind_names[image.kind] }} it has now" aria-label="Show the current {{ kind_names[image.kind] }} full screen"><img class="artwork-pic artwork-pic-{{ image.kind|lower }}{{ ' artwork-checker' if image.kind == 'Logo' }}" src="{{ url_for('main.custom_poster_image', poster_id=existing.id) }}" alt=""></button><figcaption class="small text-secondary">Now (its custom {{ kind_names[image.kind] }})</figcaption></figure>
+    {% elif image.kind == 'Primary' and image.job.media %}<figure class="mb-0"><img class="artwork-pic artwork-pic-primary" src="{{ url_for('main.poster', media_id=image.job.media.id) }}" alt="" loading="lazy"><figcaption class="small text-secondary">Now (Jellyfin's poster)</figcaption></figure>{% endif %}
+    {% set refs = (image.task or {}).get('references') or [] %}{% if refs %}<div class="artwork-refs" aria-label="References it was given">{% for r in refs %}<figure class="mb-0"><img class="artwork-ref" src="{{ url_for('main.artwork_image_reference', image_id=image.id, number=loop.index) }}" alt="" loading="lazy"><figcaption class="small text-secondary">{{ loop.index }}. {{ r.person or {'set': 'set poster', 'original': 'original art', 'lettering': 'original logo'}.get(r.role, r.role) }}</figcaption></figure>{% endfor %}</div>{% endif %}
+  </div>
+  {% set c = shown %}{% include '_artwork_candidate.html' with context %}
+  {% endif %}
+  {% if latest and image.state == 'review' and image.job.purpose == 'library' %}
+  <form method="post" class="mt-2 artwork-decide"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
+    <label class="form-label small mb-1" for="fb-{{ image.id }}">What to change, if making it again (optional)</label>
+    <textarea class="form-control form-control-sm mb-2" name="feedback" id="fb-{{ image.id }}" rows="2" placeholder="e.g. make the title larger; she should be smiling"></textarea>
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-success btn-sm" formaction="{{ url_for('main.artwork_candidate_action', candidate_id=latest.id, action='approve') }}">Approve and put on</button>
+      <button class="btn btn-outline-light btn-sm" formaction="{{ url_for('main.artwork_candidate_action', candidate_id=latest.id, action='again') }}">Make it again</button>
+      <button class="btn btn-outline-danger btn-sm" formaction="{{ url_for('main.artwork_candidate_action', candidate_id=latest.id, action='reject') }}">Turn down</button>
+    </div>
+  </form>
+  {% elif image.state in ('failed', 'completed', 'cancelled') and image.job.purpose == 'library' %}
+  <form method="post" action="{{ url_for('main.artwork_image_again', image_id=image.id) }}" class="mt-2 d-flex flex-wrap gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
+    <div class="flex-grow-1"><label class="form-label small mb-1" for="fb2-{{ image.id }}">What to change (optional)</label><input class="form-control form-control-sm" type="text" name="feedback" id="fb2-{{ image.id }}"></div>
+    <button class="btn btn-outline-light btn-sm">Make it again</button>
+  </form>
+  {% endif %}
+  {% set earlier = image.candidates|rejectattr('id', 'equalto', shown.id if shown else '')|list %}
+  {% if earlier %}<details class="mt-2"><summary class="small">Earlier versions ({{ earlier|length }})</summary><div class="artwork-versions">{% for c in earlier|reverse %}<figure class="mb-0">{% if c.path %}<button type="button" class="artwork-open" data-full="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" data-alt="Version {{ c.version }}" aria-label="Show version {{ c.version }} full screen"><img class="artwork-ref{{ ' artwork-checker' if c.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" alt="" loading="lazy"></button>{% else %}<div class="artwork-ref artwork-gone">Removed</div>{% endif %}<figcaption class="small text-secondary">v{{ c.version }} · {{ c.decision or 'waiting' }}{% if c.feedback %}: “{{ c.feedback }}”{% endif %}</figcaption></figure>{% endfor %}</div></details>{% endif %}
+</section>

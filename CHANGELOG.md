@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc39 (2026-10-28)
+
+- **Generate artwork with AI, from Curatarr itself** (Library → Posters → Generate). Choose titles and picture types, and a **worker** makes them: a program on this computer or another (it only connects to Curatarr, with its own token, so it needs no open port or shared folders), running a local image model through ComfyUI (FLUX.2 Klein, Krea 2, SDXL with IP-Adapter FaceID) or Codex's image tool with the computer's own ChatGPT login. Reference photos cast your household as the leads, a set's other pictures are made to match its poster, logos come out truly transparent, and each title is read back and made again when it's misspelled. **Nothing changes in Jellyfin until you approve a picture**, which then goes on like an imported one (original kept). Pictures can be approved one by one or as a set, made again with notes on what to change, or turned down. **Batches** make a library's missing artwork a few titles at a time, with a preview first, pause, resume and retry; **Benchmarks** compare engines on the same made-up films, with measured checks, your scores and blind A/B choices. Reference photos only go to an outside service (Codex) when you allow it. Setup: docs/ARTWORK.md. The copy-and-paste prompts still work as before.
+
 ## 0.2.0rc38 (2026-10-28)
 
 - **Sort the Posters page and the Gallery.** Newest first (as before), oldest first, or by title A–Z or Z–A. Each person's choice is remembered, is shared by both pages, and sets the order the Gallery's title pages step through.

@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% block title %}Posters · Library · Curatarr{% endblock %}
 {% block content %}
-<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Custom posters</h1><p class="text-secondary mb-0">Pictures chosen for titles instead of Jellyfin's own: their posters, and their wide tiles, backgrounds, logos and banners. Upload one on a title's page, or drop pictures in an import folder. The picture each one replaced is kept, so it can be restored.</p></div><a class="btn btn-outline-light" href="{{ url_for('main.custom_posters_gallery') }}">Gallery</a></header>
+<header class="page-heading"><div><div class="eyebrow">Library</div><h1>Custom posters</h1><p class="text-secondary mb-0">Pictures chosen for titles instead of Jellyfin's own: their posters, and their wide tiles, backgrounds, logos and banners. Upload one on a title's page, or drop pictures in an import folder. The picture each one replaced is kept, so it can be restored.</p></div><a class="btn btn-primary" href="{{ url_for('main.artwork_generate') }}">Generate with AI</a></header>
+{% set here = 'main.custom_posters_page' %}{% include '_posters_nav.html' %}
 
 <section class="card p-3 mb-4"><h2 class="h5">Import folder</h2>
   <p class="small text-secondary">Every couple of minutes Curatarr looks here for new pictures (JPEG, PNG or WebP) and puts each on the title its name matches: <code>The Big Lebowski (1998).jpg</code>, <code>the-big-lebowski-1998.png</code> or <code>08_the-big-lebowski.jpg</code>. The year is needed only when titles share a name. A word before the extension makes it another of the title's pictures: <code>….thumb.jpg</code> its wide tile, <code>….backdrop.jpg</code> its background, <code>….logo.png</code> its logo (a see-through PNG), <code>….banner.jpg</code> its banner. A file saved again later replaces its picture. The folder must be readable by Curatarr's worker.</p>

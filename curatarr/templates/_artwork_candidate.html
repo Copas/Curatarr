@@ -1,0 +1,11 @@
+{# One picture a worker made: needs `c` (an ArtworkCandidate). #}
+{% set src = url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') %}
+<dl class="artwork-facts small mb-0">
+  <dt>Engine</dt><dd>{{ engine_label(c.engine) }}{% if c.worker %} on {{ c.worker.name }}{% endif %}</dd>
+  <dt>Size</dt><dd>{{ c.width }} × {{ c.height }}{{ ', transparent' if c.has_alpha }}</dd>
+  {% if c.duration_s %}<dt>Took</dt><dd>{{ '%.0f'|format(c.duration_s) }} s{% if c.peak_vram_mb %} · {{ '%.1f'|format(c.peak_vram_mb / 1024) }} GB graphics memory{% endif %}</dd>{% endif %}
+  {% if c.seed is not none %}<dt>Seed</dt><dd>{{ c.seed }}</dd>{% endif %}
+  {% for name, m in (c.metrics or {})|dictsort %}<dt>{{ name|replace('_', ' ')|capitalize }}</dt><dd>{% if m.value is mapping %}{% for k, v in m.value|dictsort %}{{ k }} {{ v }}{{ ', ' if not loop.last }}{% endfor %}{% else %}{{ m.value }}{% endif %} <span class="text-secondary">({{ m.kind or 'measured' }}{% if m.note %}: {{ m.note }}{% endif %})</span>{% if m.detail %}<div class="text-secondary">{{ m.detail }}</div>{% endif %}</dd>{% endfor %}
+  {% if c.steps %}<dt>Steps</dt><dd>{{ c.steps|join(' → ') }}</dd>{% endif %}
+</dl>
+{% if c.prompt %}<details class="small mt-1"><summary>Prompt</summary><pre class="artwork-prompt">{{ c.prompt }}</pre>{% if c.params %}<pre class="artwork-prompt">{{ c.params|tojson(indent=1) }}</pre>{% endif %}</details>{% endif %}

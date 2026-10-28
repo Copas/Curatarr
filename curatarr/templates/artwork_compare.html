@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Compare · Benchmarks · Curatarr{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.artwork_benchmarks', run=run.id if run else None) }}">Benchmarks</a></div><h1>Which is better?</h1><p class="text-secondary mb-0">Two engines' pictures of the same thing, in random order. Which engine made which is shown after you choose.</p></div></header>
+{% set here = 'main.artwork_benchmarks' %}{% include '_posters_nav.html' %}
+{% if pair %}{% set a, b = pair %}
+<p>{{ scenario.label if scenario else '' }}: {{ kind_names[a.image.kind] }}.</p>
+<form method="post" action="{{ url_for('main.artwork_benchmark_choose') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="left" value="{{ a.id }}"><input type="hidden" name="right" value="{{ b.id }}"><input type="hidden" name="run" value="{{ run.id if run else '' }}">
+  <div class="artwork-ab">{% for c, label in [(a, 'A'), (b, 'B')] %}{% set src = url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') %}<figure class="mb-0"><button type="button" class="artwork-open" data-full="{{ src }}" data-alt="Picture {{ label }}" aria-label="Show picture {{ label }} full screen"><img class="artwork-pic artwork-pic-{{ c.image.kind|lower }}{{ ' artwork-checker' if c.has_alpha }}" src="{{ src }}" alt="Picture {{ label }}"></button><figcaption class="text-center"><button class="btn btn-primary mt-2" name="winner" value="{{ 'left' if label == 'A' else 'right' }}">{{ label }} is better</button></figcaption></figure>{% endfor %}</div>
+  <div class="d-flex flex-wrap gap-2 mt-3 align-items-end"><div class="flex-grow-1"><label class="form-label small" for="ab-notes">Why (optional)</label><input class="form-control" type="text" name="notes" id="ab-notes"></div><button class="btn btn-outline-light" name="winner" value="tie">About the same</button></div>
+</form>
+{% else %}<div class="empty-state"><h2 class="h6">Nothing left to compare</h2><p class="mb-0">Every pair of engines' pictures of the same scenario has been compared, or a run hasn't made pictures from two engines yet.</p></div>{% endif %}
+<script src="{{ url_for('static', filename='lightbox.js', v='1') }}"></script>
+{% endblock %}
