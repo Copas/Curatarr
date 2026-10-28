@@ -306,7 +306,7 @@ The Posters page writes prompts for an image-making AI agent that can read and s
 
 ### Gallery
 
-**Library → Posters → Gallery** lays out every picture made, to show people: **Sets** gives each title a hero card (its background, with its poster and logo over it) that opens the title's own page (its background across the top with its logo over it, then its poster, wide tile and banner, large; ‹ › or the arrow keys step through the titles), and **Backgrounds**, **Posters** and **Wide tiles** show every picture of one type on its own. Any picture opens full screen with arrows (or swiping) to look through the rest, and **Slideshow** plays them by themselves. A title page's own pictures open full screen too.
+**Library → Posters → Gallery** lays out every picture made, to show people: **Sets** gives each title a hero card (its background, with its poster and logo over it) that opens the title's own page (its background across the top with its logo over it, then its poster, wide tile and banner, large; ‹ › or the arrow keys step through the titles), and **Backgrounds**, **Posters** and **Wide tiles** show every picture of one type on its own. Any picture opens full screen with arrows (or swiping) to look through the rest, and **Slideshow** plays them by themselves. A title page's own pictures open full screen too. Both the Gallery and the Posters page sort newest first, oldest first, or by title A–Z or Z–A; your choice is remembered.
 
 ---
 

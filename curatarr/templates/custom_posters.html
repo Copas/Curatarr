@@ -91,7 +91,8 @@
 
 {% macro who(p) %}{% if p.jellyfin_user_id %}{{ accounts|selectattr(0, 'equalto', p.jellyfin_user_id)|map(attribute=1)|first or 'One account' }}{% else %}Everyone{% endif %}{% endmacro %}
 {% set total = groups|map(attribute='posters')|map('length')|sum %}
-<h2 class="h5">{{ groups|length }} title{{ '' if groups|length == 1 else 's' }} with custom pictures{% if total > groups|length %} <span class="text-secondary small fw-normal">({{ total }} posters across accounts)</span>{% endif %}</h2>
+<h2 class="h5" id="pictures">{{ groups|length }} title{{ '' if groups|length == 1 else 's' }} with custom pictures{% if total > groups|length %} <span class="text-secondary small fw-normal">({{ total }} posters across accounts)</span>{% endif %}</h2>
+{% if groups|length > 1 %}<div class="mb-3">{% macro sort_url(key) %}{{ url_for('main.custom_posters_page', sort=key) }}#pictures{% endmacro %}{% include '_gallery_sort.html' %}</div>{% endif %}
 {% if groups %}<div class="poster-grid">{% for g in groups %}<div class="poster-tile">
   {% set src = url_for('main.custom_poster_image', poster_id=g.image.id) %}<button type="button" class="picture-open" data-full="{{ src }}" data-alt="{{ g.media.title }}, its {{ g.noun }}" aria-label="Show {{ g.media.title }}'s {{ g.noun }} full screen"><img{% if g.kind != 'Primary' %} class="tile-{{ g.kind|lower }}"{% endif %} src="{{ src }}" alt="" loading="lazy"></button>
   <div class="poster-title" title="{{ g.media.title }}"><a href="{{ url_for('main.title', media_id=g.media.id) }}#poster">{{ g.media.title }}</a></div>

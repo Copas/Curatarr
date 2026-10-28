@@ -1197,12 +1197,47 @@ def prompts(described, *, batch, photos, people, output, style="") -> list[str]:
     return texts
 
 
-def gallery_groups() -> list[dict]:
+GALLERY_SORTS = {
+    "newest": "Newest first",
+    "oldest": "Oldest first",
+    "az": "Title A–Z",
+    "za": "Title Z–A",
+}
+GALLERY_SORT_KEY = "poster_gallery_sort"
+
+
+def gallery_sort(user_id, chosen=None) -> str:
+    """How this person sorts the Posters page and the Gallery: the one just
+    chosen (and remembered for them), else what they had last."""
+    from .services import set_setting, setting
+
+    key = f"{GALLERY_SORT_KEY}:{user_id or 'anyone'}"
+    if chosen in GALLERY_SORTS:
+        if setting(key) != chosen:
+            set_setting(key, chosen)
+            db.session.commit()
+        return chosen
+    remembered = setting(key)
+    return remembered if remembered in GALLERY_SORTS else "newest"
+
+
+def _sorted(items: list[dict], sort: str) -> list[dict]:
+    """Tiles or cards in the chosen order; titles alike stay newest first."""
+    items = sorted(items, key=lambda g: g["latest"], reverse=sort != "oldest")
+    if sort in {"az", "za"}:
+        items.sort(
+            key=lambda g: (g["media"].sort_title or g["media"].title).casefold(),
+            reverse=sort == "za",
+        )
+    return items
+
+
+def gallery_groups(sort: str = "newest") -> list[dict]:
     """The gallery, one tile per picture: a title's pictures that are the same
     (one per account, from one import) are shown together. Copies are saved
     identically, so the file's size tells them apart cheaply. Each title's
     other pictures (wide tile, background, logo, banner) go with its tile as
-    ``extras``, grouped the same way."""
+    ``extras``, grouped the same way. In ``sort`` order (GALLERY_SORTS)."""
     groups: dict[tuple, dict] = {}
     for poster in gallery():
         try:
@@ -1260,15 +1295,15 @@ def gallery_groups() -> list[dict]:
                 default="",
             )
             shown.append(tile)
-    return sorted(shown, key=lambda g: g["latest"], reverse=True)
+    return _sorted(shown, sort)
 
 
-def showcase() -> list[dict]:
+def showcase(sort: str = "newest") -> list[dict]:
     """The Gallery: one card per title with each of its pictures once (the
-    one everyone sees, or else the first account's), newest first:
+    one everyone sees, or else the first account's), in ``sort`` order:
     {"media", "pictures": {type: poster}, "latest"}."""
     cards: dict[str, dict] = {}
-    for tile in gallery_groups():
+    for tile in gallery_groups(sort):
         card = cards.setdefault(
             tile["media"].id,
             {"media": tile["media"], "pictures": {}, "latest": tile["latest"]},

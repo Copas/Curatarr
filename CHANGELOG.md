@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc38 (2026-10-28)
+
+- **Sort the Posters page and the Gallery.** Newest first (as before), oldest first, or by title A–Z or Z–A. Each person's choice is remembered, is shared by both pages, and sets the order the Gallery's title pages step through.
+
 ## 0.2.0rc37 (2026-10-27)
 
 - **Fixed: the installed app reported the wrong version.** The published v0.2.0rc36 tag still packaged v0.2.0rc34, and the install instructions named that older tag. This release gives the package and install commands the same version.

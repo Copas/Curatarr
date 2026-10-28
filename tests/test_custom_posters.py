@@ -833,3 +833,50 @@ def test_ribbon_previews_use_a_real_poster(app, client, monkeypatch):
     preview = client.get("/library/posters/ribbon-preview.jpg")
     shown = Image.open(BytesIO(preview.data)).convert("RGB")
     assert shown.getpixel((shown.width // 2, shown.height // 3))[1] > 150  # its green
+
+
+def test_the_gallery_sorts_as_chosen_and_remembers_it(app, client, monkeypatch):
+    from datetime import timedelta
+
+    from curatarr.models import utcnow
+
+    library, first, _part = _movie()
+    _fake(monkeypatch, _picture("#223344"))
+    second = MediaIdentity(
+        library_id=library.id, media_type="movie", title="Zebra", jellyfin_id="z"
+    )
+    third = MediaIdentity(
+        library_id=library.id,
+        media_type="movie",
+        title="The Apple",
+        sort_title="Apple",
+        jellyfin_id="a",
+    )
+    db.session.add_all([second, third])
+    db.session.commit()
+    for days, media in ((3, first), (2, second), (1, third)):
+        poster = custom_posters.apply(media, _picture("#cc2222"), "Uploaded")
+        poster.applied_at = utcnow() - timedelta(days=days)
+    db.session.commit()
+
+    def order(sort):
+        return [c["media"].title for c in custom_posters.showcase(sort)]
+
+    assert order("newest") == ["The Apple", "Zebra", "Film"]
+    assert order("oldest") == ["Film", "Zebra", "The Apple"]
+    assert order("az") == ["The Apple", "Film", "Zebra"]  # by its sort title
+    assert order("za") == ["Zebra", "Film", "The Apple"]
+
+    def shown(url):
+        page = client.get(url).text
+        return [page.index(t) for t in ("Zebra", "The Apple")]
+
+    zebra, apple = shown("/library/posters/gallery?sort=za")
+    assert zebra < apple
+    zebra, apple = shown("/library/posters/gallery")  # remembered
+    assert zebra < apple
+    zebra, apple = shown("/library/posters")  # and on the Posters page
+    assert zebra < apple
+    zebra, apple = shown("/library/posters?sort=bogus")  # ignored
+    assert zebra < apple
+    assert 'aria-current="true">Title Z–A' in client.get("/library/posters").text

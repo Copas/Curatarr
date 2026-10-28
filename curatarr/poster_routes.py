@@ -27,6 +27,15 @@ UPLOAD_ENDPOINTS.update({"main.title_poster_upload", "main.custom_posters_avatar
 PUBLIC_ENDPOINTS.update({"main.jellyfin_posters", "main.jellyfin_poster_image"})
 
 
+def _sort():
+    """The page's order: from the address when chosen, else remembered."""
+    from .auth import current_user
+
+    return custom_posters.gallery_sort(
+        (current_user() or {}).get("id"), request.args.get("sort")
+    )
+
+
 def _accounts():
     from .services import account_names
 
@@ -40,12 +49,19 @@ def custom_posters_gallery():
     view = request.args.get("view", "sets")
     if view not in GALLERY_VIEWS:
         view = "sets"
-    cards = custom_posters.showcase()
+    sort = _sort()
+    cards = custom_posters.showcase(sort)
     kind = GALLERY_VIEWS[view][1]
     if kind:
         cards = [c for c in cards if kind in c["pictures"]]
     return render_template(
-        "poster_gallery.html", cards=cards, view=view, views=GALLERY_VIEWS, kind=kind
+        "poster_gallery.html",
+        cards=cards,
+        view=view,
+        views=GALLERY_VIEWS,
+        kind=kind,
+        sort=sort,
+        sorts=custom_posters.GALLERY_SORTS,
     )
 
 
@@ -53,7 +69,7 @@ def custom_posters_gallery():
 def custom_posters_gallery_title(media_id):
     """One title's pictures, the whole page: its background and logo as a hero,
     then the rest, with the titles before and after it in the Gallery."""
-    cards = custom_posters.showcase()
+    cards = custom_posters.showcase(_sort())
     at = next((i for i, c in enumerate(cards) if c["media"].id == media_id), None)
     if at is None:
         abort(404)
@@ -116,6 +132,7 @@ def custom_posters_page():
             style=options["style"],
             output=folder or "the folder Curatarr imports posters from",
         )
+    sort = _sort()
     accounts = _accounts()
     ribbon = custom_posters.ribbon_settings()
     viewers_of = {
@@ -124,7 +141,9 @@ def custom_posters_page():
     }
     return render_template(
         "custom_posters.html",
-        groups=custom_posters.gallery_groups(),
+        groups=custom_posters.gallery_groups(sort),
+        sort=sort,
+        sorts=custom_posters.GALLERY_SORTS,
         folder=folder,
         import_accounts=custom_posters.settings().get("accounts") or [],
         unmatched=sorted(state["unmatched"].items()),

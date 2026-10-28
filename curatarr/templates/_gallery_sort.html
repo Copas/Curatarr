@@ -1,0 +1,2 @@
+{# The Posters page's and the Gallery's order, remembered for each person: needs sort, sorts, sort_url(key). #}
+<div class="btn-group btn-group-sm" role="group" aria-label="Sort by">{% for key, label in sorts.items() %}<a class="btn btn-outline-secondary{{ ' active' if key == sort }}" href="{{ sort_url(key) }}"{% if key == sort %} aria-current="true"{% endif %}>{{ label }}</a>{% endfor %}</div>
