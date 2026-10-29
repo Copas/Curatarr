@@ -541,3 +541,6 @@ body:has(.title-show) { overflow-x: clip; }
   .artwork-pic-thumb, .artwork-pic-backdrop, .artwork-pic-banner, .artwork-pic-logo, .artwork-pic-primary { width: 100%; }
   .artwork-facts { grid-template-columns: 1fr; }
 }
+.artwork-ab-banner, .artwork-ab-logo { grid-template-columns: 1fr; }
+.artwork-ab .artwork-pic { width: auto; max-width: 100%; max-height: 78vh; margin: 0 auto; }
+.artwork-local { border-top: 1px solid var(--app-border); }

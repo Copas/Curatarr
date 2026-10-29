@@ -2,6 +2,7 @@
 and a logo's plain background keyed out to real transparency."""
 
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image, ImageChops, ImageFilter
 
@@ -131,3 +132,20 @@ def finish(data: bytes, task: dict) -> tuple[bytes, list[str], dict]:
             )
         image = cropped
     return png(image), steps, facts
+
+
+HEAD_AND_SHOULDERS = 1.8  # the crop's side, in face widths
+
+
+def head_and_shoulders(path, box, out) -> None:
+    """A square around the face in ``box``, with the hair and shoulders: a
+    photo where the face is small gives an image model too few pixels of it
+    to keep a likeness."""
+    image = load(Path(path).read_bytes()).convert("RGB")
+    x0, y0, x1, y1 = box
+    side = max(x1 - x0, y1 - y0) * HEAD_AND_SHOULDERS
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2 + (y1 - y0) * 0.2
+    left = max(0, min(image.width - side, cx - side / 2))
+    top = max(0, min(image.height - side, cy - side / 2))
+    right, bottom = min(image.width, left + side), min(image.height, top + side)
+    image.crop((round(left), round(top), round(right), round(bottom))).save(out, "PNG")

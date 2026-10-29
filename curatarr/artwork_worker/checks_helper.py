@@ -76,9 +76,35 @@ def faces(path, people, root):
     }
 
 
+def boxes(paths, root):
+    """{path: the biggest face's box} for each photo with a face."""
+    try:
+        import cv2
+        from insightface.app import FaceAnalysis
+    except ImportError:
+        return {}
+    kwargs = {"name": "buffalo_l", "providers": ["CPUExecutionProvider"]}
+    if root:
+        kwargs["root"] = root
+    app = FaceAnalysis(**kwargs)
+    app.prepare(ctx_id=-1, det_size=(640, 640))
+    found = {}
+    for path in paths:
+        image = cv2.imread(path)
+        faces = app.get(image) if image is not None else []
+        if faces:
+            face = max(
+                faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])
+            )
+            found[path] = [float(v) for v in face.bbox]
+    return found
+
+
 def main():
     request = json.load(sys.stdin)
     answer = {}
+    if request.get("boxes"):
+        answer["boxes"] = boxes(request["boxes"], request.get("insightface_root"))
     if request.get("ocr"):
         answer["ocr"] = ocr(request["image"])
     if request.get("people"):

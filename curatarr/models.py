@@ -612,3 +612,25 @@ class ArtworkComparison(db.Model, Timed):
     winner = db.Column(db.String(10), nullable=False)  # left, right, tie
     notes = db.Column(db.Text)
     created_by = db.Column(db.String(100))
+
+
+class ArtworkPreference(db.Model, Timed):
+    """A blind choice between a title's picture as it is (CustomPoster) and
+    one made by a worker for the same title and type."""
+
+    __tablename__ = "artwork_preferences"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    candidate_id = db.Column(
+        db.String(36),
+        db.ForeignKey("artwork_candidates.id"),
+        nullable=False,
+        index=True,
+    )
+    custom_poster_id = db.Column(
+        db.String(36), db.ForeignKey("custom_posters.id"), nullable=False
+    )
+    winner = db.Column(db.String(10), nullable=False)  # new, current, tie
+    notes = db.Column(db.Text)
+    created_by = db.Column(db.String(100))
+    candidate = db.relationship("ArtworkCandidate")
+    current = db.relationship("CustomPoster")

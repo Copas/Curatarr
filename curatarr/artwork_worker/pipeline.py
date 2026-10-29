@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from . import checks, imaging
-from .backends import Failed
+from .backends import Failed, Reference
 from .gpu import Peak
 
 LOGO_BACKGROUNDS = ("black", "white")
@@ -29,6 +29,12 @@ def make_picture(task, backend, references, progress, settings: dict) -> dict:
     started = time.time()
     best = None
     steps: list[str] = []
+    references, cropped = _crop_people(references, check_python, settings)
+    if cropped:
+        steps.append(
+            f"{cropped} reference photo{'' if cropped == 1 else 's'} cropped "
+            "to head and shoulders"
+        )
     with Peak() as peak:
         for attempt in range(tries):
             this = dict(task)
@@ -76,6 +82,40 @@ def make_picture(task, backend, references, progress, settings: dict) -> dict:
         "peak_vram_mb": peak.mb or None,
     }
     return {"data": best["data"], "meta": meta}
+
+
+def _crop_people(references, python, settings):
+    """Person references cropped to head and shoulders where the face is a
+    small part of the photo (under a fifth of its width). Returns
+    (references, how many were cropped)."""
+    people = [r for r in references if r.role == "person"]
+    if not python or not people:
+        return references, 0
+    found = (
+        checks.run(
+            python,
+            None,
+            boxes=[r.path for r in people],
+            root=settings.get("insightface_root") or "",
+        ).get("boxes")
+        or {}
+    )
+    cropped, out = 0, []
+    for ref in references:
+        box = found.get(str(ref.path)) if ref.role == "person" else None
+        if box:
+            try:
+                width = imaging.load(ref.path.read_bytes()).width
+            except OSError:
+                width = 0
+            if width and (box[2] - box[0]) < width / 5:
+                crop = ref.path.with_name(ref.path.stem + "-head.png")
+                imaging.head_and_shoulders(ref.path, box, crop)
+                out.append(Reference(ref.number, crop, ref.role, ref.person))
+                cropped += 1
+                continue
+        out.append(ref)
+    return out, cropped
 
 
 def _check(data, task, people, lettered, python, settings):

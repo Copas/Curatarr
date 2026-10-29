@@ -942,3 +942,116 @@ def test_curatarr_picks_the_recommended_engine_for_each_type(app, client):
     job = artwork_jobs.create_job(media, ["Logo"], details={"title": "Film"})
     [again] = artwork_jobs.claim(worker_row, 4, ready)
     assert again["engine"] == "comfyui/sdxl-faceid" and again["job"] == job.id
+
+
+def test_alternatives_are_made_and_compared_with_the_current_pictures(
+    app, client, tmp_path, monkeypatch
+):
+    from curatarr import artwork_compare
+    from curatarr.models import ArtworkPreference
+
+    library, media, _part = _movie()
+    jellyfin = _jellyfin(monkeypatch, _picture("#223344"))
+    current = custom_posters.apply(media, _art(), "01_film.jpg")
+    other = _second(library, "Other", "jf-other")
+    from curatarr.models import MediaPart
+
+    db.session.add(
+        MediaPart(media_identity_id=other.id, kind="movie_file", has_file=True)
+    )
+    db.session.commit()
+    spec = {
+        "titles": "movies",
+        "kinds": ["Primary", "Logo"],
+        "alternatives": True,
+        "options": {},
+    }
+    assert [m.title for m in artwork_jobs.batch_titles(spec)] == ["Film"]
+    batch = artwork_jobs.create_batch(spec)
+    [job] = batch.jobs
+    assert job.kinds == ["Primary"]  # only what it has
+    _row, _token, worker = _worker(app, client, tmp_path)
+    _drain(worker)
+    page = client.get("/library/posters/compare").text
+    assert "Which do you like better?" in page and "1 left to compare" in page
+    candidate, shown, _new_left = artwork_compare.next_matchup()
+    assert shown.id == current.id and candidate.image.job_id == job.id
+    client.post(
+        "/library/posters/compare",
+        data={
+            "candidate": candidate.id,
+            "current": shown.id,
+            "winner": "new",
+            "new_left": "1",
+        },
+    )
+    assert artwork_compare.next_matchup() is None
+    results = artwork_compare.results()
+    assert results["overall"]["new"] == 1 and results["kinds"]["Primary"]["new"] == 1
+    assert [c.candidate_id for c in results["preferred"]] == [candidate.id]
+    assert jellyfin.uploads == 1  # only the first one: comparing changes nothing
+    assert "New ones you preferred" in client.get("/library/posters/compare").text
+    client.post("/library/posters/compare/undo")
+    assert db.session.query(ArtworkPreference).count() == 0
+
+
+def test_the_prompt_options_can_be_made_locally(app, client, monkeypatch):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    _jellyfin(monkeypatch, _picture("#223344"))
+    set_setting(
+        custom_posters.KEY,
+        {"prompts": {"titles": "movies", "kinds": ["Primary"], "skip_done": True}},
+    )
+    db.session.commit()
+    response = client.post("/library/posters/prompts/generate")
+    assert response.status_code == 302
+    [job] = db.session.query(ArtworkJob).all()
+    assert job.media_identity_id == media.id and job.engine == "auto"
+    assert job.options["external_ok"] is False
+    assert "Make local alternatives to compare" in client.get("/library/posters").text
+
+
+def test_a_small_face_in_a_reference_photo_is_cropped(monkeypatch, tmp_path):
+    from curatarr.artwork_worker import pipeline
+
+    photo = tmp_path / "sam.png"
+    Image.new("RGB", (1500, 2000), (90, 90, 90)).save(photo)
+    close = tmp_path / "alex.png"
+    Image.new("RGB", (1000, 1300), (90, 90, 90)).save(close)
+    monkeypatch.setattr(
+        checks,
+        "run",
+        lambda *a, **k: {
+            "boxes": {
+                str(photo): [700, 400, 860, 600],  # a small face
+                str(close): [300, 200, 700, 700],  # a big one
+            }
+        },
+    )
+    refs = [Reference(1, photo, "person", "Sam"), Reference(2, close, "person", "Alex")]
+    out, cropped = pipeline._crop_people(refs, "/fake", {})
+    assert cropped == 1 and out[0].path.name == "sam-head.png"
+    assert out[1].path == close and out[0].number == 1
+    assert Image.open(out[0].path).size == (360, 360)
+
+
+def test_the_checks_helper_answers_each_request(tmp_path):
+    """The worker's call and the helper's answer, without the models: a
+    fake checks environment that echoes what it was asked."""
+    import sys
+
+    fake = tmp_path / "python"
+    fake.write_text(
+        "#!/bin/sh\n"
+        f'exec {sys.executable} -c "import json,sys; r=json.load(sys.stdin); '
+        "print(json.dumps({'asked': sorted(k for k, v in r.items() if v)}))\"\n"
+    )
+    fake.chmod(0o755)
+    photo = tmp_path / "a.png"
+    asked = checks.run(str(fake), None, boxes=[photo], root="r")["asked"]
+    assert "boxes" in asked and "image" not in asked
+    asked = checks.run(str(fake), photo, ocr=True)["asked"]
+    assert {"image", "ocr"} <= set(asked)
+    assert checks.run("", photo, ocr=True) == {}

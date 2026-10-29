@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}Compare · Posters · Curatarr{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Which do you like better?</h1><p class="text-secondary mb-0">A title's picture as it is now, and one a worker made for the same title, in random order. Which is which is shown after you choose. Nothing changes in Jellyfin here.</p></div></header>
+{% set here = 'main.artwork_compare' %}{% include '_posters_nav.html' %}
+{% if matchup %}{% set c, current, new_left = matchup %}{% set job = c.image.job %}
+<p class="mb-2"><strong>{{ job.media.title }}</strong>: its {{ kind_names[c.image.kind] }} · {{ remaining }} left to compare</p>
+<form method="post" action="{{ url_for('main.artwork_compare_choose') }}" id="compare-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="candidate" value="{{ c.id }}"><input type="hidden" name="current" value="{{ current.id }}"><input type="hidden" name="new_left" value="{{ '1' if new_left else '0' }}">
+  {% set new_src = url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') %}{% set old_src = url_for('main.artwork_compare_current_image', poster_id=current.id) %}
+  {% set sides = [(new_src, 'new'), (old_src, 'current')] if new_left else [(old_src, 'current'), (new_src, 'new')] %}
+  <div class="artwork-ab artwork-ab-{{ c.image.kind|lower }}">{% for src, which in sides %}{% set label = 'A' if loop.first else 'B' %}<figure class="mb-0"><button type="button" class="artwork-open" data-full="{{ src }}" data-alt="Picture {{ label }}" aria-label="Show picture {{ label }} full screen"><img class="artwork-pic{{ ' artwork-checker' if c.image.kind == 'Logo' }}" src="{{ src }}" alt="Picture {{ label }}"></button><figcaption class="text-center"><button class="btn btn-primary mt-2" name="winner" value="{{ which }}" data-key="{{ 'ArrowLeft' if loop.first else 'ArrowRight' }}">{{ label }} is better</button></figcaption></figure>{% endfor %}</div>
+  <div class="d-flex flex-wrap gap-2 mt-3 align-items-end"><div class="flex-grow-1"><label class="form-label small" for="cmp-notes">Why (optional)</label><input class="form-control" type="text" name="notes" id="cmp-notes"></div><button class="btn btn-outline-light" name="winner" value="tie" data-key="ArrowDown">About the same</button></div>
+  <p class="small text-secondary mt-2 mb-0">Keys: ← A is better, → B is better, ↓ about the same. Click a picture to see it full screen.</p>
+</form>
+{% else %}<div class="empty-state"><h2 class="h6">Nothing to compare yet</h2><p class="mb-0">Make alternatives for titles that already have pictures: under <a href="{{ url_for('main.artwork_batches') }}">Batches</a>, tick <em>Make alternatives to compare</em>. They show up here as they're made.</p></div>{% endif %}
+{% set r = results %}{% if r.count %}
+<section class="card p-3 my-4"><div class="d-flex justify-content-between align-items-start"><h2 class="h5">So far: {{ r.count }} choice{{ '' if r.count == 1 else 's' }}</h2><form method="post" action="{{ url_for('main.artwork_compare_undo') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light">Take back the last one</button></form></div>
+  <div class="table-responsive"><table class="table table-sm align-middle">
+    <thead><tr><th></th><th class="text-end">New one better</th><th class="text-end">Current better</th><th class="text-end">About the same</th></tr></thead>
+    <tbody><tr><th>All</th><td class="text-end">{{ r.overall.new }}</td><td class="text-end">{{ r.overall.current }}</td><td class="text-end">{{ r.overall.tie }}</td></tr>
+    {% for kind in kinds if kind in r.kinds %}{% set t = r.kinds[kind] %}<tr><td>{{ kind_names[kind]|capitalize }}s</td><td class="text-end">{{ t.new }}</td><td class="text-end">{{ t.current }}</td><td class="text-end">{{ t.tie }}</td></tr>{% endfor %}
+    {% for engine, t in r.engines.items() %}<tr><td>Made by {{ engine_label(engine) }}</td><td class="text-end">{{ t.new }}</td><td class="text-end">{{ t.current }}</td><td class="text-end">{{ t.tie }}</td></tr>{% endfor %}</tbody></table></div>
+  {% if r.preferred %}<h3 class="h6 mt-2">New ones you preferred ({{ r.preferred|length }})</h3><p class="small text-secondary">Open one to put it on in place of the current one.</p>
+  <div class="artwork-versions">{% for choice in r.preferred[:60] %}{% set cc = choice.candidate %}<figure class="mb-0"><a href="{{ url_for('main.artwork_job', job_id=cc.image.job_id) }}#image-{{ cc.image_id }}"><img class="artwork-ref{{ ' artwork-checker' if cc.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=cc.id, ext='png' if cc.has_alpha else 'jpg') }}" alt="{{ cc.image.job.media.title }}, its {{ kind_names[cc.image.kind] }}" loading="lazy"></a><figcaption class="small text-secondary">{{ cc.image.job.media.title }}</figcaption></figure>{% endfor %}</div>{% endif %}
+</section>{% endif %}
+<script src="{{ url_for('static', filename='lightbox.js', v='1') }}"></script>
+<script src="{{ url_for('static', filename='compare-keys.js', v='1') }}"></script>
+{% endblock %}

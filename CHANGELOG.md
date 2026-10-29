@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0rc40 (2026-10-29)
+
+- **Compare generated pictures with the ones you have** (Posters → Compare). A title's picture as it is now (made with ChatGPT, say) and one a local model made for it, side by side in random order: choose the better with ← and →, and see which was which after. Your choices are tallied by picture type and engine, and the new ones you preferred are listed, to put on from their job's page.
+- **Make local alternatives**: a batch can now make new pictures for titles that *have* them (newest sets first), to compare, without replacing anything. The Posters page's AI section can also hand its prompt options straight to your workers (**Generate these locally**, **Make local alternatives to compare**) instead of writing prompts to copy.
+- **Better likeness from reference photos where the face is small**: the worker crops such photos to head and shoulders before the model sees them. Banners are now made by Krea 2 by default (FLUX.2 kept putting people in them).
+
 ## 0.2.0rc39 (2026-10-28)
 
 - **Generate artwork with AI, from Curatarr itself** (Library → Posters → Generate). Choose titles and picture types, and a **worker** makes them: a program on this computer or another (it only connects to Curatarr, with its own token, so it needs no open port or shared folders), running a local image model through ComfyUI (FLUX.2 Klein, Krea 2, SDXL with IP-Adapter FaceID) or Codex's image tool with the computer's own ChatGPT login. Reference photos cast your household as the leads, a set's other pictures are made to match its poster, logos come out truly transparent, and each title is read back and made again when it's misspelled. **Nothing changes in Jellyfin until you approve a picture**, which then goes on like an imported one (original kept). Pictures can be approved one by one or as a set, made again with notes on what to change, or turned down. **Batches** make a library's missing artwork a few titles at a time, with a preview first, pause, resume and retry; **Benchmarks** compare engines on the same made-up films, with measured checks, your scores and blind A/B choices. Reference photos only go to an outside service (Codex) when you allow it. Setup: docs/ARTWORK.md. The copy-and-paste prompts still work as before.

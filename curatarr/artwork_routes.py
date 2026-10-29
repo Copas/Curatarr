@@ -50,6 +50,7 @@ for _endpoint in (
     "main.artwork_batches",
     "main.artwork_workers",
     "main.artwork_benchmarks",
+    "main.artwork_compare",
 ):
     NAV_SECTIONS[_endpoint] = "library"
 PER_PAGE = 20
@@ -501,6 +502,7 @@ def _batch_spec(form) -> dict:
         or ["Primary"],
         "accounts": _scope(form),
         "skip_done": form.get("skip_done") in {"on", "1"},
+        "alternatives": form.get("alternatives") in {"on", "1"},
         "engine": form.get("engine") or "auto",
         "worker": worker,
         "options": _job_options(form),
@@ -791,3 +793,112 @@ def artwork_benchmark_default():
         "success",
     )
     return _back(url_for("main.artwork_benchmarks"))
+
+
+# --- Compare with the current pictures ---------------------------------------
+
+
+@bp.get("/library/posters/compare")
+def artwork_compare():
+    from . import artwork_compare as compare
+
+    return render_template(
+        "artwork_compare_current.html",
+        matchup=compare.next_matchup(),
+        remaining=compare.remaining(),
+        results=compare.results(),
+        engine_label=_engine_label,
+        **_common(),
+    )
+
+
+@bp.post("/library/posters/compare")
+def artwork_compare_choose():
+    from . import artwork_compare as compare
+
+    try:
+        choice = compare.record(
+            request.form.get("candidate"),
+            request.form.get("current"),
+            request.form.get("winner"),
+            request.form.get("notes"),
+            _who(),
+        )
+    except ValueError as exc:
+        flash(str(exc), "warning")
+    else:
+        new_side = "A" if request.form.get("new_left") == "1" else "B"
+        old_side = "B" if new_side == "A" else "A"
+        engine = _engine_label(choice.candidate.engine or "")
+        flash(
+            f"Saved. {new_side} was the new one ({engine}); {old_side} the one it "
+            "has now.",
+            "success",
+        )
+    return redirect(url_for("main.artwork_compare"))
+
+
+@bp.get("/library/posters/compare/current/<poster_id>")
+def artwork_compare_current_image(poster_id):
+    from . import artwork_compare as compare
+    from .models import CustomPoster
+
+    poster = db.session.get(CustomPoster, poster_id)
+    path = compare.current_file(poster) if poster else None
+    if path is None:
+        abort(404)
+    return send_file(path, max_age=3600)
+
+
+@bp.post("/library/posters/compare/undo")
+def artwork_compare_undo():
+    from . import artwork_compare as compare
+
+    flash(
+        "Took back your last choice."
+        if compare.undo_last()
+        else "Nothing to take back.",
+        "success",
+    )
+    return redirect(url_for("main.artwork_compare"))
+
+
+@bp.post("/library/posters/prompts/generate")
+def artwork_generate_from_prompts():
+    """The Posters page's prompt options, made by a worker as a batch
+    instead of copied into an AI by hand."""
+    options = custom_posters.prompt_options()
+    spec = {
+        "titles": options["titles"],
+        "kinds": options["kinds"],
+        "accounts": custom_posters.settings().get("accounts") or [],
+        "skip_done": options["skip_done"],
+        "alternatives": request.form.get("alternatives") in {"on", "1"},
+        "engine": "auto",
+        "worker": None,
+        "options": {
+            "photos": options["photos"],
+            "cast": [],
+            "style": options["style"],
+            "originals": options["originals"],
+            "external_ok": False,
+        },
+    }
+    try:
+        batch = artwork_jobs.create_batch(
+            spec,
+            name="Alternatives to compare"
+            if spec["alternatives"]
+            else "From the prompts",
+            created_by=_who(),
+        )
+    except ValueError as exc:
+        flash(str(exc), "warning")
+        return redirect(url_for("main.custom_posters_page") + "#prompts")
+    flash(
+        f"Started: {len(batch.media_ids)} title"
+        f"{'' if len(batch.media_ids) == 1 else 's'}, made by your workers a few at "
+        "a time. Each waits for your review.",
+        "success",
+    )
+    return redirect(url_for("main.artwork_batches"))

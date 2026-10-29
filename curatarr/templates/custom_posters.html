@@ -85,6 +85,13 @@
     <div class="col-12"><button class="btn btn-primary">Write prompts</button>{% if not folder %} <span class="small text-warning ms-2">Set the import folder above first, so the prompts say where to save.</span>{% endif %}</div>
   </form>
   <p class="small text-secondary mt-2 mb-0">Only use photos of people who've agreed. The photos are read by the AI agent you paste the prompt into, never by Curatarr; if it's a cloud service, they're sent there.</p>
+  <div class="artwork-local mt-3 pt-3"><h3 class="h6">Or make them locally</h3>
+    <p class="small text-secondary mb-2">Your workers make the same pictures (these options, as saved) with a local image model: the photos never leave your computers. Each waits for your review under <a href="{{ url_for('main.artwork_review') }}">Review</a>; set workers up under <a href="{{ url_for('main.artwork_workers') }}">Workers</a>.</p>
+    <form method="post" action="{{ url_for('main.artwork_generate_from_prompts') }}" class="d-flex flex-wrap gap-2 align-items-center"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-outline-light">Generate these locally</button>
+      <button class="btn btn-outline-light" name="alternatives" value="1">Make local alternatives to compare</button>
+      <span class="small text-secondary">Alternatives are made for titles that already have pictures, to set side by side under <a href="{{ url_for('main.artwork_compare') }}">Compare</a>.</span>
+    </form></div>
   {% if count is not none %}<hr>{% if written %}<p class="mb-2"><strong>{{ count }}</strong> title{{ '' if count == 1 else 's' }} in {{ written|length }} batch{{ '' if written|length == 1 else 'es' }}. Paste one at a time; the next can start when the last has finished.</p>
     {% for text in written %}<div class="mb-3"><div class="d-flex justify-content-between align-items-center mb-1"><span class="small fw-semibold">Batch {{ loop.index }}</span><button type="button" class="btn btn-sm btn-outline-light" data-copy="#prompt-{{ loop.index }}">Copy</button></div><textarea class="form-control font-monospace small" id="prompt-{{ loop.index }}" rows="10" readonly>{{ text }}</textarea></div>{% endfor %}
   {% else %}<p class="mb-0">No titles to write prompts for{% if options.skip_done %}: they all have the pictures asked for{% endif %}.</p>{% endif %}{% endif %}

@@ -50,9 +50,11 @@ DEFAULTS = {
 }
 # Engines tried first when a job leaves the choice to Curatarr and no default's
 # set (docs/ARTWORK.md#results-on-a-12-gb-card): FLUX.2 Klein keeps people
-# recognisable; Krea 2 letters best but takes no photos, so it leads for logos.
+# recognisable; Krea 2 letters best but takes no photos, so it leads for logos
+# and banners (which have no people).
 RECOMMENDED = {
     "Logo": ("comfyui/krea2-turbo",),
+    "Banner": ("comfyui/krea2-turbo",),
     "*": (
         "comfyui/flux2-klein-9b",
         "comfyui/flux2-klein-4b",
@@ -1033,8 +1035,14 @@ def batch_titles(spec: dict) -> list[MediaIdentity]:
     ``skip_done``, and those with a job under way."""
     kinds = spec.get("kinds") or ["Primary"]
     titles = custom_posters.prompt_titles(spec.get("titles") or "favourites", False)
-    if spec.get("skip_done", True):
-        have = _have(spec.get("accounts") or [])
+    have = _have(spec.get("accounts") or [])
+    if spec.get("alternatives"):
+        # Alternatives to compare: the titles that have pictures of these
+        # types, most recently made first.
+        latest = _latest_applied(spec.get("accounts") or [])
+        titles = [m for m in titles if set(kinds) & have.get(m.id, set())]
+        titles.sort(key=lambda m: latest.get(m.id, ""), reverse=True)
+    elif spec.get("skip_done", True):
         titles = [m for m in titles if not set(kinds) <= have.get(m.id, set())]
     busy = {
         media_id
@@ -1044,6 +1052,21 @@ def batch_titles(spec: dict) -> list[MediaIdentity]:
         )
     }
     return [m for m in titles if m.id not in busy]
+
+
+def _latest_applied(accounts) -> dict[str, str]:
+    """{title: when its newest custom picture (for ``accounts``) went on}."""
+    latest: dict[str, str] = {}
+    rows = db.session.query(
+        CustomPoster.media_identity_id,
+        CustomPoster.jellyfin_user_id,
+        CustomPoster.applied_at,
+    ).filter_by(active=True)
+    for media_id, user_id, applied in rows:
+        if ((user_id in accounts) if accounts else user_id is None) and applied:
+            when = _aware(applied).isoformat()
+            latest[media_id] = max(latest.get(media_id, ""), when)
+    return latest
 
 
 def create_batch(spec: dict, name=None, created_by=None) -> ArtworkBatch:
@@ -1093,7 +1116,12 @@ def fill_batches() -> int:
             if media is None or media.missing_since is not None:
                 continue
             kinds = spec.get("kinds") or ["Primary"]
-            if spec.get("skip_done", True):
+            if spec.get("alternatives"):
+                have = _have(spec.get("accounts") or []).get(media.id, set())
+                kinds = [k for k in kinds if k in have]
+                if not kinds:
+                    continue
+            elif spec.get("skip_done", True):
                 kinds = _missing_kinds(media.id, kinds, spec.get("accounts"))
                 if not kinds:
                     continue

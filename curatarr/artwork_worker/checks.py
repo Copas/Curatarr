@@ -17,15 +17,17 @@ BACKGROUND_LETTERS = 3  # a background with more letters than this has text on i
 
 
 def run(
-    python: str, image: Path, *, ocr=False, people=None, root="", timeout=300
+    python: str, image, *, ocr=False, people=None, root="", boxes=None, timeout=300
 ) -> dict:
-    """The checks helper's answer, or {} when there's no checks environment."""
-    if not python or not (ocr or people):
+    """The checks helper's answer, or {} when there's no checks environment.
+    ``boxes``: photos to find the biggest face in."""
+    if not python or not (ocr or people or boxes):
         return {}
     request = {
-        "image": str(image),
+        "image": str(image) if image else None,
         "ocr": ocr,
         "people": people or {},
+        "boxes": [str(b) for b in boxes or []],
         "insightface_root": root,
     }
     try:

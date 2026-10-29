@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc40 (2026-10-29): comparing generated pictures with the current ones, local alternatives, small faces cropped.
 - v0.2.0rc39 (2026-10-28): generating artwork from Curatarr through workers (ComfyUI's local models or Codex), with review before anything goes on, batches, and benchmarks.
 - v0.2.0rc38 (2026-10-28): the Posters page and the Gallery can be sorted by newest, oldest or title, remembered for each person.
 - v0.2.0rc37 (2026-10-27): corrects the package and install instructions' version after rc36 was tagged with rc34 metadata.

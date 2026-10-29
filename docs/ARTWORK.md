@@ -125,6 +125,8 @@ Check each model's licence before use; FLUX.2 Klein's and InsightFace's model we
 
 Put photos in a folder, each file named after who's in it (`Sam 1.jpg`, `Sam beach.png`, `Alex.jpg`), and give the folder on the Generate page; **Who's in them** limits it to some of them (up to three). A text file per person, named after them (`Sam.txt`), with a few words on them ("a woman of about 30, freckles, short platinum-blonde pixie cut") goes into the prompt beside their photos: it stops a model changing someone's sex or age in a busy picture. Use several photos of each person, different angles and lighting: each picture uses two of them (a different pair leads each time), plus the set's poster. Photos with the face clear and large work best. Only use photos of people who've agreed.
 
+Where a person's face is small in a photo (under a fifth of its width), the worker crops it to head and shoulders before the model sees it, so the face isn't squeezed to a few dozen pixels.
+
 **How likeness is kept.** FLUX.2 Klein takes each photo as an image input (a reference latent) and the prompt says which images are whom ("Sam (images 1 and 2) and Alex (image 3)"), so two people stay two people. SDXL's FaceID turns one person's photos into a face embedding: it can't keep two people apart. No model is trained on your photos.
 
 **How likeness is checked.** Face recognition (InsightFace) compares every face in a picture with each person's photos. **Likeness** is the similarity of the least-like person's best face: above about 0.45 is usually the same person, and 0.6 is very close. **Identity mix** says whether one face was taken for two people. It's an estimate: a good picture can score lower (a face in profile, heavy make-up, a painted style), and it says nothing about whether the picture's any good. The review shows the photos next to the picture, to judge for yourself.
@@ -154,12 +156,13 @@ Measured on an RTX 3080 Ti (12 GB) with 46 GB of memory, ComfyUI 0.33, the worke
 
 What the pictures showed, beyond the numbers:
 
+- **Real people are harder than made-up ones.** With a household's own photos, FLUX.2 Klein 4B's likeness was 0.2–0.5 (around 0.45 is usually "the same person"), against 0.6–0.7 for the made-up people, which FLUX.2 had made itself. More reference photos per person didn't help; cropping small faces to head and shoulders helped a little.
 - **People.** With FLUX.2 Klein, the made-up man and woman were recognisable in every poster and background, and two people stayed two different people. In a busy set, the woman was once drawn as a white-haired man, though face similarity still scored her 0.53; a one-line description beside the photos ([`Sam.txt`](#reference-photos)) fixed it (0.70–0.74 across the set).
 - **Lettering.** Once the prompt gave the title in capitals with a concrete style, FLUX.2's posters read back exactly on most tries; long titles and wide tiles are its weak spots (a wide tile's title was still wrong after three tries). Krea 2 spelled even "The Quixotic Adventures of Zephyr Blackwood" right.
 - **Stray text.** Both FLUX.2 and Krea 2 sometimes add small gibberish credits, and text on backgrounds; the checks count it and try again, but a busy street's signs are sometimes real.
 - **Transparent logos** keyed cleanly from black or white backgrounds, at both engines.
 
-When a job leaves the engine to Curatarr and no default is set under Workers, it uses Krea 2 Turbo for logos and FLUX.2 Klein for everything else (FLUX.2 Klein 9B first, when installed). FLUX.2 Klein 9B (a gated download; accept its licence on Hugging Face, then put its files in ComfyUI's `models`) and Codex weren't measured here: Codex's daily image allowance was used up during development.
+When a job leaves the engine to Curatarr and no default is set under Workers, it uses Krea 2 Turbo for logos and banners and FLUX.2 Klein for everything else (FLUX.2 Klein 9B first, when installed). FLUX.2 Klein 9B (a gated download; accept its licence on Hugging Face, then put its files in ComfyUI's `models`) and Codex weren't measured here: Codex's daily image allowance was used up during development.
 
 ## Privacy: what leaves the computer
 
