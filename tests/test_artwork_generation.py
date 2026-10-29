@@ -767,7 +767,8 @@ def test_workflows_find_their_models_and_build_graphs():
     assert graph["ref0"]["inputs"]["image"] == "curatarr-x/ref.png"
     assert graph["guider"]["inputs"]["positive"] == ["pos0", 0]
     assert graph["noise"]["inputs"]["noise_seed"] == 7
-    missing, why = WORKFLOWS[3].resolve(available)  # Krea 2 isn't there
+    krea = next(w for w in WORKFLOWS if w.key == "comfyui/krea2-turbo")
+    missing, why = krea.resolve(available)  # Krea 2 isn't there
     assert missing is None and "needs" in why
 
 
@@ -1013,28 +1014,44 @@ def test_the_prompt_options_can_be_made_locally(app, client, monkeypatch):
     assert "Make local alternatives to compare" in client.get("/library/posters").text
 
 
-def test_a_small_face_in_a_reference_photo_is_cropped(monkeypatch, tmp_path):
+def test_reference_photos_are_cropped_to_the_head(monkeypatch, tmp_path):
     from curatarr.artwork_worker import pipeline
 
     photo = tmp_path / "sam.png"
     Image.new("RGB", (1500, 2000), (90, 90, 90)).save(photo)
-    close = tmp_path / "alex.png"
-    Image.new("RGB", (1000, 1300), (90, 90, 90)).save(close)
+    other = tmp_path / "sam2.png"
+    Image.new("RGB", (1000, 1300), (90, 90, 90)).save(other)
+    odd = tmp_path / "sam3.png"  # sunglasses: least like the other two
+    Image.new("RGB", (1000, 1300), (90, 90, 90)).save(odd)
     monkeypatch.setattr(
         checks,
         "run",
         lambda *a, **k: {
             "boxes": {
-                str(photo): [700, 400, 860, 600],  # a small face
-                str(close): [300, 200, 700, 700],  # a big one
+                str(photo): {"box": [700, 400, 860, 600], "embedding": [1.0, 0.0]},
+                str(other): {"box": [300, 200, 700, 700], "embedding": [0.9, 0.436]},
+                str(odd): {"box": [300, 200, 700, 700], "embedding": [0.0, 1.0]},
             }
         },
     )
-    refs = [Reference(1, photo, "person", "Sam"), Reference(2, close, "person", "Alex")]
-    out, cropped = pipeline._crop_people(refs, "/fake", {})
-    assert cropped == 1 and out[0].path.name == "sam-head.png"
-    assert out[1].path == close and out[0].number == 1
-    assert Image.open(out[0].path).size == (360, 360)
+    refs = [
+        Reference(1, photo, "person", "Sam"),
+        Reference(2, other, "person", "Sam"),
+        Reference(3, odd, "person", "Sam"),
+    ]
+    work = tmp_path / "work"
+    out, cropped = pipeline._crop_people(refs, "/fake", {"_work_dir": str(work)})
+    assert cropped == 3 and out[0].path == work / "crops" / "1-sam-head.png"
+    assert not list(tmp_path.glob("*-head.png"))  # never beside the photos
+    assert Image.open(out[0].path).size == (320, 320)  # 1.6 face heights
+    assert out[2].typical < out[1].typical and out[1].face_px == 400
+    from curatarr.artwork_worker.backends.comfyui import fit_references
+
+    [chosen], prompt = fit_references(out, "Sam (images 1, 2 and 3)", 1, 1)
+    assert chosen.path.name == "2-sam2-head.png" and prompt == "Sam (image 1)"
+    two, prompt = fit_references(out, "Sam (images 1, 2 and 3), then image 9", 8, 2)
+    assert [r.path.name for r in two] == ["1-sam-head.png", "2-sam2-head.png"]
+    assert prompt == "Sam (images 1 and 2), then image 9"
 
 
 def test_the_checks_helper_answers_each_request(tmp_path):
@@ -1055,3 +1072,34 @@ def test_the_checks_helper_answers_each_request(tmp_path):
     asked = checks.run(str(fake), photo, ocr=True)["asked"]
     assert {"image", "ocr"} <= set(asked)
     assert checks.run("", photo, ocr=True) == {}
+
+
+def test_a_three_image_model_gets_each_persons_sharpest_photo(tmp_path):
+    from curatarr.artwork_worker.backends.comfyui import fit_references
+
+    paths = []
+    for i in range(5):
+        path = tmp_path / f"{i}.png"
+        Image.new("RGB", (300, 400), (40 * i, 80, 120)).save(path)
+        paths.append(path)
+    refs = [
+        Reference(1, paths[0], "person", "Sam", 120),
+        Reference(2, paths[1], "person", "Sam", 480),
+        Reference(3, paths[2], "person", "Alex"),
+        Reference(4, paths[3], "person", "Alex"),
+        Reference(5, paths[4], "set"),
+    ]
+    prompt = (
+        "Played by Sam (images 1 and 2) and Alex (images 3 and 4). "
+        "The same look as image 5."
+    )
+    fitted, renumbered = fit_references(refs, prompt, 3, 1)
+    assert [(r.number, r.role, r.person) for r in fitted] == [
+        (1, "person", "Sam"),
+        (2, "person", "Alex"),
+        (3, "set", None),
+    ]
+    assert renumbered == (
+        "Played by Sam (image 1) and Alex (image 2). The same look as image 3."
+    )
+    assert fitted[0].path == paths[1]  # Sam's sharper photo

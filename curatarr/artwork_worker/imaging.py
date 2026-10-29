@@ -134,7 +134,7 @@ def finish(data: bytes, task: dict) -> tuple[bytes, list[str], dict]:
     return png(image), steps, facts
 
 
-HEAD_AND_SHOULDERS = 1.8  # the crop's side, in face widths
+HEAD_AND_SHOULDERS = 1.6  # the crop's side, in face widths
 
 
 def head_and_shoulders(path, box, out) -> None:

@@ -77,7 +77,7 @@ def faces(path, people, root):
 
 
 def boxes(paths, root):
-    """{path: the biggest face's box} for each photo with a face."""
+    """{path: the biggest face's box and embedding} for each photo with one."""
     try:
         import cv2
         from insightface.app import FaceAnalysis
@@ -96,7 +96,10 @@ def boxes(paths, root):
             face = max(
                 faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])
             )
-            found[path] = [float(v) for v in face.bbox]
+            found[path] = {
+                "box": [float(v) for v in face.bbox],
+                "embedding": [round(float(v), 5) for v in face.normed_embedding],
+            }
     return found
 
 

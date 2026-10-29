@@ -33,7 +33,7 @@ def make_picture(task, backend, references, progress, settings: dict) -> dict:
     if cropped:
         steps.append(
             f"{cropped} reference photo{'' if cropped == 1 else 's'} cropped "
-            "to head and shoulders"
+            "to the head"
         )
     with Peak() as peak:
         for attempt in range(tries):
@@ -85,9 +85,11 @@ def make_picture(task, backend, references, progress, settings: dict) -> dict:
 
 
 def _crop_people(references, python, settings):
-    """Person references cropped to head and shoulders where the face is a
-    small part of the photo (under a fifth of its width). Returns
-    (references, how many were cropped)."""
+    """Person references cropped to the head (an image model copies the rest
+    of a photo: clothes, glasses, writing), each marked with its face's size
+    and how typical of the person it is (its face compared with the person's
+    others: a photo in sunglasses or heavy make-up is the least typical).
+    Returns (references, how many were cropped)."""
     people = [r for r in references if r.role == "person"]
     if not python or not people:
         return references, 0
@@ -100,21 +102,42 @@ def _crop_people(references, python, settings):
         ).get("boxes")
         or {}
     )
+    means = {}
+    for who in {r.person for r in people}:
+        vectors = [
+            found[str(r.path)]["embedding"]
+            for r in people
+            if r.person == who and str(r.path) in found
+        ]
+        if vectors:
+            mean = [sum(v) / len(vectors) for v in zip(*vectors, strict=True)]
+            size = sum(v * v for v in mean) ** 0.5 or 1
+            means[who] = [v / size for v in mean]
+    folder = Path(settings.get("_work_dir") or ".") / "crops"
     cropped, out = 0, []
     for ref in references:
-        box = found.get(str(ref.path)) if ref.role == "person" else None
-        if box:
-            try:
-                width = imaging.load(ref.path.read_bytes()).width
-            except OSError:
-                width = 0
-            if width and (box[2] - box[0]) < width / 5:
-                crop = ref.path.with_name(ref.path.stem + "-head.png")
-                imaging.head_and_shoulders(ref.path, box, crop)
-                out.append(Reference(ref.number, crop, ref.role, ref.person))
-                cropped += 1
-                continue
-        out.append(ref)
+        face = found.get(str(ref.path)) if ref.role == "person" else None
+        if not face:
+            out.append(ref)
+            continue
+        box, embedding = face["box"], face["embedding"]
+        mean = means.get(ref.person) or embedding
+        typical = sum(a * b for a, b in zip(embedding, mean, strict=True))
+        # Into the worker's own folder: never beside the photo itself.
+        folder.mkdir(parents=True, exist_ok=True)
+        crop = folder / f"{ref.number}-{ref.path.stem}-head.png"
+        imaging.head_and_shoulders(ref.path, box, crop)
+        out.append(
+            Reference(
+                ref.number,
+                crop,
+                ref.role,
+                ref.person,
+                round(box[2] - box[0]),
+                round(typical, 3),
+            )
+        )
+        cropped += 1
     return out, cropped
 
 

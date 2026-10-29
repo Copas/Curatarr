@@ -49,13 +49,14 @@ DEFAULTS = {
     "defaults": {},  # {picture type: engine} preferred, from Benchmarks
 }
 # Engines tried first when a job leaves the choice to Curatarr and no default's
-# set (docs/ARTWORK.md#results-on-a-12-gb-card): FLUX.2 Klein keeps people
-# recognisable; Krea 2 letters best but takes no photos, so it leads for logos
-# and banners (which have no people).
+# set (docs/ARTWORK.md#results-on-a-12-gb-card): Qwen-Image-Edit keeps people
+# recognisable best, then FLUX.2 Klein; Krea 2 letters best but takes no
+# photos, so it leads for logos and banners (which have no people).
 RECOMMENDED = {
     "Logo": ("comfyui/krea2-turbo",),
     "Banner": ("comfyui/krea2-turbo",),
     "*": (
+        "comfyui/qwen-image-edit",
         "comfyui/flux2-klein-9b",
         "comfyui/flux2-klein-4b",
         "comfyui/krea2-turbo",

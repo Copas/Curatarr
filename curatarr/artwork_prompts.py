@@ -38,7 +38,9 @@ CAST_KINDS = {"Primary", "Thumb", "Backdrop"}
 LETTERED_KINDS = {"Primary", "Thumb", "Banner", "Logo"}
 PHOTO_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_PEOPLE = 3
-PHOTOS_EACH = 2  # an image model's references per person; more slows it down
+# An image model is sent up to this many photos of each person; the worker
+# keeps the most typical (artwork_worker.backends.comfyui.fit_references).
+PHOTOS_EACH = 5
 AGENT_PHOTOS_EACH = 4
 NAME_SPLIT = re.compile(r"[\s_.\-\d]+")
 
@@ -184,9 +186,10 @@ def _cast(people: dict[str, list[int]], about: dict[str, str] | None = None) -> 
             + f" and {named[-1]}, each a different person shown once."
         )
     return (
-        lead + " Keep each face exactly as in their photos (face shape, eyes, nose, "
-        "mouth, skin tone, age, hair and facial hair); costume, setting, lighting "
-        "and expression follow the story."
+        lead + " They play the story's own characters: in those characters' "
+        "costumes, make-up and props, in the places that make it recognisable at "
+        "a glance. Keep each face exactly as in their photos (face shape, eyes, "
+        "nose, mouth, skin tone, age, hair and facial hair)."
     )
 
 

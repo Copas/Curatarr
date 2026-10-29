@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc41 (2026-10-29)
+
+- **Qwen-Image-Edit, a better local engine for pictures of you.** Tested on a household's own photos and favourite films, FLUX.2 Klein lost people's likenesses and each film's look; Qwen-Image-Edit 2511 (a free download, docs/ARTWORK.md) kept them far better and dresses the cast as the film's own characters. When it's installed, it's used for pictures with people.
+- **Reference photos are used more carefully**: each is cropped to the head (whole photos had their clothes, sunglasses and T-shirt slogans copied onto the posters), and each person's most typical photos are the ones used, so a photo in sunglasses or heavy make-up isn't. Curatarr now sends a worker all of a person's photos (up to five) to choose from. Prompts ask for the story's own characters, in their costumes.
+
 ## 0.2.0rc40 (2026-10-29)
 
 - **Compare generated pictures with the ones you have** (Posters → Compare). A title's picture as it is now (made with ChatGPT, say) and one a local model made for it, side by side in random order: choose the better with ← and →, and see which was which after. Your choices are tallied by picture type and engine, and the new ones you preferred are listed, to put on from their job's page.

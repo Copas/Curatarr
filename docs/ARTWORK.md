@@ -97,7 +97,8 @@ The worker is part of the Curatarr package (`curatarr-artwork-worker`). On the c
 
 | Engine | Reference photos | Lettering | Notes |
 |---|---|---|---|
-| **FLUX.2 Klein 4B** (ComfyUI) | yes, several people | good, not perfect | recommended for everything but logos (see [Benchmarks](#results-on-a-12-gb-card)) |
+| **Qwen-Image-Edit 2511** (ComfyUI) | yes, one photo each | good | recommended for pictures with people (see [Benchmarks](#results-on-a-12-gb-card)) |
+| FLUX.2 Klein 4B (ComfyUI) | yes, several people | good, not perfect | used when Qwen-Image-Edit isn't installed |
 | FLUX.2 Klein 4B base (ComfyUI) | yes | | the undistilled model: many more steps; slower |
 | FLUX.2 Klein 9B (ComfyUI) | yes | | offered when its files are installed |
 | **Krea 2 Turbo** (ComfyUI) | no | the best measured | recommended for logos; never given jobs with reference photos |
@@ -106,6 +107,7 @@ The worker is part of the Curatarr package (`curatarr-artwork-worker`). On the c
 
 **ComfyUI** needs these files in its `models` folder (the worker matches names loosely, so other quantisations count):
 
+- Qwen-Image-Edit 2511: `diffusion_models/qwen_image_edit_2511_fp8_e4m3fn_scaled_lightning_comfyui_4steps_v1.0.safetensors` (from [lightx2v/Qwen-Image-Edit-2511-Lightning](https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning), 20 GB), `text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors` (from [Comfy-Org/Qwen-Image_ComfyUI](https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI), 9 GB), `vae/qwen_image_vae.safetensors`. Apache 2.0; it streams from system memory on a 12 GB card, so allow 40 GB of RAM.
 - FLUX.2 Klein 4B: `diffusion_models/flux-2-klein-4b-fp8.safetensors`, `text_encoders/qwen_3_4b.safetensors`, `vae/flux2-vae.safetensors`.
 - Krea 2 Turbo: `diffusion_models/krea2_turbo_fp8_scaled.safetensors`, `text_encoders/qwen3vl_4b_fp8_scaled.safetensors`, `vae/qwen_image_vae.safetensors`.
 - SDXL + FaceID: an SDXL checkpoint (`checkpoints/Juggernaut-XL…`), the [ComfyUI_IPAdapter_plus](https://github.com/cubiq/ComfyUI_IPAdapter_plus) nodes, `ipadapter/ip-adapter-faceid-plusv2_sdxl.bin`, its LoRA, and InsightFace.
@@ -162,7 +164,15 @@ What the pictures showed, beyond the numbers:
 - **Stray text.** Both FLUX.2 and Krea 2 sometimes add small gibberish credits, and text on backgrounds; the checks count it and try again, but a busy street's signs are sometimes real.
 - **Transparent logos** keyed cleanly from black or white backgrounds, at both engines.
 
-When a job leaves the engine to Curatarr and no default is set under Workers, it uses Krea 2 Turbo for logos and banners and FLUX.2 Klein for everything else (FLUX.2 Klein 9B first, when installed). FLUX.2 Klein 9B (a gated download; accept its licence on Hugging Face, then put its files in ComfyUI's `models`) and Codex weren't measured here: Codex's daily image allowance was used up during development.
+**With a household's own photos** (the second round of testing, posters for real favourite films): FLUX.2 Klein 4B kept likeness at 0.15–0.45 and lost each film's look (two people in leather jackets for *Batman Returns*). Qwen-Image-Edit 2511, given one head-cropped photo per person, reached 0.30–0.66 (most at 0.45 or above), put the cast in the film's own costumes and settings (Batman suits, sombreros, a vampire's cloak) and spelled most titles right, at 2–3 minutes a picture with its checks and retries. What got it there, each measured:
+
+- **One photo each, not several side by side** (the harder-to-match person scored 0.16–0.24 side by side, 0.45 with one).
+- **Crop every photo to the head**: shown a whole photo, the model copied its clothes and the writing on them.
+- **The most typical photo**, compared with the person's others, so a photo in sunglasses isn't the one used (it was copied onto every picture).
+- **"They play the story's own characters, in their costumes"** in the prompt.
+- Not the film's original poster as a mood reference: it brought in the actors' faces (likeness 0.02).
+
+When a job leaves the engine to Curatarr and no default is set under Workers, it uses Krea 2 Turbo for logos and banners and Qwen-Image-Edit (or, without it, FLUX.2 Klein) for everything else (FLUX.2 Klein 9B first, when installed). FLUX.2 Klein 9B (a gated download; accept its licence on Hugging Face, then put its files in ComfyUI's `models`) and Codex weren't measured here: Codex's daily image allowance was used up during development.
 
 ## Privacy: what leaves the computer
 

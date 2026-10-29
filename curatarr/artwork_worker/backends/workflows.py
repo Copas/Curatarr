@@ -28,6 +28,7 @@ class Workflow:
     }
     seconds = 30  # about how long a picture takes, for progress
     one_person = False  # it can only keep one person's likeness
+    max_images = None  # how many reference images it takes, if limited
 
     def resolve(self, available: dict[str, list[str]]) -> tuple[dict | None, str]:
         """{loader: file} for this workflow from ComfyUI's lists, or None
@@ -401,4 +402,105 @@ class SdxlFaceId(Workflow):
         return _save(g, ["decode", 0])
 
 
-WORKFLOWS = [Flux2Klein(), Flux2Klein9B(), Flux2KleinBase(), Krea2Turbo(), SdxlFaceId()]
+class QwenImageEdit(Workflow):
+    """Qwen-Image-Edit 2511 with the Lightning four-step merge: up to three
+    reference images, each read by its Qwen2.5-VL text encoder as well as
+    given as a latent. Each person's photos go in side by side as one."""
+
+    key = "comfyui/qwen-image-edit"
+    label = "Qwen-Image-Edit 2511 (local)"
+    references = True
+    max_images = 3
+    needs: ClassVar[dict] = {
+        "UNETLoader": (
+            "unet_name",
+            [r"qwen.?image.?edit.?2511.*light", r"qwen.?image.?edit"],
+        ),
+        "CLIPLoader": ("clip_name", [r"qwen_?2\.?5_?vl_?7b"]),
+        "VAELoader": ("vae_name", [r"qwen_image_vae", r"qwen.*vae"]),
+    }
+    sizes: ClassVar[dict] = {
+        "Primary": (1024, 1536),
+        "Thumb": (1664, 928),
+        "Backdrop": (1664, 928),
+        "Banner": (1728, 320),
+        "Logo": (1536, 768),
+    }
+    steps = 4
+    seconds = 60
+
+    def graph(self, prompt, size, seed, refs, models):
+        width, height = size
+        g = {
+            "unet": {
+                "class_type": "UNETLoader",
+                "inputs": {
+                    "unet_name": models["UNETLoader"],
+                    "weight_dtype": "default",
+                },
+            },
+            "shift": {
+                "class_type": "ModelSamplingAuraFlow",
+                "inputs": {"model": ["unet", 0], "shift": 3.1},
+            },
+            "clip": {
+                "class_type": "CLIPLoader",
+                "inputs": {
+                    "clip_name": models["CLIPLoader"],
+                    "type": "qwen_image",
+                    "device": "default",
+                },
+            },
+            "vae": {
+                "class_type": "VAELoader",
+                "inputs": {"vae_name": models["VAELoader"]},
+            },
+            "latent": {
+                "class_type": "EmptySD3LatentImage",
+                "inputs": {"width": width, "height": height, "batch_size": 1},
+            },
+        }
+        images = {}
+        for i, name in enumerate(refs[: self.max_images]):
+            g[f"ref{i}"] = {"class_type": "LoadImage", "inputs": {"image": name}}
+            images[f"image{i + 1}"] = [f"ref{i}", 0]
+        for node, text in (("pos", prompt), ("neg", "")):
+            g[node] = {
+                "class_type": "TextEncodeQwenImageEditPlus",
+                "inputs": {
+                    "clip": ["clip", 0],
+                    "prompt": text,
+                    "vae": ["vae", 0],
+                    **images,
+                },
+            }
+        g["sample"] = {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["shift", 0],
+                "seed": seed,
+                "steps": self.steps,
+                "cfg": 1.0,
+                "sampler_name": "euler",
+                "scheduler": "simple",
+                "positive": ["pos", 0],
+                "negative": ["neg", 0],
+                "latent_image": ["latent", 0],
+                "denoise": 1.0,
+            },
+        }
+        g["decode"] = {
+            "class_type": "VAEDecode",
+            "inputs": {"samples": ["sample", 0], "vae": ["vae", 0]},
+        }
+        return _save(g, ["decode", 0])
+
+
+WORKFLOWS = [
+    Flux2Klein(),
+    Flux2Klein9B(),
+    QwenImageEdit(),
+    Flux2KleinBase(),
+    Krea2Turbo(),
+    SdxlFaceId(),
+]

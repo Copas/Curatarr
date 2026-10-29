@@ -9,6 +9,7 @@ another model): the picture waits and is tried again later.
 """
 
 import json
+import re
 import subprocess
 import time
 import uuid
@@ -17,7 +18,7 @@ from pathlib import Path
 import requests
 
 from .. import gpu
-from .base import Backend, Cancelled, Failed, Made
+from .base import Backend, Cancelled, Failed, Made, Reference
 from .workflows import KINDS, WORKFLOWS
 
 LOADERS = ("UNETLoader", "CLIPLoader", "VAELoader", "CheckpointLoaderSimple")
@@ -293,12 +294,17 @@ class ComfyBackend(Backend):
             refs = [r for r in people if r.person == first]
         elif not workflow.references:
             refs = []
+        prompt = task["prompt"]
+        if workflow.max_images:  # one photo of each person, at most
+            refs, prompt = fit_references(refs, prompt, workflow.max_images, 1)
+        elif not workflow.one_person:  # more than two each made likenesses worse
+            refs, prompt = fit_references(refs, prompt, 8, 2)
         folder = f"curatarr-{task['image']}"
         try:
             names = [self._upload(r.path, folder) for r in refs]
             width, height = workflow.size(task["kind"])
             seed = int(task.get("seed") or 0)
-            graph = workflow.graph(task["prompt"], (width, height), seed, names, models)
+            graph = workflow.graph(prompt, (width, height), seed, names, models)
             data = self._run(graph, workflow, progress)
         finally:
             self._clean_inputs(folder)
@@ -373,3 +379,55 @@ class ComfyBackend(Backend):
             )
         except requests.RequestException:
             pass
+
+
+def _numbers(indexes) -> str:
+    """As the prompts write them (artwork_prompts._numbers)."""
+    words = [str(i) for i in indexes]
+    if len(words) == 1:
+        return f"image {words[0]}"
+    return "images " + ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def fit_references(refs, prompt, limit, each):
+    """At most ``limit`` references: each person's ``each`` most typical
+    photos (the sharpest among equals: a photo in sunglasses is the least
+    typical), then the other references, with the prompt's image numbers
+    changed to match. Given more, the models did worse: several photos side
+    by side lost likenesses, and more than two each confused FLUX.2. Returns
+    (references, prompt)."""
+    people: dict[str, list] = {}
+    others = []
+    for ref in refs:
+        if ref.role == "person" and ref.person:
+            people.setdefault(ref.person, []).append(ref)
+        else:
+            others.append(ref)
+    fitted, renumber = [], []
+    for who, photos in people.items():
+        room = min(each, limit - len(fitted))
+        if room <= 0:
+            break
+        best = sorted(photos, key=lambda r: (-round(r.typical, 2), -r.face_px))[:room]
+        numbers = []
+        for ref in sorted(best, key=lambda r: r.number):
+            numbers.append(len(fitted) + 1)
+            fitted.append(
+                Reference(
+                    numbers[-1], ref.path, "person", who, ref.face_px, ref.typical
+                )
+            )
+        renumber.append(([r.number for r in photos], numbers))
+    for ref in others:
+        if len(fitted) >= limit:
+            break
+        fitted.append(Reference(len(fitted) + 1, ref.path, ref.role, ref.person))
+        renumber.append(([ref.number], [len(fitted)]))
+    # Longest first, so "images 1 and 2" isn't half-replaced as "image 1".
+    for index, (old, _new) in sorted(
+        enumerate(renumber), key=lambda r: -len(_numbers(r[1][0]))
+    ):
+        prompt = prompt.replace(_numbers(old), f"@@{index}@@")
+    return fitted, re.sub(
+        r"@@(\d+)@@", lambda m: _numbers(renumber[int(m.group(1))][1]), prompt
+    )

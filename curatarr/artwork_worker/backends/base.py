@@ -22,6 +22,8 @@ class Reference:
     path: Path
     role: str  # person, set, original, lettering
     person: str | None = None
+    face_px: int = 0  # the face's width in pixels, when known
+    typical: float = 0.0  # how like this person's other photos it is (0 to 1)
 
 
 @dataclass
