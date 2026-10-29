@@ -590,6 +590,24 @@ def artwork_worker_create():
     return _show_token(worker, token)
 
 
+def _setup_command(token: str) -> str:
+    """The one command that sets a worker up on a computer and starts it:
+    this installation's own program when it's run here, else the one on the
+    PATH (where the worker's installed on another computer)."""
+    import shlex
+    import sys
+
+    from .artwork_worker.cli import stable
+
+    here = Path(sys.executable).parent / "curatarr-artwork-worker"
+    program = str(stable(here)) if here.is_file() else "curatarr-artwork-worker"
+    server = request.host_url.rstrip("/")
+    return (
+        f"{shlex.quote(program)} setup --server {shlex.quote(server)} "
+        f"--token {shlex.quote(token)} --service"
+    )
+
+
 def _show_token(worker, token):
     return render_template(
         "artwork_workers.html",
@@ -598,6 +616,7 @@ def _show_token(worker, token):
         online=artwork_jobs.online,
         token=token,
         new_worker=worker,
+        command=_setup_command(token),
         server=request.host_url.rstrip("/"),
         engine_label=_engine_label,
         **_common(),

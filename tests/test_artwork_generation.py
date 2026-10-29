@@ -511,7 +511,8 @@ def test_the_pages_show(app, client, tmp_path, monkeypatch):
     assert "Approve and put on" in client.get("/library/posters/review").text
     assert "Film" in client.get("/library/posters/jobs?fragment=1").text
     new = client.post("/library/posters/workers", data={"name": "Living room"}).text
-    assert "cwk_" in new and "curatarr-artwork-worker setup" in new
+    assert "curatarr-artwork-worker setup --server http://localhost --token cwk_" in new
+    assert "--service" in new
 
 
 # --- Batches -------------------------------------------------------------------
@@ -1181,3 +1182,50 @@ def test_setup_saves_where_codex_is(monkeypatch, tmp_path):
         "executable": str(codex),
     }
     assert (tmp_path / "token").read_text().strip() == "cwk_test"
+
+
+def test_setup_can_take_the_token_and_start_the_service(monkeypatch, tmp_path):
+    from curatarr.artwork_worker import cli
+
+    monkeypatch.setenv("PATH", str(tmp_path))  # no Codex here
+    monkeypatch.setattr(cli, "check", lambda args: 0)
+    monkeypatch.setattr(cli, "CHECKS_ENV", tmp_path / "none")
+    monkeypatch.setattr(cli, "SERVICE", tmp_path / "unit" / "w.service")
+    ran = []
+    monkeypatch.setattr(
+        cli.subprocess, "run", lambda command, check: ran.append(command[2:])
+    )
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"token_file": str(tmp_path / "token")}))
+    argv = [
+        "--config",
+        str(config),
+        "setup",
+        "--server",
+        "http://x",
+        "--token",
+        "cwk_abc",
+        "--service",
+    ]
+    assert cli.main(argv) == 0
+    assert (tmp_path / "token").read_text().strip() == "cwk_abc"
+    unit = (tmp_path / "unit" / "w.service").read_text()
+    assert f"--config {config} run" in unit and "Restart=on-failure" in unit
+    assert ran == [
+        ["daemon-reload"],
+        ["enable", "curatarr-artwork-worker"],
+        ["restart", "curatarr-artwork-worker"],
+    ]
+
+
+def test_a_service_follows_the_installers_current_release(tmp_path):
+    from curatarr.artwork_worker.cli import stable
+
+    release = tmp_path / "opt" / "releases" / "20261029-1" / "bin"
+    release.mkdir(parents=True)
+    (tmp_path / "opt" / "current").symlink_to(release.parent)
+    assert stable(release / "python") == tmp_path / "opt" / "current" / "bin" / "python"
+    assert (
+        stable(tmp_path / "venv" / "bin" / "python")
+        == tmp_path / "venv" / "bin" / "python"
+    )

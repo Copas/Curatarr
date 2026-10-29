@@ -4,14 +4,11 @@
 <header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Models &amp; workers</h1><p class="text-secondary mb-0">Workers make the pictures: a program on this computer or another, with a local image model (through ComfyUI) or Codex's image tool. A worker asks Curatarr for work, so it needs no open port; it signs in with its own token.</p></div></header>
 {% set here = 'main.artwork_workers' %}{% include '_posters_nav.html' %}
 {% if token %}
-<section class="alert alert-success" id="new-token"><h2 class="h5">{{ new_worker.name }}'s token</h2>
-  <p>Copy it now: Curatarr keeps only a fingerprint of it, so it can't show it again (make a new one if it's lost). On the computer the worker runs on, save it in a file only you can read, then start the worker:</p>
-  <pre class="artwork-prompt" id="worker-token">{{ token }}</pre>
-  <button type="button" class="btn btn-sm btn-outline-dark mb-2" data-copy="#worker-token">Copy the token</button>
-  <pre class="artwork-prompt" id="worker-setup">curatarr-artwork-worker setup --server {{ server }} --name "{{ new_worker.name }}"
-curatarr-artwork-worker run</pre>
-  <button type="button" class="btn btn-sm btn-outline-dark" data-copy="#worker-setup">Copy the commands</button>
-  <p class="small mb-0 mt-2"><code>setup</code> asks for the token and finds what the computer can run (ComfyUI and its models, Codex). See <a href="https://github.com/Copas/Curatarr/blob/main/docs/ARTWORK.md">docs/ARTWORK.md</a> for running it as a service.</p>
+<section class="alert alert-success" id="new-token"><h2 class="h5">Set up {{ new_worker.name }}</h2>
+  <p class="mb-2">On the computer that makes the pictures (this one, if Curatarr runs here), paste this into a terminal. It connects the worker, finds Codex (and ComfyUI, if it's in a usual place), and starts it in the background, now and whenever you sign in. Nothing else to do.</p>
+  <pre class="artwork-prompt" id="worker-command">{{ command }}</pre>
+  <button type="button" class="btn btn-sm btn-outline-dark" data-copy="#worker-command">Copy</button>
+  <p class="small mb-0 mt-2">The command holds the worker's token, its own password for talking to Curatarr (which the rest of your network can reach); Curatarr keeps only a fingerprint of it, so this is the only time it's shown. Lost it? Click <strong>New token</strong> and run the new command. More in <a href="https://github.com/Copas/Curatarr/blob/main/docs/ARTWORK.md">docs/ARTWORK.md</a>.</p>
 </section>{% endif %}
 <section class="card p-3 mb-4"><h2 class="h5">Workers</h2>
 {% if workers %}<div class="table-responsive"><table class="table align-middle">

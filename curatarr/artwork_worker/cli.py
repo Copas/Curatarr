@@ -54,10 +54,14 @@ def setup(args) -> int:
     if not config["server"]:
         print("Give Curatarr's address with --server (as you open it in a browser).")
         return 2
-    token = os.environ.get("CURATARR_WORKER_TOKEN") or (
-        sys.stdin.readline().strip()
-        if args.token_stdin
-        else getpass.getpass("The worker's token (from Posters → Workers): ")
+    token = (
+        (args.token or "").strip()
+        or os.environ.get("CURATARR_WORKER_TOKEN")
+        or (
+            sys.stdin.readline().strip()
+            if args.token_stdin
+            else getpass.getpass("The worker's token (from Posters → Workers): ")
+        )
     )
     if not token.startswith("cwk_"):
         print("That isn't a worker token: copy it from Posters → Workers.")
@@ -94,7 +98,67 @@ def setup(args) -> int:
     settings.save_token(token, config)
     path = settings.save(config)
     print(f"Saved {path} (the token beside it, readable only by you).")
-    return check(args)
+    status = check(args)
+    if status == 0 and args.service:
+        status = install_service(args)
+    return status
+
+
+SERVICE = (
+    Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    / "systemd"
+    / "user"
+    / "curatarr-artwork-worker.service"
+)
+
+
+def stable(path: Path) -> Path:
+    """``path`` through the installer's ``current`` link when it's inside one
+    of its release folders (/opt/curatarr/releases/<date>/bin/…), so a
+    service keeps running the newest version after an upgrade."""
+    path = Path(path)
+    parts = path.parts
+    if "releases" in parts:
+        at = len(parts) - 1 - parts[::-1].index("releases")
+        current = Path(*parts[:at]) / "current"
+        if at + 2 <= len(parts) and current.exists():
+            return current.joinpath(*parts[at + 2 :])
+    return path
+
+
+def install_service(args) -> int:
+    """Runs the worker in the background as a systemd user service, started
+    now and whenever you sign in."""
+    command = [str(stable(Path(sys.executable))), "-m", "curatarr.artwork_worker"]
+    if args.config:
+        command += ["--config", str(Path(args.config).resolve())]
+    SERVICE.parent.mkdir(parents=True, exist_ok=True)
+    SERVICE.write_text(
+        "[Unit]\n"
+        "Description=Curatarr artwork worker\n"
+        "After=network-online.target\n\n"
+        "[Service]\n"
+        f"ExecStart={' '.join(command)} run\n"
+        "Restart=on-failure\n"
+        "RestartSec=30\n\n"
+        "[Install]\n"
+        "WantedBy=default.target\n"
+    )
+    for step in (
+        ["daemon-reload"],
+        ["enable", "curatarr-artwork-worker"],
+        ["restart", "curatarr-artwork-worker"],
+    ):
+        try:
+            subprocess.run(["systemctl", "--user", *step], check=True)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            print(
+                f"Couldn't start the service ({exc}); run it by hand with: "
+                f"{' '.join(command)} run"
+            )
+            return 1
+    print("The worker is running in the background, and starts whenever you sign in.")
+    return 0
 
 
 def check(args) -> int:
@@ -211,8 +275,14 @@ def main(argv=None) -> int:
     p.add_argument("--name", help="(the name is set in Curatarr)")
     p.add_argument("--comfyui", help="ComfyUI's folder")
     p.add_argument("--no-codex", action="store_true", help="don't offer Codex")
+    p.add_argument("--token", help="the worker's token, from Posters → Workers")
     p.add_argument(
         "--token-stdin", action="store_true", help="read the token from stdin"
+    )
+    p.add_argument(
+        "--service",
+        action="store_true",
+        help="then run it in the background as a systemd user service",
     )
     p.add_argument(
         "--install-checks",

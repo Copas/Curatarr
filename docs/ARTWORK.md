@@ -37,44 +37,17 @@ The worker is part of the Curatarr package (`curatarr-artwork-worker`). On the c
 
    On the Curatarr computer itself, the installed Curatarr already has it: use its `curatarr-artwork-worker`.
 
-2. **Add the worker** in Curatarr under **Library → Posters → Workers**. Its token is shown once; copy it.
+2. **Add the worker** in Curatarr under **Library → Posters → Workers**. Curatarr shows one command, with the worker's token in it.
 
-3. **Set it up**, pointing it at Curatarr's address as you open it in a browser:
-
-   ```
-   curatarr-artwork-worker setup --server http://192.0.2.10:8787 --comfyui /path/to/ComfyUI --install-checks
-   ```
-
-   It asks for the token (or reads `CURATARR_WORKER_TOKEN`), finds ComfyUI and Codex, and saves `~/.config/curatarr-artwork-worker/config.json` with the token beside it, both readable only by you. `--install-checks` makes a small environment for the checks (text recognition and face recognition, about 600 MB); without it, pictures aren't checked. `check` shows what it found:
+3. **Paste that command** into a terminal on the worker's computer. It saves the token (in `~/.config/curatarr-artwork-worker/`, readable only by you), finds Codex and ComfyUI (give `--comfyui /path/to/ComfyUI` if yours is somewhere unusual), and starts the worker as a systemd user service, now and whenever you sign in. It looks like:
 
    ```
-   curatarr-artwork-worker check
+   /opt/curatarr/current/bin/curatarr-artwork-worker setup --server http://192.0.2.10:8787 --token cwk_… --service
    ```
 
-4. **Run it**, by hand or as a service:
+   The token is the worker's own password for talking to Curatarr, which the rest of the network can reach: it's what keeps anything else on the network from fetching your reference photos or sending pictures. Curatarr keeps only a fingerprint of it; **New token** makes another (the old one stops working) with a new command.
 
-   ```
-   curatarr-artwork-worker run
-   ```
-
-   As a systemd user service, `~/.config/systemd/user/curatarr-artwork-worker.service`:
-
-   ```ini
-   [Unit]
-   Description=Curatarr artwork worker
-   After=network-online.target
-
-   [Service]
-   ExecStart=%h/curatarr-worker/bin/curatarr-artwork-worker run
-   Restart=on-failure
-
-   [Install]
-   WantedBy=default.target
-   ```
-
-   ```
-   systemctl --user enable --now curatarr-artwork-worker
-   ```
+   For the checks (text recognition and face recognition, about 600 MB), add `--install-checks` once; without them, pictures aren't checked. `curatarr-artwork-worker check` shows what the worker found, and `journalctl --user -u curatarr-artwork-worker` its log.
 
 ### Settings
 

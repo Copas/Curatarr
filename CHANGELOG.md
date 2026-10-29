@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc44 (2026-10-29)
+
+- **Setting up a worker is one paste.** Adding a worker on Posters → Workers now shows a single command, with its token in it, that connects the worker, finds Codex and ComfyUI, and starts it in the background as a user service (now and at every sign-in). The service follows the installer's current release, so it's upgraded with Curatarr.
+
 ## 0.2.0rc43 (2026-10-29)
 
 - **Fixed: a worker run as a service couldn't find Codex.** Services don't get a terminal's PATH (Codex usually lives in `~/.local/bin`), so the worker reported Codex as not installed. `curatarr-artwork-worker setup` now saves Codex's full path.
