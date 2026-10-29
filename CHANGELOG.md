@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc43 (2026-10-29)
+
+- **Fixed: a worker run as a service couldn't find Codex.** Services don't get a terminal's PATH (Codex usually lives in `~/.local/bin`), so the worker reported Codex as not installed. `curatarr-artwork-worker setup` now saves Codex's full path.
+
 ## 0.2.0rc42 (2026-10-29)
 
 - **Make them with ChatGPT, without copying prompts.** Posters → Artwork has a **Make them with ChatGPT** button beside the prompt writer: your worker sends each picture to ChatGPT's image tool through Codex, signed in on its computer, with the prompt options as saved, and each waits for you under Review. Tested end to end with a household's own photos. When the plan's image allowance runs out, the rest wait for it to reset.

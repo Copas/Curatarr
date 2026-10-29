@@ -78,6 +78,8 @@ def setup(args) -> int:
         print("ComfyUI: not found (give its folder with --comfyui to use local models)")
     if shutil.which("codex") and not args.no_codex:
         backends["codex"]["enabled"] = True
+        # Its full path: a service doesn't get the PATH of a terminal.
+        backends["codex"]["executable"] = shutil.which("codex")
         print("Codex: found (it sends prompts and their pictures to OpenAI)")
     if args.install_checks:
         print("Installing the checks (text and face recognition, about 600 MB)…")

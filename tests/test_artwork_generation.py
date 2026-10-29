@@ -1156,3 +1156,28 @@ def test_an_outside_service_isnt_asked_again_by_itself(monkeypatch, tmp_path):
     )
     assert len(made) == 1  # a misread title doesn't spend more of the allowance
     assert result["meta"]["metrics"]["title_match"]["value"] == 0.0
+
+
+def test_setup_saves_where_codex_is(monkeypatch, tmp_path):
+    import io
+
+    from curatarr.artwork_worker import cli
+
+    codex = tmp_path / "bin" / "codex"
+    codex.parent.mkdir()
+    codex.write_text("#!/bin/sh\n")
+    codex.chmod(0o755)
+    monkeypatch.setenv("PATH", str(codex.parent))
+    monkeypatch.setenv("CURATARR_WORKER_TOKEN", "cwk_test")
+    monkeypatch.setattr(cli, "check", lambda args: 0)
+    monkeypatch.setattr(cli, "CHECKS_ENV", tmp_path / "none")
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"token_file": str(tmp_path / "token")}))
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    assert cli.main(["--config", str(config), "setup", "--server", "http://x"]) == 0
+    saved = json.loads(config.read_text())
+    assert saved["backends"]["codex"] == saved["backends"]["codex"] | {
+        "enabled": True,
+        "executable": str(codex),
+    }
+    assert (tmp_path / "token").read_text().strip() == "cwk_test"
