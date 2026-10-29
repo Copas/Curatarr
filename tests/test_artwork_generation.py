@@ -1103,3 +1103,56 @@ def test_a_three_image_model_gets_each_persons_sharpest_photo(tmp_path):
         "Played by Sam (image 1) and Alex (image 2). The same look as image 3."
     )
     assert fitted[0].path == paths[1]  # Sam's sharper photo
+
+
+def test_the_prompt_options_can_go_to_chatgpt(app, client, monkeypatch):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    _jellyfin(monkeypatch, _picture("#223344"))
+    set_setting(
+        custom_posters.KEY,
+        {"prompts": {"titles": "movies", "kinds": ["Primary"], "photos": "/p"}},
+    )
+    db.session.commit()
+    client.post("/library/posters/prompts/generate", data={"engine": "codex/image"})
+    [job] = db.session.query(ArtworkJob).all()
+    assert job.engine == "codex/image" and job.options["external_ok"] is True
+    assert job.media_identity_id == media.id
+    assert "Make them with ChatGPT" in client.get("/library/posters").text
+
+
+def test_an_outside_service_isnt_asked_again_by_itself(monkeypatch, tmp_path):
+    from curatarr.artwork_worker import pipeline
+    from curatarr.artwork_worker.backends.mock import MockBackend
+
+    class Codex(MockBackend):
+        name = "codex"
+
+    made = []
+    monkeypatch.setattr(
+        checks, "run", lambda *a, **k: {"ocr": {"available": True, "texts": []}}
+    )
+    backend = Codex({}, tmp_path)
+    original = backend.make
+    backend.make = lambda *a: made.append(1) or original(*a)
+    task = {
+        "image": "z",
+        "engine": "codex/image",
+        "kind": "Primary",
+        "title": "Hush",
+        "lettered": True,
+        "size": [1024, 1536],
+        "aspect": 2 / 3,
+        "seed": 1,
+        "prompt": "p",
+    }
+    result = pipeline.make_picture(
+        task,
+        backend,
+        [],
+        lambda *a: None,
+        {"python": "/fake", "title_retries": 2, "_work_dir": str(tmp_path)},
+    )
+    assert len(made) == 1  # a misread title doesn't spend more of the allowance
+    assert result["meta"]["metrics"]["title_match"]["value"] == 0.0

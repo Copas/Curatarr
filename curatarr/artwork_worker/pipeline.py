@@ -23,13 +23,22 @@ def make_picture(task, backend, references, progress, settings: dict) -> dict:
             people.setdefault(ref.person, []).append(str(ref.path))
     textless = task.get("kind") == "Backdrop"  # a background has no text at all
     checked = (lettered or textless or people) and check_python
-    tries = 1 + (int(settings.get("title_retries") or 0) if checked else 0)
-    if task.get("transparent"):
+    # Only a local model tries again by itself: an outside service's pictures
+    # use up its allowance, and its lettering is good enough that a misread
+    # (text recognition can't read thin, spaced-out lettering) costs more
+    # than it saves. Its checks still show in review.
+    local = getattr(backend, "name", "") != "codex"
+    tries = 1 + (int(settings.get("title_retries") or 0) if checked and local else 0)
+    if task.get("transparent") and local:
         tries = max(tries, 2)  # a second background if keying the first fails
     started = time.time()
     best = None
     steps: list[str] = []
-    references, cropped = _crop_people(references, check_python, settings)
+    # Local models are shown head crops (they copy whatever else is in a
+    # photo); an agent like Codex does better with the whole photos.
+    cropped = 0
+    if getattr(backend, "name", "") == "comfyui":
+        references, cropped = _crop_people(references, check_python, settings)
     if cropped:
         steps.append(
             f"{cropped} reference photo{'' if cropped == 1 else 's'} cropped "

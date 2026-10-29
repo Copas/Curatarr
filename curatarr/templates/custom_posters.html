@@ -85,7 +85,12 @@
     <div class="col-12"><button class="btn btn-primary">Write prompts</button>{% if not folder %} <span class="small text-warning ms-2">Set the import folder above first, so the prompts say where to save.</span>{% endif %}</div>
   </form>
   <p class="small text-secondary mt-2 mb-0">Only use photos of people who've agreed. The photos are read by the AI agent you paste the prompt into, never by Curatarr; if it's a cloud service, they're sent there.</p>
-  <div class="artwork-local mt-3 pt-3"><h3 class="h6">Or make them locally</h3>
+  <div class="artwork-local mt-3 pt-3"><h3 class="h6">Or have Curatarr do it</h3>
+    <p class="small text-secondary mb-2">Instead of copying prompts: your worker sends each picture to ChatGPT's image tool through Codex (signed in on the worker's computer, with your ChatGPT plan's image allowance), with these options as saved. <strong>The reference photos go to OpenAI</strong>, as they do when you paste the prompts into ChatGPT. Each picture waits for you under <a href="{{ url_for('main.artwork_review') }}">Review</a>; when the plan's allowance runs out, the rest wait for it to reset.</p>
+    <form method="post" action="{{ url_for('main.artwork_generate_from_prompts') }}" class="d-flex flex-wrap gap-2 align-items-center mb-3"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="engine" value="codex/image">
+      <button class="btn btn-primary">Make them with ChatGPT</button>
+    </form>
+    <h3 class="h6">Or make them locally</h3>
     <p class="small text-secondary mb-2">Your workers make the same pictures (these options, as saved) with a local image model: the photos never leave your computers. Each waits for your review under <a href="{{ url_for('main.artwork_review') }}">Review</a>; set workers up under <a href="{{ url_for('main.artwork_workers') }}">Workers</a>.</p>
     <form method="post" action="{{ url_for('main.artwork_generate_from_prompts') }}" class="d-flex flex-wrap gap-2 align-items-center"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button class="btn btn-outline-light">Generate these locally</button>

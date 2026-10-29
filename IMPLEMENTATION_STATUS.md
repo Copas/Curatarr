@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc42 (2026-10-29): Make them with ChatGPT (through Codex) from the Posters page; no automatic retries for Codex.
 - v0.2.0rc41 (2026-10-29): Qwen-Image-Edit for pictures with people; reference photos cropped to the head, the most typical used.
 - v0.2.0rc40 (2026-10-29): comparing generated pictures with the current ones, local alternatives, small faces cropped.
 - v0.2.0rc39 (2026-10-28): generating artwork from Curatarr through workers (ComfyUI's local models or Codex), with review before anything goes on, batches, and benchmarks.

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc42 (2026-10-29)
+
+- **Make them with ChatGPT, without copying prompts.** Posters → Artwork has a **Make them with ChatGPT** button beside the prompt writer: your worker sends each picture to ChatGPT's image tool through Codex, signed in on its computer, with the prompt options as saved, and each waits for you under Review. Tested end to end with a household's own photos. When the plan's image allowance runs out, the rest wait for it to reset.
+- **Codex isn't asked again by itself.** Text recognition can't read thin, spaced-out lettering, and each retry used the plan's allowance; ChatGPT's pictures now take one try each (the checks still show in review). Local models still try again when a title's misspelled.
+
 ## 0.2.0rc41 (2026-10-29)
 
 - **Qwen-Image-Edit, a better local engine for pictures of you.** Tested on a household's own photos and favourite films, FLUX.2 Klein lost people's likenesses and each film's look; Qwen-Image-Edit 2511 (a free download, docs/ARTWORK.md) kept them far better and dresses the cast as the film's own characters. When it's installed, it's used for pictures with people.

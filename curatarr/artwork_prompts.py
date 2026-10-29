@@ -334,5 +334,18 @@ def agent_prompt(
         lines.append(f"The look: {options['style']}")
     if feedback:
         lines.append(f"Changes asked for: {feedback}")
+    frame = {
+        "Banner": (
+            "The image tool makes 3:2 pictures and this one is cut to a strip "
+            "about 5.4 times as wide as it is high, from its middle: keep the "
+            "title and everything that matters inside a horizontal band across "
+            "the centre, a fifth of the height; the rest is cropped away."
+        ),
+        "Thumb": "Use the landscape 3:2 size; it's trimmed a little top and bottom to 16:9.",
+        "Backdrop": "Use the landscape 3:2 size; it's trimmed a little top and bottom to 16:9.",
+        "Primary": "Use the portrait 2:3 size.",
+        "Logo": "Make the background genuinely transparent.",
+    }[kind]
+    lines.append(frame)
     lines.append("Use the image tool once, for this one picture.")
     return "\n".join(lines)

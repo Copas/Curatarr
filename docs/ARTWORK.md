@@ -91,7 +91,7 @@ The worker is part of the Curatarr package (`curatarr-artwork-worker`). On the c
 | `backends.codex.enabled` | when Codex is found | offer Codex's image tool |
 | `backends.codex.model`, `timeout` | Codex's default, 900 | |
 | `checks.python` | the checks environment | a Python with `rapidocr_onnxruntime` and `insightface` |
-| `checks.title_retries` | 2 | more tries when the title comes out misspelled |
+| `checks.title_retries` | 2 | more tries when the title comes out misspelled (local models only: Codex is asked once, to spare the plan's allowance) |
 
 ## Engines
 
@@ -172,7 +172,7 @@ What the pictures showed, beyond the numbers:
 - **"They play the story's own characters, in their costumes"** in the prompt.
 - Not the film's original poster as a mood reference: it brought in the actors' faces (likeness 0.02).
 
-When a job leaves the engine to Curatarr and no default is set under Workers, it uses Krea 2 Turbo for logos and banners and Qwen-Image-Edit (or, without it, FLUX.2 Klein) for everything else (FLUX.2 Klein 9B first, when installed). FLUX.2 Klein 9B (a gated download; accept its licence on Hugging Face, then put its files in ComfyUI's `models`) and Codex weren't measured here: Codex's daily image allowance was used up during development.
+When a job leaves the engine to Curatarr and no default is set under Workers, it uses Krea 2 Turbo for logos and banners and Qwen-Image-Edit (or, without it, FLUX.2 Klein) for everything else (FLUX.2 Klein 9B first, when installed). FLUX.2 Klein 9B (a gated download; accept its licence on Hugging Face, then put its files in ComfyUI's `models`) and Codex wasn't benchmarked (its allowance is the plan's), but a household compared ChatGPT's pictures with the local ones on their own titles and preferred ChatGPT's every time; a test poster through Curatarr's Codex worker took 2 minutes 20 seconds and scored 0.59 for likeness.
 
 ## Privacy: what leaves the computer
 

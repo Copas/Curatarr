@@ -884,6 +884,10 @@ def artwork_generate_from_prompts():
             "external_ok": False,
         },
     }
+    if request.form.get("engine") == "codex/image":
+        # The button says the photos go to OpenAI: that's the permission.
+        spec["engine"] = "codex/image"
+        spec["options"]["external_ok"] = True
     try:
         batch = artwork_jobs.create_batch(
             spec,
