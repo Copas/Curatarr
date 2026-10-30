@@ -15,11 +15,11 @@
     <div class="d-flex flex-wrap gap-2 mt-2" id="chosen-titles">{% for m in chosen %}<span class="badge text-bg-secondary artwork-chip">{{ m.title }}<input type="hidden" name="media" value="{{ m.id }}"><button type="button" class="btn-close btn-close-white ms-1" aria-label="Remove {{ m.title }}" data-remove-chip></button></span>{% endfor %}</div>
   </div>
   <fieldset class="mb-3"><legend class="h6">Pictures to make</legend>
-    <div class="d-flex flex-wrap gap-3">{% for kind in kinds %}<div class="form-check"><input class="form-check-input" type="checkbox" name="kinds" value="{{ kind }}" id="g-kind-{{ kind }}"{% if kind in options.kinds %} checked{% endif %}><label class="form-check-label" for="g-kind-{{ kind }}">{{ kind_names[kind]|capitalize }}</label></div>{% endfor %}</div>
+    <div class="d-flex flex-wrap gap-3">{% for kind in kinds %}<div class="form-check"><input class="form-check-input" type="checkbox" name="kinds" value="{{ kind }}" id="g-kind-{{ kind }}"{% if kind in saved.get('kinds', options.kinds) %} checked{% endif %}><label class="form-check-label" for="g-kind-{{ kind }}">{{ kind_names[kind]|capitalize }}</label></div>{% endfor %}</div>
     <div class="form-text">Several make a matching set: the poster is made first, and the rest match its cast and look, each a different scene.</div>
   </fieldset>
   <fieldset class="mb-3"><legend class="h6">Who they're for</legend>
-    {% if accounts %}<div class="d-flex flex-wrap gap-3">{% for id, name in accounts %}<div class="form-check"><input class="form-check-input" type="checkbox" name="accounts" value="{{ id }}" id="g-acc-{{ id }}"><label class="form-check-label" for="g-acc-{{ id }}">{{ name }}</label></div>{% endfor %}</div>
+    {% if accounts %}<div class="d-flex flex-wrap gap-3">{% for id, name in accounts %}<div class="form-check"><input class="form-check-input" type="checkbox" name="accounts" value="{{ id }}" id="g-acc-{{ id }}"{% if id in saved.get('accounts', []) %} checked{% endif %}><label class="form-check-label" for="g-acc-{{ id }}">{{ name }}</label></div>{% endfor %}</div>
     <div class="form-text">None ticked: everyone. Ticked accounts get them through the Curatarr plugin; everyone else keeps the usual art.</div>{% else %}<p class="small text-secondary mb-0">Everyone (Curatarr hasn't read Jellyfin's accounts yet).</p>{% endif %}
   </fieldset>
   <div class="row g-3 mb-3">
@@ -27,7 +27,7 @@
       <select class="form-select" name="engine" id="g-engine"><option value="auto">Best available on this computer's workers</option>{% for e in engines %}<option value="{{ e.engine }}"{% if e.engine == suggested %} selected{% endif %}>{{ e.label }}{% if e.external %} (outside service){% endif %}{% if not e.workers|selectattr(1)|list %} (no worker online){% endif %}</option>{% endfor %}</select>
       <div class="form-text">"Best available" picks the engine chosen for each type under Workers, else one on your own computers. An outside service (Codex, ChatGPT) is only used when chosen here.{% if suggested != 'auto' %} Your workers only offer {{ engines[0].label }}, so it's chosen.{% endif %}</div></div>
     <div class="col-md-6"><label class="form-label" for="g-worker">Worker</label>
-      <select class="form-select" name="worker" id="g-worker"><option value="">Any that can make it</option>{% for w in workers %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div>
+      <select class="form-select" name="worker" id="g-worker"><option value="">Any that can make it</option>{% for w in workers %}<option value="{{ w.id }}"{% if saved.get('worker') == w.id %} selected{% endif %}>{{ w.name }}</option>{% endfor %}</select></div>
   </div>
   <h2 class="h5 mt-2">Cast and look</h2>
   <div class="row g-3 mb-3">
@@ -35,12 +35,12 @@
       <input class="form-control" type="text" name="photos" id="g-photos" value="{{ photos }}" placeholder="/path/to/photos" aria-describedby="g-photos-help">
       <div id="g-photos-help" class="form-text">Optional. Each file name starts with who's in it ("Sam 1.jpg"). With photos, those people play the leads.{% if people %} Found: {{ people.keys()|join(', ') }}.{% elif photos %} No photos found there.{% endif %}</div></div>
     <div class="col-md-6"><label class="form-label" for="g-cast">Who's in them</label>
-      <input class="form-control" type="text" name="cast" id="g-cast" value="" placeholder="{{ people.keys()|join(', ') if people else 'Everyone in the folder' }}" aria-describedby="g-cast-help">
+      <input class="form-control" type="text" name="cast" id="g-cast" value="{{ saved.get('cast', '') }}" placeholder="{{ people.keys()|join(', ') if people else 'Everyone in the folder' }}" aria-describedby="g-cast-help">
       <div id="g-cast-help" class="form-text">Names, separated by commas (up to three). Empty: everyone in the folder.</div></div>
     <div class="col-12"><label class="form-label" for="g-style">The look</label>
-      <textarea class="form-control" name="style" id="g-style" rows="3">{{ options.style }}</textarea></div>
-    <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="originals" id="g-originals"{% if options.originals %} checked{% endif %}><label class="form-check-label" for="g-originals">Use each title's original art as a reference (its logo's lettering, and for Codex, its poster's feel)</label></div>
-      <div class="form-check"><input class="form-check-input" type="checkbox" name="external_ok" id="g-external"><label class="form-check-label" for="g-external">Allow the reference photos to be sent to an outside service (Codex sends them to OpenAI). Local engines never send anything off the worker.</label></div></div>
+      <textarea class="form-control" name="style" id="g-style" rows="3">{{ saved.get('style', options.style) }}</textarea></div>
+    <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="originals" id="g-originals"{% if saved.get('originals', options.originals) %} checked{% endif %}><label class="form-check-label" for="g-originals">Use each title's original art as a reference (its logo's lettering, and for Codex, its poster's feel)</label></div>
+      <div class="form-check"><input class="form-check-input" type="checkbox" name="external_ok" id="g-external"{% if saved.get('external_ok') %} checked{% endif %}><label class="form-check-label" for="g-external">Allow the reference photos to be sent to an outside service (Codex sends them to OpenAI). Local engines never send anything off the worker.</label></div></div>
   </div>
   <div><button class="btn btn-primary">Generate</button> <span class="small text-secondary ms-2">Prefer to paste prompts into an AI yourself? <a href="{{ url_for('main.custom_posters_page') }}#prompts">Write prompts</a> still works.</span></div>
 </form>

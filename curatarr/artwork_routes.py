@@ -149,6 +149,27 @@ def _who() -> str | None:
     return (current_user() or {}).get("name")
 
 
+FORM_KEY = "artwork_form"
+
+
+def _remembered(form: str) -> dict:
+    """What this person chose on ``form`` last time, to start from."""
+    from .auth import current_user
+    from .services import setting
+
+    who = (current_user() or {}).get("id") or "anyone"
+    return setting(f"{FORM_KEY}:{form}:{who}") or {}
+
+
+def _remember(form: str, values: dict) -> None:
+    from .auth import current_user
+    from .services import set_setting
+
+    who = (current_user() or {}).get("id") or "anyone"
+    set_setting(f"{FORM_KEY}:{form}:{who}", values)
+    db.session.commit()
+
+
 def _page() -> int:
     try:
         return max(1, int(request.args.get("page") or 1))
@@ -185,14 +206,18 @@ def artwork_generate():
         )
         if m is not None
     ]
-    photos = request.args.get("photos", options["photos"])
+    saved = _remembered("generate")
+    photos = request.args.get("photos", saved.get("photos", options["photos"]))
     engines = artwork_jobs.engines()
     local = [e for e in engines if not e["external"]]
     # Only an outside service (Codex) on offer: it's the one to choose.
     suggested = engines[0]["engine"] if engines and not local else "auto"
+    if saved.get("engine") in {"auto", *(e["engine"] for e in engines)}:
+        suggested = saved["engine"]
     return render_template(
         "artwork_generate.html",
         suggested=suggested,
+        saved=saved,
         options=options,
         chosen=chosen,
         photos=photos,
@@ -265,6 +290,20 @@ def artwork_generate_submit():
         return redirect(url_for("main.artwork_generate"))
     kinds = request.form.getlist("kinds")
     options = _job_options(request.form)
+    _remember(
+        "generate",
+        {
+            "kinds": kinds,
+            "accounts": _scope(request.form),
+            "engine": request.form.get("engine") or "auto",
+            "worker": request.form.get("worker") or "",
+            "photos": options["photos"],
+            "cast": ", ".join(options["cast"]),
+            "style": options["style"],
+            "originals": options["originals"],
+            "external_ok": options["external_ok"],
+        },
+    )
     if options["photos"] and not Path(options["photos"]).is_dir():
         flash(f"Curatarr can't find the folder {options['photos']}.", "danger")
         return redirect(url_for("main.artwork_generate", media=[m.id for m in titles]))
@@ -515,8 +554,11 @@ def artwork_batches():
     spec = None
     if request.args.get("preview"):
         spec = _batch_spec(request.args)
+        _remember("batch", spec)
         titles = artwork_jobs.batch_titles(spec)
         preview = {"count": len(titles), "titles": titles[:50]}
+    else:
+        spec = _remembered("batch") or None
     batches = (
         db.session.query(ArtworkBatch)
         .filter_by(purpose="library")
@@ -563,6 +605,7 @@ def _batch_spec(form) -> dict:
 @bp.post("/library/posters/batches")
 def artwork_batch_create():
     spec = _batch_spec(request.form)
+    _remember("batch", spec)
     if spec["options"]["photos"] and not Path(spec["options"]["photos"]).is_dir():
         flash(f"Curatarr can't find the folder {spec['options']['photos']}.", "danger")
         return redirect(url_for("main.artwork_batches"))
@@ -738,6 +781,7 @@ def artwork_benchmarks():
         aspects=artwork_bench.ASPECTS,
         ratings_of=artwork_bench.ratings_of,
         options=custom_posters.prompt_options(),
+        saved=_remembered("benchmark"),
         defaults=artwork_jobs.settings().get("defaults") or {},
         engine_label=_engine_label,
         **_common(),
@@ -753,6 +797,16 @@ def artwork_benchmark_start():
         flash(f"Curatarr can't find the folder {photos}.", "danger")
         return redirect(url_for("main.artwork_benchmarks"))
     cast = [n.strip() for n in (request.form.get("cast") or "").split(",") if n.strip()]
+    _remember(
+        "benchmark",
+        {
+            "engines": request.form.getlist("engines"),
+            "scenarios": request.form.getlist("scenarios"),
+            "photos": photos,
+            "cast": ", ".join(cast),
+            "external_ok": request.form.get("external_ok") in {"on", "1"},
+        },
+    )
     try:
         run = artwork_bench.start(
             request.form.getlist("engines"),

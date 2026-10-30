@@ -1327,3 +1327,62 @@ def test_a_busy_database_asks_the_worker_to_come_back(app, client, monkeypatch):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 503 and "busy" in response.get_json()["error"]
+
+
+def test_the_forms_remember_their_last_choices(app, client, monkeypatch, tmp_path):
+    _library, media, _part = _movie()
+    _jellyfin(monkeypatch, _picture("#223344"))
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    worker_row, _token = artwork_jobs.create_worker("Codex PC", 1)
+    worker_row.capabilities = artwork_jobs._clean_capabilities(
+        [
+            {
+                "engine": "codex/image",
+                "label": "Codex",
+                "references": True,
+                "external": True,
+            }
+        ]
+    )
+    db.session.commit()
+    client.post(
+        "/library/posters/generate",
+        data={
+            "media": [media.id],
+            "kinds": ["Primary", "Logo"],
+            "engine": "codex/image",
+            "photos": str(photos),
+            "cast": "Sam",
+            "style": "Moody.",
+            "external_ok": "on",
+            "worker": worker_row.id,
+        },
+    )
+    page = client.get("/library/posters/generate").text
+    assert 'name="external_ok" id="g-external" checked' in page
+    assert (
+        'id="g-kind-Logo" checked' in page and 'id="g-kind-Thumb" checked' not in page
+    )
+    assert 'value="Sam"' in page and "Moody.</textarea>" in page
+    assert f'value="{worker_row.id}" selected' in page
+    assert 'value="codex/image" selected' in page
+    client.get(
+        "/library/posters/batches",
+        query_string={
+            "preview": "1",
+            "titles": "movies",
+            "kinds": ["Banner"],
+            "external_ok": "on",
+        },
+    )
+    page = client.get("/library/posters/batches").text
+    assert 'id="b-kind-Banner" checked' in page and 'id="f-external" checked' in page
+    assert 'value="movies" selected' in page
+    client.post(
+        "/library/posters/benchmarks",
+        data={"engines": ["codex/image"], "scenarios": ["logo"], "external_ok": "on"},
+    )
+    page = client.get("/library/posters/benchmarks").text
+    assert 'name="external_ok" id="b-ext" checked' in page
+    assert 'id="bs-logo" checked' in page and 'id="bs-portrait" checked' not in page

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc47 (2026-10-30)
+
+- **Generate, Batches and Benchmarks remember your choices.** Each form starts from what you chose last time, kept for you on the server (so on every device): the picture types, who they're for, the engine and worker, the photos and who's in them, the look, and the box allowing the photos to go to an outside service, so it's ticked once and stays ticked.
+
 ## 0.2.0rc46 (2026-10-30)
 
 - **See each picture as soon as it's made.** Posters → Jobs shows a small preview of every finished picture beside its job, as it arrives (the page updates itself while anything's being made); click one to review it on the job's page.
