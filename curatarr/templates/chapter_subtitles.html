@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Subtitles · Curatarr{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow">Enhance</div><h1>Subtitles</h1><p class="text-secondary mb-0">Downloaded English subtitles are often timed for another release of the film, so lines turn up early or late. Curatarr listens to a few minutes of each film and matches what's said to the subtitle lines: ones off by a steady amount are re-timed (the original kept as “.unsynced”), and ones that can't be fixed that way are set aside (“.out-of-sync”) while Curatarr makes its own.</p></div></header>
+{% if not summary.files %}<div class="alert alert-info">No file locations are recorded yet.</div>{% endif %}
+{% include '_subtitle_summary.html' %}
+{% set groups = [
+  ('resynced', 'Re-timed', 'Off by a steady delay or drift, and now matching the speech. Undo puts back the original.', true),
+  ('set_aside', 'Set aside', "Out by different amounts in different places (another cut), or not this film's words: Curatarr made its own. Bring back restores the file.", true),
+  ('unknown', "Couldn't tell", 'Too little English speech in the stretches listened to, or subtitles only for signs and other languages. Left as they are.', false),
+  ('chosen', 'Changed by you', 'Re-timing undone, or set-aside files brought back. Left that way until the file changes.', false),
+  ('own', "Curatarr's own asked for", "Files given Curatarr's own subtitles whatever they had.", false),
+  ('in_sync', 'In sync', 'Matching the speech already. Nothing was changed.', false),
+] %}
+{% for key, title, hint, open in groups %}{% set items = found.groups[key] %}{% if items %}
+<details class="mb-3" id="subs-group-{{ key }}"{% if open %} open{% endif %}>
+  <summary class="h5">{{ title }} <span class="text-secondary">({{ found.counts[key]|commas }})</span></summary>
+  <p class="small text-secondary mt-2">{{ hint }}{% if found.counts[key] > items|length %} The latest {{ items|length }} are shown.{% endif %}</p>
+  {% set seen = [] %}{% for state, _name, _entry in items %}{% if state.id not in seen %}{% set _ = seen.append(state.id) %}{% include '_subtitle_card.html' %}{% endif %}{% endfor %}
+</details>
+{% endif %}{% endfor %}
+{% if not (found.counts.values()|sum) %}<div class="empty-state"><p class="mb-0">Nothing checked yet. Files with English subtitles beside them are checked in the background, a few at a time, when subtitles are on for their library (Settings → Enhance → Subtitles).</p></div>{% endif %}
+<script src="{{ url_for('static', filename='artwork-actions.js', v='2') }}"></script>
+{% endblock %}

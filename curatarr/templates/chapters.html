@@ -18,6 +18,7 @@
   <div class="stat-grid stat-grid-done mb-3">
     {{ stat('Chapters added', summary.generated, 'files that had none') }}
     {{ stat('Subtitles added', summary.subtitles_generated, 'files with no English ones') }}
+    {% if summary.subtitles_resynced %}<div><h3 class="stat-label mb-0"><a href="{{ url_for('main.chapter_subtitle_sync') }}">Subtitles re-timed</a></h3><p class="stat-value mb-0">{{ summary.subtitles_resynced|commas }}</p><p class="stat-hint mb-0">were out of sync with the speech</p></div>{% endif %}
     {{ stat('Recaps marked', summary.recaps_found, '"previously on", skippable') }}
     {{ stat('Previews marked', summary.previews_found, '"next time on", skippable') }}
     {{ stat('Bad skip markers hidden', summary.markers_hidden, 'Intro Skipper guesses that were wrong') }}

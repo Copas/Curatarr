@@ -1,0 +1,24 @@
+{# One file's subtitles on Enhance → Subtitles: what the sync check found and
+   did, with Undo / Bring back / Check again. Redrawn in place after those. #}
+{% set labels = {'in_sync': 'In sync', 'resynced': 'Re-timed', 'set_aside': 'Set aside', 'unknown': "Couldn't tell", 'unchecked': "Couldn't check", 'undone': 'Re-timing undone by you', 'kept': 'Brought back by you'} %}
+<div class="card p-3 mb-2 subtitle-card" id="subs-{{ state.id }}" data-live="card" data-live-id="{{ state.id }}" data-live-url="{{ url_for('main.chapter_subtitle_card', state_id=state.id) }}">
+  <div class="d-flex flex-wrap justify-content-between gap-2">
+    <div><a class="fw-semibold" href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}</div>
+    {% if state.job_state in ('queued', 'running') %}<span class="badge text-bg-secondary align-self-start">{{ 'Being checked' if state.job_state == 'running' else 'Waiting to be checked' }}</span>{% endif %}
+  </div>
+  {% if (state.subtitle_sync or {}).get('own') %}<p class="small mb-1 mt-1">Curatarr's own subtitles asked for{% if state.subtitle_status == 'generated' %}, and made{% endif %}.</p>{% endif %}
+  {% for name, entry in entries(state) %}{% set r = entry.result or {} %}
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2">
+    <div class="small">
+      <div class="text-break text-secondary">{{ name }}</div>
+      <div><strong>{{ labels.get(entry.outcome, entry.outcome or 'Not checked yet') }}</strong>{% if entry.outcome in ('resynced', 'undone') and r.reason %}: they were {{ r.reason }}{% elif entry.outcome == 'set_aside' %}{% if r.reason %}: {{ r.reason[:1]|lower }}{{ r.reason[1:] }}{% endif %}. {{ "Curatarr's own are beside it." if state.subtitle_status == 'generated' else "Curatarr's own are on the way." }}{% elif entry.outcome in ('unknown', 'unchecked', 'kept') and (r.reason or entry.reason) %}: {{ r.reason or entry.reason }}{% endif %}{% if r.points %} <span class="text-secondary">({{ r.points }} of {{ r.spoken }} spoken lines matched)</span>{% endif %}</div>
+      {% if entry.checked_at %}<div class="text-secondary">Checked {{ entry.checked_at|when }}</div>{% endif %}
+    </div>
+    <form method="post" class="d-flex gap-2" data-async><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ name }}">
+      {% if entry.outcome == 'resynced' and entry.backup %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.chapter_subtitle_action', state_id=state.id, action='undo') }}" data-tip="Puts back the file as it was before re-timing ({{ entry.backup }}), and leaves it that way.">Undo</button>{% endif %}
+      {% if entry.outcome == 'set_aside' %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.chapter_subtitle_action', state_id=state.id, action='restore') }}" data-tip="Brings back the file set aside ({{ entry.aside }}) and leaves it that way. Curatarr's own stay beside it; remove them from the file's page if you don't want them.">Bring back</button>{% endif %}
+      {% if state.job_state not in ('queued', 'running') %}<button class="btn btn-sm btn-outline-secondary" formaction="{{ url_for('main.chapter_subtitle_action', state_id=state.id, action='recheck') }}" data-tip="Listens to the film again and decides afresh.">Check again</button>{% endif %}
+    </form>
+  </div>
+  {% endfor %}
+</div>

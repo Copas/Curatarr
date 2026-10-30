@@ -1,6 +1,6 @@
-// Review and a job's page: Approve, Turn down, Make it again and the job's
-// own buttons work in place, without reloading the page, so going through
-// many pictures is quick. On Review, a picture that's dealt with folds to a
+// Buttons that work in place, without reloading the page: Review and a job's
+// page (Approve, Turn down, Make it again, the job's own buttons), so going
+// through many pictures is quick, and Enhance → Subtitles. On Review, a picture that's dealt with folds to a
 // one-line note and the next moves up; on a job's page, just that picture
 // (and the top of the page) is redrawn. If the background request fails,
 // the form is sent the usual way, so nothing's lost.
@@ -26,7 +26,10 @@
         if (!html) return;
         var holder = document.createElement("div");
         holder.innerHTML = html.trim();
-        if (holder.firstElementChild) el.replaceWith(holder.firstElementChild);
+        var next = holder.firstElementChild;
+        if (!next) return;
+        el.replaceWith(next);
+        if (window.curatarrLocalTime) window.curatarrLocalTime(next);
       });
   }
 

@@ -1,0 +1,25 @@
+{# Enhance → Subtitles: the counts, the background check's progress and the
+   page-wide buttons. Redrawn in place after any button on the page. #}
+{% from '_confirm.html' import confirm_submit %}
+{% set c = found.counts %}{% set run = found.pass %}
+<section class="card p-3 mb-3" data-live="head" data-live-id="summary" data-live-url="{{ url_for('main.chapter_subtitle_summary') }}" aria-labelledby="sync-heading">
+  <h2 class="section-label" id="sync-heading">What happened</h2>
+  <div class="stat-grid stat-grid-done mb-3">
+    <div><h3 class="stat-label mb-0">Checked</h3><p class="stat-value mb-0">{{ (c.in_sync + c.resynced + c.set_aside + c.unknown + c.chosen)|commas }}</p><p class="stat-hint mb-0">subtitle files beside a video</p></div>
+    <div><h3 class="stat-label mb-0">In sync</h3><p class="stat-value mb-0">{{ c.in_sync|commas }}</p><p class="stat-hint mb-0">left as they were</p></div>
+    <div><h3 class="stat-label mb-0">Re-timed</h3><p class="stat-value mb-0">{{ c.resynced|commas }}</p><p class="stat-hint mb-0">off by a steady amount, now matching</p></div>
+    <div><h3 class="stat-label mb-0">Set aside</h3><p class="stat-value mb-0">{{ c.set_aside|commas }}</p><p class="stat-hint mb-0">couldn't be fixed; Curatarr made its own</p></div>
+    <div><h3 class="stat-label mb-0">Couldn't tell</h3><p class="stat-value mb-0">{{ c.unknown|commas }}</p><p class="stat-hint mb-0">too little speech, or not English</p></div>
+    <div><h3 class="stat-label mb-0">Made by Curatarr</h3><p class="stat-value mb-0">{{ summary.subtitles_generated|commas }}</p><p class="stat-hint mb-0">files with no usable English ones</p></div>
+  </div>
+  <p class="small text-secondary mb-3" role="status">{% if not run.total %}No files rely on a subtitle file beside them yet.{% elif run.finished_at %}The library's subtitle files have all been looked at.{% if run.waiting %} {{ run.waiting|commas }} still being checked.{% endif %}{% else %}Checking the library's subtitle files in the background: {{ run.looked|commas }} of {{ run.total|commas }} looked at{% if run.waiting %}, {{ run.waiting|commas }} being checked now{% endif %}.{% endif %}{% if summary.needing_subtitles %} {{ summary.needing_subtitles|commas }} {{ 'file has' if summary.needing_subtitles == 1 else 'files have' }} no English subtitles yet.{% endif %}</p>
+  <div class="d-flex flex-wrap gap-2 align-items-start">
+    <form method="post" action="{{ url_for('main.chapter_subtitles_check_all') }}" data-async><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light" data-tip="Every English subtitle file beside a video is listened to again, a few at a time, as if never checked. Ones you undid or brought back stay as they are.">Check all again</button></form>
+    {% if summary.needing_subtitles %}<form method="post" action="{{ url_for('main.chapter_subtitles') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light" data-tip="Queues the English-audio files with no English subtitles to get a subtitle file made from what's said.">Make subtitles for {{ summary.needing_subtitles|commas }} without</button></form>{% endif %}
+    <form method="post" action="{{ url_for('main.chapter_subtitles_make_all') }}" data-async>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {{ confirm_submit("Make Curatarr's own for every file", "Transcribe every file and add Curatarr's subtitles beside it, even where English ones exist (they're kept, so there'll be two to pick from)? It takes days of transcription for a whole library. Removing Curatarr's from a file's page undoes it there.", 'Make them all', style='btn-outline-light', tip="Curatarr's own subtitles beside every English-audio file, alongside any it already has.") }}
+    </form>
+    <a class="btn btn-sm btn-link" href="{{ url_for('main.chapter_settings') }}#subtitles">Subtitle settings</a>
+  </div>
+</section>

@@ -1640,6 +1640,15 @@ def _check_sync(state, part, media, path, info, names, config, opts, fields):
                 payload={"file": str(target), "aside": aside.name} | result.as_dict(),
             )
             continue
+        if result.verdict == "in_sync" and known.get("outcome") == "resynced":
+            # Checked again after Curatarr re-timed it: still say so.
+            entry |= {
+                "outcome": "resynced",
+                "backup": known.get("backup"),
+                "result": known.get("result"),
+            }
+            kept = resynced = True
+            continue
         entry["outcome"] = result.verdict  # in_sync, or unknown: left alone
         kept = True
     state.subtitle_sync = record | {"files": files}
@@ -1654,7 +1663,8 @@ def _check_sync(state, part, media, path, info, names, config, opts, fields):
 
 def _restore_set_aside(state, path) -> bool:
     """Puts back subtitles set aside as out of sync (when Curatarr's own are
-    removed). True if any were."""
+    removed), and forgets asking for Curatarr's own regardless. True if any
+    were put back."""
     video = Path(path)
     record = dict(state.subtitle_sync or {})
     files = dict(record.get("files") or {})
@@ -1670,6 +1680,7 @@ def _restore_set_aside(state, path) -> bool:
                 continue
             files[name] = {}  # checked again if a subtitle job runs
             restored = True
+    record.pop("own", None)  # removed: no longer wanted regardless
     state.subtitle_sync = record | {"files": files}
     return restored
 
@@ -1721,7 +1732,8 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
             error=f"{target.name} already exists and was not written by Curatarr",
             fields=fields,
         )
-    if not ours:
+    own = bool((state.subtitle_sync or {}).get("own"))  # asked for regardless
+    if not ours and not own:
         if embedded_english(info.streams, text_only=True):
             return _subtitles_done(state, "existing", fields=fields)
         outside = sidecar_english(path, text_only=True)
@@ -2790,6 +2802,7 @@ def maintenance_summary(library_id=None) -> dict:
         "markers_checked": checked,
         "markers_possible": checked + to_check,
         "subtitles_generated": subtitles.get("generated", 0),
+        "subtitles_resynced": subtitles.get("resynced", 0),
         "subtitles_existing": subtitles.get("existing", 0)
         + subtitles.get("resynced", 0)
         + subtitles.get("pictures", 0),

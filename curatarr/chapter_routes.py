@@ -1,6 +1,14 @@
 """Chapter generation pages: settings, library maintenance, and one file."""
 
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import (
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 
 from . import db
 from .chapters import (
@@ -61,6 +69,7 @@ NAV_SECTIONS.update(
         "main.chapter_part": "enhance",
         "main.chapter_markers": "enhance",
         "main.chapter_dubs": "enhance",
+        "main.chapter_subtitle_sync": "enhance",
         "main.chapter_problems": "enhance",
         "main.chapter_identity": "enhance",
         "main.transcript_search": "library",
@@ -273,6 +282,107 @@ def chapter_subtitles():
         "success",
     )
     return redirect(url_for("main.chapter_maintenance", library=library_id))
+
+
+# --- Enhance → Subtitles -------------------------------------------------------
+
+
+def _answer(message, category="success"):
+    """An action's answer: to the page in the background (artwork-actions.js),
+    or flashed and back to Subtitles."""
+    if request.headers.get("X-Curatarr-Async") == "1":
+        return jsonify(
+            {
+                "ok": category not in ("danger", "warning"),
+                "messages": [{"category": category, "text": message}],
+            }
+        )
+    flash(message, category)
+    return redirect(url_for("main.chapter_subtitle_sync"))
+
+
+def _subtitle_page_values():
+    from . import outside_subtitles
+
+    return {
+        "found": outside_subtitles.overview(),
+        "entries": outside_subtitles.entries,
+        "file_label": file_label,
+        "summary": maintenance_summary(),
+    }
+
+
+@bp.get("/chapters/subtitles")
+def chapter_subtitle_sync():
+    """English subtitles: whether they're in sync, and what was done."""
+    return render_template("chapter_subtitles.html", **_subtitle_page_values())
+
+
+@bp.get("/chapters/subtitles/summary")
+def chapter_subtitle_summary():
+    return render_template("_subtitle_summary.html", **_subtitle_page_values())
+
+
+@bp.get("/chapters/subtitles/<state_id>/card")
+def chapter_subtitle_card(state_id):
+    from . import outside_subtitles
+
+    state = db.session.get(ChapterState, state_id) or abort(404)
+    return render_template(
+        "_subtitle_card.html",
+        state=state,
+        entries=outside_subtitles.entries,
+        file_label=file_label,
+    )
+
+
+@bp.post("/chapters/subtitles/<state_id>/<action>")
+def chapter_subtitle_action(state_id, action):
+    from . import outside_subtitles
+
+    state = db.session.get(ChapterState, state_id)
+    if not state or action not in ("undo", "restore", "recheck"):
+        abort(404)
+    name = request.form.get("name", "")
+    try:
+        if action == "undo":
+            message = outside_subtitles.undo(state, name)
+        elif action == "restore":
+            message = outside_subtitles.restore(state, name)
+        else:
+            message = outside_subtitles.recheck(state)
+    except (ValueError, OSError) as exc:
+        db.session.rollback()
+        return _answer(str(exc), "warning")
+    if action != "recheck":
+        from .enrichment import _refresh_jellyfin
+
+        _refresh_jellyfin(state.part, state.part.media)
+    return _answer(message)
+
+
+@bp.post("/chapters/subtitles/check-all")
+def chapter_subtitles_check_all():
+    from . import outside_subtitles
+
+    count = outside_subtitles.check_all()
+    return _answer(
+        f"Checking every English subtitle file again, a few at a time "
+        f"({count:,} checked before). Ones you undid or brought back stay as "
+        "they are."
+    )
+
+
+@bp.post("/chapters/subtitles/make-all")
+def chapter_subtitles_make_all():
+    from . import outside_subtitles
+
+    count = outside_subtitles.make_own_for_all()
+    return _answer(
+        f"Queued {count:,} file{'' if count == 1 else 's'} for Curatarr's own "
+        "subtitles, made from what's "
+        "said. Ones that have English subtitles keep them too."
+    )
 
 
 @bp.post("/chapters/queue")

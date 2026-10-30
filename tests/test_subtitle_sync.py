@@ -200,19 +200,111 @@ def test_the_check_can_be_switched_off(sync_env):
 
 
 def test_subtitles_the_library_already_had_are_checked_a_few_at_a_time(sync_env):
-    from curatarr import subtitle_sync_sweep
+    from curatarr import outside_subtitles
 
     part, sidecar, speech, _calls, _arr = sync_env
     state = _run(part)  # no subtitles yet: Curatarr's own are made
     generated_path(part.file_path).unlink()
     state.subtitle_status, state.subtitle_fingerprint = "existing", None
     db.session.commit()
-    assert subtitle_sync_sweep.sweep() == 0  # nothing beside it to check
-    set_setting(subtitle_sync_sweep.KEY, {})
+    assert outside_subtitles.sweep() == 0  # nothing beside it to check
+    set_setting(outside_subtitles.KEY, {})
     sidecar.write_text(_subtitles(speech, lambda t: 8.0 + t), encoding="utf-8")
-    assert subtitle_sync_sweep.sweep() == 1
+    assert outside_subtitles.sweep() == 1
     assert _state(part).requested_action == "subtitles"
     enrichment.dispatch(synchronous=True)
     assert _state(part).subtitle_status == "resynced"
-    set_setting(subtitle_sync_sweep.KEY, {})
-    assert subtitle_sync_sweep.sweep() == 0  # checked as it is now
+    set_setting(outside_subtitles.KEY, {})
+    assert outside_subtitles.sweep() == 0  # checked as it is now
+
+
+ASYNC = {"X-Curatarr-Async": "1"}
+
+
+def test_the_subtitles_page_shows_what_happened_and_undoes_it(app, client, sync_env):
+    part, sidecar, speech, _calls, _arr = sync_env
+    original = _subtitles(speech, lambda t: 8.0 + t)
+    sidecar.write_text(original, encoding="utf-8")
+    state = _run(part)
+    page = client.get("/chapters/subtitles").get_data(as_text=True)
+    assert "Re-timed" in page and "8.0 s late at the start" in page
+    assert ">Subtitles<" in page  # the Enhance tab
+    assert "Make Curatarr&#39;s own for every file" in page
+    card = client.get(f"/chapters/subtitles/{state.id}/card").get_data(as_text=True)
+    assert 'data-live="card"' in card and "Undo" in card
+    assert 'data-live="head"' in client.get("/chapters/subtitles/summary").get_data(
+        as_text=True
+    )
+    answer = client.post(
+        f"/chapters/subtitles/{state.id}/undo",
+        data={"name": "Film.en.srt"},
+        headers=ASYNC,
+    ).get_json()
+    assert answer["ok"] and "original timing" in answer["messages"][0]["text"]
+    assert sidecar.read_text() == original
+    assert not sidecar.with_name("Film.en.srt.unsynced").exists()
+    state = _state(part)
+    assert state.subtitle_status == "existing"
+    assert state.subtitle_sync["files"]["Film.en.srt"]["outcome"] == "undone"
+    # Your choice stands: checking everything again leaves it alone.
+    from curatarr import outside_subtitles
+
+    assert outside_subtitles.check_all() == 0
+    assert outside_subtitles.sweep() == 0
+    # Undoing twice is refused, politely.
+    again = client.post(
+        f"/chapters/subtitles/{state.id}/undo",
+        data={"name": "Film.en.srt"},
+        headers=ASYNC,
+    ).get_json()
+    assert not again["ok"] and "weren't re-timed" in again["messages"][0]["text"]
+
+
+def test_set_aside_subtitles_can_be_brought_back(app, client, sync_env):
+    part, sidecar, speech, _calls, _arr = sync_env
+    text = _subtitles(speech, lambda t: t if t < DURATION / 2 else t + 6.0)
+    sidecar.write_text(text, encoding="utf-8")
+    state = _run(part)
+    assert "Set aside" in client.get("/chapters/subtitles").get_data(as_text=True)
+    answer = client.post(
+        f"/chapters/subtitles/{state.id}/restore",
+        data={"name": "Film.en.srt"},
+        headers=ASYNC,
+    ).get_json()
+    assert answer["ok"] and sidecar.read_text() == text
+    assert generated_path(part.file_path).exists()  # Curatarr's stay
+    assert _state(part).subtitle_sync["files"]["Film.en.srt"]["outcome"] == "kept"
+
+
+def test_check_again_and_check_all(app, client, sync_env):
+    from curatarr import outside_subtitles
+
+    part, sidecar, speech, _calls, _arr = sync_env
+    sidecar.write_text(_subtitles(speech, lambda t: 8.0 + t), encoding="utf-8")
+    state = _run(part)
+    answer = client.post(
+        f"/chapters/subtitles/{state.id}/recheck", headers=ASYNC
+    ).get_json()
+    assert answer["ok"] and _state(part).job_state == "queued"
+    enrichment.dispatch(synchronous=True)
+    state = _state(part)
+    # In sync now, but still listed as what Curatarr re-timed.
+    assert state.subtitle_status == "resynced"
+    assert state.subtitle_sync["files"]["Film.en.srt"]["backup"]
+    assert client.post("/chapters/subtitles/check-all", headers=ASYNC).get_json()["ok"]
+    assert outside_subtitles.sweep() == 1
+
+
+def test_curatarrs_own_for_every_file(app, client, sync_env):
+    part, sidecar, speech, _calls, _arr = sync_env
+    sidecar.write_text(_subtitles(speech, lambda t: t), encoding="utf-8")
+    assert _run(part).subtitle_status == "existing"
+    answer = client.post("/chapters/subtitles/make-all", headers=ASYNC).get_json()
+    assert answer["ok"] and "Queued 1 file" in answer["messages"][0]["text"]
+    enrichment.dispatch(synchronous=True)
+    assert _state(part).subtitle_status == "generated"
+    assert generated_path(part.file_path).exists() and sidecar.exists()
+    # Removed again: no longer wanted regardless.
+    enrichment.request(part, "remove_subtitles")
+    enrichment.dispatch(synchronous=True)
+    assert not (_state(part).subtitle_sync or {}).get("own")

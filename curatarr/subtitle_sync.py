@@ -205,6 +205,8 @@ def judge(lines: list[Line], segments: list[Segment], duration: float) -> Result
             result.verdict = "mismatch"
             result.reason = (
                 f"Only {len(points)} of {spoken} spoken lines are in the subtitles"
+                if points
+                else f"None of {spoken} spoken lines are in the subtitles"
             )
         else:
             result.reason = f"Too little speech to compare ({len(points)} lines)"

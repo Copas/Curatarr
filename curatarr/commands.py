@@ -331,9 +331,9 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Checking for picture-only subtitles failed")
     try:
-        from . import subtitle_sync_sweep
+        from . import outside_subtitles
 
-        subtitle_sync_sweep.sweep()
+        outside_subtitles.sweep()
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Checking subtitles' sync failed")
