@@ -6,10 +6,10 @@
 {% set latest = waiting[-1] if waiting else None %}
 {% set approved = image.candidates|selectattr('decision', 'equalto', 'approved')|list %}
 {% set noun = kind_names[image.kind] %}
-<section class="card p-3 mb-3 artwork-image" id="image-{{ image.id }}">
+<section class="card p-3 mb-3 artwork-image" id="image-{{ image.id }}" data-live="image" data-live-id="{{ image.id }}" data-live-key="{{ live_key(image) }}" data-live-url="{{ url_for('main.artwork_image_panel', image_id=image.id, back=back) }}">
   <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
     <h3 class="h6 mb-0">{{ noun|capitalize }} <span class="badge artwork-state artwork-state-{{ image.state }}">{{ state_names[image.state] }}</span></h3>
-    {% if image.state in ('generating', 'preparing', 'validating', 'assigned') %}<progress class="artwork-progress" max="100" value="{{ image.progress }}" aria-label="{{ noun }} progress">{{ image.progress }}%</progress>{% endif %}
+    {% if image.state in ('generating', 'preparing', 'validating', 'assigned') %}<progress class="artwork-progress" max="100" value="{{ image.progress }}" data-progress-for="{{ image.id }}" aria-label="{{ noun }} progress">{{ image.progress }}%</progress>{% endif %}
   </div>
   {% set why = reasons.get(image.id) if reasons is defined else None %}
   {% if why %}<p class="small text-warning-emphasis mb-2 artwork-why">{{ why }}</p>{% elif image.message %}<p class="small text-secondary mb-2">{{ image.message }}</p>{% endif %}
@@ -27,9 +27,9 @@
   {% endif %}
   {% if latest and image.state == 'review' and image.job.purpose == 'library' %}
   <form method="post" class="mt-3 artwork-decide"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
-    {% set default_who = image.job.accounts or [] %}
+    {% set default_everyone, default_who = default_audience(image) %}
     <fieldset class="mb-2 artwork-audience"><legend class="small mb-1">Put on for</legend><input type="hidden" name="audience" value="1">
-      <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="everyone" id="ev-{{ image.id }}"{% if not default_who %} checked{% endif %}><label class="form-check-label small" for="ev-{{ image.id }}">Everyone (Jellyfin's own)</label></div>
+      <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="everyone" id="ev-{{ image.id }}"{% if default_everyone %} checked{% endif %}><label class="form-check-label small" for="ev-{{ image.id }}">Everyone (Jellyfin's own)</label></div>
       {% for id, name in account_list or [] %}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="who" value="{{ id }}" id="who-{{ image.id }}-{{ id }}"{% if id in default_who %} checked{% endif %}><label class="form-check-label small" for="who-{{ image.id }}-{{ id }}">{{ name }}</label></div>{% endfor %}
     </fieldset>
     <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -53,11 +53,11 @@
   {% if 'set' in roles %}{% set _ = summary.append("the set's poster") %}{% endif %}
   {% set originals = refs|selectattr('role', 'in', ['original', 'lettering'])|list %}
   {% if originals %}{% set _ = summary.append(originals|length ~ ' piece' ~ ('' if originals|length == 1 else 's') ~ ' of original art') %}{% endif %}
-  <details class="mt-3 artwork-fold"><summary class="small">References it was given: {{ summary|join(', ') if summary else 'none' }}{% if image.job.options and image.job.options.originals and not originals %} <span class="text-warning-emphasis">(no original art found for it)</span>{% endif %}</summary>
+  <details class="mt-3 artwork-fold" id="refs-{{ image.id }}"><summary class="small">References it was given: {{ summary|join(', ') if summary else 'none' }}{% if image.job.options and image.job.options.originals and not originals %} <span class="text-warning-emphasis">(no original art found for it)</span>{% endif %}</summary>
     {% if refs %}<div class="artwork-refs mt-2">{% for r in refs %}{% set ref_src = url_for('main.artwork_image_reference', image_id=image.id, number=loop.index) %}{% set label = r.person or {'set': "the set's poster", 'original': 'original art', 'lettering': 'original logo'}.get(r.role, r.role) %}<figure class="mb-0"><button type="button" class="artwork-open" data-full="{{ ref_src }}" data-alt="Reference {{ loop.index }}: {{ label }}" aria-label="Show reference {{ loop.index }}, {{ label }}, full screen"><img class="artwork-ref" src="{{ ref_src }}" alt="" loading="lazy"></button><figcaption class="small text-secondary">{{ loop.index }}. {{ label }}</figcaption></figure>{% endfor %}</div>{% else %}<p class="small text-secondary mb-0 mt-2">It was made from its prompt alone.</p>{% endif %}
   </details>
   {% endif %}
-  {% if shown %}<details class="mt-2 artwork-fold"><summary class="small">How it was made</summary><div class="mt-2">{% set c = shown %}{% include '_artwork_candidate.html' with context %}</div></details>{% endif %}
+  {% if shown %}<details class="mt-2 artwork-fold" id="made-{{ image.id }}"><summary class="small">How it was made</summary><div class="mt-2">{% set c = shown %}{% include '_artwork_candidate.html' with context %}</div></details>{% endif %}
   {% set earlier = image.candidates|rejectattr('id', 'equalto', shown.id if shown else '')|list %}
-  {% if earlier %}<details class="mt-2 artwork-fold"><summary class="small">Earlier versions ({{ earlier|length }})</summary><div class="artwork-versions mt-2">{% for c in earlier|reverse %}<figure class="mb-0">{% if c.path %}<button type="button" class="artwork-open" data-full="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" data-alt="Version {{ c.version }}" aria-label="Show version {{ c.version }} full screen"><img class="artwork-ref{{ ' artwork-checker' if c.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" alt="" loading="lazy"></button>{% else %}<div class="artwork-ref artwork-gone">Removed</div>{% endif %}<figcaption class="small text-secondary">v{{ c.version }} · {{ c.decision or 'waiting' }}{% if c.feedback %}: “{{ c.feedback }}”{% endif %}</figcaption></figure>{% endfor %}</div></details>{% endif %}
+  {% if earlier %}<details class="mt-2 artwork-fold" id="earlier-{{ image.id }}"><summary class="small">Earlier versions ({{ earlier|length }})</summary><div class="artwork-versions mt-2">{% for c in earlier|reverse %}<figure class="mb-0">{% if c.path %}<button type="button" class="artwork-open" data-full="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" data-alt="Version {{ c.version }}" aria-label="Show version {{ c.version }} full screen"><img class="artwork-ref{{ ' artwork-checker' if c.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" alt="" loading="lazy"></button>{% else %}<div class="artwork-ref artwork-gone">Removed</div>{% endif %}<figcaption class="small text-secondary">v{{ c.version }} · {{ c.decision or 'waiting' }}{% if c.feedback %}: “{{ c.feedback }}”{% endif %}</figcaption></figure>{% endfor %}</div></details>{% endif %}
 </section>

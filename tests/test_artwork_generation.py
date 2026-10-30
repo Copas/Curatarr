@@ -1465,7 +1465,7 @@ def test_original_art_comes_from_jellyfin_when_it_isnt_beside_the_file(
     assert "original poster" in task["prompt"]
     page = client.get(f"/library/posters/jobs/{job.id}").text
     assert "References it was given: 1 photo of Sam, 2 pieces of original art" in page
-    assert '<details class="mt-3 artwork-fold">' in page  # folded away
+    assert '<details class="mt-3 artwork-fold" id="refs-' in page  # folded away
     assert 'data-alt="Reference 1: Sam"' in page  # opens full screen
     # A custom poster for everyone: its saved original, never the custom one.
     jellyfin.current = _picture("#112233")
@@ -1476,3 +1476,63 @@ def test_original_art_comes_from_jellyfin_when_it_isnt_beside_the_file(
     response = client.get(f"/library/posters/now/{media.id}/Primary")
     assert response.status_code == 200 and response.data
     assert client.get(f"/library/posters/now/{media.id}/Nope").status_code == 404
+
+
+def test_pages_update_only_what_changed(app, client, tmp_path, monkeypatch):
+    _library, media, _part = _movie()
+    _jellyfin(monkeypatch, _picture("#223344"))
+    _row, _token, worker = _worker(app, client, tmp_path)
+    job = artwork_jobs.create_job(media, ["Primary", "Logo"])
+    image = job.images[0]
+    page = client.get(f"/library/posters/jobs/{job.id}").text
+    assert 'data-active="1"' in page and 'data-live="image"' in page
+    assert f'data-live-key="{artwork_jobs.live_key(image)}"' in page
+    listing = client.get("/library/posters/jobs").text
+    assert 'data-live="row"' in listing and "data-progress-for" not in listing
+    status = client.get(
+        f"/library/posters/live?images={image.id}&jobs={job.id}"
+    ).get_json()
+    before = status["images"][image.id]
+    assert status["active"] is True and status["progress"][image.id] == 0
+    _drain(worker)
+    status = client.get(
+        f"/library/posters/live?images={image.id}&jobs={job.id}"
+    ).get_json()
+    assert status["images"][image.id] != before  # made: its panel is redrawn
+    assert status["active"] is False
+    panel = client.get(f"/library/posters/images/{image.id}/panel").text
+    assert panel.startswith("{#") is False and 'id="image-' in panel
+    assert "Approve and put on" in panel
+    row = client.get(f"/library/posters/jobs/{job.id}/row").text
+    assert row.lstrip().startswith("<tr") and 'class="artwork-made' in row
+    top = client.get(f"/library/posters/jobs/{job.id}/top").text
+    assert "Approve the whole set" in top
+    assert client.get("/library/posters/images/x/panel").status_code == 404
+
+
+def test_the_ticks_start_from_who_has_a_custom_picture_now(
+    app, client, tmp_path, monkeypatch
+):
+    from curatarr.services import set_setting
+
+    library, media, _part = _movie()
+    _jellyfin(monkeypatch, _picture("#223344"))
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex", "u3": "Pat"})
+    db.session.commit()
+    ours = _art()
+    custom_posters.apply(media, ours, "01_film.jpg", user_id="u1")
+    custom_posters.apply(media, ours, "01_film.jpg", user_id="u2")
+    other = _second(library, "Other", "jf-other")
+    _row, _token, worker = _worker(app, client, tmp_path)
+    job = artwork_jobs.create_job(media, ["Primary", "Logo"])  # for everyone
+    fresh = artwork_jobs.create_job(other, ["Primary"])
+    _drain(worker)
+    poster, logo = job.images
+    assert artwork_jobs.default_audience(poster) == (False, ["u1", "u2"])
+    assert artwork_jobs.default_audience(logo) == (True, [])  # it has no logo
+    assert artwork_jobs.default_audience(fresh.images[0]) == (True, [])
+    assert artwork_jobs.set_audience(job) == (True, ["u1", "u2"])
+    panel = client.get(f"/library/posters/images/{poster.id}/panel").text
+    assert f'id="who-{poster.id}-u1" checked' in panel
+    assert f'id="who-{poster.id}-u3" checked' not in panel
+    assert f'id="ev-{poster.id}" checked' not in panel

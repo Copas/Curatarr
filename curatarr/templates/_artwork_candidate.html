@@ -8,4 +8,4 @@
   {% for name, m in (c.metrics or {})|dictsort %}<dt>{{ name|replace('_', ' ')|capitalize }}</dt><dd>{% if m.value is mapping %}{% for k, v in m.value|dictsort %}{{ k }} {{ v }}{{ ', ' if not loop.last }}{% endfor %}{% else %}{{ m.value }}{% endif %} <span class="text-secondary">({{ m.kind or 'measured' }}{% if m.note %}: {{ m.note }}{% endif %})</span>{% if m.detail %}<div class="text-secondary">{{ m.detail }}</div>{% endif %}</dd>{% endfor %}
   {% if c.steps %}<dt>Steps</dt><dd>{{ c.steps|join(' → ') }}</dd>{% endif %}
 </dl>
-{% if c.prompt %}<details class="small mt-1"><summary>Prompt</summary><pre class="artwork-prompt">{{ c.prompt }}</pre>{% if c.params %}<pre class="artwork-prompt">{{ c.params|tojson(indent=1) }}</pre>{% endif %}</details>{% endif %}
+{% if c.prompt %}<details class="small mt-1" id="prompt-{{ c.id }}"><summary>Prompt</summary><pre class="artwork-prompt">{{ c.prompt }}</pre>{% if c.params %}<pre class="artwork-prompt">{{ c.params|tojson(indent=1) }}</pre>{% endif %}</details>{% endif %}

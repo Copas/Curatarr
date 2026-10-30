@@ -7,5 +7,5 @@
 <ul class="nav nav-pills gap-2 mb-3" aria-label="Show">{% for key, label in [(None, 'All')] + job_state_names.items()|list %}<li class="nav-item"><a class="nav-link{{ ' active' if key == state }}" href="{{ url_for('main.artwork_jobs', state=key) }}">{{ label }}</a></li>{% endfor %}</ul>
 {% include '_artwork_jobs.html' %}
 {% if pages > 1 %}<nav class="d-flex justify-content-between mt-3" aria-label="Pages">{% if page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_jobs', state=state, page=page - 1) }}">Previous</a>{% else %}<span></span>{% endif %}<span class="small text-secondary">Page {{ page }} of {{ pages }}</span>{% if page < pages %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_jobs', state=state, page=page + 1) }}">Next</a>{% else %}<span></span>{% endif %}</nav>{% endif %}
-<script src="{{ url_for('static', filename='artwork-live.js', v='1') }}"></script>
+<script src="{{ url_for('static', filename='artwork-live.js', v='3') }}"></script>
 {% endblock %}

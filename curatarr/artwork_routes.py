@@ -179,6 +179,11 @@ def _page() -> int:
 
 def _common() -> dict:
     return {
+        "live_key": artwork_jobs.live_key,
+        "default_audience": artwork_jobs.default_audience,
+        "set_audience": artwork_jobs.set_audience,
+        "job_key": artwork_jobs.job_key,
+        "head_key": artwork_jobs.head_key,
         "overview": artwork_jobs.overview(),
         "kinds": custom_posters.KINDS,
         "kind_names": custom_posters.KIND_NAMES,
@@ -1081,3 +1086,91 @@ def artwork_jellyfin_picture(media_id, kind):
     if not data:
         abort(404)
     return send_file(BytesIO(data), mimetype=custom_posters.mimetype(kind), max_age=300)
+
+
+# --- Live updates, without reloading the page --------------------------------
+
+
+@bp.get("/library/posters/live")
+def artwork_live():
+    """Fingerprints of the pictures, job rows and job tops a page shows, and
+    their pictures' progress: the page redraws only what changed."""
+    images = [
+        i
+        for i in (
+            db.session.get(ArtworkImage, x)
+            for x in (request.args.get("images") or "").split(",")[:200]
+            if x
+        )
+        if i is not None
+    ]
+    jobs = [
+        j
+        for j in (
+            db.session.get(ArtworkJob, x)
+            for x in (request.args.get("jobs") or "").split(",")[:100]
+            if x
+        )
+        if j is not None
+    ]
+    every = images + [i for j in jobs for i in j.images]
+    return jsonify(
+        {
+            "images": {i.id: artwork_jobs.live_key(i) for i in images},
+            "rows": {j.id: artwork_jobs.job_key(j) for j in jobs},
+            "heads": {j.id: artwork_jobs.head_key(j) for j in jobs},
+            "progress": {i.id: i.progress for i in every},
+            "active": any(i.state in artwork_jobs.ACTIVE for i in every),
+        }
+    )
+
+
+@bp.get("/library/posters/images/<image_id>/panel")
+def artwork_image_panel(image_id):
+    """One picture's panel, redrawn when it changes."""
+    image = db.session.get(ArtworkImage, image_id)
+    if image is None:
+        abort(404)
+    back = request.args.get("back") or url_for("main.artwork_job", job_id=image.job_id)
+    if not back.startswith("/library/posters/"):
+        back = url_for("main.artwork_job", job_id=image.job_id)
+    return render_template(
+        "_artwork_image.html",
+        image=image,
+        back=back,
+        versions=_versions([image]),
+        account_list=_accounts(),
+        reasons=_reasons([image.job]),
+        engine_label=_engine_label,
+        **_common(),
+    )
+
+
+@bp.get("/library/posters/jobs/<job_id>/row")
+def artwork_job_row(job_id):
+    job = db.session.get(ArtworkJob, job_id)
+    if job is None:
+        abort(404)
+    return render_template(
+        "_artwork_job_row.html",
+        job=job,
+        reasons=_reasons([job]),
+        engine_label=_engine_label,
+        **_common(),
+    )
+
+
+@bp.get("/library/posters/jobs/<job_id>/top")
+def artwork_job_top(job_id):
+    job = db.session.get(ArtworkJob, job_id)
+    if job is None:
+        abort(404)
+    return render_template(
+        "_artwork_job_top.html",
+        job=job,
+        back=url_for("main.artwork_job", job_id=job.id),
+        accounts=dict(_accounts()),
+        account_list=_accounts(),
+        engine_label=_engine_label,
+        **_common(),
+    )

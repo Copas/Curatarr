@@ -1,0 +1,24 @@
+{# The top of a job's page: its state and the buttons it offers, redrawn
+   by itself when they change. #}
+<div data-live="head" data-live-id="{{ job.id }}" data-live-key="{{ head_key(job) }}" data-live-url="{{ url_for('main.artwork_job_top', job_id=job.id) }}">
+{% set back = url_for('main.artwork_job', job_id=job.id) %}
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <span class="artwork-job-state artwork-job-{{ job.state }}">{{ job_state_names[job.state] }}</span>
+  <span class="small text-secondary">{{ engine_label(job.engine) }}{% if job.worker %} · {{ job.worker.name }} only{% endif %} · for {% if job.accounts %}{% for a in job.accounts %}{{ accounts.get(a, 'an account') }}{{ ', ' if not loop.last }}{% endfor %}{% else %}everyone{% endif %}{% if job.options and job.options.photos %} · with reference photos{% endif %}</span>
+  <form method="post" class="d-flex flex-wrap gap-2 ms-auto"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
+    {% if job.purpose == 'library' and job.images|selectattr('state', 'equalto', 'review')|list|length > 1 %}{% set default_everyone, default_who = set_audience(job) %}<span class="artwork-audience d-inline-flex flex-wrap gap-2 align-items-center"><input type="hidden" name="audience" value="1"><span class="small">The whole set, for:</span>
+      <span class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="everyone" id="set-ev"{% if default_everyone %} checked{% endif %}><label class="form-check-label small" for="set-ev">Everyone</label></span>
+      {% for id, name in account_list or [] %}<span class="form-check form-check-inline mb-0"><input class="form-check-input" type="checkbox" name="who" value="{{ id }}" id="set-who-{{ id }}"{% if id in default_who %} checked{% endif %}><label class="form-check-label small" for="set-who-{{ id }}">{{ name }}</label></span>{% endfor %}
+      <button class="btn btn-success btn-sm" formaction="{{ url_for('main.artwork_job_action', job_id=job.id, action='approve') }}">Approve the whole set</button></span>{% endif %}
+    {% if job.state in ('pending', 'generating') %}<button class="btn btn-outline-light btn-sm" formaction="{{ url_for('main.artwork_job_action', job_id=job.id, action='first') }}">Make it next</button><button class="btn btn-outline-danger btn-sm" formaction="{{ url_for('main.artwork_job_action', job_id=job.id, action='cancel') }}">Cancel</button>{% endif %}
+    {% if job.images|selectattr('state', 'equalto', 'failed')|list %}<button class="btn btn-outline-light btn-sm" formaction="{{ url_for('main.artwork_job_action', job_id=job.id, action='retry') }}">Try the failed ones again</button>{% endif %}
+  </form>
+</div>
+{% if job.purpose == 'library' and job.images|selectattr('state', 'equalto', 'pending')|list %}
+<form method="post" action="{{ url_for('main.artwork_job_engine', job_id=job.id) }}" class="card p-3 mb-3 d-flex flex-wrap flex-row gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div><label class="form-label small mb-1" for="je-{{ job.id }}">Engine for what's waiting</label>
+    <select class="form-select form-select-sm" name="engine" id="je-{{ job.id }}"><option value="auto"{{ ' selected' if job.engine == 'auto' }}>Best available (your own computers)</option>{% for e in engines %}<option value="{{ e.engine }}"{{ ' selected' if job.engine == e.engine }}>{{ e.label }}{% if e.external %} (outside service){% endif %}</option>{% endfor %}</select></div>
+  <div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="external_ok" id="jx-{{ job.id }}"{% if job.options and job.options.external_ok %} checked{% endif %}><label class="form-check-label small" for="jx-{{ job.id }}">Allow the reference photos to be sent to an outside service (Codex sends them to OpenAI)</label></div>
+  <button class="btn btn-sm btn-primary">Change</button>
+</form>{% endif %}
+</div>

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc50 (2026-10-30)
+
+- **Fixed: job pages closed whatever you'd opened every few seconds.** While pictures were being made, Jobs and a job's page reloaded their contents every five seconds, closing any section you'd opened and undoing ticks. They now ask Curatarr what changed and update only that, without reloading: progress bars move in place, and a picture or a job's row is redrawn on its own only when it changes (a new picture, a new state), keeping what was open, ticked or typed in it.
+- **"Put on for" starts from who has the picture now.** When a title already has a custom picture of that type, the new one starts ticked for exactly the same people (the accounts that have one, and everyone only if there's one for everyone), so replacing it changes nothing about who sees what unless you choose to. Without one, it's whom the job was made for.
+
 ## 0.2.0rc49 (2026-10-30)
 
 - **Fixed: "Use each title's original art" usually sent nothing.** Curatarr looked for the art only beside the title's file, and most libraries keep it in Jellyfin's own metadata folder, so the AI got no original poster or logo to take the feel and lettering from. It now asks Jellyfin when the art isn't beside the file: the picture from before any custom one for everyone, or Jellyfin's own where only some accounts have their own (never your own art passed off as the original). Codex is given the title's original poster, logo and picture of the type it's making; a local model the logo, for the lettering.

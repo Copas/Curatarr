@@ -556,6 +556,63 @@ def waiting_reason(image: ArtworkImage, now=None) -> str | None:
     return "No online worker has an engine that can make it."
 
 
+def default_audience(image: ArtworkImage) -> tuple[bool, list[str]]:
+    """Who a new picture starts out ticked for: the people who have a custom
+    picture of its type now (replacing it keeps the same people), else whom
+    the job was made for. Returns (everyone, accounts)."""
+    rows = (
+        db.session.query(CustomPoster.jellyfin_user_id)
+        .filter_by(
+            media_identity_id=image.job.media_identity_id,
+            image_type=image.kind,
+            active=True,
+        )
+        .all()
+    )
+    if rows:
+        users = [u for (u,) in rows]
+        return None in users, sorted(u for u in users if u)
+    accounts = list(image.job.accounts or [])
+    return not accounts, accounts
+
+
+def set_audience(job: ArtworkJob) -> tuple[bool, list[str]]:
+    """The same for a whole set: anyone who'd be ticked for any of it."""
+    everyone, accounts = False, set()
+    for image in job.images:
+        some, who = default_audience(image)
+        everyone = everyone or some
+        accounts.update(who)
+    return everyone, sorted(accounts)
+
+
+def live_key(image: ArtworkImage) -> str:
+    """What a picture's panel shows, in short: it changes when the panel
+    needs redrawing (its state, a new version, why it's waiting), not with
+    its progress, which pages update in place."""
+    kept = [c.id for c in image.candidates if c.path and c.decision != "rejected"]
+    why = waiting_reason(image) if image.state == "pending" else None
+    if image.state == "failed":
+        why = image.error
+    return (
+        f"{image.state}|{kept[-1] if kept else ''}|{len(image.candidates)}|{why or ''}"
+    )
+
+
+def job_key(job: ArtworkJob) -> str:
+    """The same for a job's row on Jobs: its state and its pictures'."""
+    return job.state + "|" + "||".join(live_key(i) for i in job.images)
+
+
+def head_key(job: ArtworkJob) -> str:
+    """And for the top of a job's page (its state and the buttons it offers)."""
+    states = [i.state for i in job.images]
+    return "|".join(
+        [job.state, job.engine]
+        + [str(states.count(s)) for s in ("review", "failed", "pending")]
+    )
+
+
 def set_engine(job: ArtworkJob, engine: str, external_ok: bool) -> int:
     """Changes the engine of a job's pictures that haven't started."""
     options = dict(job.options or {})
