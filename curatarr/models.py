@@ -408,6 +408,10 @@ class ChapterState(db.Model, Timed):
     subtitle_fingerprint = db.Column(db.String(64))
     subtitle_processed_at = db.Column(db.DateTime(timezone=True))
     subtitle_error = db.Column(db.Text)
+    # Whether an English subtitle file beside the video, not Curatarr's, lines
+    # up with the speech, and what was done about it (subtitle_sync.py). Keyed
+    # by the file's name, size and time, so it's checked again if it changes.
+    subtitle_sync = db.Column(db.JSON)
     # Transcript cache keys, so other episodes of the series can be read back
     # when looking for a recap (see recaps.py).
     transcript_key = db.Column(db.String(32))

@@ -89,8 +89,8 @@ def subtitle_env(media_env, tmp_path, monkeypatch):  # noqa: F811
     )
     calls = []
 
-    def fake_transcribe(info, model, device, cache):
-        calls.append(info.path)
+    def fake_transcribe(info, model, device, cache, window=None):
+        calls.append(info.path if window is None else window)
         return [Segment(1, 3, "Hello."), Segment(4, 6, "Goodbye.")], {
             "language": "en",
             "cached": len(calls) > 1,
@@ -130,7 +130,11 @@ def test_existing_english_is_respected_and_others_files_untouched(subtitle_env):
     sidecar.write_text("theirs")
     enrichment.request(part, "subtitles")
     enrichment.dispatch(synchronous=True)
-    assert _state(part).subtitle_status == "existing" and calls == []
+    # Listened to for the sync check (too little to tell), never transcribed
+    # in full, and their file is left as it was.
+    assert _state(part).subtitle_status == "existing"
+    assert calls and all(isinstance(call, tuple) for call in calls)
+    assert sidecar.read_text() == "theirs"
     sidecar.unlink()
     target = generated_path(part.file_path)
     target.write_text("someone else's")
@@ -211,7 +215,7 @@ def test_non_english_audio_is_skipped(subtitle_env, monkeypatch):
     _files, _arr, _library, _media, part, _calls = subtitle_env
     monkeypatch.setattr(
         "curatarr.transcribe.transcribe",
-        lambda *_a: ([Segment(1, 2, "Hola.")], {"language": "es"}),
+        lambda *_a, **_k: ([Segment(1, 2, "Hola.")], {"language": "es"}),
     )
     enrichment.request(part, "subtitles")
     enrichment.dispatch(synchronous=True)

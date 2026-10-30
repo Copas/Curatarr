@@ -55,6 +55,9 @@ DEFAULTS: dict[str, Any] = {
         # TV apps, so Jellyfin burns them into the video: a restart, a
         # transcode, slow seeking. A text track beside them avoids that.
         "replace_pictures": True,
+        # Downloaded subtitles are often timed for another release: re-time
+        # them to the speech, or make Curatarr's own when that can't work.
+        "check_sync": True,
     },
 }
 

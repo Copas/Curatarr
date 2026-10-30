@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc54 (2026-10-30)
+
+- **Out-of-sync subtitles are fixed.** Downloaded English subtitles are often timed for another release of the same film: a different opening shifts every line, and a different frame rate (24 against 23.976, 25 against 24) makes them drift further out as it goes on. Curatarr used to see "already has English subtitles" and leave such files alone. Now a subtitle job listens to four short stretches of the film (about ten minutes in all) and matches what's said to the subtitle lines. Subtitles off by a steady delay or drift are re-timed to the speech, with the original kept beside them as `.unsynced`. Ones that can't be fixed that way (another cut of the film, or another film) are set aside as `.out-of-sync`, and Curatarr makes its own. Removing Curatarr's puts them back. Too little speech to tell, or audio that isn't English, leaves the file as it is. Only SRT files are checked, and each is checked again only if it changes. Subtitles the library already had are checked in the background, a few at a time. On by default: Settings → Enhance → Subtitles, *Fix English subtitles that are out of sync*.
+
 ## 0.2.0rc53 (2026-10-30)
 
 - **Pictures made with ChatGPT start from the film's own artwork, not its plot.** The prompt gave the plot as the picture's "key imagery", and the model illustrated it (John Wick's dog turned up on his poster), while the original art was only a "tonal reference". Now, by default, each picture is a new version of the title's own picture of that type (its poster, background, logo…, from Jellyfin), keeping what makes it recognisable (concept, composition, mood, palette, era, iconic imagery, lettering), with your cast in place of the actors, each in the costume of the character they replace, and nothing added that the artwork doesn't have. The plot isn't sent. **Start from** (Generate, Batches, and the Posters page for *Make them with ChatGPT*) can choose *A new scene from the story* instead, and titles without original art always get one; then the story gives only mood and setting, never plot details to draw.

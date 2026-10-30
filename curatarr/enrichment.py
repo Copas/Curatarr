@@ -14,6 +14,7 @@ regenerates chapters it can show it wrote (see ChapterState).
 import json
 import logging
 import os
+import shutil
 import threading
 import time
 import traceback
@@ -24,7 +25,7 @@ from flask import current_app
 from sqlalchemy import and_, case, func, or_, update
 from sqlalchemy.exc import OperationalError, PendingRollbackError
 
-from . import db, leases, throttle
+from . import db, leases, subtitle_sync, throttle
 from .chapters import (
     DEFAULTS,
     GENERATED_STATUSES,
@@ -167,6 +168,7 @@ FIELD_PATHS = {
     "dry_run": ("processing", "dry_run"),
     "subtitles_enabled": ("subtitles", "enabled"),
     "subtitles_pictures": ("subtitles", "replace_pictures"),
+    "subtitles_sync": ("subtitles", "check_sync"),
 }
 
 
@@ -1501,6 +1503,177 @@ def _ours(state, target) -> bool:
         return False
 
 
+def _sidecar_key(path: Path) -> dict:
+    stat = path.stat()
+    return {"size": stat.st_size, "mtime": int(stat.st_mtime)}
+
+
+def _read_text(path: Path) -> tuple[str, str]:
+    """A subtitle file's text and the encoding to write it back in."""
+    raw = path.read_bytes()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig"), "utf-8-sig"
+    try:
+        return raw.decode("utf-8"), "utf-8"
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace"), "cp1252"
+
+
+def _sync_segments(info, config, opts):
+    """What's said in the stretches the sync check listens to, or an error."""
+    from .transcribe import transcribe
+
+    segments = []
+    for window in subtitle_sync.windows(info.duration):
+        try:
+            found, details = transcribe(
+                info,
+                config["semantic"]["model"],
+                opts["whisper_device"],
+                cache_dir() / "transcripts",
+                window=window,
+            )
+        except (MediaToolError, RuntimeError) as exc:
+            return None, str(exc)
+        language = details.get("language")
+        if language and language != "en":
+            return None, f"The audio is not English (detected: {language})"
+        segments += found
+    return segments, None
+
+
+def _check_sync(state, part, media, path, info, names, config, opts, fields):
+    """Checks the English .srt files beside the video that Curatarr didn't
+    write: in sync ones are kept, ones off by a steady amount are re-timed
+    (the original kept as .unsynced), and ones that can't be fixed that way
+    are set aside as .out-of-sync. Returns the status to finish with, or
+    None when no English subtitles are left and Curatarr should make its own.
+    """
+    video = Path(path)
+    record = dict(state.subtitle_sync or {})
+    files = dict(record.get("files") or {})
+    segments = error = None
+    kept, resynced, changed = False, False, False
+    for name in names:
+        target = video.with_name(name)
+        if target.suffix.lower() != ".srt":
+            kept = True  # only SRT is re-timed; others are trusted as before
+            continue
+        try:
+            key = _sidecar_key(target)
+        except OSError:
+            continue
+        known = files.get(name) or {}
+        if known.get("key") == key:
+            outcome = known.get("outcome")
+            kept = kept or outcome != "set_aside"
+            resynced = resynced or outcome == "resynced"
+            continue
+        if segments is None and error is None:
+            segments, error = _sync_segments(info, config, opts)
+        entry = {"key": key, "checked_at": utcnow().isoformat()}
+        files[name] = entry
+        if error:
+            entry |= {"outcome": "unchecked", "reason": error}
+            kept = True
+            continue
+        try:
+            text, encoding = _read_text(target)
+        except OSError as exc:
+            entry |= {"outcome": "unchecked", "reason": str(exc)}
+            kept = True
+            continue
+        result = subtitle_sync.judge(
+            subtitle_sync.parse_srt(text), segments, info.duration
+        )
+        entry["result"] = result.as_dict()
+        if result.verdict == "shifted":
+            fixed = subtitle_sync.retime(text, result.delay, result.rate)
+            after = subtitle_sync.judge(
+                subtitle_sync.parse_srt(fixed), segments, info.duration
+            )
+            if after.verdict != "in_sync":
+                result.verdict = "mismatch"
+                result.reason = "Re-timing it didn't bring it into line"
+                entry["result"] = result.as_dict()
+            else:
+                backup = target.with_name(name + ".unsynced")
+                partial = target.with_name(name + ".partial")
+                try:
+                    partial.write_text(fixed, encoding=encoding)
+                    shutil.copy2(target, backup)
+                    os.replace(partial, target)
+                    entry["key"] = _sidecar_key(target)
+                except OSError as exc:
+                    _best_effort_unlink(partial)
+                    entry |= {"outcome": "unchecked", "reason": str(exc)}
+                    kept = True
+                    continue
+                entry |= {"outcome": "resynced", "backup": backup.name}
+                kept = resynced = changed = True
+                audit(
+                    "subtitles_resynced",
+                    media.id,
+                    f"Re-timed the English subtitles of {_part_label(part)} to "
+                    f"match the speech: they were {result.reason}.",
+                    f"subtitles-resync:{state.id}:{name}:{key['mtime']}",
+                    payload={"file": str(target), "backup": backup.name}
+                    | result.as_dict(),
+                )
+                continue
+        if result.verdict == "mismatch":
+            aside = target.with_name(name + ".out-of-sync")
+            try:
+                os.replace(target, aside)
+            except OSError as exc:
+                entry |= {"outcome": "unchecked", "reason": str(exc)}
+                kept = True
+                continue
+            entry |= {"outcome": "set_aside", "aside": aside.name}
+            changed = True
+            audit(
+                "subtitles_set_aside",
+                media.id,
+                f"Set aside the English subtitles of {_part_label(part)}: "
+                f"{result.reason[:1].lower() + result.reason[1:]}.",
+                f"subtitles-aside:{state.id}:{name}:{key['mtime']}",
+                payload={"file": str(target), "aside": aside.name} | result.as_dict(),
+            )
+            continue
+        entry["outcome"] = result.verdict  # in_sync, or unknown: left alone
+        kept = True
+    state.subtitle_sync = record | {"files": files}
+    db.session.commit()
+    _log("subtitles_sync_checked", files=files, **fields)
+    if changed and kept:
+        _refresh_jellyfin(part, media)
+    if not kept:
+        return None
+    return "resynced" if resynced else "existing"
+
+
+def _restore_set_aside(state, path) -> bool:
+    """Puts back subtitles set aside as out of sync (when Curatarr's own are
+    removed). True if any were."""
+    video = Path(path)
+    record = dict(state.subtitle_sync or {})
+    files = dict(record.get("files") or {})
+    restored = False
+    for name, entry in files.items():
+        if entry.get("outcome") != "set_aside":
+            continue
+        aside, target = video.with_name(entry["aside"]), video.with_name(name)
+        if aside.exists() and not target.exists():
+            try:
+                os.replace(aside, target)
+            except OSError:
+                continue
+            files[name] = {}  # checked again if a subtitle job runs
+            restored = True
+    state.subtitle_sync = record | {"files": files}
+    return restored
+
+
 def run_subtitles(state, action, part, media, path, config, opts) -> str:
     """Write (or remove) the generated English subtitle file for one video."""
     fields = {"state_id": state.id, "action": action, "file": path}
@@ -1525,6 +1698,7 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
             return _subtitles_done(state, "failed", error=str(exc), fields=fields)
         state.subtitle_fingerprint = None
         state.subtitle_path = None
+        restored = _restore_set_aside(state, path)
         _refresh_jellyfin(part, media)
         audit(
             "subtitles_removed",
@@ -1533,7 +1707,9 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
             f"subtitles-remove:{state.id}:{utcnow().isoformat()}",
             payload={"file": str(target)},
         )
-        return _subtitles_done(state, "removed", fields=fields)
+        return _subtitles_done(
+            state, "existing" if restored else "removed", fields=fields
+        )
     try:
         info = probe(path)
     except (MediaToolError, OSError) as exc:
@@ -1548,8 +1724,15 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
     if not ours:
         if embedded_english(info.streams, text_only=True):
             return _subtitles_done(state, "existing", fields=fields)
-        if sidecar_english(path, text_only=True):
+        outside = sidecar_english(path, text_only=True)
+        if outside and not config["subtitles"].get("check_sync", True):
             return _subtitles_done(state, "existing", fields=fields)
+        if outside:
+            status = _check_sync(
+                state, part, media, path, info, outside, config, opts, fields
+            )
+            if status:
+                return _subtitles_done(state, status, fields=fields)
         pictures = embedded_english(info.streams) or sidecar_english(path)
         if pictures and not config["subtitles"].get("replace_pictures", True):
             return _subtitles_done(state, "pictures", fields=fields)
@@ -2591,7 +2774,8 @@ def maintenance_summary(library_id=None) -> dict:
     existing = by_status.get("existing", 0)
     # Picture subtitles count when they're wanted as they are.
     with_subtitles = sum(
-        subtitles.get(status, 0) for status in ("existing", "pictures", "generated")
+        subtitles.get(status, 0)
+        for status in ("existing", "resynced", "pictures", "generated")
     )
     from . import dub_jobs
 
@@ -2607,6 +2791,7 @@ def maintenance_summary(library_id=None) -> dict:
         "markers_possible": checked + to_check,
         "subtitles_generated": subtitles.get("generated", 0),
         "subtitles_existing": subtitles.get("existing", 0)
+        + subtitles.get("resynced", 0)
         + subtitles.get("pictures", 0),
         "subtitles_checked": sum(subtitles.values()),
         "files": parts,
@@ -2738,6 +2923,7 @@ def describe(state: ChapterState | None) -> dict:
             None: "Not checked",
             "generated": "Generated",
             "existing": "Already has English subtitles",
+            "resynced": "Had English subtitles out of sync; re-timed",
             "pictures": "English subtitles only as pictures",
             "skipped_language": "Not English audio",
             "no_speech": "No speech found",
