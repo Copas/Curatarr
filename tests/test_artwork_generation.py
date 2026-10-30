@@ -509,7 +509,8 @@ def test_the_pages_show(app, client, tmp_path, monkeypatch):
     artwork_jobs.create_job(media, ["Primary"])
     _drain(worker)
     assert "Approve and put on" in client.get("/library/posters/review").text
-    assert "Film" in client.get("/library/posters/jobs?fragment=1").text
+    listed = client.get("/library/posters/jobs?fragment=1").text
+    assert "Film" in listed and 'class="artwork-made' in listed  # shown as made
     new = client.post("/library/posters/workers", data={"name": "Living room"}).text
     assert "curatarr-artwork-worker setup --server http://localhost --token cwk_" in new
     assert "--service" in new

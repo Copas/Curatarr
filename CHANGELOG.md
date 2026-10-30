@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc46 (2026-10-30)
+
+- **See each picture as soon as it's made.** Posters → Jobs shows a small preview of every finished picture beside its job, as it arrives (the page updates itself while anything's being made); click one to review it on the job's page.
+- A set's other pictures say plainly that they're waiting for the new poster the job is making, which they're made to match.
+
 ## 0.2.0rc45 (2026-10-30)
 
 - **Fixed: a job could wait forever without saying why.** With only Codex on offer, a job left at *Best available* sat at "Waiting", even with its photos allowed to go out. Best available now uses an outside service when the job allows it and nothing on your own computers can make it, and Generate chooses Codex when it's the only engine.
