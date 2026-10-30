@@ -501,7 +501,10 @@ def waiting_reason(image: ArtworkImage, now=None) -> str | None:
     if job.batch is not None and job.batch.state == "paused":
         return "Its batch is paused (Posters → Batches)."
     if _waiting_on_poster(image):
-        return "It follows the set's poster, which is made first."
+        return (
+            "Waiting for the new poster this job is making: it's sent with it, so "
+            "the set matches it."
+        )
     workers = [
         w
         for w in db.session.query(ArtworkWorker).filter_by(enabled=True)
