@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc55 (2026-10-30): Enhance → Subtitles tab: sync results, undo, bulk checks.
 - v0.2.0rc54 (2026-10-30): out-of-sync English subtitles beside a video are re-timed, or set aside and replaced.
 - v0.2.0rc53 (2026-10-30): ChatGPT pictures start from the film's own art; plot not sent.
 - v0.2.0rc52 (2026-10-30): review actions without page reloads.

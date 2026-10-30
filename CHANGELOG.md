@@ -2,10 +2,13 @@
 
 ## Unreleased
 
+## 0.2.0rc55 (2026-10-30)
+
+- **Enhance → Subtitles**, a new tab, shows what happened: how many subtitle files were checked, in sync, re-timed, set aside or couldn't be told, how far through the library the background check is, and each re-timed or set-aside file with what was wrong. Buttons work in place: **Undo** a re-timing, **Bring back** a file set aside, **Check again**, **Check all again**, *Make subtitles for N without*, and **Make Curatarr's own for every file** (asks first; any English ones are kept beside them). What you undo or bring back stays that way until the file changes. Progress counts subtitles re-timed.
+
 ## 0.2.0rc54 (2026-10-30)
 
 - **Out-of-sync subtitles are fixed.** Downloaded English subtitles are often timed for another release of the same film: a different opening shifts every line, and a different frame rate (24 against 23.976, 25 against 24) makes them drift further out as it goes on. Curatarr used to see "already has English subtitles" and leave such files alone. Now a subtitle job listens to four short stretches of the film (about ten minutes in all) and matches what's said to the subtitle lines. Subtitles off by a steady delay or drift are re-timed to the speech, with the original kept beside them as `.unsynced`. Ones that can't be fixed that way (another cut of the film, or another film) are set aside as `.out-of-sync`, and Curatarr makes its own. Removing Curatarr's puts them back. Too little speech to tell, or audio that isn't English, leaves the file as it is. Only SRT files are checked, and each is checked again only if it changes. Subtitles the library already had are checked in the background, a few at a time. On by default: Settings → Enhance → Subtitles, *Fix English subtitles that are out of sync*.
-- **Enhance → Subtitles**, a new tab, shows what happened: how many subtitle files were checked, in sync, re-timed, set aside or couldn't be told, how far through the library the background check is, and each re-timed or set-aside file with what was wrong. Buttons work in place: **Undo** a re-timing, **Bring back** a file set aside, **Check again**, **Check all again**, *Make subtitles for N without*, and **Make Curatarr's own for every file** (asks first; any English ones are kept beside them). What you undo or bring back stays that way until the file changes. Progress counts subtitles re-timed.
 
 ## 0.2.0rc53 (2026-10-30)
 
