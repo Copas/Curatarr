@@ -1523,8 +1523,9 @@ def _sync_segments(info, config, opts):
     """What's said in the stretches the sync check listens to, or an error."""
     from .transcribe import transcribe
 
-    segments = []
-    for window in subtitle_sync.windows(info.duration):
+    segments, other = [], []
+    stretches = subtitle_sync.windows(info.duration)
+    for window in stretches:
         try:
             found, details = transcribe(
                 info,
@@ -1537,8 +1538,13 @@ def _sync_segments(info, config, opts):
             return None, str(exc)
         language = details.get("language")
         if language and language != "en":
-            return None, f"The audio is not English (detected: {language})"
-        segments += found
+            # One stretch can be another language (a scene abroad), or an
+            # accent misheard as one: only most of them decide.
+            other.append(language)
+        else:
+            segments += found
+    if len(other) * 2 > len(stretches):
+        return None, f"The audio is not English (detected: {other[0]})"
     return segments, None
 
 
@@ -1601,7 +1607,9 @@ def _check_sync(state, part, media, path, info, names, config, opts, fields):
                 partial = target.with_name(name + ".partial")
                 try:
                     partial.write_text(fixed, encoding=encoding)
-                    shutil.copy2(target, backup)
+                    # Contents only: copying the file's dates and permissions
+                    # isn't allowed on some network shares.
+                    shutil.copyfile(target, backup)
                     os.replace(partial, target)
                     entry["key"] = _sidecar_key(target)
                 except OSError as exc:

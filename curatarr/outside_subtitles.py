@@ -24,6 +24,7 @@ from . import db
 from .models import ChapterState, MediaIdentity, MediaPart, utcnow
 
 KEY = "subtitle_sync_sweep"
+RULES_KEY = "subtitle_sync_rules"
 RUN_SECONDS = 20
 BATCH = 200
 WAITING = 4  # at most this many of its subtitle jobs waiting at once
@@ -86,10 +87,63 @@ def _candidates():
     )
 
 
+def revisit() -> int:
+    """After the rules change: subtitles set aside under the old ones are put
+    back (with Curatarr's own, if unchanged, removed) and checked again, and
+    ones that couldn't be checked are tried again. Returns how many."""
+    from . import subtitle_sync
+    from .enrichment import _ours
+    from .services import set_setting, setting
+
+    if (setting(RULES_KEY) or 1) >= subtitle_sync.RULES:
+        return 0
+    count = 0
+    for state in _checked_states():
+        record = dict(state.subtitle_sync or {})
+        files = dict(record.get("files") or {})
+        video = Path(state.part.file_path)
+        for name, entry in files.items():
+            outcome = entry.get("outcome")
+            if outcome == "unchecked":
+                files[name] = {k: v for k, v in entry.items() if k != "key"}
+                count += 1
+                continue
+            if outcome != "set_aside" or record.get("own"):
+                continue
+            aside, target = (
+                video.with_name(entry.get("aside", "")),
+                video.with_name(name),
+            )
+            if not aside.is_file() or target.exists():
+                continue
+            try:
+                os.replace(aside, target)
+            except OSError:
+                continue
+            files[name] = {}
+            count += 1
+            generated = Path(state.subtitle_path) if state.subtitle_path else None
+            if generated and _ours(state, generated):
+                try:
+                    generated.unlink()
+                except OSError:
+                    pass
+                else:
+                    state.subtitle_fingerprint = state.subtitle_path = None
+            if state.job_state == "idle" and not state.subtitle_fingerprint:
+                state.subtitle_status = "existing"
+        state.subtitle_sync = record | {"files": files}
+    set_setting(RULES_KEY, subtitle_sync.RULES)
+    set_setting(KEY, {})  # the pass starts over, picking these up
+    db.session.commit()
+    return count
+
+
 def sweep() -> int:
     """Returns how many files were queued."""
     from .services import set_setting, setting
 
+    revisit()
     progress = dict(setting(KEY, {}) or {})
     if progress.get("finished_at"):
         return 0

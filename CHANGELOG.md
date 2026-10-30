@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0rc56 (2026-10-30)
+
+- **Fixed: subtitles only a little uneven were set aside.** Subtitles within a couple of seconds everywhere, but not by a single steady amount, were counted as unfixable, set aside and replaced (about half of those set aside so far, Moana among them). Subtitles are now set aside only when they're more than 3 seconds out somewhere; closer ones are left as they are ("close enough"). Files set aside before this are put back on their own and checked again, and Curatarr's own subtitles for them are removed if unchanged (they're made again from the saved transcript if the check still says so).
+- **Fixed: re-timing failed with "Operation not permitted"** on network shares where Curatarr can't copy a file's dates. The original is now copied by its contents only. Those files are tried again.
+- **Fixed: one stretch heard as another language stopped the check** (a Scottish or Northern English accent heard as Welsh, a scene in French). Most of the stretches listened to must be another language before a film counts as not English; files skipped that way are tried again.
+
 ## 0.2.0rc55 (2026-10-30)
 
 - **Enhance → Subtitles**, a new tab, shows what happened: how many subtitle files were checked, in sync, re-timed, set aside or couldn't be told, how far through the library the background check is, and each re-timed or set-aside file with what was wrong. Buttons work in place: **Undo** a re-timing, **Bring back** a file set aside, **Check again**, **Check all again**, *Make subtitles for N without*, and **Make Curatarr's own for every file** (asks first; any English ones are kept beside them). What you undo or bring back stays that way until the file changes. Progress counts subtitles re-timed.

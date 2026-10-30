@@ -308,3 +308,74 @@ def test_curatarrs_own_for_every_file(app, client, sync_env):
     enrichment.request(part, "remove_subtitles")
     enrichment.dispatch(synchronous=True)
     assert not (_state(part).subtitle_sync or {}).get("own")
+
+
+def test_slightly_uneven_subtitles_are_close_enough_to_keep():
+    speech = _speech()
+    # Out by up to 2.5 s in places, by different amounts: they read fine.
+    steps = {0: 0.2, 1: 2.5, 2: -0.4, 3: 1.0}
+    stretches = subtitle_sync.windows(DURATION)
+
+    def timing(t):
+        index = next(i for i, (s, e) in enumerate(stretches) if s <= t < e)
+        return t + steps[index]
+
+    result = _judge(_subtitles(speech, timing), speech)
+    assert result.verdict == "in_sync" and "close enough" in result.reason
+
+
+def test_one_stretch_in_another_language_doesnt_stop_the_check(sync_env, monkeypatch):
+    part, sidecar, speech, _calls, _arr = sync_env
+    first = subtitle_sync.windows(DURATION)[0]
+
+    def fake_transcribe(info, model, device, cache, window=None):
+        found = [s for s in speech if window and window[0] <= s.start < window[1]]
+        return found, {"language": "cy" if window == first else "en"}
+
+    monkeypatch.setattr("curatarr.transcribe.transcribe", fake_transcribe)
+    sidecar.write_text(_subtitles(speech, lambda t: 8.0 + t), encoding="utf-8")
+    assert _run(part).subtitle_status == "resynced"
+
+
+def test_retiming_works_where_file_dates_cant_be_copied(sync_env, monkeypatch):
+    part, sidecar, speech, _calls, _arr = sync_env
+
+    def refused(*_a, **_k):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr("shutil.copystat", refused)
+    monkeypatch.setattr("shutil.copymode", refused)
+    sidecar.write_text(_subtitles(speech, lambda t: 8.0 + t), encoding="utf-8")
+    assert _run(part).subtitle_status == "resynced"
+    assert sidecar.with_name("Film.en.srt.unsynced").exists()
+
+
+def test_files_set_aside_under_older_rules_are_put_back_and_checked_again(
+    sync_env,
+):
+    from curatarr import outside_subtitles
+
+    part, sidecar, speech, _calls, _arr = sync_env
+    text = _subtitles(speech, lambda t: t + 0.3)  # in sync really
+    sidecar.write_text(text, encoding="utf-8")
+    state = _run(part)
+    # As an older version left it: set aside, and Curatarr's own made.
+    aside = sidecar.with_name("Film.en.srt.out-of-sync")
+    sidecar.rename(aside)
+    state.subtitle_sync = {
+        "files": {"Film.en.srt": {"outcome": "set_aside", "aside": aside.name}}
+    }
+    db.session.commit()
+    enrichment.request(part, "subtitles")
+    enrichment.dispatch(synchronous=True)
+    assert generated_path(part.file_path).exists()
+    set_setting(outside_subtitles.RULES_KEY, 1)
+    assert outside_subtitles.revisit() == 1
+    assert sidecar.read_text() == text and not aside.exists()
+    assert not generated_path(part.file_path).exists()
+    assert outside_subtitles.sweep() == 1
+    enrichment.dispatch(synchronous=True)
+    state = _state(part)
+    assert state.subtitle_status == "existing"
+    assert state.subtitle_sync["files"]["Film.en.srt"]["outcome"] == "in_sync"
+    assert outside_subtitles.revisit() == 0  # once

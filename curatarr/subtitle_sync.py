@@ -39,6 +39,9 @@ SURE_POINTS = 20
 # moment before the voice, and speech recognition times lines to within a
 # second or so (files known to be right measure up to ~1.2 s).
 IN_SYNC_SECONDS = 1.5
+# Uneven but never further out than this anywhere it was heard: not worth
+# replacing someone's subtitles over (they read fine).
+CLOSE_SECONDS = 3.0
 # Lines further from the fitted line than this don't count, and a fit
 # where the rest scatter more than SPREAD_SECONDS isn't a straight shift.
 OUTLIER_SECONDS = 2.0
@@ -62,6 +65,10 @@ RATES = (0.95, 1.06)
 # Each stretch listened to must sit on the line: a film cut differently is
 # right in some places and out in others, which one line can't follow.
 STRETCH_SECONDS = 0.75
+
+# Bumped when the rules change in a way that should revisit earlier verdicts
+# (see outside_subtitles.revisit).
+RULES = 2
 
 TIME = re.compile(r"(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})")
 ARROW = re.compile(
@@ -247,7 +254,13 @@ def judge(lines: list[Line], segments: list[Segment], duration: float) -> Result
         and result.spread <= SPREAD_SECONDS
         and all(abs(off) <= STRETCH_SECONDS for off in result.stretches)
     )
-    if not straight:
+    if not straight and all(abs(off) <= CLOSE_SECONDS for off in heard):
+        result.verdict = "in_sync"
+        result.reason = (
+            f"Up to {max(abs(off) for off in heard):.1f} s out in places: "
+            "close enough to leave as they are"
+        )
+    elif not straight:
         if len(points) >= SURE_POINTS:
             result.verdict = "mismatch"
             result.reason = (
