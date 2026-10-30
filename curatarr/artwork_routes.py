@@ -486,6 +486,33 @@ def artwork_image_reference(image_id, number):
     return send_file(path, max_age=300)
 
 
+def _async() -> bool:
+    """Sent from the page in the background (artwork-actions.js)."""
+    return request.headers.get("X-Curatarr-Async") == "1"
+
+
+def _say(message: str, category: str = "success") -> None:
+    """A message for the person: answered with, or flashed for the next page."""
+    if _async():
+        request.environ.setdefault("curatarr.said", []).append((category, message))
+    else:
+        flash(message, category)
+
+
+def _done(default):
+    """The answer to an action: its messages, from the page; else back to it."""
+    if not _async():
+        return _back(default)
+    said = request.environ.get("curatarr.said", [])
+    return jsonify(
+        {
+            "ok": not any(c in ("danger", "warning") for c, _m in said),
+            "messages": [{"category": c, "text": m} for c, m in said],
+            "review": artwork_jobs.overview()["review"],
+        }
+    )
+
+
 def _back(default):
     target = request.form.get("back") or ""
     if target.startswith("/library/posters/") and "//" not in target:
@@ -501,24 +528,24 @@ def artwork_candidate_action(candidate_id, action):
     job = candidate.image.job
     back = url_for("main.artwork_job", job_id=job.id)
     feedback = request.form.get("feedback")
+    title = job.media.title if job.media else "It"
+    what = f"{title}, its {custom_posters._noun(candidate.image.kind)}"
     try:
         if action == "approve":
             everyone, accounts = _audience(request.form)
-            flash(
-                artwork_jobs.approve(candidate, _who(), everyone, accounts), "success"
-            )
+            _say(artwork_jobs.approve(candidate, _who(), everyone, accounts), "success")
         elif action == "reject":
             artwork_jobs.reject(candidate, feedback, again=False)
-            flash("Turned down.", "success")
+            _say(f"{what}: turned down; nothing changed in Jellyfin.", "success")
         elif action == "again":
             artwork_jobs.reject(candidate, feedback, again=True)
-            flash("Turned down; it's being made again.", "success")
+            _say(f"{what}: being made again.", "success")
         else:
             abort(404)
     except (ValueError, IntegrationError, OSError) as exc:
         db.session.rollback()
-        flash(f"Couldn't do that: {exc}", "danger")
-    return _back(back)
+        _say(f"Couldn't do that: {exc}", "danger")
+    return _done(back)
 
 
 @bp.post("/library/posters/images/<image_id>/again")
@@ -528,10 +555,11 @@ def artwork_image_again(image_id):
         abort(404)
     try:
         artwork_jobs.regenerate(image, request.form.get("feedback"))
-        flash(f"Making its {custom_posters._noun(image.kind)} again.", "success")
+        title = image.job.media.title if image.job.media else "It"
+        _say(f"{title}, its {custom_posters._noun(image.kind)}: being made again.")
     except ValueError as exc:
-        flash(str(exc), "warning")
-    return _back(url_for("main.artwork_job", job_id=image.job_id))
+        _say(str(exc), "warning")
+    return _done(url_for("main.artwork_job", job_id=image.job_id))
 
 
 @bp.post("/library/posters/jobs/<job_id>/engine")
@@ -546,14 +574,14 @@ def artwork_job_engine(job_id):
             request.form.get("external_ok") in {"on", "1"},
         )
     except ValueError as exc:
-        flash(str(exc), "warning")
+        _say(str(exc), "warning")
     else:
-        flash(
+        _say(
             f"{_engine_label(job.engine)} makes its {count} waiting "
             f"picture{'' if count == 1 else 's'}.",
             "success",
         )
-    return redirect(url_for("main.artwork_job", job_id=job.id))
+    return _done(url_for("main.artwork_job", job_id=job.id))
 
 
 @bp.post("/library/posters/jobs/<job_id>/<action>")
@@ -565,22 +593,22 @@ def artwork_job_action(job_id, action):
         if action == "approve":
             everyone, accounts = _audience(request.form)
             done = artwork_jobs.approve_set(job, _who(), everyone, accounts)
-            flash(" ".join(done) or "Nothing was waiting for review.", "success")
+            _say(" ".join(done) or "Nothing was waiting for review.", "success")
         elif action == "cancel":
             count = artwork_jobs.cancel_job(job)
-            flash(f"Cancelled {count} picture{'' if count == 1 else 's'}.", "success")
+            _say(f"Cancelled {count} picture{'' if count == 1 else 's'}.", "success")
         elif action == "retry":
             count = artwork_jobs.retry_job(job)
-            flash(f"Trying {count} again.", "success")
+            _say(f"Trying {count} again.", "success")
         elif action == "first":
             artwork_jobs.prioritise(job)
-            flash("It's next in the queue.", "success")
+            _say("It's next in the queue.", "success")
         else:
             abort(404)
     except (ValueError, IntegrationError, OSError) as exc:
         db.session.rollback()
-        flash(f"Couldn't do that: {exc}", "danger")
-    return _back(url_for("main.artwork_job", job_id=job.id))
+        _say(f"Couldn't do that: {exc}", "danger")
+    return _done(url_for("main.artwork_job", job_id=job.id))
 
 
 @bp.get("/library/posters/batches")

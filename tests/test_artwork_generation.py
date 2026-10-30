@@ -1536,3 +1536,38 @@ def test_the_ticks_start_from_who_has_a_custom_picture_now(
     assert f'id="who-{poster.id}-u1" checked' in panel
     assert f'id="who-{poster.id}-u3" checked' not in panel
     assert f'id="ev-{poster.id}" checked' not in panel
+
+
+def test_review_actions_answer_without_a_page_reload(
+    app, client, tmp_path, monkeypatch
+):
+    _library, media, _part = _movie()
+    _jellyfin(monkeypatch, _picture("#223344"))
+    _row, _token, worker = _worker(app, client, tmp_path)
+    job = artwork_jobs.create_job(media, ["Primary", "Logo"])
+    _drain(worker)
+    page = client.get("/library/posters/review").text
+    assert "artwork-actions.js" in page and "data-review-item" in page
+    assert 'class="mt-3 artwork-decide" data-async' in page
+    poster = job.images[0].candidates[0]
+    answer = client.post(
+        f"/library/posters/candidates/{poster.id}/approve",
+        data={"audience": "1", "everyone": "on"},
+        headers={"X-Curatarr-Async": "1"},
+    )
+    assert answer.status_code == 200
+    body = answer.get_json()
+    assert body["ok"] and "is on for everyone" in body["messages"][0]["text"]
+    assert body["review"] == 1  # the logo still waits
+    refused = client.post(
+        f"/library/posters/candidates/{job.images[1].candidates[0].id}/approve",
+        data={"audience": "1"},
+        headers={"X-Curatarr-Async": "1"},
+    ).get_json()
+    assert (
+        refused["ok"] is False
+        and "Choose who sees it" in refused["messages"][0]["text"]
+    )
+    # Sent the usual way, it still redirects back.
+    plain = client.post(f"/library/posters/jobs/{job.id}/first")
+    assert plain.status_code == 302

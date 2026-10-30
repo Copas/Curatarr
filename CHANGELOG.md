@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc52 (2026-10-30)
+
+- **Review without reloading the page.** Approve, Turn down and Make it again (and a job's Approve the whole set, Cancel, Retry and engine change) now work in place: a short note confirms what happened, and the page doesn't reload. On Review, a picture you've dealt with folds to a one-line note and the next moves up, so going through many is quick; on a job's page, just that picture is redrawn. If the background request fails, the button works the usual way.
+
 ## 0.2.0rc51 (2026-10-30)
 
 - **Fixed: Overview reloaded the whole page every 15 seconds during a reconciliation**, closing anything you'd opened and jumping back to the top. Only its status line updates now, in place; when the run finishes, the line says so with a link to show the new numbers.

@@ -26,7 +26,7 @@
   </div>
   {% endif %}
   {% if latest and image.state == 'review' and image.job.purpose == 'library' %}
-  <form method="post" class="mt-3 artwork-decide"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
+  <form method="post" class="mt-3 artwork-decide" data-async><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
     {% set default_everyone, default_who = default_audience(image) %}
     <fieldset class="mb-2 artwork-audience"><legend class="small mb-1">Put on for</legend><input type="hidden" name="audience" value="1">
       <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="everyone" id="ev-{{ image.id }}"{% if default_everyone %} checked{% endif %}><label class="form-check-label small" for="ev-{{ image.id }}">Everyone (Jellyfin's own)</label></div>
@@ -39,7 +39,7 @@
     </div>
   </form>
   {% elif image.state in ('failed', 'completed', 'cancelled') and image.job.purpose == 'library' %}
-  <form method="post" action="{{ url_for('main.artwork_image_again', image_id=image.id) }}" class="mt-3 d-flex flex-wrap gap-2 align-items-center"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
+  <form method="post" action="{{ url_for('main.artwork_image_again', image_id=image.id) }}" class="mt-3 d-flex flex-wrap gap-2 align-items-center" data-async><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
     <label class="visually-hidden" for="fb2-{{ image.id }}">What to change</label><input class="form-control form-control-sm artwork-feedback" type="text" name="feedback" id="fb2-{{ image.id }}" placeholder="What to change (optional)">
     <button class="btn btn-outline-light btn-sm">Make it again</button>
   </form>
