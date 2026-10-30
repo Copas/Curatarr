@@ -8,7 +8,8 @@
     <h3 class="h6 mb-0">{{ kind_names[image.kind]|capitalize }} <span class="badge artwork-state artwork-state-{{ image.state }}">{{ state_names[image.state] }}</span></h3>
     {% if image.state in ('generating', 'preparing', 'validating', 'assigned') %}<progress class="artwork-progress" max="100" value="{{ image.progress }}" aria-label="{{ kind_names[image.kind] }} progress">{{ image.progress }}%</progress>{% endif %}
   </div>
-  {% if image.message %}<p class="small text-secondary mb-2">{{ image.message }}</p>{% endif %}
+  {% set why = reasons.get(image.id) if reasons is defined else None %}
+  {% if why %}<p class="small text-warning-emphasis mb-2 artwork-why">{{ why }}</p>{% elif image.message %}<p class="small text-secondary mb-2">{{ image.message }}</p>{% endif %}
   {% if image.error and image.state == 'failed' %}<div class="alert alert-danger small py-2">{{ image.error }}</div>{% endif %}
   {% set shown = latest or (approved[-1] if approved else None) %}
   {% if shown %}

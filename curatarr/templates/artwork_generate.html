@@ -24,8 +24,8 @@
   </fieldset>
   <div class="row g-3 mb-3">
     <div class="col-md-6"><label class="form-label" for="g-engine">Engine</label>
-      <select class="form-select" name="engine" id="g-engine"><option value="auto">Best available on this computer's workers</option>{% for e in engines %}<option value="{{ e.engine }}">{{ e.label }}{% if e.external %} (outside service){% endif %}{% if not e.workers|selectattr(1)|list %} (no worker online){% endif %}</option>{% endfor %}</select>
-      <div class="form-text">"Best available" picks the engine chosen for each type under Workers, else a local one. An outside service is only used when chosen here.</div></div>
+      <select class="form-select" name="engine" id="g-engine"><option value="auto">Best available on this computer's workers</option>{% for e in engines %}<option value="{{ e.engine }}"{% if e.engine == suggested %} selected{% endif %}>{{ e.label }}{% if e.external %} (outside service){% endif %}{% if not e.workers|selectattr(1)|list %} (no worker online){% endif %}</option>{% endfor %}</select>
+      <div class="form-text">"Best available" picks the engine chosen for each type under Workers, else one on your own computers. An outside service (Codex, ChatGPT) is only used when chosen here.{% if suggested != 'auto' %} Your workers only offer {{ engines[0].label }}, so it's chosen.{% endif %}</div></div>
     <div class="col-md-6"><label class="form-label" for="g-worker">Worker</label>
       <select class="form-select" name="worker" id="g-worker"><option value="">Any that can make it</option>{% for w in workers %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div>
   </div>

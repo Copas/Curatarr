@@ -20,6 +20,7 @@ from flask import (
     send_file,
     url_for,
 )
+from sqlalchemy.exc import OperationalError
 
 from . import artwork_jobs, artwork_prompts, custom_posters, db
 from .integrations import IntegrationError
@@ -57,6 +58,16 @@ PER_PAGE = 20
 
 
 # --- The worker API ---------------------------------------------------------
+
+
+@bp.errorhandler(OperationalError)
+def artwork_worker_busy(exc):
+    """The database busy (SQLite has one writer): a worker's request is
+    asked again shortly instead of failing with a server error."""
+    if not request.path.startswith("/api/v1/artwork/worker/"):
+        raise exc
+    db.session.rollback()
+    return jsonify({"error": "Curatarr is busy; try again shortly."}), 503
 
 
 def _worker() -> ArtworkWorker:
@@ -175,8 +186,13 @@ def artwork_generate():
         if m is not None
     ]
     photos = request.args.get("photos", options["photos"])
+    engines = artwork_jobs.engines()
+    local = [e for e in engines if not e["external"]]
+    # Only an outside service (Codex) on offer: it's the one to choose.
+    suggested = engines[0]["engine"] if engines and not local else "auto"
     return render_template(
         "artwork_generate.html",
+        suggested=suggested,
         options=options,
         chosen=chosen,
         photos=photos,
@@ -305,11 +321,23 @@ def artwork_jobs_page():
         "total": total,
         "engine_label": _engine_label,
         "live": any(j.state in ("pending", "generating") for j in jobs),
+        "reasons": _reasons(jobs),
         **_common(),
     }
     if request.args.get("fragment"):
         return render_template("_artwork_jobs.html", **context)
     return render_template("artwork_jobs.html", **context)
+
+
+def _reasons(jobs) -> dict:
+    """{picture: why it's waiting} for the pictures of ``jobs`` that wait."""
+    found = {}
+    for job in jobs:
+        for image in job.images:
+            reason = artwork_jobs.waiting_reason(image)
+            if reason:
+                found[image.id] = reason
+    return found
 
 
 def _existing(job: ArtworkJob, kind: str):
@@ -335,6 +363,7 @@ def artwork_job(job_id):
         "engine_label": _engine_label,
         "accounts": dict(_accounts()),
         "live": job.state in ("pending", "generating"),
+        "reasons": _reasons([job]),
         **_common(),
     }
     if request.args.get("fragment"):
@@ -429,6 +458,28 @@ def artwork_image_again(image_id):
     except ValueError as exc:
         flash(str(exc), "warning")
     return _back(url_for("main.artwork_job", job_id=image.job_id))
+
+
+@bp.post("/library/posters/jobs/<job_id>/engine")
+def artwork_job_engine(job_id):
+    job = db.session.get(ArtworkJob, job_id)
+    if job is None:
+        abort(404)
+    try:
+        count = artwork_jobs.set_engine(
+            job,
+            request.form.get("engine") or "auto",
+            request.form.get("external_ok") in {"on", "1"},
+        )
+    except ValueError as exc:
+        flash(str(exc), "warning")
+    else:
+        flash(
+            f"{_engine_label(job.engine)} makes its {count} waiting "
+            f"picture{'' if count == 1 else 's'}.",
+            "success",
+        )
+    return redirect(url_for("main.artwork_job", job_id=job.id))
 
 
 @bp.post("/library/posters/jobs/<job_id>/<action>")

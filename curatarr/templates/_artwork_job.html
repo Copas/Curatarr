@@ -9,5 +9,12 @@
     {% if job.images|selectattr('state', 'equalto', 'failed')|list %}<button class="btn btn-outline-light btn-sm" formaction="{{ url_for('main.artwork_job_action', job_id=job.id, action='retry') }}">Try the failed ones again</button>{% endif %}
   </form>
 </div>
+{% if job.purpose == 'library' and job.images|selectattr('state', 'equalto', 'pending')|list %}
+<form method="post" action="{{ url_for('main.artwork_job_engine', job_id=job.id) }}" class="card p-3 mb-3 d-flex flex-wrap flex-row gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div><label class="form-label small mb-1" for="je-{{ job.id }}">Engine for what's waiting</label>
+    <select class="form-select form-select-sm" name="engine" id="je-{{ job.id }}"><option value="auto"{{ ' selected' if job.engine == 'auto' }}>Best available (your own computers)</option>{% for e in engines %}<option value="{{ e.engine }}"{{ ' selected' if job.engine == e.engine }}>{{ e.label }}{% if e.external %} (outside service){% endif %}</option>{% endfor %}</select></div>
+  <div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="external_ok" id="jx-{{ job.id }}"{% if job.options and job.options.external_ok %} checked{% endif %}><label class="form-check-label small" for="jx-{{ job.id }}">Allow the reference photos to be sent to an outside service (Codex sends them to OpenAI)</label></div>
+  <button class="btn btn-sm btn-primary">Change</button>
+</form>{% endif %}
 {% for image in job.images %}{% set existing = existing_by_kind.get(image.kind) %}{% include '_artwork_image.html' with context %}{% endfor %}
 </div>

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0rc45 (2026-10-30)
+
+- **Fixed: a job could wait forever without saying why.** With only Codex on offer, a job left at *Best available* sat at "Waiting", even with its photos allowed to go out. Best available now uses an outside service when the job allows it and nothing on your own computers can make it, and Generate chooses Codex when it's the only engine.
+- **Every waiting picture says why** on Jobs and its job's page (no worker online, the engine not ready, a usage limit until a time, the set's poster first, Curatarr paused, a paused batch…), and a waiting job's engine can be changed on its page.
+- **Fixed: a worker asking for work while Curatarr was busy got a server error** ("database is locked"). It's now told to come back shortly, and a worker marks itself seen at most once a minute instead of at every request.
+
 ## 0.2.0rc44 (2026-10-29)
 
 - **Setting up a worker is one paste.** Adding a worker on Posters → Workers now shows a single command, with its token in it, that connects the worker, finds Codex and ComfyUI, and starts it in the background as a user service (now and at every sign-in). The service follows the installer's current release, so it's upgraded with Curatarr.

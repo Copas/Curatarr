@@ -1229,3 +1229,100 @@ def test_a_service_follows_the_installers_current_release(tmp_path):
         stable(tmp_path / "venv" / "bin" / "python")
         == tmp_path / "venv" / "bin" / "python"
     )
+
+
+def test_a_waiting_picture_says_why_and_its_engine_can_change(app, client, tmp_path):
+    _library, media, _part = _movie()
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    (photos / "Sam.jpg").write_bytes(_picture("#aa8866"))
+    worker_row, _token = artwork_jobs.create_worker("Codex PC", 1)
+    worker_row.capabilities = artwork_jobs._clean_capabilities(
+        [
+            {
+                "engine": "codex/image",
+                "label": "Codex image tool (ChatGPT)",
+                "references": True,
+                "external": True,
+            }
+        ]
+    )
+    worker_row.last_seen_at = utcnow()
+    db.session.commit()
+    job = artwork_jobs.create_job(
+        media, ["Primary"], options={"photos": str(photos)}, details={"title": "Film"}
+    )
+    reason = artwork_jobs.waiting_reason(job.images[0])
+    assert "Best available" in reason and "Codex image tool" in reason
+    assert (
+        "only uses engines on your own computers"
+        in client.get("/library/posters/jobs").text
+    )
+    page = client.get(f"/library/posters/jobs/{job.id}").text
+    assert "Engine for what's waiting" in page
+    # Without allowing the photos out, it's refused; with, it's made.
+    client.post(
+        f"/library/posters/jobs/{job.id}/engine", data={"engine": "codex/image"}
+    )
+    assert job.engine == "auto"
+    client.post(
+        f"/library/posters/jobs/{job.id}/engine",
+        data={"engine": "codex/image", "external_ok": "on"},
+    )
+    db.session.expire_all()
+    assert job.engine == "codex/image" and job.options["external_ok"] is True
+    assert artwork_jobs.waiting_reason(job.images[0]) is None
+    [task] = artwork_jobs.claim(worker_row, 1, ["codex/image"])
+    assert task["image"] == job.images[0].id
+    # With only Codex on offer, Generate chooses it.
+    assert (
+        'value="codex/image" selected' in client.get("/library/posters/generate").text
+    )
+
+
+def test_no_worker_online_is_said(app, client):
+    _library, media, _part = _movie()
+    job = artwork_jobs.create_job(media, ["Primary"], details={"title": "Film"})
+    assert "No worker is online" in artwork_jobs.waiting_reason(job.images[0])
+
+
+def test_best_available_uses_an_allowed_outside_service_when_nothing_local_can(
+    app, client
+):
+    _library, media, _part = _movie()
+    worker_row, _token = artwork_jobs.create_worker("Codex PC", 1)
+    worker_row.capabilities = artwork_jobs._clean_capabilities(
+        [
+            {
+                "engine": "codex/image",
+                "label": "Codex",
+                "references": True,
+                "external": True,
+            }
+        ]
+    )
+    db.session.commit()
+    artwork_jobs.create_job(media, ["Primary"], details={"title": "Film"})
+    assert artwork_jobs.claim(worker_row, 1, ["codex/image"]) == []  # not allowed
+    allowed = artwork_jobs.create_job(
+        media, ["Primary"], options={"external_ok": True}, details={"title": "Film"}
+    )
+    [task] = artwork_jobs.claim(worker_row, 1, ["codex/image"])
+    assert task["image"] == allowed.images[0].id and task["engine"] == "codex/image"
+
+
+def test_a_busy_database_asks_the_worker_to_come_back(app, client, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    _row, token = artwork_jobs.create_worker("W", 1)
+
+    def locked(*_a, **_k):
+        raise OperationalError("SELECT", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(artwork_jobs, "claim", locked)
+    response = client.post(
+        "/api/v1/artwork/worker/claim",
+        json={"slots": 1, "ready": ["x"]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 503 and "busy" in response.get_json()["error"]

@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc45 (2026-10-30): waiting pictures say why; Best available uses an allowed outside service; busy database handled for workers.
 - v0.2.0rc44 (2026-10-29): one-paste worker setup, as a user service.
 - v0.2.0rc43 (2026-10-29): the worker finds Codex when run as a service.
 - v0.2.0rc42 (2026-10-29): Make them with ChatGPT (through Codex) from the Posters page; no automatic retries for Codex.

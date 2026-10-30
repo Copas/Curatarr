@@ -240,6 +240,14 @@ def heartbeat(worker: ArtworkWorker, report: dict) -> dict:
     }
 
 
+def touch(worker: ArtworkWorker) -> None:
+    """Marks the worker seen, at most once a minute: it asks every few
+    seconds, and SQLite has one writer at a time."""
+    seen = worker.last_seen_at
+    if seen is None or utcnow() - _aware(seen) > timedelta(seconds=60):
+        worker.last_seen_at = utcnow()
+
+
 def online(worker: ArtworkWorker) -> bool:
     if worker.last_seen_at is None:
         return False
@@ -458,14 +466,113 @@ def _pick_engine(image: ArtworkImage, worker: ArtworkWorker, ready: set) -> str 
     if preferred and usable(preferred):
         return preferred
     # Otherwise the local engine that did best in the benchmarks for this
-    # type, then any local one: an outside service is used only when chosen.
+    # type, then any local one; an outside service only when the job allows
+    # it and nothing local can.
     for engine in RECOMMENDED.get(image.kind, ()) + RECOMMENDED["*"]:
         if engine in offered and not offered[engine]["external"] and usable(engine):
             return engine
     for entry in offered.values():
         if not entry["external"] and usable(entry["engine"]):
             return entry["engine"]
+    # Nothing local can: an outside service, where the job allows one.
+    if options.get("external_ok"):
+        for entry in offered.values():
+            if entry["external"] and usable(entry["engine"]):
+                return entry["engine"]
     return None
+
+
+def waiting_reason(image: ArtworkImage, now=None) -> str | None:
+    """Why a picture that's waiting hasn't started, in words, with what to
+    do about it; None when it's simply next in line."""
+    from .pause import state as paused
+
+    if image.state != "pending":
+        return None
+    now = now or utcnow()
+    job = image.job
+    if image.not_before and _aware(image.not_before) > now:
+        when = _aware(image.not_before).astimezone().strftime("%H:%M")
+        return (
+            image.message or "It's waiting before trying again."
+        ) + f" (until {when})"
+    if paused():
+        return "Curatarr's work is paused; it starts when work resumes."
+    if job.batch is not None and job.batch.state == "paused":
+        return "Its batch is paused (Posters → Batches)."
+    if _waiting_on_poster(image):
+        return "It follows the set's poster, which is made first."
+    workers = [
+        w
+        for w in db.session.query(ArtworkWorker).filter_by(enabled=True)
+        if online(w) and (job.worker_id is None or w.id == job.worker_id)
+    ]
+    if not workers:
+        if job.worker_id and job.worker is not None:
+            return f"It's for {job.worker.name}, which isn't online."
+        return "No worker is online. Posters → Workers shows how to start one."
+    for worker in workers:
+        ready = {e["engine"] for e in worker.capabilities or [] if e.get("ready")}
+        if _pick_engine(image, worker, ready):
+            if _running_count() >= settings()["concurrency"]:
+                return "Waiting for a free place: other pictures are being made."
+            return None  # its worker picks it up on its next look (seconds)
+    offered = [e for w in workers for e in w.capabilities or []]
+    not_ready = [e for e in offered if not e.get("ready")]
+    external = [e for e in offered if e.get("external") and e.get("ready")]
+    options = job.options or {}
+    if (
+        job.engine == "auto"
+        and external
+        and not options.get("external_ok")
+        and not any(not e.get("external") and e.get("ready") for e in offered)
+    ):
+        return (
+            f"Its engine is Best available, which only uses engines on your own "
+            f"computers unless the job allows an outside service, and your "
+            f"workers only offer {external[0]['label']}, an outside one. Allow it "
+            "(or choose it) on this job's page."
+        )
+    if job.engine != "auto":
+        entry = next((e for e in offered if e["engine"] == job.engine), None)
+        if entry is None:
+            return f"No online worker offers {job.engine}."
+        if not entry.get("ready"):
+            return f"{entry['label']} isn't ready: {entry.get('why') or 'see Workers'}."
+        if (
+            entry.get("external")
+            and options.get("photos")
+            and not options.get("external_ok")
+        ):
+            return (
+                f"{entry['label']} sends the reference photos to an outside "
+                "service, and this job doesn't allow that. Allow it on this job's page."
+            )
+    if not_ready:
+        return f"{not_ready[0]['label']} isn't ready: {not_ready[0].get('why') or ''}"
+    return "No online worker has an engine that can make it."
+
+
+def set_engine(job: ArtworkJob, engine: str, external_ok: bool) -> int:
+    """Changes the engine of a job's pictures that haven't started."""
+    options = dict(job.options or {})
+    info = engine_info(engine) if engine != "auto" else None
+    if engine != "auto" and info is None:
+        raise ValueError("No worker offers that engine.")
+    if info and info["external"] and options.get("photos") and not external_ok:
+        raise ValueError(
+            f"{info['label']} sends the reference photos to an outside service: "
+            "tick the box that allows it."
+        )
+    options["external_ok"] = bool(external_ok)
+    job.options = options
+    job.engine = engine
+    waiting = [i for i in job.images if i.state == "pending"]
+    for image in waiting:
+        image.not_before = None
+        image.message = None
+    db.session.commit()
+    return len(waiting)
 
 
 def claim(worker: ArtworkWorker, slots: int, ready) -> list[dict]:
@@ -473,7 +580,7 @@ def claim(worker: ArtworkWorker, slots: int, ready) -> list[dict]:
     engines, each with its task."""
     from .pause import state as paused
 
-    worker.last_seen_at = utcnow()
+    touch(worker)
     ready = set(ready or [])
     options = settings()
     mine = (
@@ -487,7 +594,8 @@ def claim(worker: ArtworkWorker, slots: int, ready) -> list[dict]:
         max(0, options["concurrency"] - _running_count()),
     )
     if not room or not ready or paused():
-        db.session.commit()
+        if db.session.dirty:
+            db.session.commit()
         return []
     now = utcnow()
     waiting = (
@@ -529,7 +637,8 @@ def claim(worker: ArtworkWorker, slots: int, ready) -> list[dict]:
         image.seed = secrets.randbelow(2**31)  # a new try is a new picture
         tasks.append(build_task(image, engine, agent=entry["external"]))
         _refresh(image.job)
-    db.session.commit()
+    if tasks or db.session.dirty:
+        db.session.commit()
     return tasks
 
 
@@ -656,7 +765,7 @@ def _held(worker: ArtworkWorker, image_id: str) -> ArtworkImage | None:
 def report(worker: ArtworkWorker, image_id: str, update: dict) -> dict:
     """A worker's progress on a picture; renews its lease. Says whether to
     stop (the picture was cancelled, or given to another worker)."""
-    worker.last_seen_at = utcnow()
+    touch(worker)
     image = _held(worker, image_id)
     if image is None or image.state not in RUNNING:
         db.session.commit()

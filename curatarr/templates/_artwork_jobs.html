@@ -4,7 +4,7 @@
 <tbody>{% for job in jobs %}<tr>
   <td><a href="{{ url_for('main.artwork_job', job_id=job.id) }}">{{ job.media.title if job.media else (job.options.details.title if job.options and job.options.details else 'Benchmark') }}</a>{% if job.accounts %}<div class="small text-secondary">for {{ job.accounts|length }} account{{ '' if job.accounts|length == 1 else 's' }}</div>{% endif %}{% if job.batch %}<div class="small text-secondary">{{ job.batch.name }}</div>{% endif %}</td>
   <td><div class="d-flex flex-wrap gap-1">{% for image in job.images %}<span class="badge artwork-state artwork-state-{{ image.state }}" title="{{ state_names[image.state] }}{% if image.message %}: {{ image.message }}{% endif %}">{{ kind_names[image.kind] }}{% if image.state in ('generating', 'preparing', 'validating') and image.progress %} {{ image.progress }}%{% endif %}</span>{% endfor %}</div>
-    {% for image in job.images if image.state in ('pending', 'assigned', 'preparing', 'generating', 'validating', 'failed') and image.message %}<div class="small text-secondary">{{ kind_names[image.kind]|capitalize }}: {{ image.message }}</div>{% endfor %}</td>
+    {% set ns = namespace(said=[]) %}{% for image in job.images %}{% set why = reasons.get(image.id) or (image.message if image.state in ('assigned', 'preparing', 'generating', 'validating', 'failed') else None) %}{% if why and why not in ns.said %}{% set ns.said = ns.said + [why] %}<div class="small text-warning-emphasis artwork-why">{{ why }}</div>{% endif %}{% endfor %}</td>
   <td class="small">{{ engine_label(job.engine) }}</td>
   <td><span class="artwork-job-state artwork-job-{{ job.state }}">{{ job_state_names[job.state] }}</span></td>
   <td class="text-end small text-secondary">{{ job.created_at|when }}</td>
