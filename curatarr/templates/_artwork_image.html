@@ -1,46 +1,63 @@
-{# One picture asked for, with what was made for it and the review buttons.
-   Needs `image`, `existing` (the picture it would replace, or None), `back`. #}
+{# One picture asked for, with what was made for it and the review buttons:
+   the new picture beside every version in use, the approval right under
+   them, and the references and how it was made folded away.
+   Needs `image` and `back`; uses `versions`, `account_list`, `reasons`. #}
 {% set waiting = image.candidates|selectattr('decision', 'none')|selectattr('path')|list %}
 {% set latest = waiting[-1] if waiting else None %}
 {% set approved = image.candidates|selectattr('decision', 'equalto', 'approved')|list %}
+{% set noun = kind_names[image.kind] %}
 <section class="card p-3 mb-3 artwork-image" id="image-{{ image.id }}">
   <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
-    <h3 class="h6 mb-0">{{ kind_names[image.kind]|capitalize }} <span class="badge artwork-state artwork-state-{{ image.state }}">{{ state_names[image.state] }}</span></h3>
-    {% if image.state in ('generating', 'preparing', 'validating', 'assigned') %}<progress class="artwork-progress" max="100" value="{{ image.progress }}" aria-label="{{ kind_names[image.kind] }} progress">{{ image.progress }}%</progress>{% endif %}
+    <h3 class="h6 mb-0">{{ noun|capitalize }} <span class="badge artwork-state artwork-state-{{ image.state }}">{{ state_names[image.state] }}</span></h3>
+    {% if image.state in ('generating', 'preparing', 'validating', 'assigned') %}<progress class="artwork-progress" max="100" value="{{ image.progress }}" aria-label="{{ noun }} progress">{{ image.progress }}%</progress>{% endif %}
   </div>
   {% set why = reasons.get(image.id) if reasons is defined else None %}
   {% if why %}<p class="small text-warning-emphasis mb-2 artwork-why">{{ why }}</p>{% elif image.message %}<p class="small text-secondary mb-2">{{ image.message }}</p>{% endif %}
   {% if image.error and image.state == 'failed' %}<div class="alert alert-danger small py-2">{{ image.error }}</div>{% endif %}
   {% set shown = latest or (approved[-1] if approved else None) %}
   {% if shown %}
+  {% set new_src = url_for('main.artwork_candidate_image', candidate_id=shown.id, ext='png' if shown.has_alpha else 'jpg') %}
   <div class="artwork-compare">
-    <figure class="mb-0"><button type="button" class="artwork-open" data-full="{{ url_for('main.artwork_candidate_image', candidate_id=shown.id, ext='png' if shown.has_alpha else 'jpg') }}" data-alt="The new {{ kind_names[image.kind] }}" aria-label="Show the new {{ kind_names[image.kind] }} full screen"><img class="artwork-pic artwork-pic-{{ image.kind|lower }}{{ ' artwork-checker' if shown.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=shown.id, ext='png' if shown.has_alpha else 'jpg') }}" alt=""></button><figcaption class="small text-secondary">New, version {{ shown.version }}{{ ' (approved)' if shown.decision == 'approved' }}</figcaption></figure>
-    {% for v in (versions.get(image.id) if versions is defined else []) or [] %}<figure class="mb-0">{% if v.poster %}<button type="button" class="artwork-open" data-full="{{ url_for('main.custom_poster_image', poster_id=v.poster.id) }}" data-alt="The {{ kind_names[image.kind] }} {{ v.who|join(', ') }} see now" aria-label="Show it full screen"><img class="artwork-pic artwork-pic-{{ image.kind|lower }}{{ ' artwork-checker' if image.kind == 'Logo' }}" src="{{ url_for('main.custom_poster_image', poster_id=v.poster.id) }}" alt="" loading="lazy"></button>{% elif image.kind == 'Primary' %}<img class="artwork-pic artwork-pic-primary" src="{{ url_for('main.poster', media_id=image.job.media.id) }}" alt="" loading="lazy">{% else %}<div class="artwork-pic artwork-pic-{{ image.kind|lower }} artwork-gone">Jellyfin's own</div>{% endif %}<figcaption class="small text-secondary">Now: {{ v.who|join(', ') }}{% if not v.poster %} (Jellyfin's own){% endif %}</figcaption></figure>{% endfor %}
-    {% set refs = (image.task or {}).get('references') or [] %}{% if refs %}<div class="artwork-refs" aria-label="References it was given">{% for r in refs %}<figure class="mb-0"><img class="artwork-ref" src="{{ url_for('main.artwork_image_reference', image_id=image.id, number=loop.index) }}" alt="" loading="lazy"><figcaption class="small text-secondary">{{ loop.index }}. {{ r.person or {'set': 'set poster', 'original': 'original art', 'lettering': 'original logo'}.get(r.role, r.role) }}</figcaption></figure>{% endfor %}</div>{% endif %}
+    <figure class="mb-0 artwork-new"><button type="button" class="artwork-open" data-full="{{ new_src }}" data-alt="The new {{ noun }}" aria-label="Show the new {{ noun }} full screen"><img class="artwork-pic artwork-pic-{{ image.kind|lower }}{{ ' artwork-checker' if shown.has_alpha }}" src="{{ new_src }}" alt=""></button><figcaption class="small"><strong>New</strong>{% if shown.version > 1 %}, version {{ shown.version }}{% endif %}{{ ' (approved)' if shown.decision == 'approved' }}</figcaption></figure>
+    {% for v in (versions.get(image.id) if versions is defined else []) or [] %}
+    {% set now_src = url_for('main.custom_poster_image', poster_id=v.poster.id) if v.poster else url_for('main.artwork_jellyfin_picture', media_id=image.job.media_identity_id, kind=image.kind) %}
+    <figure class="mb-0 artwork-now"><button type="button" class="artwork-open" data-full="{{ now_src }}" data-alt="The {{ noun }} {{ v.who|join(', ') }} see now" aria-label="Show the {{ noun }} {{ v.who|join(', ') }} see, full screen"><img class="artwork-pic artwork-pic-{{ image.kind|lower }}{{ ' artwork-checker' if image.kind == 'Logo' }}" src="{{ now_src }}" alt="" loading="lazy"></button><figcaption class="small text-secondary">Now: {{ v.who|join(', ') }}{% if not v.poster %} (Jellyfin's own){% endif %}</figcaption></figure>
+    {% endfor %}
   </div>
-  {% set c = shown %}{% include '_artwork_candidate.html' with context %}
   {% endif %}
   {% if latest and image.state == 'review' and image.job.purpose == 'library' %}
-  <form method="post" class="mt-2 artwork-decide"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
-    <label class="form-label small mb-1" for="fb-{{ image.id }}">What to change, if making it again (optional)</label>
-    <textarea class="form-control form-control-sm mb-2" name="feedback" id="fb-{{ image.id }}" rows="2" placeholder="e.g. make the title larger; she should be smiling"></textarea>
+  <form method="post" class="mt-3 artwork-decide"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
     {% set default_who = image.job.accounts or [] %}
     <fieldset class="mb-2 artwork-audience"><legend class="small mb-1">Put on for</legend><input type="hidden" name="audience" value="1">
       <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="everyone" id="ev-{{ image.id }}"{% if not default_who %} checked{% endif %}><label class="form-check-label small" for="ev-{{ image.id }}">Everyone (Jellyfin's own)</label></div>
       {% for id, name in account_list or [] %}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="who" value="{{ id }}" id="who-{{ image.id }}-{{ id }}"{% if id in default_who %} checked{% endif %}><label class="form-check-label small" for="who-{{ image.id }}-{{ id }}">{{ name }}</label></div>{% endfor %}
     </fieldset>
-    <div class="d-flex flex-wrap gap-2">
+    <div class="d-flex flex-wrap gap-2 align-items-center">
       <button class="btn btn-success btn-sm" formaction="{{ url_for('main.artwork_candidate_action', candidate_id=latest.id, action='approve') }}">Approve and put on</button>
-      <button class="btn btn-outline-light btn-sm" formaction="{{ url_for('main.artwork_candidate_action', candidate_id=latest.id, action='again') }}">Make it again</button>
       <button class="btn btn-outline-danger btn-sm" formaction="{{ url_for('main.artwork_candidate_action', candidate_id=latest.id, action='reject') }}">Turn down</button>
+      <span class="artwork-again d-inline-flex flex-wrap gap-2 align-items-center"><label class="visually-hidden" for="fb-{{ image.id }}">What to change, if making it again</label><input class="form-control form-control-sm" type="text" name="feedback" id="fb-{{ image.id }}" placeholder="What to change (optional)"><button class="btn btn-outline-light btn-sm" formaction="{{ url_for('main.artwork_candidate_action', candidate_id=latest.id, action='again') }}">Make it again</button></span>
     </div>
   </form>
   {% elif image.state in ('failed', 'completed', 'cancelled') and image.job.purpose == 'library' %}
-  <form method="post" action="{{ url_for('main.artwork_image_again', image_id=image.id) }}" class="mt-2 d-flex flex-wrap gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
-    <div class="flex-grow-1"><label class="form-label small mb-1" for="fb2-{{ image.id }}">What to change (optional)</label><input class="form-control form-control-sm" type="text" name="feedback" id="fb2-{{ image.id }}"></div>
+  <form method="post" action="{{ url_for('main.artwork_image_again', image_id=image.id) }}" class="mt-3 d-flex flex-wrap gap-2 align-items-center"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ back }}">
+    <label class="visually-hidden" for="fb2-{{ image.id }}">What to change</label><input class="form-control form-control-sm artwork-feedback" type="text" name="feedback" id="fb2-{{ image.id }}" placeholder="What to change (optional)">
     <button class="btn btn-outline-light btn-sm">Make it again</button>
   </form>
   {% endif %}
+  {% set refs = (image.task or {}).get('references') or [] %}
+  {% if refs or image.task %}
+  {% set people = refs|selectattr('role', 'equalto', 'person')|map(attribute='person')|list %}
+  {% set roles = refs|map(attribute='role')|list %}
+  {% set summary = [] %}
+  {% for who in people|unique %}{% set n = people|select('equalto', who)|list|length %}{% set _ = summary.append(n ~ ' photo' ~ ('' if n == 1 else 's') ~ ' of ' ~ who) %}{% endfor %}
+  {% if 'set' in roles %}{% set _ = summary.append("the set's poster") %}{% endif %}
+  {% set originals = refs|selectattr('role', 'in', ['original', 'lettering'])|list %}
+  {% if originals %}{% set _ = summary.append(originals|length ~ ' piece' ~ ('' if originals|length == 1 else 's') ~ ' of original art') %}{% endif %}
+  <details class="mt-3 artwork-fold"><summary class="small">References it was given: {{ summary|join(', ') if summary else 'none' }}{% if image.job.options and image.job.options.originals and not originals %} <span class="text-warning-emphasis">(no original art found for it)</span>{% endif %}</summary>
+    {% if refs %}<div class="artwork-refs mt-2">{% for r in refs %}{% set ref_src = url_for('main.artwork_image_reference', image_id=image.id, number=loop.index) %}{% set label = r.person or {'set': "the set's poster", 'original': 'original art', 'lettering': 'original logo'}.get(r.role, r.role) %}<figure class="mb-0"><button type="button" class="artwork-open" data-full="{{ ref_src }}" data-alt="Reference {{ loop.index }}: {{ label }}" aria-label="Show reference {{ loop.index }}, {{ label }}, full screen"><img class="artwork-ref" src="{{ ref_src }}" alt="" loading="lazy"></button><figcaption class="small text-secondary">{{ loop.index }}. {{ label }}</figcaption></figure>{% endfor %}</div>{% else %}<p class="small text-secondary mb-0 mt-2">It was made from its prompt alone.</p>{% endif %}
+  </details>
+  {% endif %}
+  {% if shown %}<details class="mt-2 artwork-fold"><summary class="small">How it was made</summary><div class="mt-2">{% set c = shown %}{% include '_artwork_candidate.html' with context %}</div></details>{% endif %}
   {% set earlier = image.candidates|rejectattr('id', 'equalto', shown.id if shown else '')|list %}
-  {% if earlier %}<details class="mt-2"><summary class="small">Earlier versions ({{ earlier|length }})</summary><div class="artwork-versions">{% for c in earlier|reverse %}<figure class="mb-0">{% if c.path %}<button type="button" class="artwork-open" data-full="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" data-alt="Version {{ c.version }}" aria-label="Show version {{ c.version }} full screen"><img class="artwork-ref{{ ' artwork-checker' if c.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" alt="" loading="lazy"></button>{% else %}<div class="artwork-ref artwork-gone">Removed</div>{% endif %}<figcaption class="small text-secondary">v{{ c.version }} · {{ c.decision or 'waiting' }}{% if c.feedback %}: “{{ c.feedback }}”{% endif %}</figcaption></figure>{% endfor %}</div></details>{% endif %}
+  {% if earlier %}<details class="mt-2 artwork-fold"><summary class="small">Earlier versions ({{ earlier|length }})</summary><div class="artwork-versions mt-2">{% for c in earlier|reverse %}<figure class="mb-0">{% if c.path %}<button type="button" class="artwork-open" data-full="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" data-alt="Version {{ c.version }}" aria-label="Show version {{ c.version }} full screen"><img class="artwork-ref{{ ' artwork-checker' if c.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') }}" alt="" loading="lazy"></button>{% else %}<div class="artwork-ref artwork-gone">Removed</div>{% endif %}<figcaption class="small text-secondary">v{{ c.version }} · {{ c.decision or 'waiting' }}{% if c.feedback %}: “{{ c.feedback }}”{% endif %}</figcaption></figure>{% endfor %}</div></details>{% endif %}
 </section>

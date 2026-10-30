@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc49 (2026-10-30)
+
+- **Fixed: "Use each title's original art" usually sent nothing.** Curatarr looked for the art only beside the title's file, and most libraries keep it in Jellyfin's own metadata folder, so the AI got no original poster or logo to take the feel and lettering from. It now asks Jellyfin when the art isn't beside the file: the picture from before any custom one for everyone, or Jellyfin's own where only some accounts have their own (never your own art passed off as the original). Codex is given the title's original poster, logo and picture of the type it's making; a local model the logo, for the lettering.
+- **Review is quicker to work through.** Each picture sits large beside the versions people see now, with **Put on for**, **Approve and put on**, **Turn down** and **Make it again** right under them. What it was given (folded, with a one-line summary such as "4 photos of Amber, 4 photos of Jon, the set's poster, 3 pieces of original art", or a note when no original art was found) and how it was made are folded away until you open them. Every picture opens full screen, references and Jellyfin's own included.
+
 ## 0.2.0rc48 (2026-10-30)
 
 - **Review shows every version in use, and you choose who gets the new one.** Each picture under Review (and on its job's page) now sits beside every version of it people see now, captioned with who sees each (Jellyfin's own for everyone else, and each account's own, accounts with the same picture together), instead of only one. **Put on for** ticks choose who gets the new one, everyone and/or any accounts, starting from whom the job was made for; *Approve the whole set* has the same ticks. Putting a new version on for some accounts leaves the version others see as it is.

@@ -1061,3 +1061,23 @@ def artwork_generate_from_prompts():
         "success",
     )
     return redirect(url_for("main.artwork_batches"))
+
+
+@bp.get("/library/posters/now/<media_id>/<kind>")
+def artwork_jellyfin_picture(media_id, kind):
+    """A title's own picture of ``kind`` as Jellyfin shows it now, to compare
+    with a new one."""
+    from io import BytesIO
+
+    from .services import client
+
+    media = db.session.get(MediaIdentity, media_id)
+    if media is None or not media.jellyfin_id or kind not in custom_posters.KINDS:
+        abort(404)
+    try:
+        data = custom_posters._current(client("jellyfin"), media.jellyfin_id, kind)
+    except IntegrationError:
+        data = None
+    if not data:
+        abort(404)
+    return send_file(BytesIO(data), mimetype=custom_posters.mimetype(kind), max_age=300)

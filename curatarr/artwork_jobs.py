@@ -666,6 +666,43 @@ def _set_picture(image: ArtworkImage) -> Path | None:
     return None
 
 
+ORIGINALS_FOR_A_DAY = 86400  # seconds an original fetched from Jellyfin is reused
+
+
+def original_art(media: MediaIdentity, kind: str) -> Path | None:
+    """The title's own picture of ``kind`` from before any custom one, as a
+    file: beside its media when Jellyfin saves art there, else from Jellyfin
+    (the one saved before a custom picture for everyone, or Jellyfin's own
+    when only some accounts have their own). None when it has none."""
+    import time
+
+    on_disk = custom_posters.originals(media).get(kind)
+    if on_disk:
+        return Path(on_disk)
+    everyone = custom_posters.active(media.id, kind=kind)
+    if everyone is not None:
+        saved = Path(everyone.original_path) if everyone.original_path else None
+        return saved if saved and saved.is_file() else None
+    folder = staging().parent / "artwork_originals"
+    folder.mkdir(parents=True, exist_ok=True)
+    cached = folder / f"{media.id}-{kind}{custom_posters._extension(kind)}"
+    try:
+        if time.time() - cached.stat().st_mtime < ORIGINALS_FOR_A_DAY:
+            return cached
+    except OSError:
+        pass
+    from .services import client
+
+    try:
+        data = custom_posters._original(media, client("jellyfin"), kind)
+    except IntegrationError:
+        return cached if cached.is_file() else None
+    if not data:
+        return None
+    cached.write_bytes(data)
+    return cached
+
+
 def build_task(image: ArtworkImage, engine: str, agent: bool) -> dict:
     """What the worker is sent: the prompt, its references (as addresses it
     fetches with its token) and the checks to run. The references' paths are
@@ -693,13 +730,20 @@ def build_task(image: ArtworkImage, engine: str, agent: bool) -> dict:
     originals = {}
     lettering = None
     if options.get("originals") and job.media is not None:
-        found = custom_posters.originals(job.media)
         if agent:
-            for kind in ("Primary", "Logo"):
-                if kind in found:
-                    originals[kind] = add(found[kind], "original")
-        elif image.kind in artwork_prompts.LETTERED_KINDS and "Logo" in found:
-            lettering = add(found["Logo"], "lettering")
+            # Its poster for the feel and its logo for the lettering, and its
+            # own picture of this type, as tonal references.
+            kinds = ["Primary", "Logo"]
+            if image.kind not in kinds:
+                kinds.append(image.kind)
+            for kind in kinds:
+                path = original_art(job.media, kind)
+                if path is not None:
+                    originals[kind] = add(path, "original")
+        elif image.kind in artwork_prompts.LETTERED_KINDS:
+            path = original_art(job.media, "Logo")
+            if path is not None:
+                lettering = add(path, "lettering")
     if agent:
         prompt = artwork_prompts.agent_prompt(
             image.kind,

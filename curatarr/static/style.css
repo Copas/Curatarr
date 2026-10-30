@@ -548,3 +548,11 @@ body:has(.title-show) { overflow-x: clip; }
 .artwork-made img { display: block; height: 4.5rem; width: auto; border-radius: .3rem; border: 1px solid var(--app-border); }
 .artwork-made .artwork-made-banner { height: 2rem; }
 .artwork-made .artwork-made-logo { height: 2.5rem; }
+.artwork-now .artwork-pic-primary { width: 10rem; }
+.artwork-now .artwork-pic-thumb, .artwork-now .artwork-pic-backdrop { width: 17rem; }
+.artwork-now .artwork-pic-banner { width: 22rem; }
+.artwork-now .artwork-pic-logo { width: 14rem; }
+.artwork-again input, .artwork-feedback { width: 18rem; max-width: 100%; }
+.artwork-fold summary { cursor: pointer; color: var(--app-muted); }
+.artwork-fold[open] summary { color: var(--bs-body-color); }
+.artwork-refs .artwork-ref { width: 7rem; }

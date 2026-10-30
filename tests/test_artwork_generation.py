@@ -1431,3 +1431,48 @@ def test_review_shows_every_version_and_puts_it_on_for_whom_you_choose(
     assert custom_posters.active(media.id, "u1").source != "01_film.jpg"
     with pytest.raises(ValueError, match="Choose who sees it"):
         artwork_jobs.approve(second, everyone=False, accounts=[])
+
+
+def test_original_art_comes_from_jellyfin_when_it_isnt_beside_the_file(
+    app, client, tmp_path, monkeypatch
+):
+    _library, media, _part = _movie()
+    jellyfin = _jellyfin(monkeypatch, _picture("#445566"))
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    (photos / "Sam.jpg").write_bytes(_picture("#aa8866"))
+    worker_row, _token = artwork_jobs.create_worker("Codex PC", 1)
+    worker_row.capabilities = artwork_jobs._clean_capabilities(
+        [
+            {
+                "engine": "codex/image",
+                "label": "Codex",
+                "references": True,
+                "external": True,
+            }
+        ]
+    )
+    db.session.commit()
+    job = artwork_jobs.create_job(
+        media,
+        ["Primary"],
+        engine="codex/image",
+        options={"photos": str(photos), "originals": True, "external_ok": True},
+    )
+    [task] = artwork_jobs.claim(worker_row, 1, ["codex/image"])
+    roles = [r["role"] for r in task["references"]]
+    assert roles.count("original") == 2  # its poster and its logo
+    assert "original poster" in task["prompt"]
+    page = client.get(f"/library/posters/jobs/{job.id}").text
+    assert "References it was given: 1 photo of Sam, 2 pieces of original art" in page
+    assert '<details class="mt-3 artwork-fold">' in page  # folded away
+    assert 'data-alt="Reference 1: Sam"' in page  # opens full screen
+    # A custom poster for everyone: its saved original, never the custom one.
+    jellyfin.current = _picture("#112233")
+    custom_posters.apply(media, _art(), "Uploaded")
+    saved = custom_posters.active(media.id).original_path
+    assert artwork_jobs.original_art(media, "Primary") == Path(saved)
+    # Jellyfin's own picture, to compare with.
+    response = client.get(f"/library/posters/now/{media.id}/Primary")
+    assert response.status_code == 200 and response.data
+    assert client.get(f"/library/posters/now/{media.id}/Nope").status_code == 404

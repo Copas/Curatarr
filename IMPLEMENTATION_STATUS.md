@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc49 (2026-10-30): original art from Jellyfin; streamlined review.
 - v0.2.0rc48 (2026-10-30): review shows every version in use; choose who gets the new one.
 - v0.2.0rc47 (2026-10-30): artwork forms remember each person's choices.
 - v0.2.0rc46 (2026-10-30): previews of finished pictures on Jobs.
