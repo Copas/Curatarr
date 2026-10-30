@@ -379,6 +379,29 @@ def _reasons(jobs) -> dict:
     return found
 
 
+def _versions(images) -> dict:
+    """{picture: every version of it someone sees now, and who}."""
+    accounts = _accounts()
+    return {
+        i.id: artwork_jobs.in_use(i.job.media_identity_id, i.kind, accounts)
+        for i in images
+        if i.job.media_identity_id
+    }
+
+
+def _audience(form):
+    """(everyone, accounts) ticked on an approve form, or (None, None) when
+    it doesn't say (then it's whom the job was made for)."""
+    if "everyone" not in form and "who" not in form and "audience" not in form:
+        return None, None
+    return form.get("everyone") in {"on", "1"}, _scope_list(form.getlist("who"))
+
+
+def _scope_list(ids) -> list[str]:
+    known = dict(_accounts())
+    return [a for a in ids if a in known]
+
+
 def _existing(job: ArtworkJob, kind: str):
     """What the title shows now for ``kind``, to compare with: its custom
     picture (the first account's, or everyone's)."""
@@ -399,6 +422,8 @@ def artwork_job(job_id):
     context = {
         "job": job,
         "existing_by_kind": {i.kind: _existing(job, i.kind) for i in job.images},
+        "versions": _versions(job.images),
+        "account_list": _accounts(),
         "engine_label": _engine_label,
         "accounts": dict(_accounts()),
         "live": job.state in ("pending", "generating"),
@@ -425,6 +450,8 @@ def artwork_review():
         "artwork_review.html",
         images=images,
         existing_by_image={i.id: _existing(i.job, i.kind) for i in images},
+        versions=_versions(images),
+        account_list=_accounts(),
         page=page,
         pages=max(1, -(-total // PER_PAGE)),
         total=total,
@@ -471,7 +498,10 @@ def artwork_candidate_action(candidate_id, action):
     feedback = request.form.get("feedback")
     try:
         if action == "approve":
-            flash(artwork_jobs.approve(candidate, _who()), "success")
+            everyone, accounts = _audience(request.form)
+            flash(
+                artwork_jobs.approve(candidate, _who(), everyone, accounts), "success"
+            )
         elif action == "reject":
             artwork_jobs.reject(candidate, feedback, again=False)
             flash("Turned down.", "success")
@@ -528,7 +558,8 @@ def artwork_job_action(job_id, action):
         abort(404)
     try:
         if action == "approve":
-            done = artwork_jobs.approve_set(job, _who())
+            everyone, accounts = _audience(request.form)
+            done = artwork_jobs.approve_set(job, _who(), everyone, accounts)
             flash(" ".join(done) or "Nothing was waiting for review.", "success")
         elif action == "cancel":
             count = artwork_jobs.cancel_job(job)

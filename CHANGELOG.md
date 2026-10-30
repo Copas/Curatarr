@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc48 (2026-10-30)
+
+- **Review shows every version in use, and you choose who gets the new one.** Each picture under Review (and on its job's page) now sits beside every version of it people see now, captioned with who sees each (Jellyfin's own for everyone else, and each account's own, accounts with the same picture together), instead of only one. **Put on for** ticks choose who gets the new one, everyone and/or any accounts, starting from whom the job was made for; *Approve the whole set* has the same ticks. Putting a new version on for some accounts leaves the version others see as it is.
+
 ## 0.2.0rc47 (2026-10-30)
 
 - **Generate, Batches and Benchmarks remember your choices.** Each form starts from what you chose last time, kept for you on the server (so on every device): the picture types, who they're for, the engine and worker, the photos and who's in them, the look, and the box allowing the photos to go to an outside service, so it's ticked once and stays ticked.

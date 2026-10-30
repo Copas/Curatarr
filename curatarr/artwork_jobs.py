@@ -997,9 +997,59 @@ def _source(image: ArtworkImage) -> str:
     return custom_posters.file_name(details.get("base") or "generated", image.kind)
 
 
-def approve(candidate: ArtworkCandidate, by=None) -> str:
-    """Puts ``candidate`` on in Jellyfin, for the job's accounts or everyone,
-    the way an imported file is. Returns what happened, for the page."""
+def in_use(media_id, kind, accounts) -> list[dict]:
+    """Every version of a title's picture someone sees now: {"poster"
+    (CustomPoster, or None for Jellyfin's own), "who": [names]}, with
+    accounts that see the same picture together. ``accounts`` is [(id,
+    name)]; an account without its own picture sees everyone's."""
+    versions: dict[object, dict] = {}
+
+    def key(poster):
+        if poster is None:
+            return "jellyfin"
+        try:
+            return ("size", Path(poster.image_path).stat().st_size)
+        except OSError:
+            return ("id", poster.id)
+
+    everyone = custom_posters.active(media_id, kind=kind)
+    shared = {"poster": everyone, "who": ["Everyone else"]}
+    versions[key(everyone)] = shared
+    for user_id, name in accounts:
+        own = custom_posters.active(media_id, user_id, kind)
+        if own is None:
+            continue
+        found = versions.setdefault(key(own), {"poster": own, "who": []})
+        if found is shared:
+            found["who"].insert(0, name)
+        else:
+            found["who"].append(name)
+    return list(versions.values())
+
+
+def _put_on(media, data, source, kind, everyone, accounts) -> None:
+    if everyone:
+        custom_posters.apply(media, data, source, kind=kind)
+        picture = custom_posters.normalise(data, kind)
+        for user_id in accounts:  # their own picture, the same
+            mine = custom_posters.active(media.id, user_id, kind)
+            kept = Path(mine.image_path) if mine else None
+            if (
+                kept
+                and kept.exists()
+                and custom_posters._same_picture(picture, kept.read_bytes())
+            ):
+                continue
+            custom_posters._for_account(media, picture, source, user_id, kind)
+    else:
+        custom_posters.import_for_accounts(media, data, source, accounts, kind)
+
+
+def approve(candidate: ArtworkCandidate, by=None, everyone=None, accounts=None) -> str:
+    """Puts ``candidate`` on in Jellyfin the way an imported file is: for
+    everyone (Jellyfin's own picture) and/or for chosen ``accounts`` (their
+    own, through the plugin). Left out, it's whom the job was made for.
+    Returns what happened, for the page."""
     image = candidate.image
     job = image.job
     if job.purpose == "benchmark" or job.media is None:
@@ -1008,17 +1058,20 @@ def approve(candidate: ArtworkCandidate, by=None) -> str:
         raise ValueError("This picture is still being made.")
     if not candidate.path or not Path(candidate.path).is_file():
         raise ValueError("This picture's file is gone (removed after its retention).")
+    if everyone is None and accounts is None:
+        accounts = list(job.accounts or [])
+        everyone = not accounts
+    accounts = list(accounts or [])
+    if not everyone and not accounts:
+        raise ValueError("Choose who sees it: everyone, or some accounts.")
     before = image.state
     image.state = "importing"
     db.session.commit()
     data = Path(candidate.path).read_bytes()
     source = _source(image)
-    media, accounts, kind = job.media, list(job.accounts or []), image.kind
+    media, kind = job.media, image.kind
     try:
-        if accounts:
-            custom_posters.import_for_accounts(media, data, source, accounts, kind)
-        else:
-            custom_posters.apply(media, data, source, kind=kind)
+        _put_on(media, data, source, kind, everyone, accounts)
     except (IntegrationError, ValueError, OSError):
         db.session.rollback()
         image = db.session.get(ArtworkImage, image.id)
@@ -1030,7 +1083,7 @@ def approve(candidate: ArtworkCandidate, by=None) -> str:
     image = candidate.image
     now = utcnow()
     for other in image.candidates:
-        if other.id != candidate.id and other.decision in (None, "approved"):
+        if other.id != candidate.id and other.decision is None:
             other.decision = "superseded"
             other.decided_at = now
     candidate.decision = "approved"
@@ -1041,22 +1094,21 @@ def approve(candidate: ArtworkCandidate, by=None) -> str:
     image.message = None
     _refresh(image.job)
     db.session.commit()
-    if accounts:
-        who = "for " + ", ".join(custom_posters.account_name(a) for a in accounts)
-    else:
-        who = "for everyone"
-    return f"{media.title}: its {custom_posters._noun(kind)} is on {who}."
+    names = [custom_posters.account_name(a) for a in accounts]
+    who = ", ".join((["everyone"] if everyone else []) + names)
+    return f"{media.title}: its {custom_posters._noun(kind)} is on for {who}."
 
 
-def approve_set(job: ArtworkJob, by=None) -> list[str]:
-    """Approves each picture of the job waiting for review (its latest)."""
+def approve_set(job: ArtworkJob, by=None, everyone=None, accounts=None) -> list[str]:
+    """Approves each picture of the job waiting for review (its latest), for
+    the same people."""
     done = []
     for image in list(job.images):
         if image.state != "review":
             continue
         waiting = [c for c in image.candidates if c.decision is None and c.path]
         if waiting:
-            done.append(approve(waiting[-1], by))
+            done.append(approve(waiting[-1], by, everyone, accounts))
     return done
 
 

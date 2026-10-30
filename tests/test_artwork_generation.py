@@ -1386,3 +1386,48 @@ def test_the_forms_remember_their_last_choices(app, client, monkeypatch, tmp_pat
     page = client.get("/library/posters/benchmarks").text
     assert 'name="external_ok" id="b-ext" checked' in page
     assert 'id="bs-logo" checked' in page and 'id="bs-portrait" checked' not in page
+
+
+def test_review_shows_every_version_and_puts_it_on_for_whom_you_choose(
+    app, client, tmp_path, monkeypatch
+):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    jellyfin = _jellyfin(monkeypatch, _picture("#223344"))
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex", "u3": "Pat"})
+    db.session.commit()
+    ours = _art()
+    custom_posters.apply(media, ours, "01_film.jpg", user_id="u1")
+    custom_posters.apply(media, ours, "01_film.jpg", user_id="u2")
+    accounts = [("u1", "Sam"), ("u2", "Alex"), ("u3", "Pat")]
+    versions = artwork_jobs.in_use(media.id, "Primary", accounts)
+    assert [v["who"] for v in versions] == [["Everyone else"], ["Sam", "Alex"]]
+    assert versions[0]["poster"] is None  # Jellyfin's own
+    _row, _token, worker = _worker(app, client, tmp_path)
+    job = artwork_jobs.create_job(media, ["Primary"])
+    _drain(worker)
+    page = client.get(f"/library/posters/jobs/{job.id}").text
+    assert "Now: Alex, Sam" in page and "Now: Everyone else" in page
+    assert "Put on for" in page and 'name="who" value="u3"' in page
+    first = job.images[0].candidates[0]
+    client.post(
+        f"/library/posters/candidates/{first.id}/approve",
+        data={"audience": "1", "everyone": "on", "who": ["u3"]},
+    )
+    db.session.expire_all()
+    assert jellyfin.uploads == 1  # everyone's, in Jellyfin
+    assert custom_posters.active(media.id, "u3") is not None  # Pat's own too
+    assert custom_posters.active(media.id, "u1").source == "01_film.jpg"  # kept
+    # Another version, for Sam only: the first stays on for the others.
+    artwork_jobs.regenerate(job.images[0])
+    _drain(worker)
+    db.session.expire_all()
+    second = job.images[0].candidates[-1]
+    message = artwork_jobs.approve(second, everyone=False, accounts=["u1"])
+    assert "for Sam" in message
+    db.session.expire_all()
+    assert first.decision == "approved" and second.decision == "approved"
+    assert custom_posters.active(media.id, "u1").source != "01_film.jpg"
+    with pytest.raises(ValueError, match="Choose who sees it"):
+        artwork_jobs.approve(second, everyone=False, accounts=[])
