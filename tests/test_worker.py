@@ -101,7 +101,7 @@ def test_overview_banner_tracks_reconciliation(app, client):
     assert "No reconciliation has run yet" in page
     set_setting("reconcile_requested_at", now.isoformat())
     page = client.get("/").text
-    assert "Discovery queued" in page and 'http-equiv="refresh"' in page
+    assert "Discovery queued" in page and 'data-active="1"' in page  # updates itself
     set_setting("last_reconcile_attempt_at", (now + timedelta(seconds=5)).isoformat())
     set_setting("worker_heartbeat_at", (now - timedelta(minutes=2)).isoformat())
     page = client.get("/").text
@@ -113,7 +113,7 @@ def test_overview_banner_tracks_reconciliation(app, client):
     )
     page = client.get("/").text
     assert "Last reconciliation failed:</strong> sonarr down" in page
-    assert 'http-equiv="refresh"' not in page
+    assert 'data-active="1"' not in page
     set_setting("last_reconcile_at", (now + timedelta(seconds=60)).isoformat())
     set_setting("last_reconcile_duration_ms", 134743)
     page = client.get("/").text

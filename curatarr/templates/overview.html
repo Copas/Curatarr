@@ -13,15 +13,7 @@
 </div>
 {% if is_admin %}
 {% set r = reconciliation %}
-{% if r.state in ('queued', 'running') %}<meta http-equiv="refresh" content="15">{% endif %}
-<div class="status-line status-{{ r.state or 'idle' }}" id="reconcile-status">
-{% if r.state == 'queued' %}<strong>Discovery queued</strong> at {{ r.requested_at|when('seconds') }}; the worker picks it up within 15 seconds. Queued work appears here until it starts, and this page refreshes on its own.
-{% elif r.state == 'running' %}<strong>Discovery and reconciliation running</strong> since {{ r.started_at|when('seconds') }} ({{ r.elapsed_seconds // 60 }} min {{ r.elapsed_seconds % 60 }} s). This page refreshes on its own.
-{% elif r.state == 'failed' %}<strong>Last reconciliation failed:</strong> {{ r.error }}. It retries automatically in about 5 minutes; check integration status in Settings.
-{% elif r.state == 'interrupted' %}<strong>Last reconciliation did not finish.</strong> It started at {{ r.started_at|when('time') }}; the worker may have restarted. Click Discover to run it again.
-{% elif r.last_finished %}Last reconciliation finished {{ r.last_finished|when }}{% if r.last_duration_ms %} in {{ (r.last_duration_ms / 1000)|round(0)|int }} s{% endif %}: {{ r.titles }} titles across {{ r.libraries }} libraries.
-{% else %}No reconciliation has run yet. Click Discover after adding API keys.{% endif %}
-</div>
+{% include '_reconcile_status.html' %}
 {% endif %}
 {% if care and care.activity.overall %}<a class="card p-3 mb-3 d-block text-reset text-decoration-none" href="{{ url_for('main.chapter_maintenance') }}" aria-label="Ongoing work, on Enhance">{{ overall_bar(care.activity.overall) }}{% set a = care.activity %}<span class="small text-secondary">{% if a.paused_since %}Paused, making room for people watching{% elif a.running %}{{ a.running|length }} job{{ '' if a.running|length == 1 else 's' }} running now{% endif %}</span></a>{% endif %}
 {% if leaving %}<section class="card p-3 mb-3 leaving-card" aria-labelledby="leaving-heading"><div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2"><h2 class="section-label mb-0" id="leaving-heading">{{ icon('calendar', 14) }} Leaving soon</h2><a class="small" href="{{ url_for('main.review') }}">See them</a></div>
@@ -110,4 +102,5 @@
 </tbody></table></div></div></details>
 {% endif %}
 {% if is_admin and demo_mode %}<div class="card p-3 mt-4"><h2 class="h5">Demo controls</h2><form class="d-flex flex-wrap gap-2" method="post" action="{{ url_for('main.demo_simulate') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select class="form-select w-auto" name="choice">{% for value in ['complete_episode','start_playback','favorite','unfavorite','advance_30_days','add_movie','increase_movie_size','outage_sonarr','outage_radarr','outage_jellyfin','restore_integrations'] %}<option value="{{ value }}">{{ value.replace('_',' ')|title }}</option>{% endfor %}</select><button class="btn btn-outline-light">Simulate</button></form></div>{% endif %}
+<script src="{{ url_for('static', filename='reconcile-status.js', v='1') }}" defer></script>
 {% endblock %}

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc51 (2026-10-30)
+
+- **Fixed: Overview reloaded the whole page every 15 seconds during a reconciliation**, closing anything you'd opened and jumping back to the top. Only its status line updates now, in place; when the run finishes, the line says so with a link to show the new numbers.
+- Enhance's activity card is only redrawn when something in it changed, and keeps your place on the page. No page in Curatarr reloads itself any more (a test now checks every page).
+
 ## 0.2.0rc50 (2026-10-30)
 
 - **Fixed: job pages closed whatever you'd opened every few seconds.** While pictures were being made, Jobs and a job's page reloaded their contents every five seconds, closing any section you'd opened and undoing ticks. They now ask Curatarr what changed and update only that, without reloading: progress bars move in place, and a picture or a job's row is redrawn on its own only when it changes (a new picture, a new state), keeping what was open, ticked or typed in it.

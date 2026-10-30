@@ -1,0 +1,9 @@
+{# Overview's reconciliation line, updated in place while one runs (reconcile-status.js). Needs `r`. #}
+<div class="status-line status-{{ r.state or 'idle' }}" id="reconcile-status" data-status-url="{{ url_for('main.reconcile_status_line') }}"{% if r.state in ('queued', 'running') %} data-active="1"{% endif %}>
+{% if r.state == 'queued' %}<strong>Discovery queued</strong> at {{ r.requested_at|when('seconds') }}; the worker picks it up within 15 seconds. Queued work appears here until it starts, and this line updates on its own.
+{% elif r.state == 'running' %}<strong>Discovery and reconciliation running</strong> since {{ r.started_at|when('seconds') }} ({{ r.elapsed_seconds // 60 }} min {{ r.elapsed_seconds % 60 }} s). This line updates on its own.
+{% elif r.state == 'failed' %}<strong>Last reconciliation failed:</strong> {{ r.error }}. It retries automatically in about 5 minutes; check integration status in Settings.
+{% elif r.state == 'interrupted' %}<strong>Last reconciliation did not finish.</strong> It started at {{ r.started_at|when('time') }}; the worker may have restarted. Click Discover to run it again.
+{% elif r.last_finished %}Last reconciliation finished {{ r.last_finished|when }}{% if r.last_duration_ms %} in {{ (r.last_duration_ms / 1000)|round(0)|int }} s{% endif %}: {{ r.titles }} titles across {{ r.libraries }} libraries.
+{% else %}No reconciliation has run yet. Click Discover after adding API keys.{% endif %}
+</div>

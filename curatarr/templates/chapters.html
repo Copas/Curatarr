@@ -74,5 +74,5 @@
   <div class="d-flex flex-wrap gap-2 mt-2">{% for action, label, tip in [('retry', 'Try again', 'Queues the chapter job again. If the file has gone, Curatarr checks with Radarr or Sonarr and waits quietly for the next copy instead of failing.'), ('search', 'Find another copy', 'Asks Radarr or Sonarr to search for this film or episode now.'), ('ignore', 'Ignore', 'Takes it off this list. It gets chapters again only if the file is replaced or you ask from its page.')] %}<form method="post" action="{{ url_for('main.chapter_failed_action', state_id=state.id, action=action) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ 'btn-primary' if loop.first else 'btn-outline-light' }}" data-tip="{{ tip }}">{{ label }}</button></form>{% endfor %}</div></div><span class="chip chip-danger">{{ state.attempts }} attempt{{ '' if state.attempts == 1 else 's' }}</span></li>{% endfor %}</ul></section>{% endfor %}{% endif %}
 <h2 class="section-title">Activity</h2>
 {% include "_chapter_activity.html" %}
-<script src="{{ url_for('static', filename='chapter-activity.js', v='1') }}" defer></script>
+<script src="{{ url_for('static', filename='chapter-activity.js', v='2') }}" defer></script>
 {% endblock %}

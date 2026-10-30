@@ -995,6 +995,12 @@ def _library_care() -> dict | None:
     }
 
 
+@bp.get("/overview/reconcile-status")
+def reconcile_status_line():
+    """Overview's reconciliation line alone, for it to update in place."""
+    return render_template("_reconcile_status.html", r=reconciliation_state())
+
+
 @bp.get("/operations")
 def operations():
     return render_template(
