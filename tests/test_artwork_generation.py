@@ -1571,3 +1571,43 @@ def test_review_actions_answer_without_a_page_reload(
     # Sent the usual way, it still redirects back.
     plain = client.post(f"/library/posters/jobs/{job.id}/first")
     assert plain.status_code == 302
+
+
+def test_chatgpt_works_from_the_films_own_art_not_its_plot():
+    details = {
+        "title": "John Wick",
+        "year": 2014,
+        "kind": "film",
+        "genres": ["Action"],
+        "overview": "A retired hitman avenges his dog.",
+    }
+    people = {"Sam": [1, 2], "Alex": [3]}
+    poster = artwork_prompts.agent_prompt(
+        "Primary", details, {}, people, originals={"Primary": 4, "Logo": 5}
+    )
+    assert "Base it on the title's own artwork, its original poster (image 4)" in poster
+    assert "dog" not in poster and "hitman" not in poster  # no plot to illustrate
+    assert "They replace the people in the original artwork" in poster
+    assert "Don't add story elements, characters, animals" in poster
+    assert "own logo (image 5) shows the lettering" in poster
+    backdrop = artwork_prompts.agent_prompt(
+        "Backdrop", details, {}, people, originals={"Primary": 4, "Backdrop": 6}
+    )
+    assert (
+        "its original background (image 6)" in backdrop and "lettering)" not in backdrop
+    )
+    banner = artwork_prompts.agent_prompt(
+        "Banner", details, {}, {}, set_image=1, originals={"Primary": 2}
+    )
+    assert "from the story" not in banner and "new faces" not in banner
+    logo = artwork_prompts.agent_prompt("Logo", details, {}, {}, originals={"Logo": 1})
+    assert "Recreate the title's own logo (image 1)" in logo
+    # Asked for a new scene, or with no original art: the story, held back.
+    for prompt in (
+        artwork_prompts.agent_prompt(
+            "Primary", details, {"approach": "story"}, people, originals={"Primary": 4}
+        ),
+        artwork_prompts.agent_prompt("Primary", details, {}, people),
+    ):
+        assert "don't illustrate its plot details" in prompt
+        assert "Base it on the title's own artwork" not in prompt

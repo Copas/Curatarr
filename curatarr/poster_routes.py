@@ -139,8 +139,11 @@ def custom_posters_page():
         who: [v for v, seen in (ribbon["sees"] or {}).items() if who in seen]
         for who, _name in accounts
     }
+    from .artwork_prompts import APPROACHES
+
     return render_template(
         "custom_posters.html",
+        approaches=APPROACHES,
         groups=custom_posters.gallery_groups(sort),
         sort=sort,
         sorts=custom_posters.GALLERY_SORTS,

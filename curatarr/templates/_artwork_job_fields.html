@@ -9,6 +9,9 @@
     <input class="form-control" type="text" name="photos" id="f-photos" value="{{ spec.options.photos if spec else options.photos }}" placeholder="/path/to/photos"></div>
   <div class="col-md-6"><label class="form-label" for="f-cast">Who's in them</label>
     <input class="form-control" type="text" name="cast" id="f-cast" value="{{ spec.options.cast|join(', ') if spec else '' }}" placeholder="Everyone in the folder"></div>
+  <div class="col-12"><label class="form-label" for="f-approach">Start from</label>
+    {% set chosen_approach = spec.options.approach if spec and spec.options.approach else options.get('approach', 'original') %}
+    <select class="form-select" name="approach" id="f-approach">{% for key, label in approaches.items() %}<option value="{{ key }}"{% if key == chosen_approach %} selected{% endif %}>{{ label }}{% if key == 'original' %} (recommended){% endif %}</option>{% endfor %}</select></div>
   <div class="col-12"><label class="form-label" for="f-style">The look</label>
     <textarea class="form-control" name="style" id="f-style" rows="2">{{ spec.options.style if spec else options.style }}</textarea></div>
   <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="originals" id="f-originals"{% if (spec.options.originals if spec else options.originals) %} checked{% endif %}><label class="form-check-label" for="f-originals">Use each title's original art as a reference</label></div>

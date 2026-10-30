@@ -187,6 +187,7 @@ def _common() -> dict:
         "overview": artwork_jobs.overview(),
         "kinds": custom_posters.KINDS,
         "kind_names": custom_posters.KIND_NAMES,
+        "approaches": artwork_prompts.APPROACHES,
         "state_names": artwork_jobs.STATE_NAMES,
         "job_state_names": artwork_jobs.JOB_STATE_NAMES,
         "engines": artwork_jobs.engines(),
@@ -273,6 +274,7 @@ def _job_options(form) -> dict:
         "style": " ".join((form.get("style") or "").split())[:600],
         "originals": form.get("originals") in {"on", "1"},
         "external_ok": form.get("external_ok") in {"on", "1"},
+        "approach": "story" if form.get("approach") == "story" else "original",
     }
 
 
@@ -307,6 +309,7 @@ def artwork_generate_submit():
             "style": options["style"],
             "originals": options["originals"],
             "external_ok": options["external_ok"],
+            "approach": options["approach"],
         },
     )
     if options["photos"] and not Path(options["photos"]).is_dir():
@@ -1070,6 +1073,7 @@ def artwork_generate_from_prompts():
             "style": options["style"],
             "originals": options["originals"],
             "external_ok": False,
+            "approach": options.get("approach", "original"),
         },
     }
     if request.form.get("engine") == "codex/image":

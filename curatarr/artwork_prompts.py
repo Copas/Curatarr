@@ -276,6 +276,88 @@ def model_prompt(
     return " ".join(lines)
 
 
+APPROACHES = {
+    "original": "The film's own artwork, with your cast",
+    "story": "A new scene from the story",
+}
+
+
+def _film(details: dict) -> str:
+    """The title, year and genre, without the plot."""
+    year = f" ({details['year']})" if details.get("year") else ""
+    genres = ", ".join(g.lower() for g in (details.get("genres") or [])[:2])
+    noun = "TV series" if details.get("kind") == "TV show" else "film"
+    return f'the {noun} "{details["title"]}"{year}' + (f", {genres}" if genres else "")
+
+
+# Each picture type's shape and purpose, without sending the model to the
+# story (as KIND_SPECS does, for prompts made from the story).
+SHAPES = {
+    "Primary": "Poster: portrait 2:3, with the title on it.",
+    "Thumb": (
+        "Wide tile: landscape 16:9, with the title on it, large enough to read "
+        "when the picture is shown small."
+    ),
+    "Backdrop": (
+        "Background: landscape 16:9, with no text at all; keep the lower left "
+        "fairly calm, as apps lay the title and plot over it."
+    ),
+    "Logo": (
+        "Logo: only the title, on a transparent background, PNG, at least 1000 "
+        "pixels wide; nothing else in it."
+    ),
+    "Banner": (
+        "Banner: a wide strip, about 5.4:1, with the title on it, and no people "
+        "(it's too small for faces)."
+    ),
+}
+
+
+FRAMES = {
+    "Banner": (
+        "The image tool makes 3:2 pictures and this one is cut to a strip about "
+        "5.4 times as wide as it is high, from its middle: keep the title and "
+        "everything that matters inside a horizontal band across the centre, a "
+        "fifth of the height; the rest is cropped away."
+    ),
+    "Thumb": "Use the landscape 3:2 size; it's trimmed a little top and bottom to 16:9.",
+    "Backdrop": "Use the landscape 3:2 size; it's trimmed a little top and bottom to 16:9.",
+    "Primary": "Use the portrait 2:3 size.",
+    "Logo": "Make the background genuinely transparent.",
+}
+
+
+def _agent_cast(people: dict[str, list[int]], from_art: bool) -> list[str]:
+    """Who plays whom, and keeping them recognisable."""
+    who = ", ".join(f"{name} ({_numbers(numbers)})" for name, numbers in people.items())
+    if from_art:
+        role = (
+            "They replace the people in the original artwork: each takes the "
+            "place of the character they suit best, in that character's costume, "
+            "pose and look. If the artwork shows fewer characters than there are "
+            "people, add the others as the film's other main characters; if it "
+            "shows none, make it without people."
+        )
+    else:
+        role = (
+            "They play the story's main characters, in place of the actors, in "
+            "those characters' costumes; where it has no fitting roles, leave "
+            "them out."
+        )
+    rules = custom_posters._casting("", "them", True)
+    keep = [
+        line
+        for line in rules[4:]
+        if line and "photos side by side" not in line and "Use all of their" not in line
+    ]
+    return [
+        "",
+        f"Reference photos of {who}, who've agreed to this, are attached.",
+        role,
+        *keep,
+    ]
+
+
 def agent_prompt(
     kind: str,
     details: dict,
@@ -286,66 +368,97 @@ def agent_prompt(
     feedback: str | None = None,
 ) -> str:
     """The prompt for an agent with an image tool (Codex): one picture, made
-    with the tool once, nothing else done."""
+    with the tool once, nothing else done.
+
+    By default (``approach`` "original") it's a new version of the title's
+    own artwork with the household as its cast: the plot isn't given, as a
+    model illustrates whatever it's told (a film's dog, a minor scene) and
+    loses what makes the art recognisable. Without original art, or with
+    "story", it's a new scene, the story giving only mood and setting."""
     noun = KIND_NAMES[kind]
+    originals = originals or {}
+    base = originals.get(kind) or (originals.get("Primary") if kind != "Logo" else None)
+    from_art = options.get("approach", "original") == "original" and bool(
+        base or (kind == "Logo" and originals.get("Logo"))
+    )
     lines = [
         (
-            f"Make one {noun} for a home media library with your image "
-            "generation tool, then stop. Don't run commands, read or write "
-            "files, or browse: the picture the tool makes is collected "
+            f"Make one {noun} for {_film(details)}, for a home media library, with "
+            "your image generation tool, then stop. Don't run commands, read or "
+            "write files, or browse: the picture the tool makes is collected "
             "automatically."
         ),
         "",
-        f"- {KIND_SPECS[kind]}",
-        f"- Its tone, setting and key imagery: {_story(details)}",
+        f"- {SHAPES[kind] if from_art else KIND_SPECS[kind]}",
     ]
+    if from_art and kind == "Logo":
+        lines.append(
+            f"- Recreate the title's own logo ({_numbers([originals['Logo']])}): "
+            "the same lettering, typeface, colours and effects, cleanly, as the "
+            "title alone."
+        )
+    elif from_art:
+        source = (
+            f"its original {custom_posters.ORIGINAL_NAMES[kind]}"
+            if originals.get(kind)
+            else "its original poster"
+        )
+        lines.append(
+            f"- Base it on the title's own artwork, {source} ({_numbers([base])}): "
+            "make a new version of it, keeping what makes it recognisable (its "
+            "concept, composition, mood, colour palette, era"
+            + (
+                " and iconic imagery"
+                if kind == "Backdrop"
+                else ", iconic imagery and lettering"
+            )
+            + "). Don't add story elements, characters, animals or objects that "
+            "aren't in that artwork."
+        )
+    else:
+        about = details.get("overview") or ""
+        lines.append(
+            "- A new scene that captures the film's mood, setting and genre at a "
+            "glance."
+            + (
+                f" For mood and setting only, don't illustrate its plot details: "
+                f"{about}"
+                if about
+                else ""
+            )
+        )
     if kind != "Backdrop":
         lines += [
             "- The title, spelled exactly as given: " + details["title"],
             LETTERING,
         ]
-    if people:
-        who = ", ".join(
-            f"{name} ({_numbers(numbers)})" for name, numbers in people.items()
-        )
-        rules = custom_posters._casting("", "them", True)
+    if people and kind != "Logo":
+        lines += _agent_cast(people, from_art)
+    elif kind not in ("Logo", "Banner"):
         lines += [
             "",
-            f"Reference photos of {who}, who've agreed to this, are attached.",
-            *[line for line in rules[2:] if "photos side by side" not in line],
+            "Don't use any real person's likeness, actors included"
+            + (": the people in it are new faces." if from_art else "."),
         ]
-    else:
-        lines += ["", "Don't use any real person's likeness, actors included."]
     if set_image:
         lines.append(
             f"It's one of a matching set: keep the cast, costumes, look and style "
-            f"of {_numbers([set_image])}, in a different scene or framing."
+            f"of {_numbers([set_image])}, in this picture's own framing."
+        )
+    other = {
+        k: n for k, n in originals.items() if n != base and k != kind and k == "Logo"
+    }
+    if other and kind != "Logo":
+        lines.append(
+            f"The title's own logo ({_numbers([other['Logo']])}) shows the "
+            "lettering to match."
         )
     if originals:
-        named = ", ".join(
-            f"its original {custom_posters.ORIGINAL_NAMES[k]} ({_numbers([n])})"
-            for k, n in originals.items()
-        )
-        lines.append(
-            f"Original art, as a tonal reference only: {named}. Carry over its "
-            "mood, palette, era and lettering, but none of the actors' faces."
-        )
+        lines.append("None of the actors' faces from the original art.")
     if options.get("style"):
         lines.append(f"The look: {options['style']}")
     if feedback:
         lines.append(f"Changes asked for: {feedback}")
-    frame = {
-        "Banner": (
-            "The image tool makes 3:2 pictures and this one is cut to a strip "
-            "about 5.4 times as wide as it is high, from its middle: keep the "
-            "title and everything that matters inside a horizontal band across "
-            "the centre, a fifth of the height; the rest is cropped away."
-        ),
-        "Thumb": "Use the landscape 3:2 size; it's trimmed a little top and bottom to 16:9.",
-        "Backdrop": "Use the landscape 3:2 size; it's trimmed a little top and bottom to 16:9.",
-        "Primary": "Use the portrait 2:3 size.",
-        "Logo": "Make the background genuinely transparent.",
-    }[kind]
-    lines.append(frame)
+    lines.append(FRAMES[kind])
     lines.append("Use the image tool once, for this one picture.")
     return "\n".join(lines)

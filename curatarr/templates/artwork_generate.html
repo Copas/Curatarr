@@ -37,6 +37,10 @@
     <div class="col-md-6"><label class="form-label" for="g-cast">Who's in them</label>
       <input class="form-control" type="text" name="cast" id="g-cast" value="{{ saved.get('cast', '') }}" placeholder="{{ people.keys()|join(', ') if people else 'Everyone in the folder' }}" aria-describedby="g-cast-help">
       <div id="g-cast-help" class="form-text">Names, separated by commas (up to three). Empty: everyone in the folder.</div></div>
+    <div class="col-12"><label class="form-label" for="g-approach">Start from</label>
+      {% set chosen_approach = saved.get('approach', options.get('approach', 'original')) %}
+      <select class="form-select" name="approach" id="g-approach" aria-describedby="g-approach-help">{% for key, label in approaches.items() %}<option value="{{ key }}"{% if key == chosen_approach %} selected{% endif %}>{{ label }}{% if key == 'original' %} (recommended){% endif %}</option>{% endfor %}</select>
+      <div id="g-approach-help" class="form-text">The film's own artwork: a new version of its poster (or background, logo…) with your cast in place of the actors, keeping what makes it recognisable; the plot isn't used, so nothing from the story is added. A new scene: made from the film's mood and setting. Titles without original art always get a new scene.</div></div>
     <div class="col-12"><label class="form-label" for="g-style">The look</label>
       <textarea class="form-control" name="style" id="g-style" rows="3">{{ saved.get('style', options.style) }}</textarea></div>
     <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="originals" id="g-originals"{% if saved.get('originals', options.originals) %} checked{% endif %}><label class="form-check-label" for="g-originals">Use each title's original art as a reference (its logo's lettering, and for Codex, its poster's feel)</label></div>

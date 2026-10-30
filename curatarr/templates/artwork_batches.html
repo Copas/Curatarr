@@ -27,7 +27,7 @@
     {% for key in ['titles', 'name', 'engine', 'worker'] %}<input type="hidden" name="{{ key }}" value="{{ request.args.get(key, '') }}">{% endfor %}
     {% for k in spec.kinds %}<input type="hidden" name="kinds" value="{{ k }}">{% endfor %}{% for a in spec.accounts %}<input type="hidden" name="accounts" value="{{ a }}">{% endfor %}
     {% if spec.skip_done %}<input type="hidden" name="skip_done" value="1">{% endif %}{% if spec.alternatives %}<input type="hidden" name="alternatives" value="1">{% endif %}{% if spec.options.originals %}<input type="hidden" name="originals" value="1">{% endif %}{% if spec.options.external_ok %}<input type="hidden" name="external_ok" value="1">{% endif %}
-    <input type="hidden" name="photos" value="{{ spec.options.photos }}"><input type="hidden" name="cast" value="{{ spec.options.cast|join(', ') }}"><input type="hidden" name="style" value="{{ spec.options.style }}">
+    <input type="hidden" name="approach" value="{{ spec.options.approach or 'original' }}"><input type="hidden" name="photos" value="{{ spec.options.photos }}"><input type="hidden" name="cast" value="{{ spec.options.cast|join(', ') }}"><input type="hidden" name="style" value="{{ spec.options.style }}">
     <button class="btn btn-primary">Start this batch</button>
   </form>{% else %}<p class="mb-0 text-secondary">Every title chosen has these pictures already (or has a job under way).</p>{% endif %}
 </section>{% endif %}

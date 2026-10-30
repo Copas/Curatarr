@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc53 (2026-10-30)
+
+- **Pictures made with ChatGPT start from the film's own artwork, not its plot.** The prompt gave the plot as the picture's "key imagery", and the model illustrated it (John Wick's dog turned up on his poster), while the original art was only a "tonal reference". Now, by default, each picture is a new version of the title's own picture of that type (its poster, background, logo…, from Jellyfin), keeping what makes it recognisable (concept, composition, mood, palette, era, iconic imagery, lettering), with your cast in place of the actors, each in the costume of the character they replace, and nothing added that the artwork doesn't have. The plot isn't sent. **Start from** (Generate, Batches, and the Posters page for *Make them with ChatGPT*) can choose *A new scene from the story* instead, and titles without original art always get one; then the story gives only mood and setting, never plot details to draw.
+
 ## 0.2.0rc52 (2026-10-30)
 
 - **Review without reloading the page.** Approve, Turn down and Make it again (and a job's Approve the whole set, Cancel, Retry and engine change) now work in place: a short note confirms what happened, and the page doesn't reload. On Review, a picture you've dealt with folds to a one-line note and the next moves up, so going through many is quick; on a job's page, just that picture is redrawn. If the background request fails, the button works the usual way.

@@ -743,6 +743,7 @@ PROMPT_DEFAULTS = {
     "kinds": ["Primary"],  # which pictures to ask for, as a matching set
     "style": None,  # the look asked for; None: DEFAULT_STYLE, "": none
     "originals": True,  # point the AI to each title's original art
+    "approach": "original",  # artwork_prompts.APPROACHES: from its own art, or story
 }
 DEFAULT_STYLE = (
     "An extreme, heightened take on the story, like an over-the-top movie "
@@ -825,6 +826,7 @@ def save_prompt_options(form) -> dict:
         "kinds": kinds,
         "style": " ".join((form.get("style") or "").split())[:600],
         "originals": form.get("originals") in {"on", "true", "1"},
+        "approach": "story" if form.get("approach") == "story" else "original",
     }
     set_setting(KEY, settings() | {"prompts": options})
     db.session.commit()

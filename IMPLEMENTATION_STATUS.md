@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc53 (2026-10-30): ChatGPT pictures start from the film's own art; plot not sent.
 - v0.2.0rc52 (2026-10-30): review actions without page reloads.
 - v0.2.0rc51 (2026-10-30): no page reloads itself; Overview's status updates in place.
 - v0.2.0rc50 (2026-10-30): live job pages update in place; ticks follow the current setup.
