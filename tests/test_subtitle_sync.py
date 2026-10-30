@@ -67,6 +67,28 @@ def test_a_delay_and_a_frame_rate_drift_are_measured_and_undone():
     assert first.start == pytest.approx(speech[0].start, abs=0.05)
 
 
+def test_a_few_stray_matches_in_a_quiet_stretch_dont_condemn_the_file():
+    speech = _speech()
+    first = subtitle_sync.windows(DURATION)[0]
+    quiet = [s for s in speech if not first[0] <= s.start < first[1]]
+    quiet += [s for s in speech if first[0] <= s.start < first[0] + 16][:4]
+    quiet.sort(key=lambda s: s.start)
+    second = subtitle_sync.windows(DURATION)[1]
+    # A second off in one stretch: uneven, but close enough.
+    lines = _subtitles(
+        speech, lambda t: t + (2.4 if second[0] <= t < second[1] else 0.4)
+    )
+    # Two of the quiet stretch's four lines are matched far away.
+    texts = subtitle_sync.parse_srt(lines)
+    early = [s for s in quiet if first[0] <= s.start < first[1]]
+    for segment, offset in zip(early[:2], (28.0, 44.0), strict=True):
+        moved = Segment(segment.start + offset, segment.end + offset, segment.text)
+        texts = [line for line in texts if line.text != segment.text]
+        texts.append(subtitle_sync.Line(moved.start, moved.end, moved.text))
+    result = subtitle_sync.judge(texts, quiet, DURATION)
+    assert result.verdict == "in_sync" and "close enough" in result.reason
+
+
 def test_subtitles_cut_for_another_version_cant_be_shifted_into_line():
     speech = _speech()
     middle = DURATION / 2

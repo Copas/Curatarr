@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc57 (2026-10-30)
+
+- **Fixed: a few stray matches could get good subtitles set aside.** Each stretch listened to was measured by the middle of all its matched lines, so in a quiet stretch two chance matches far away (with only two real ones) made subtitles that were in sync look 15 seconds out (Beetlejuice Beetlejuice). A stretch is now measured by its largest group of lines that agree with each other; a real cut, where most lines agree on a new offset, still shows. Files set aside before this are put back and checked again once more.
+- Re-timed subtitles keep their name (`….en.srt`), so Bazarr still counts them as English and doesn't download them again; Bazarr only recognises names that end in the language.
+
 ## 0.2.0rc56 (2026-10-30)
 
 - **Fixed: subtitles only a little uneven were set aside.** Subtitles within a couple of seconds everywhere, but not by a single steady amount, were counted as unfixable, set aside and replaced (about half of those set aside so far, Moana among them). Subtitles are now set aside only when they're more than 3 seconds out somewhere; closer ones are left as they are ("close enough"). Files set aside before this are put back on their own and checked again, and Curatarr's own subtitles for them are removed if unchanged (they're made again from the saved transcript if the check still says so).

@@ -39,6 +39,8 @@ SURE_POINTS = 20
 # moment before the voice, and speech recognition times lines to within a
 # second or so (files known to be right measure up to ~1.2 s).
 IN_SYNC_SECONDS = 1.5
+# Lines within this of each other agree on how far out a stretch is.
+AGREE_SECONDS = 1.0
 # Uneven but never further out than this anywhere it was heard: not worth
 # replacing someone's subtitles over (they read fine).
 CLOSE_SECONDS = 3.0
@@ -68,7 +70,7 @@ STRETCH_SECONDS = 0.75
 
 # Bumped when the rules change in a way that should revisit earlier verdicts
 # (see outside_subtitles.revisit).
-RULES = 2
+RULES = 3
 
 TIME = re.compile(r"(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})")
 ARROW = re.compile(
@@ -179,6 +181,14 @@ def _line(points):
     return median(o - slope * t for t, o in points), slope
 
 
+def _agreed(offsets: list[float]) -> float:
+    groups = [
+        [o for o in offsets if abs(o - centre) <= AGREE_SECONDS] for centre in offsets
+    ]
+    best = max(groups, key=lambda group: (len(group), -abs(median(group))))
+    return median(best)
+
+
 def _snap(rate: float) -> float:
     known = [r for k in KNOWN_RATES for r in (k, 1 / k)]
     nearest = min(known, key=lambda k: abs(rate - k))
@@ -243,8 +253,12 @@ def judge(lines: list[Line], segments: list[Segment], duration: float) -> Result
             if abs(o - delay - (rate - 1) * t) <= OUTLIER_SECONDS
         ]
         result.stretches.append(median(near) if near else OUTLIER_SECONDS)
+    # How far out each stretch is where it was heard: the middle of its largest
+    # group of lines that agree with each other, so a few stray matches in a
+    # quiet stretch don't drag it off (and a cut, where most agree on a new
+    # offset, still shows).
+    heard = [_agreed([o for _, o in found]) for found in stretches]
     # Close enough everywhere it was heard is in sync, whatever the line says.
-    heard = [median(o for _, o in found) for found in stretches]
     if all(abs(off) <= IN_SYNC_SECONDS for off in heard):
         result.verdict = "in_sync"
         return result

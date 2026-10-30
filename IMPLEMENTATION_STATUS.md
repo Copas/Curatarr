@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc57 (2026-10-30): subtitle sync stretches measured by agreeing lines; set-asides revisited again.
 - v0.2.0rc56 (2026-10-30): subtitle sync check fixes (close enough kept, contents-only backup, language by majority); earlier set-asides revisited.
 - v0.2.0rc55 (2026-10-30): Enhance → Subtitles tab: sync results, undo, bulk checks.
 - v0.2.0rc54 (2026-10-30): out-of-sync English subtitles beside a video are re-timed, or set aside and replaced.
