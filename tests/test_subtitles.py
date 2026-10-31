@@ -273,3 +273,55 @@ def test_new_imports_go_before_subtitles_that_need_transcribing(subtitle_env):
     db.session.commit()
     ids = [s.media_part_id for s in enrichment._due_jobs(10, scans=False)]
     assert ids[0] == part.id  # quick with a saved transcript: first
+
+
+ENGLISH_LINES = "\n".join(
+    f"{n}\n00:00:{n:02},000 --> 00:00:{n:02},900\nWhat do you want me to do with it?\n"
+    for n in range(1, 30)
+)
+SPANISH_LINES = "\n".join(
+    f"{n}\n00:00:{n:02},000 --> 00:00:{n:02},900\n¿Por qué actuaba tan raro con ella?\n"
+    for n in range(1, 30)
+)
+
+
+def test_untagged_subtitles_count_as_english_only_if_they_read_as_english(tmp_path):
+    from curatarr.subtitles import read_text, written_in_english
+
+    video = tmp_path / "Film.mkv"
+    video.touch()
+    untagged = tmp_path / "Film.srt"
+    untagged.write_text(SPANISH_LINES, encoding="cp1252")
+    assert written_in_english(untagged) is False
+    assert sidecar_english(str(video)) == []
+    untagged.write_text(ENGLISH_LINES, encoding="utf-16")  # with its marker
+    assert written_in_english(untagged) is True
+    assert sidecar_english(str(video)) == ["Film.srt"]
+    assert read_text(untagged) == (ENGLISH_LINES, "utf-16")
+    untagged.write_bytes(ENGLISH_LINES.encode("utf-16-le"))  # without
+    assert read_text(untagged) == (ENGLISH_LINES, "utf-16-le")
+    assert written_in_english(untagged) is True
+    untagged.write_text("1\n00:00:01,000 --> 00:00:02,000\nHola.\n")
+    assert written_in_english(untagged) is None  # too few words to tell
+    assert sidecar_english(str(video)) == ["Film.srt"]
+    ass = tmp_path / "Film.ass"
+    untagged.unlink()
+    ass.write_text(
+        "[V4+ Styles]\nFormat: Name, Fontname\nStyle: Default,Arial\n[Events]\n"
+        + "".join(
+            f"Dialogue: 0,0:00:{n:02}.00,0:00:{n:02}.90,Default,,0,0,0,,"
+            "¿Por qué actuaba\\Ntan raro con ella?\n"
+            for n in range(1, 30)
+        )
+    )
+    assert written_in_english(ass) is False
+
+
+def test_a_film_with_only_foreign_subtitles_gets_english_ones(subtitle_env):
+    _files, _arr, _library, _media, part, _calls = subtitle_env
+    foreign = Path(part.file_path).with_name("Film.srt")
+    foreign.write_text(SPANISH_LINES, encoding="utf-8")
+    enrichment.request(part, "subtitles")
+    enrichment.dispatch(synchronous=True)
+    assert _state(part).subtitle_status == "generated"
+    assert foreign.read_text(encoding="utf-8") == SPANISH_LINES  # left alone

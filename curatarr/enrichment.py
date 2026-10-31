@@ -68,6 +68,7 @@ from .subtitles import (
     digest,
     embedded_english,
     generated_path,
+    read_text,
     sidecar_english,
     srt_text,
 )
@@ -1508,17 +1509,6 @@ def _sidecar_key(path: Path) -> dict:
     return {"size": stat.st_size, "mtime": int(stat.st_mtime)}
 
 
-def _read_text(path: Path) -> tuple[str, str]:
-    """A subtitle file's text and the encoding to write it back in."""
-    raw = path.read_bytes()
-    if raw.startswith(b"\xef\xbb\xbf"):
-        return raw.decode("utf-8-sig"), "utf-8-sig"
-    try:
-        return raw.decode("utf-8"), "utf-8"
-    except UnicodeDecodeError:
-        return raw.decode("cp1252", errors="replace"), "cp1252"
-
-
 def _sync_segments(info, config, opts):
     """What's said in the stretches the sync check listens to, or an error."""
     from .transcribe import transcribe
@@ -1584,7 +1574,7 @@ def _check_sync(state, part, media, path, info, names, config, opts, fields):
             kept = True
             continue
         try:
-            text, encoding = _read_text(target)
+            text, encoding = read_text(target)
         except OSError as exc:
             entry |= {"outcome": "unchecked", "reason": str(exc)}
             kept = True

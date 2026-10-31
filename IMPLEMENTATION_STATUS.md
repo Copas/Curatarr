@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc59 (2026-10-30): untagged subtitle files judged by their words; UTF-16 subtitles read.
 - v0.2.0rc58 (2026-10-30): subtitle times read exactly (leading-zero milliseconds); re-timed files redone from originals.
 - v0.2.0rc57 (2026-10-30): subtitle sync stretches measured by agreeing lines; set-asides revisited again.
 - v0.2.0rc56 (2026-10-30): subtitle sync check fixes (close enough kept, contents-only backup, language by majority); earlier set-asides revisited.

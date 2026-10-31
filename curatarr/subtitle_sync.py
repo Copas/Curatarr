@@ -70,7 +70,7 @@ STRETCH_SECONDS = 0.75
 
 # Bumped when the rules change in a way that should revisit earlier verdicts
 # (see outside_subtitles.revisit).
-RULES = 4
+RULES = 5
 
 TIME = re.compile(r"(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})")
 ARROW = re.compile(

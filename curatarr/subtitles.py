@@ -54,8 +54,9 @@ def embedded_english(streams: list[dict], text_only=False) -> bool:
 
 
 def sidecar_english(video_path: str, text_only=False) -> list[str]:
-    """Subtitle files beside the video that are English or untagged (with
-    ``text_only``, not pictures: VobSub .idx/.sub, Blu-ray .sup).
+    """Subtitle files beside the video that are English, or untagged and not
+    plainly another language (with ``text_only``, not pictures: VobSub
+    .idx/.sub, Blu-ray .sup).
 
     ``Show.S01E01.en.srt``, ``Show.S01E01.eng.forced.srt`` (forced excluded),
     ``Show.S01E01.srt``. Curatarr's own generated file is not counted.
@@ -80,9 +81,108 @@ def sidecar_english(video_path: str, text_only=False) -> list[str]:
         tags = [tag for tag in tags if tag]
         if "forced" in tags:
             continue
-        if not tags or any(tag in ENGLISH for tag in tags):
+        if any(tag in ENGLISH for tag in tags):
+            found.append(name)
+        elif not tags and written_in_english(candidate) is not False:
+            # Untagged: English unless its words say otherwise.
             found.append(name)
     return found
+
+
+# The commonest English words. In English subtitles they make up a third or
+# more of all words; in other languages, even ones written in the same
+# letters, a few in a hundred (shared words like "a", "in", "no" included).
+COMMON_ENGLISH = frozenset(
+    [
+        "the",
+        "you",
+        "i",
+        "to",
+        "a",
+        "and",
+        "it",
+        "is",
+        "that",
+        "of",
+        "what",
+        "in",
+        "me",
+        "this",
+        "we",
+        "he",
+        "your",
+        "on",
+        "my",
+        "no",
+        "be",
+        "for",
+        "have",
+        "not",
+        "do",
+        "are",
+        "was",
+        "don't",
+        "it's",
+        "i'm",
+        "know",
+        "just",
+        "with",
+        "so",
+        "all",
+        "can",
+    ]
+)
+ENGLISH_SHARE = 0.15
+MIN_WORDS = 50
+SAMPLE_BYTES = 65536
+
+
+def decode(raw: bytes) -> tuple[str, str]:
+    """A subtitle file's text and the encoding to write it back in: UTF-8
+    (with or without its marker), UTF-16 (a zero byte beside most letters;
+    usually marked, sometimes not), else Western European (Windows-1252)."""
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig"), "utf-8-sig"
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16", errors="replace"), "utf-16"
+    sample = raw[:4096]
+    if sample and sample.count(0) * 4 > len(sample):
+        encoding = (
+            "utf-16-le" if sample[1::2].count(0) > sample[::2].count(0) else "utf-16-be"
+        )
+        return raw.decode(encoding, errors="replace"), encoding
+    try:
+        return raw.decode("utf-8"), "utf-8"
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace"), "cp1252"
+
+
+def read_text(path) -> tuple[str, str]:
+    with open(path, "rb") as handle:
+        return decode(handle.read())
+
+
+def written_in_english(path) -> bool | None:
+    """Whether a text subtitle file reads as English, from its words. None
+    when it can't be told: unreadable, or too few words."""
+    try:
+        with open(path, "rb") as handle:
+            raw = handle.read(SAMPLE_BYTES)
+    except OSError:
+        return None
+    if raw[:2] not in (b"\xff\xfe", b"\xfe\xff") and len(raw) % 2 and raw.count(0):
+        raw = raw[:-1]  # cut mid-letter in UTF-16
+    lines = decode(raw)[0].splitlines()
+    if any(line.startswith("Dialogue:") for line in lines):
+        # SubStation (.ass/.ssa): only what's said, not the styling around it.
+        lines = [
+            line.split(",", 9)[-1] for line in lines if line.startswith("Dialogue:")
+        ]
+    text = re.sub(r"<[^>]*>|\{[^}]*\}|\\N", " ", "\n".join(lines)).lower()
+    words = re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?", text)
+    if len(words) < MIN_WORDS:
+        return None
+    return sum(word in COMMON_ENGLISH for word in words) >= ENGLISH_SHARE * len(words)
 
 
 def _picture_file(path: Path) -> bool:

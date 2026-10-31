@@ -92,7 +92,8 @@ def _retime_again(video, name, entry) -> bool:
     its original, after a fix to how times are read (0.2.0rc58: ",083" was
     read as 0.83 s)."""
     from . import subtitle_sync
-    from .enrichment import _read_text, _sidecar_key
+    from .enrichment import _sidecar_key
+    from .subtitles import read_text
 
     target = video.with_name(name)
     backup = video.with_name(entry.get("backup") or "")
@@ -102,7 +103,7 @@ def _retime_again(video, name, entry) -> bool:
     try:
         if _sidecar_key(target) != entry.get("key"):
             return False  # changed since: left as it is
-        text, encoding = _read_text(backup)
+        text, encoding = read_text(backup)
         fixed = subtitle_sync.retime(text, result["delay"], result["rate"])
         partial = target.with_name(name + ".partial")
         partial.write_text(fixed, encoding=encoding)

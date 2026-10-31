@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc59 (2026-10-30)
+
+- **Subtitle files with no language in their name are judged by their words.** A file named just `<video>.srt` used to count as English. Now it counts only if it reads as English: in English subtitles the commonest small words ("the", "you", "and"…) make up a third or more of all words, and in other languages a few in a hundred. A film whose only subtitles are an untagged foreign file now gets English ones, and the sync check no longer sets such files aside as "not this film's words". Files set aside that way are put back. Files too short to tell count as before.
+- **Subtitles saved as UTF-16** (a zero byte beside each letter) are now read properly, by the sync check too, and written back the same way. They were read as gibberish, so they were never really checked.
+
 ## 0.2.0rc58 (2026-10-30)
 
 - **Fixed: subtitle times with a leading zero in the milliseconds were misread.** `00:00:46,083` was read as 46.830 s, so about one time in ten was up to 0.9 s off: in subtitles Curatarr re-timed (a line could end late or start early) and, slightly, in the sync check. Times are now read exactly. Subtitles Curatarr re-timed before this, and nobody has changed since, are re-timed again from their kept originals.
