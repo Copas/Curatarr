@@ -380,7 +380,7 @@ def test_prompts_keep_the_reference_people_recognisable(app, client, tmp_path):
     assert custom_posters.prompt_options()["photos"] == str(tmp_path)
 
 
-def test_prompts_ask_for_an_extreme_take_unless_told_otherwise(app, client, tmp_path):
+def test_prompts_ask_for_a_heightened_take_unless_told_otherwise(app, client, tmp_path):
     entry = {
         "number": 1,
         "title": "Film",
@@ -393,11 +393,11 @@ def test_prompts_ask_for_an_extreme_take_unless_told_otherwise(app, client, tmp_
         "made": None,
     }
     options = custom_posters.prompt_options()
-    assert "extreme, heightened take" in options["style"]  # the default
+    assert "heightened take on the original artwork" in options["style"]  # the default
     text = custom_posters.prompts(
         [entry], batch=5, photos="", people="", output="/out", style=options["style"]
     )[0]
-    assert "The look: An extreme" in text and "sexual tension" in text
+    assert "The look: A heightened take" in text and "sexual tension" in text
     assert "The look" in client.get("/library/posters").text
     client.post(
         "/library/posters/prompts",

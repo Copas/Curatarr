@@ -1611,3 +1611,24 @@ def test_chatgpt_works_from_the_films_own_art_not_its_plot():
     ):
         assert "don't illustrate its plot details" in prompt
         assert "Base it on the title's own artwork" not in prompt
+
+
+def test_an_untouched_old_default_look_follows_todays_default(app, client):
+    from curatarr.services import set_setting
+
+    old = custom_posters.OLD_STYLES[0]
+    set_setting(custom_posters.KEY, {"prompts": {"style": old}})
+    assert custom_posters.prompt_options()["style"] == custom_posters.DEFAULT_STYLE
+    assert "original artwork" in custom_posters.DEFAULT_STYLE
+    set_setting(custom_posters.KEY, {"prompts": {"style": "Film noir, all shadows."}})
+    assert custom_posters.prompt_options()["style"] == "Film noir, all shadows."
+    set_setting(custom_posters.KEY, {"prompts": {"style": ""}})
+    assert custom_posters.prompt_options()["style"] == ""  # no look asked for
+    with app.test_request_context():
+        from curatarr import artwork_routes
+
+        set_setting(f"{artwork_routes.FORM_KEY}:generate:anyone", {"style": old})
+        assert (
+            artwork_routes._remembered("generate")["style"]
+            == custom_posters.DEFAULT_STYLE
+        )

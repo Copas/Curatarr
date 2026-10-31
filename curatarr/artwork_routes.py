@@ -155,10 +155,14 @@ FORM_KEY = "artwork_form"
 def _remembered(form: str) -> dict:
     """What this person chose on ``form`` last time, to start from."""
     from .auth import current_user
+    from .custom_posters import current_style
     from .services import setting
 
     who = (current_user() or {}).get("id") or "anyone"
-    return setting(f"{FORM_KEY}:{form}:{who}") or {}
+    values = dict(setting(f"{FORM_KEY}:{form}:{who}") or {})
+    if values.get("style"):
+        values["style"] = current_style(values["style"])
+    return values
 
 
 def _remember(form: str, values: dict) -> None:

@@ -746,11 +746,29 @@ PROMPT_DEFAULTS = {
     "approach": "original",  # artwork_prompts.APPROACHES: from its own art, or story
 }
 DEFAULT_STYLE = (
-    "An extreme, heightened take on the story, like an over-the-top movie "
-    "poster: big, intense facial expressions (terror, joy, rage, grief, "
-    "romantic or sexual tension, whatever the story runs on), pushed further "
-    "than the film itself, with bold, dramatic composition and lighting."
+    "A heightened take on the original artwork, like an over-the-top movie "
+    "poster: keep its composition, mood and palette and push them further, "
+    "with big, intense facial expressions (terror, joy, rage, grief, romantic "
+    "or sexual tension, whatever the film runs on) and bold, dramatic lighting."
 )
+# Defaults from before, saved as they were: read as today's default, so a
+# look nobody changed follows the default (one written for plot-led prompts
+# no longer fits pictures made from the original art).
+OLD_STYLES = (
+    (
+        "An extreme, heightened take on the story, like an over-the-top movie "
+        "poster: big, intense facial expressions (terror, joy, rage, grief, "
+        "romantic or sexual tension, whatever the story runs on), pushed further "
+        "than the film itself, with bold, dramatic composition and lighting."
+    ),
+)
+
+
+def current_style(style):
+    """A saved look, with an untouched old default read as today's."""
+    return DEFAULT_STYLE if style is None or style in OLD_STYLES else style
+
+
 OVERVIEW_CHARS = 280
 # Left to "lettering in the film's style", logos came out as plain fonts; and
 # with the pictures made without text, an agent typed every title on in the
@@ -802,8 +820,7 @@ KIND_SPECS = {
 
 def prompt_options() -> dict:
     options = PROMPT_DEFAULTS | (settings().get("prompts") or {})
-    if options["style"] is None:
-        options["style"] = DEFAULT_STYLE
+    options["style"] = current_style(options["style"])
     return options
 
 

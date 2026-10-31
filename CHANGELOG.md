@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc60 (2026-10-30)
+
+- **The default look for made pictures starts from the original artwork.** It read "An extreme, heightened take on the story…", from when pictures were made from the plot. It's now a heightened take on the original artwork: its composition, mood and palette pushed further, with big, intense expressions and dramatic lighting. A look still saved as the old default (it's saved with the form) follows the new one; a look you wrote yourself is left as it is.
+
 ## 0.2.0rc59 (2026-10-30)
 
 - **Subtitle files with no language in their name are judged by their words.** A file named just `<video>.srt` used to count as English. Now it counts only if it reads as English: in English subtitles the commonest small words ("the", "you", "and"…) make up a third or more of all words, and in other languages a few in a hundred. A film whose only subtitles are an untagged foreign file now gets English ones, and the sync check no longer sets such files aside as "not this film's words". Files set aside that way are put back. Files too short to tell count as before.
