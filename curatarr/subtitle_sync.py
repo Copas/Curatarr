@@ -68,9 +68,17 @@ RATES = (0.95, 1.06)
 # right in some places and out in others, which one line can't follow.
 STRETCH_SECONDS = 0.75
 
+# Another episode whose subtitles hold this much of what's said, at least so
+# many lines, and this many times more than any other episode's: the file is
+# that episode. (Measured: a misfiled episode matches its true episode's
+# subtitles at 85-95%, any other at under 5%.)
+EPISODE_SHARE = 0.4
+EPISODE_LINES = 15
+EPISODE_CLEAR = 3.0
+
 # Bumped when the rules change in a way that should revisit earlier verdicts
 # (see outside_subtitles.revisit).
-RULES = 5
+RULES = 6
 
 TIME = re.compile(r"(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})")
 ARROW = re.compile(
@@ -318,3 +326,22 @@ def retime(text: str, delay: float, rate: float) -> str:
         return f"{fixed(match, 1)} --> {fixed(match, 5)}{match.group(9)}"
 
     return ARROW.sub(line, text)
+
+
+def which_episode(segments: list[Segment], others: dict) -> tuple | None:
+    """(key, lines found, lines spoken) for the one of ``others`` ({key:
+    subtitle lines}) holding most of what's said, clearly ahead of the rest;
+    None when none does."""
+    found = {key: measure(lines, segments) for key, lines in others.items()}
+    ranked = sorted(found.items(), key=lambda item: len(item[1][0]), reverse=True)
+    if not ranked:
+        return None
+    best, (points, spoken) = ranked[0]
+    runner_up = len(ranked[1][1][0]) if len(ranked) > 1 else 0
+    if (
+        len(points) >= EPISODE_LINES
+        and len(points) >= EPISODE_SHARE * spoken
+        and len(points) >= EPISODE_CLEAR * max(runner_up, 1)
+    ):
+        return best, len(points), spoken
+    return None

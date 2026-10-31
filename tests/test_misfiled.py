@@ -226,3 +226,91 @@ def test_checked_every_half_hour(app, monkeypatch):
     )
     misfiled.sweep()
     assert len(calls) == 2 and setting(misfiled.KEY)["findings"] == {}
+
+
+def test_a_file_its_subtitles_show_is_another_episode_is_fixed(app, monkeypatch):
+    from curatarr.models import ChapterState, MediaPart
+
+    media = _show()
+    states = {}
+    for number in (2, 3):
+        part = MediaPart(
+            media_identity_id=media.id,
+            kind="episode",
+            season_number=1,
+            episode_number=number,
+            has_file=True,
+            file_path=f"/tv/Show/S01E0{number}.mkv",
+        )
+        db.session.add(part)
+        db.session.flush()
+        states[number] = ChapterState(media_part_id=part.id, media_identity_id=media.id)
+        db.session.add(states[number])
+    # E2's file is really E3 (its speech is in E3's subtitles), and E3's own
+    # file matches its own subtitles: E2's is a second copy of E3. Its
+    # download was named for E2, so the name gave nothing away.
+    states[2].subtitle_sync = {
+        "files": {"S01E02.en.srt": {"outcome": "set_aside"}},
+        "episode": {"fits": 3, "found": 140, "spoken": 150, "file": "S01E02.mkv"},
+    }
+    states[3].subtitle_sync = {"files": {"S01E03.en.srt": {"outcome": "in_sync"}}}
+    db.session.commit()
+    sonarr = FakeSonarr(
+        [_episode(1, 11), _episode(2, 12), _episode(3, 13), _episode(4, 14)],
+        [],
+        {
+            12: {"id": 12, "path": "/tv/Show/S01E02.mkv", "quality": {}},
+            13: {"id": 13, "path": "/tv/Show/S01E03.mkv", "quality": {}},
+        },
+    )
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: sonarr)
+    monkeypatch.setattr(misfiled, "_transcript", _said({}))
+    monkeypatch.setattr(autofix, "ON_BY_DEFAULT", True)
+    from curatarr import filecheck_jobs
+
+    monkeypatch.setattr(filecheck_jobs, "_dry_run", lambda media: False)
+    assert misfiled.sweep() == 1
+    assert ("delete", 12) in sonarr.calls  # the second copy
+    assert ("blocklist", 900) in sonarr.calls  # the download that held it
+    assert sonarr.calls.index(("blocklist", 900)) < sonarr.calls.index(
+        ("search", [102])
+    )
+    lines = misfiled.evidence(
+        next(iter((setting(misfiled.KEY) or {})["findings"].values()))
+    )
+    assert "its own subtitles don't match" in lines[0]
+    assert "140 of 150 lines heard" in lines[1] and "second copy" in lines[2]
+
+
+def test_subtitle_evidence_about_a_replaced_file_is_ignored(app, monkeypatch):
+    from curatarr.models import ChapterState, MediaPart
+
+    media = _show()
+    part = MediaPart(
+        media_identity_id=media.id,
+        kind="episode",
+        season_number=1,
+        episode_number=2,
+        has_file=True,
+        file_path="/tv/Show/S01E02.new.mkv",
+    )
+    db.session.add(part)
+    db.session.flush()
+    db.session.add(
+        ChapterState(
+            media_part_id=part.id,
+            media_identity_id=media.id,
+            subtitle_sync={
+                "episode": {
+                    "fits": 3,
+                    "found": 140,
+                    "spoken": 150,
+                    "file": "S01E02.mkv",
+                }
+            },
+        )
+    )
+    db.session.commit()
+    sonarr = FakeSonarr([_episode(2, 12), _episode(3, 13)], [], {})
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: sonarr)
+    assert misfiled._findings(sonarr, utcnow()) == {}

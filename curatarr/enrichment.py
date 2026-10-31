@@ -1538,6 +1538,39 @@ def _sync_segments(info, config, opts):
     return segments, None
 
 
+def _other_episode(part, segments) -> dict | None:
+    """Which other episode of the season a file really is, from its speech:
+    the one whose downloaded English subtitles hold most of what's said.
+    {"fits": episode number, "found", "spoken"}, or None."""
+    siblings = (
+        db.session.query(MediaPart)
+        .filter(
+            MediaPart.media_identity_id == part.media_identity_id,
+            MediaPart.season_number == part.season_number,
+            MediaPart.episode_number != part.episode_number,
+            MediaPart.has_file.is_(True),
+            MediaPart.file_path.isnot(None),
+        )
+        .all()
+    )
+    others = {}
+    for sibling in siblings:
+        for name in sidecar_english(sibling.file_path, text_only=True):
+            if not name.lower().endswith(".srt"):
+                continue
+            try:
+                text, _encoding = read_text(Path(sibling.file_path).with_name(name))
+            except OSError:
+                continue
+            others[sibling.episode_number] = subtitle_sync.parse_srt(text)
+            break
+    match = subtitle_sync.which_episode(segments, others)
+    if match is None:
+        return None
+    number, found, spoken = match
+    return {"fits": number, "found": found, "spoken": spoken}
+
+
 def _check_sync(state, part, media, path, info, names, config, opts, fields):
     """Checks the English .srt files beside the video that Curatarr didn't
     write: in sync ones are kept, ones off by a steady amount are re-timed
@@ -1567,6 +1600,7 @@ def _check_sync(state, part, media, path, info, names, config, opts, fields):
             continue
         if segments is None and error is None:
             segments, error = _sync_segments(info, config, opts)
+            record.pop("episode", None)  # decided afresh by this check
         entry = {"key": key, "checked_at": utcnow().isoformat()}
         files[name] = entry
         if error:
@@ -1619,6 +1653,10 @@ def _check_sync(state, part, media, path, info, names, config, opts, fields):
                     | result.as_dict(),
                 )
                 continue
+        if result.verdict == "mismatch" and part.kind == "episode":
+            other = _other_episode(part, segments)
+            if other:
+                record["episode"] = other | {"file": video.name, "subtitles": name}
         if result.verdict == "mismatch":
             aside = target.with_name(name + ".out-of-sync")
             try:

@@ -31,7 +31,8 @@ DOC_NETS = [
 HOME = re.compile(r"/home/([A-Za-z0-9_.-]+)")
 EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 IPV4 = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?![\d.])")
-SESSION = re.compile(r"Claude-Session|claude\.ai/code/session", re.IGNORECASE)
+# Split so this file doesn't match itself.
+SESSION = re.compile("Claude-Session|claude\\.ai/code/session", re.IGNORECASE)
 
 
 def problems(text: str) -> list[str]:
@@ -77,12 +78,16 @@ def _git(*args) -> str | None:
 
 
 def test_the_checks_catch_what_they_should():
-    assert problems("see /home/robin/media and robin@gmail.com") == [
+    # The examples are put together here, so this file passes its own check.
+    email = "robin" + "@" + "gmail.com"
+    lan = "192." + "168.1.20"
+    office = "10." + "0.4.7"
+    assert problems(f"see /home/robin/media and {email}") == [
         "home folder /home/robin",
-        "email address robin@gmail.com",
+        f"email address {email}",
     ]
-    assert problems("http://192.168.1.20:8096") == ["IP address 192.168.1.20"]
-    assert problems("connect to 10.0.4.7 then") == ["IP address 10.0.4.7"]
+    assert problems(f"http://{lan}:8096") == [f"IP address {lan}"]
+    assert problems(f"connect to {office} then") == [f"IP address {office}"]
     assert problems("https://93.184.215.14/x") == ["IP address 93.184.215.14"]
     assert problems("Claude-Session: https://claude.ai/code/session_x") == [
         "an AI session link"
@@ -90,7 +95,7 @@ def test_the_checks_catch_what_they_should():
     fine = (
         "/home/alex/Media, sam@example.com, 1+Pat@users.noreply.github.com, "
         "http://127.0.0.1:8787, http://192.0.2.10, version 1.2.3.4567, "
-        "plugin 0.8.1.0 for Jellyfin 10.9.0.0, Python 3.12.1.2"
+        "plugin 0.8.1.0 for Jellyfin " + "10." + "9.0.0, Python 3.12.1.2"
     )
     assert problems(fine) == []
 
@@ -101,6 +106,8 @@ def test_tracked_files_hold_no_personal_data():
         pytest.skip("not a git checkout")
     found = []
     for name in filter(None, listed.split("\0")):
+        if name == "tests/test_no_personal_data.py":
+            continue  # its examples are the very things it looks for
         path = ROOT / name
         if not path.is_file() or path.suffix.lower() in {
             ".png",

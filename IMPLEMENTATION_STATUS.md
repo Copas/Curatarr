@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc61 (2026-10-31): episode files identified by their season's subtitles; misfiled fix acts on it.
 - v0.2.0rc60 (2026-10-30): default artwork look starts from the original art.
 - v0.2.0rc59 (2026-10-30): untagged subtitle files judged by their words; UTF-16 subtitles read.
 - v0.2.0rc58 (2026-10-30): subtitle times read exactly (leading-zero milliseconds); re-timed files redone from originals.

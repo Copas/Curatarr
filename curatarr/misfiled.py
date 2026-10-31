@@ -269,7 +269,114 @@ def _findings(sonarr, now) -> dict:
                 fits(target_text, episodes, target["id"], current["id"]) == "own"
             )
         found[file_id] = finding
+    _add_subtitle_findings(sonarr, series, episodes_by_series, files_by_series, found)
     return found
+
+
+def _subtitles_fit(state) -> bool:
+    """Whether a file's own downloaded subtitles were found to match its
+    speech: then it is the episode it's filed as."""
+    files = ((state.subtitle_sync or {}).get("files") or {}).values()
+    return any(entry.get("outcome") in {"in_sync", "resynced"} for entry in files)
+
+
+def _add_subtitle_findings(sonarr, series, episodes_by_series, files_by_series, found):
+    """Files the subtitle check found to be another episode: their own
+    subtitles don't match what's said, and another episode's hold most of it
+    (enrichment._other_episode). Independent of the download's name, so a
+    release named for the right episode that holds another is caught too."""
+    rows = (
+        db.session.query(ChapterState, MediaPart, MediaIdentity)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            ChapterState.subtitle_sync.isnot(None),
+            MediaPart.kind == "episode",
+            MediaPart.has_file.is_(True),
+            MediaIdentity.sonarr_id.isnot(None),
+        )
+        .all()
+    )
+    for state, part, media in rows:
+        evidence = (state.subtitle_sync or {}).get("episode")
+        if not evidence or media.sonarr_id not in series:
+            continue
+        if evidence.get("file") != os.path.basename(part.file_path or ""):
+            continue  # about a file that has since been replaced
+        series_id = media.sonarr_id
+        if series_id not in episodes_by_series:
+            episodes_by_series[series_id] = sonarr.episodes(series_id) or []
+            files_by_series[series_id] = {
+                f["id"]: f for f in sonarr.episode_files(series_id) or []
+            }
+        episodes = episodes_by_series[series_id]
+        current = next(
+            (
+                e
+                for e in episodes
+                if e.get("seasonNumber") == part.season_number
+                and e.get("episodeNumber") == part.episode_number
+            ),
+            None,
+        )
+        target = next(
+            (
+                e
+                for e in episodes
+                if e.get("seasonNumber") == part.season_number
+                and e.get("episodeNumber") == evidence["fits"]
+            ),
+            None,
+        )
+        file_id = int((current or {}).get("episodeFileId") or 0)
+        if not current or not target or not file_id or file_id in found:
+            continue
+        target_file = (
+            files_by_series[series_id].get(target.get("episodeFileId"))
+            if target.get("hasFile")
+            else None
+        )
+        target_state = (
+            db.session.query(ChapterState)
+            .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+            .filter(
+                MediaPart.media_identity_id == media.id,
+                MediaPart.season_number == part.season_number,
+                MediaPart.episode_number == evidence["fits"],
+                MediaPart.has_file.is_(True),
+            )
+            .first()
+        )
+        show = series[series_id]
+        own_file = files_by_series[series_id].get(file_id, {})
+        found[file_id] = {
+            "series_id": series_id,
+            "series_title": show.get("title") or "",
+            "folder": os.path.basename(str(show.get("path") or "").rstrip("/")),
+            "file_id": file_id,
+            "download": os.path.basename(part.file_path or ""),
+            "from_id": current["id"],
+            "from_code": code(current),
+            "from_title": current.get("title") or "",
+            "from_monitored": bool(current.get("monitored")),
+            "file_quality": _quality_name(own_file.get("quality")),
+            "to_id": target["id"],
+            "to_code": code(target),
+            "to_title": target.get("title") or "",
+            "target_file_id": int((target_file or {}).get("id") or 0),
+            "target_quality": _quality_name((target_file or {}).get("quality")),
+            "better_than_target": target_file is not None
+            and _rank(own_file.get("quality")) > _rank(target_file.get("quality")),
+            "scene": False,
+            # The subtitles settle which episode it is; the release was
+            # named for the wrong one, so a search mustn't bring it back.
+            "verdict": "other",
+            "by": "subtitles",
+            "mislabelled": True,
+            "subtitle_match": f"{evidence['found']} of {evidence['spoken']}",
+            "target_is_target": target_state is not None
+            and _subtitles_fit(target_state),
+        }
 
 
 def _plan(finding, findings) -> str | None:
@@ -384,6 +491,29 @@ def count() -> int:
 
 
 def evidence(finding) -> list[str]:
+    if finding.get("by") == "subtitles":
+        lines = [
+            (
+                f"Filed as {finding['from_code']} “{finding['from_title']}”, but "
+                "its own subtitles don't match what's said in it"
+            ),
+            (
+                f"{finding['to_code']} “{finding['to_title']}”'s subtitles do: "
+                f"{finding['subtitle_match']} lines heard"
+            ),
+        ]
+        if finding.get("target_file_id"):
+            lines.append(
+                f"{finding['to_code']} already has a file ({finding['target_quality']})"
+                + (
+                    ", which matches its own subtitles too: this is a second copy"
+                    if finding.get("target_is_target")
+                    else ""
+                )
+            )
+        if finding.get("failed"):
+            lines.append(f"Fixing it failed: {finding['failed']}")
+        return lines
     lines = [f"Downloaded as “{finding['download']}”"]
     if finding.get("verdict") == "ambiguous":
         lines.append(
@@ -431,6 +561,16 @@ def _blocklist_release(sonarr, finding) -> bool:
         if norm(grab.get("sourceTitle")) == wanted:
             sonarr.mark_failed(grab["id"])
             return True
+    return False
+
+
+def _blocklist_latest(sonarr, finding) -> bool:
+    """Blocklist the latest grab for the episode the file was filed under: the
+    download that brought in another episode under this one's name."""
+    grabs = sonarr.episode_grabs(finding["from_id"]) or []
+    if grabs:
+        sonarr.mark_failed(grabs[0]["id"])
+        return True
     return False
 
 
@@ -537,7 +677,9 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
                 misnumbered = (
                     release_number(finding["download"]) == finding["from_code"]
                 )
-                if misnumbered and _blocklist_release(sonarr, finding):
+                if finding.get("mislabelled") and _blocklist_latest(sonarr, finding):
+                    steps.append("blocklisted the download, which held another episode")
+                elif misnumbered and _blocklist_release(sonarr, finding):
                     steps.append("blocklisted the release, which is numbered wrong")
                 sonarr.episode_search([finding["from_id"]])
                 steps.append(f"searched for the real {finding['from_code']}")

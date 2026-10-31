@@ -437,3 +437,72 @@ def test_files_retimed_before_the_time_fix_are_retimed_again(sync_env):
     assert sidecar.read_text() == right
     entry = _state(part).subtitle_sync["files"]["Film.en.srt"]
     assert entry["key"] == _sidecar_key(sidecar) and entry["outcome"] == "resynced"
+
+
+def test_which_episode_a_file_is_from_its_seasons_subtitles():
+    speech = _speech()
+    others = {
+        2: subtitle_sync.parse_srt(_subtitles(_speech(seed=2), lambda t: t)),
+        3: subtitle_sync.parse_srt(_subtitles(speech, lambda t: t + 0.5)),
+        4: subtitle_sync.parse_srt(_subtitles(_speech(seed=4), lambda t: t)),
+    }
+    number, found, spoken = subtitle_sync.which_episode(speech, others)
+    assert number == 3 and found > 0.8 * spoken
+    del others[3]
+    assert subtitle_sync.which_episode(speech, others) is None
+
+
+def test_a_subtitle_check_records_which_episode_a_file_really_is(app, tmp_path):
+    from curatarr.enrichment import _other_episode
+    from curatarr.models import MediaPart
+
+    media = _show_with_files(tmp_path, {2: _speech(seed=2), 3: _speech()})
+    part = MediaPart(
+        media_identity_id=media.id,
+        kind="episode",
+        season_number=1,
+        episode_number=1,
+        has_file=True,
+        file_path=str(tmp_path / "S01E01.mkv"),
+    )
+    db.session.add(part)
+    db.session.commit()
+    # E1's file says what E3's subtitles say.
+    assert _other_episode(part, _speech()) | {} == {
+        "fits": 3,
+        "found": pytest.approx(len(_speech()), abs=8),
+        "spoken": len(_speech()),
+    }
+
+
+def _show_with_files(folder, subtitles):
+    """A show with an episode file per number, each with English subtitles
+    made from the given speech."""
+    from curatarr.models import Library, MediaIdentity, MediaPart
+
+    library = Library(jellyfin_library_id="tv", name="TV", media_type="tvshows")
+    db.session.add(library)
+    db.session.flush()
+    media = MediaIdentity(
+        library_id=library.id, media_type="series", title="Show", sonarr_id=7
+    )
+    db.session.add(media)
+    db.session.flush()
+    for number, speech in subtitles.items():
+        video = folder / f"S01E{number:02}.mkv"
+        video.touch()
+        video.with_name(f"S01E{number:02}.en.srt").write_text(
+            _subtitles(speech, lambda t: t), encoding="utf-8"
+        )
+        db.session.add(
+            MediaPart(
+                media_identity_id=media.id,
+                kind="episode",
+                season_number=1,
+                episode_number=number,
+                has_file=True,
+                file_path=str(video),
+            )
+        )
+    db.session.commit()
+    return media
