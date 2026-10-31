@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc68 (2026-10-31): batch links that pick only titles keep the saved look, photos and engine.
 - v0.2.0rc67 (2026-10-31): Jellyfin told when Curatarr deletes; deleting an already-deleted title again isn't an error.
 - v0.2.0rc65 (2026-10-31): unclear recaps rechecked once earlier episodes are transcribed; history rescanned.
 - v0.2.0rc64 (2026-10-31): no logos from original art, Use the original logos, remake batch (oldest first).

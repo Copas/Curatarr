@@ -270,6 +270,9 @@ def artwork_find_titles():
     )
 
 
+OPTION_FIELDS = ("photos", "cast", "style", "originals", "external_ok", "engine")
+
+
 def _job_options(form) -> dict:
     cast = [n.strip() for n in (form.get("cast") or "").split(",") if n.strip()]
     return {
@@ -668,6 +671,13 @@ def artwork_batches():
     spec = None
     if request.args.get("preview"):
         spec = _batch_spec(request.args)
+        if not any(field in request.args for field in OPTION_FIELDS):
+            # A link that only picks titles keeps the look, reference photos
+            # and engine chosen before, rather than blanking them.
+            before = _remembered("batch")
+            spec["options"] = before.get("options") or spec["options"]
+            spec["engine"] = before.get("engine") or spec["engine"]
+            spec["worker"] = before.get("worker") or spec["worker"]
         _remember("batch", spec)
         titles = artwork_jobs.batch_titles(spec)
         preview = {"count": len(titles), "titles": titles[:50]}

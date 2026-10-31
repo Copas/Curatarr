@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc68 (2026-10-31)
+
+- **Fixed: a link to Posters → Batches blanked the saved look and reference photos.** The batch page remembers what you chose, and opening it from a link that picked only the titles saved an empty look, no reference-photo folder and the default engine over your own. Such a link now keeps them.
+
 ## 0.2.0rc67 (2026-10-31)
 
 - **Fixed: a film deleted in Jellyfin stayed listed, and deleting it again failed.** With the Curatarr plugin, Delete in Jellyfin's web app deletes the title through Radarr or Sonarr. Radarr removed the files, but nothing told Jellyfin, so the title stayed in the library until Jellyfin's next scan; deleting it again there was refused ("Radarr doesn't have a file") and Jellyfin showed *There was an error deleting the item*. Curatarr now tells Jellyfin the files are gone after every delete it makes, as Radarr's and Sonarr's own Jellyfin connection would, so the title drops out within seconds. Deleting a title that's already gone is no longer an error: Curatarr tells Jellyfin again.

@@ -1385,6 +1385,13 @@ def test_the_forms_remember_their_last_choices(app, client, monkeypatch, tmp_pat
     page = client.get("/library/posters/batches").text
     assert 'id="b-kind-Banner" checked' in page and 'id="f-external" checked' in page
     assert 'value="movies" selected' in page
+    # A link that only picks the titles keeps the look and photos chosen before.
+    client.get(
+        "/library/posters/batches",
+        query_string={"preview": "1", "titles": "shows", "kinds": ["Primary"]},
+    )
+    page = client.get("/library/posters/batches").text
+    assert 'value="shows" selected' in page and 'id="f-external" checked' in page
     client.post(
         "/library/posters/benchmarks",
         data={"engines": ["codex/image"], "scenarios": ["logo"], "external_ok": "on"},
