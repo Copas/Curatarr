@@ -594,6 +594,27 @@ def artwork_job_engine(job_id):
     return _done(url_for("main.artwork_job", job_id=job.id))
 
 
+@bp.post("/library/posters/originals/logos")
+def artwork_original_logos():
+    """Everyone back on each film's own logo, and no generated logos to come:
+    made from the film's own art, a logo only comes back as the original."""
+    cancelled = artwork_jobs.cancel_kind("Logo")
+    try:
+        restored = custom_posters.restore_kind("Logo")
+    except (IntegrationError, OSError) as exc:
+        db.session.rollback()
+        _say(f"Couldn't put every original logo back: {exc}", "danger")
+        return _done(url_for("main.custom_posters_page"))
+    said = f"Put back the original logo on {restored} picture{'' if restored == 1 else 's'}"
+    if cancelled:
+        said += f", and cancelled {cancelled} logo{'' if cancelled == 1 else 's'} not made yet"
+    _say(
+        said
+        + ". The generated ones are kept and can be put on again from a title's page."
+    )
+    return _done(url_for("main.custom_posters_page"))
+
+
 @bp.get("/library/posters/status")
 def artwork_status():
     return render_template("_artwork_status.html", **_common())
@@ -676,7 +697,8 @@ def artwork_batches():
 def _batch_spec(form) -> dict:
     which = form.get("titles") or "favourites"
     if not (
-        which in ("favourites", "movies", "shows") or which.startswith("favourites:")
+        which in ("favourites", "movies", "shows", "remake")
+        or which.startswith("favourites:")
     ):
         which = "favourites"
     worker = form.get("worker") or None

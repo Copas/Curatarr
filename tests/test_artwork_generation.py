@@ -202,7 +202,13 @@ def test_a_set_is_made_reviewed_and_put_on(app, client, tmp_path, monkeypatch):
     _row, _token, worker = _worker(app, client, tmp_path)
     response = client.post(
         "/library/posters/generate",
-        data={"media": [media.id], "kinds": ["Primary", "Thumb", "Logo"]},
+        # A new scene from the story: logos are made then (from the film's own
+        # art they aren't; its own logo is kept).
+        data={
+            "media": [media.id],
+            "kinds": ["Primary", "Thumb", "Logo"],
+            "approach": "story",
+        },
     )
     assert response.status_code == 302
     job = db.session.query(ArtworkJob).one()
@@ -1670,3 +1676,95 @@ def test_jobs_can_be_cancelled_from_their_row_or_all_at_once(app, client):
         "/library/posters/jobs/cancel-waiting", headers={"X-Curatarr-Async": "1"}
     ).get_json()
     assert answer["messages"][0]["text"] == "Nothing was waiting."
+
+
+def _old_picture(media, kind, account, when, source="01_film.jpg"):
+    from curatarr.models import CustomPoster
+
+    poster = CustomPoster(
+        media_identity_id=media.id,
+        jellyfin_user_id=account,
+        image_type=kind,
+        image_path=f"/pictures/{media.id}-{kind}-{account}.jpg",
+        source=source,
+        active=True,
+        applied_at=when,
+    )
+    db.session.add(poster)
+    db.session.commit()
+    return poster
+
+
+def test_logos_are_not_made_from_the_films_own_art(app):
+    _library, media, _part = _movie()
+    job = artwork_jobs.create_job(
+        media, ["Primary", "Logo"], options={"approach": "original"}
+    )
+    assert [i.kind for i in job.images] == ["Primary"]
+    with pytest.raises(ValueError, match="its own logo is kept"):
+        artwork_jobs.create_job(media, ["Logo"], options={"approach": "original"})
+    story = artwork_jobs.create_job(media, ["Logo"], options={"approach": "story"})
+    assert [i.kind for i in story.images] == ["Logo"]
+
+
+def test_everyone_goes_back_to_the_original_logos(app, client):
+    from curatarr.models import CustomPoster
+
+    _library, media, _part = _movie()
+    for account in ("u1", "u2"):
+        _old_picture(media, "Logo", account, utcnow())
+        _old_picture(media, "Primary", account, utcnow())
+    waiting = artwork_jobs.create_job(media, ["Logo"], options={"approach": "story"})
+    answer = client.post(
+        "/library/posters/originals/logos", headers={"X-Curatarr-Async": "1"}
+    ).get_json()
+    assert answer["ok"]
+    assert "original logo on 2 pictures" in answer["messages"][0]["text"]
+    assert "cancelled 1 logo" in answer["messages"][0]["text"]
+    db.session.expire_all()
+    on = {(p.image_type, p.active) for p in db.session.query(CustomPoster)}
+    assert on == {("Logo", False), ("Primary", True)}  # logos off, posters kept
+    assert {i.state for i in waiting.images} == {"cancelled"}
+    page = client.get("/library/posters").get_data(as_text=True)
+    assert "Use the original logos" in page
+
+
+def test_a_remake_batch_takes_the_oldest_old_prompt_pictures_first(app):
+    from curatarr.models import MediaIdentity
+
+    _library, first, _part = _movie()
+    second = MediaIdentity(
+        library_id=first.library_id,
+        media_type="movie",
+        title="Sequel",
+        jellyfin_id="jf2",
+    )
+    third = MediaIdentity(
+        library_id=first.library_id,
+        media_type="movie",
+        title="Remade",
+        jellyfin_id="jf3",
+    )
+    db.session.add_all([second, third])
+    db.session.commit()
+    now = utcnow()
+    _old_picture(second, "Primary", "u1", now - timedelta(days=9))
+    _old_picture(first, "Primary", "u1", now - timedelta(days=2))
+    _old_picture(first, "Logo", "u1", now - timedelta(days=2))
+    _old_picture(third, "Primary", "u1", now - timedelta(days=12))
+    _old_picture(second, "Backdrop", "u2", now, source="Uploaded")  # not generated
+    # Remade already with the new prompts: left out.
+    done = artwork_jobs.create_job(third, ["Primary"], options={"approach": "original"})
+    done.state = "completed"
+    db.session.commit()
+    assert [m.title for m in artwork_jobs.remake_titles(["u1"])] == ["Sequel", "Film"]
+    spec = {"titles": "remake", "kinds": ["Primary", "Logo"], "accounts": ["u1"]}
+    assert [m.title for m in artwork_jobs.batch_titles(spec)] == ["Sequel", "Film"]
+    batch = artwork_jobs.create_batch(
+        spec | {"options": {"approach": "original"}, "engine": "auto"}
+    )
+    kinds = {
+        j.media.title: sorted(i.kind for i in j.images)
+        for j in db.session.query(artwork_jobs.ArtworkJob).filter_by(batch_id=batch.id)
+    }
+    assert kinds == {"Sequel": ["Primary"], "Film": ["Primary"]}  # no logos remade

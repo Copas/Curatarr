@@ -66,6 +66,12 @@
     <form method="post" action="{{ url_for('main.custom_posters_avatar') }}" enctype="multipart/form-data" class="d-flex gap-1 align-items-center"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="account" value="{{ who }}"><input class="form-control form-control-sm" style="max-width:12rem" type="file" name="picture" accept="image/jpeg,image/png,image/webp" aria-label="Picture for {{ who_name }}"><button class="btn btn-sm btn-outline-light">Use</button>{% if avatar_uploaded[who] %}<button class="btn btn-sm btn-link p-0" name="remove" value="1">Remove</button>{% endif %}</form></div></li>{% endfor %}</ul>{% else %}<p class="mb-0 text-secondary">Curatarr hasn't read Jellyfin's accounts yet; they appear after the next reconciliation.</p>{% endif %}
 </section>
 
+{% from '_confirm.html' import confirm_submit %}
+<section class="card p-3 mb-4" id="logos"><h2 class="h5">Logos</h2>
+  <p class="small text-secondary">Pictures made from each film's own art bring its logo back almost unchanged: there's no one in it to recast. Curatarr no longer makes logos that way, and this puts every title back on its own logo, for everyone. The generated logos are kept; any can be put on again from a title's page.</p>
+  <form method="post" action="{{ url_for('main.artwork_original_logos') }}" data-async data-redraw="none"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{{ confirm_submit('Use the original logos', 'Put every title back on its own logo, for every account, and cancel the logos not made yet?', 'Use the originals', style='btn-outline-light') }}</form>
+</section>
+
 <section class="card p-3 mb-4" id="prompts"><h2 class="h5">Make them with an AI</h2>
   <p class="small text-secondary">Curatarr writes the prompts; an image-making AI agent (Codex, or any other that can read and save files) makes the pictures and saves them in the import folder, where Curatarr puts them on. Each prompt is a batch, with each title's year, genres, plot and the file names to save them as. Asking for more than the poster gets a matching set: the same cast and style, each picture a different scene.</p>
   <form method="post" action="{{ url_for('main.custom_posters_prompts') }}" class="row g-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -120,4 +126,5 @@
 <script src="{{ url_for('static', filename='copy.js', v='1') }}"></script>
 <script src="{{ url_for('static', filename='lightbox.js', v='1') }}"></script>
 <script src="{{ url_for('static', filename='ribbon-grid.js', v='1') }}"></script>
+<script src="{{ url_for('static', filename='artwork-actions.js', v='4') }}"></script>
 {% endblock %}

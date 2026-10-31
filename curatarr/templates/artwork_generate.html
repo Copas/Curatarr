@@ -15,7 +15,7 @@
     <div class="d-flex flex-wrap gap-2 mt-2" id="chosen-titles">{% for m in chosen %}<span class="badge text-bg-secondary artwork-chip">{{ m.title }}<input type="hidden" name="media" value="{{ m.id }}"><button type="button" class="btn-close btn-close-white ms-1" aria-label="Remove {{ m.title }}" data-remove-chip></button></span>{% endfor %}</div>
   </div>
   <fieldset class="mb-3"><legend class="h6">Pictures to make</legend>
-    <div class="d-flex flex-wrap gap-3">{% for kind in kinds %}<div class="form-check"><input class="form-check-input" type="checkbox" name="kinds" value="{{ kind }}" id="g-kind-{{ kind }}"{% if kind in saved.get('kinds', options.kinds) %} checked{% endif %}><label class="form-check-label" for="g-kind-{{ kind }}">{{ kind_names[kind]|capitalize }}</label></div>{% endfor %}</div>
+    <div class="d-flex flex-wrap gap-3">{% for kind in kinds %}<div class="form-check"><input class="form-check-input" type="checkbox" name="kinds" value="{{ kind }}" id="g-kind-{{ kind }}"{% if kind in saved.get('kinds', options.kinds) %} checked{% endif %}><label class="form-check-label" for="g-kind-{{ kind }}">{{ kind_names[kind]|capitalize }}{% if kind == 'Logo' %} <span class="text-secondary small">(not made when starting from the film's own art: its own logo is kept)</span>{% endif %}</label></div>{% endfor %}</div>
     <div class="form-text">Several make a matching set: the poster is made first, and the rest match its cast and look, each a different scene.</div>
   </fieldset>
   <fieldset class="mb-3"><legend class="h6">Who they're for</legend>

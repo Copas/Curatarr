@@ -452,6 +452,22 @@ def for_accounts(kind="Primary") -> list[CustomPoster]:
     return query.all()
 
 
+def restore_kind(kind: str) -> int:
+    """Puts back the original picture of one kind on every title, for every
+    account (Curatarr's copies are kept, so any can be put on again).
+    Returns how many were put back."""
+    count = 0
+    posters = (
+        db.session.query(CustomPoster)
+        .filter(CustomPoster.active.is_(True), CustomPoster.image_type == kind)
+        .all()
+    )
+    for poster in posters:
+        restore(poster)
+        count += 1
+    return count
+
+
 def restore(poster: CustomPoster) -> str:
     """Put the original back; returns what was done, in words."""
     from .services import audit, client

@@ -25,6 +25,7 @@ from pathlib import Path
 
 from flask import current_app
 from PIL import Image, ImageFilter, ImageStat, UnidentifiedImageError
+from sqlalchemy import func
 
 from . import artwork_prompts, custom_posters, db
 from .integrations import IntegrationError
@@ -309,9 +310,16 @@ def create_job(
     """A job for ``media``'s pictures of ``kinds``. ``details`` (title, year,
     genres, plot) are looked up when not given; a benchmark gives its own."""
     kinds = [k for k in custom_posters.KINDS if k in set(kinds)]
-    if not kinds:
-        raise ValueError("Choose at least one type of picture to make.")
     options = dict(options or {})
+    if purpose == "library" and options.get("approach") == "original":
+        # Made from the film's own art, a logo comes back as the film's own
+        # logo: there's no one in it to recast. Keep the original instead.
+        kinds = [k for k in kinds if k != "Logo"]
+    if not kinds:
+        raise ValueError(
+            "Choose at least one type of picture to make. Logos aren't made "
+            "from the film's own art: its own logo is kept."
+        )
     if media is not None and details is None:
         details = title_details(media)
     options["details"] = details
@@ -390,6 +398,30 @@ def cancel_job(job: ArtworkJob) -> int:
             image.lease_expires_at = None
             count += 1
     _refresh(job)
+    db.session.commit()
+    return count
+
+
+def cancel_kind(kind: str) -> int:
+    """Cancels the pictures of one kind not made yet, in every library job.
+    Returns how many."""
+    count = 0
+    jobs = (
+        db.session.query(ArtworkJob)
+        .filter(
+            ArtworkJob.state.in_(("pending", "generating")),
+            ArtworkJob.purpose == "library",
+        )
+        .all()
+    )
+    for job in jobs:
+        for image in job.images:
+            if image.kind == kind and image.state in ACTIVE:
+                image.state = "cancelled"
+                image.finished_at = utcnow()
+                image.lease_expires_at = None
+                count += 1
+        _refresh(job)
     db.session.commit()
     return count
 
@@ -1309,12 +1341,56 @@ def _have(accounts) -> dict[str, set]:
     return have
 
 
+def remake_titles(accounts) -> list[MediaIdentity]:
+    """Titles whose generated pictures (for ``accounts``, or anyone's) came
+    from the old prompts, the oldest first: the ones without a job made from
+    the film's own art yet."""
+    query = (
+        db.session.query(
+            CustomPoster.media_identity_id, func.min(CustomPoster.applied_at)
+        )
+        .filter(CustomPoster.active.is_(True), CustomPoster.source != "Uploaded")
+        .group_by(CustomPoster.media_identity_id)
+    )
+    if accounts:
+        query = query.filter(CustomPoster.jellyfin_user_id.in_(list(accounts)))
+    oldest = {media_id: when for media_id, when in query}
+    remade = set()
+    for media_id, options in db.session.query(
+        ArtworkJob.media_identity_id, ArtworkJob.options
+    ).filter(
+        ArtworkJob.purpose == "library",
+        ArtworkJob.state.in_(("pending", "generating", "review", "completed")),
+    ):
+        if (options or {}).get("approach") == "original":
+            remade.add(media_id)
+    titles = [
+        m
+        for m in db.session.query(MediaIdentity).filter(
+            MediaIdentity.id.in_(list(oldest) or [""]),
+            MediaIdentity.missing_since.is_(None),
+        )
+        if m.id not in remade
+    ]
+    latest = _aware(utcnow())
+    titles.sort(
+        key=lambda m: (_aware(oldest[m.id]) if oldest[m.id] else latest, m.title or "")
+    )
+    return titles
+
+
 def batch_titles(spec: dict) -> list[MediaIdentity]:
     """The titles a batch would make pictures for: the prompt writer's
     choice (favourites, one account's, films or shows), less those that
     already have every type asked for (for the accounts it's for) when
     ``skip_done``, and those with a job under way."""
     kinds = spec.get("kinds") or ["Primary"]
+    if spec.get("titles") == "remake":
+        # Replacing what's there: each title's own pictures of these kinds.
+        titles = remake_titles(spec.get("accounts") or [])
+        have = _have(spec.get("accounts") or [])
+        titles = [m for m in titles if set(kinds) & have.get(m.id, set())]
+        return _not_busy(titles)
     titles = custom_posters.prompt_titles(spec.get("titles") or "favourites", False)
     have = _have(spec.get("accounts") or [])
     if spec.get("alternatives"):
@@ -1325,6 +1401,10 @@ def batch_titles(spec: dict) -> list[MediaIdentity]:
         titles.sort(key=lambda m: latest.get(m.id, ""), reverse=True)
     elif spec.get("skip_done", True):
         titles = [m for m in titles if not set(kinds) <= have.get(m.id, set())]
+    return _not_busy(titles)
+
+
+def _not_busy(titles) -> list[MediaIdentity]:
     busy = {
         media_id
         for (media_id,) in db.session.query(ArtworkJob.media_identity_id).filter(
@@ -1397,7 +1477,7 @@ def fill_batches() -> int:
             if media is None or media.missing_since is not None:
                 continue
             kinds = spec.get("kinds") or ["Primary"]
-            if spec.get("alternatives"):
+            if spec.get("alternatives") or spec.get("titles") == "remake":
                 have = _have(spec.get("accounts") or []).get(media.id, set())
                 kinds = [k for k in kinds if k in have]
                 if not kinds:
