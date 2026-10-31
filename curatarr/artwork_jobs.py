@@ -394,6 +394,21 @@ def cancel_job(job: ArtworkJob) -> int:
     return count
 
 
+def cancel_waiting() -> tuple[int, int]:
+    """Cancels every library job still waiting or being made: (jobs,
+    pictures). Pictures waiting for review stay, as with one job."""
+    jobs = (
+        db.session.query(ArtworkJob)
+        .filter(
+            ArtworkJob.state.in_(("pending", "generating")),
+            ArtworkJob.purpose == "library",
+        )
+        .all()
+    )
+    pictures = sum(cancel_job(job) for job in jobs)
+    return len(jobs), pictures
+
+
 def retry_job(job: ArtworkJob) -> int:
     """Tries again the pictures that failed."""
     count = 0

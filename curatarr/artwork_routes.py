@@ -372,6 +372,9 @@ def artwork_jobs_page():
         "total": total,
         "engine_label": _engine_label,
         "live": any(j.state in ("pending", "generating") for j in jobs),
+        "waiting": _jobs_query()
+        .filter(ArtworkJob.state.in_(("pending", "generating")))
+        .count(),
         "reasons": _reasons(jobs),
         **_common(),
     }
@@ -589,6 +592,25 @@ def artwork_job_engine(job_id):
             "success",
         )
     return _done(url_for("main.artwork_job", job_id=job.id))
+
+
+@bp.get("/library/posters/status")
+def artwork_status():
+    return render_template("_artwork_status.html", **_common())
+
+
+@bp.post("/library/posters/jobs/cancel-waiting")
+def artwork_jobs_cancel_waiting():
+    jobs, pictures = artwork_jobs.cancel_waiting()
+    if jobs:
+        _say(
+            f"Cancelled {pictures} picture{'' if pictures == 1 else 's'} in "
+            f"{jobs} job{'' if jobs == 1 else 's'}. Any waiting for review stay.",
+            "success",
+        )
+    else:
+        _say("Nothing was waiting.", "success")
+    return _done(url_for("main.artwork_jobs"))
 
 
 @bp.post("/library/posters/jobs/<job_id>/<action>")

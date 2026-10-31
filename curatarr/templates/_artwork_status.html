@@ -1,5 +1,6 @@
-{# The Generate pages' dashboard: needs `overview`. #}
-<div class="artwork-status mb-4">
+{# The Generate pages' dashboard: needs `overview`. Redrawn after a button
+   on the page (artwork-actions.js), so its counts stay right. #}
+<div class="artwork-status mb-4" data-live="status" data-live-url="{{ url_for('main.artwork_status') }}">
   <a class="artwork-stat" href="{{ url_for('main.artwork_jobs', state='pending') }}"><span class="artwork-stat-number">{{ overview.waiting }}</span><span class="artwork-stat-label">waiting</span></a>
   <a class="artwork-stat" href="{{ url_for('main.artwork_jobs', state='generating') }}"><span class="artwork-stat-number">{{ overview.running }}</span><span class="artwork-stat-label">being made</span></a>
   <a class="artwork-stat{{ ' artwork-stat-attention' if overview.review }}" href="{{ url_for('main.artwork_review') }}"><span class="artwork-stat-number">{{ overview.review }}</span><span class="artwork-stat-label">to review</span></a>

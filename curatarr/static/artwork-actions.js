@@ -1,6 +1,7 @@
 // Buttons that work in place, without reloading the page: Review and a job's
 // page (Approve, Turn down, Make it again, the job's own buttons), so going
-// through many pictures is quick, and Enhance → Subtitles. On Review, a picture that's dealt with folds to a
+// through many pictures is quick, Jobs (Cancel, Cancel all waiting) and
+// Enhance → Subtitles. On Review, a picture that's dealt with folds to a
 // one-line note and the next moves up; on a job's page, just that picture
 // (and the top of the page) is redrawn. If the background request fails,
 // the form is sent the usual way, so nothing's lost.
@@ -24,7 +25,8 @@
       .then(function (response) { return response.ok ? response.text() : null; })
       .then(function (html) {
         if (!html) return;
-        var holder = document.createElement("div");
+        // A table row only survives being parsed inside a table body.
+        var holder = document.createElement(el.tagName === "TR" ? "tbody" : "div");
         holder.innerHTML = html.trim();
         var next = holder.firstElementChild;
         if (!next) return;
@@ -69,7 +71,15 @@
         }
         var panel = form.closest("[data-live]");
         var top = document.querySelector('[data-live="head"]');
-        var parts = [panel, top];
+        var counts = document.querySelector('[data-live="status"]');
+        var parts = [panel, top, counts];
+        if (form.dataset.redraw) {
+          // A page-wide button (Jobs → Cancel all waiting): every part of
+          // that kind, and the button itself is done.
+          parts = parts.concat(Array.prototype.slice.call(
+            document.querySelectorAll('[data-live="' + form.dataset.redraw + '"]')));
+          if (answer.ok) form.remove();
+        }
         if (panel && panel.dataset.live === "head") {
           // A job-wide button (the whole set, cancel, retry): every picture.
           parts = parts.concat(Array.prototype.slice.call(

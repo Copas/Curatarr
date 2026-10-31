@@ -20,5 +20,5 @@
 </details>
 {% endif %}{% endfor %}
 {% if not (found.counts.values()|sum) %}<div class="empty-state"><p class="mb-0">Nothing checked yet. Files with English subtitles beside them are checked in the background, a few at a time, when subtitles are on for their library (Settings → Enhance → Subtitles).</p></div>{% endif %}
-<script src="{{ url_for('static', filename='artwork-actions.js', v='2') }}"></script>
+<script src="{{ url_for('static', filename='artwork-actions.js', v='4') }}"></script>
 {% endblock %}

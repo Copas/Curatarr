@@ -14,5 +14,5 @@
 {% if pages > 1 %}<nav class="d-flex justify-content-between mt-3" aria-label="Pages">{% if page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_review', page=page - 1) }}">Previous</a>{% else %}<span></span>{% endif %}{% if page < pages %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_review', page=page + 1) }}">Next</a>{% endif %}</nav>{% endif %}
 {% else %}<div class="empty-state"><h2 class="h6">Nothing to review</h2><p class="mb-0">Pictures appear here as workers make them. See <a href="{{ url_for('main.artwork_jobs') }}">Jobs</a> for what's under way.</p></div>{% endif %}
 <script src="{{ url_for('static', filename='lightbox.js', v='1') }}"></script>
-<script src="{{ url_for('static', filename='artwork-actions.js', v='2') }}"></script>
+<script src="{{ url_for('static', filename='artwork-actions.js', v='4') }}"></script>
 {% endblock %}

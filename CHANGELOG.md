@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc62 (2026-10-31)
+
+- **Cancel jobs from Posters → Jobs.** Each job that's waiting or being made has its own **Cancel** in its row, and **Cancel all waiting** (it asks first) stops every unfinished job at once, on every page. Pictures already waiting for review stay. Both work in place: the rows and the counts at the top update without reloading the page. Before, a job could only be cancelled from its own page, one at a time.
+
 - For contributors: the pre-commit hook (`git config core.hooksPath scripts/git-hooks`) also runs ruff, the formatter check and the whole test suite, and refuses the commit if any fails, or if changes are unstaged or new files unadded (the tests would then run on something other than what's committed). AGENTS.md now asks for the GitHub Tests run to be checked after every push.
 
 ## 0.2.0rc61 (2026-10-31)

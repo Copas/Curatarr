@@ -1632,3 +1632,41 @@ def test_an_untouched_old_default_look_follows_todays_default(app, client):
             artwork_routes._remembered("generate")["style"]
             == custom_posters.DEFAULT_STYLE
         )
+
+
+def test_jobs_can_be_cancelled_from_their_row_or_all_at_once(app, client):
+    _library, media, _part = _movie()
+    first = artwork_jobs.create_job(media, ["Primary", "Backdrop"])
+    page = client.get("/library/posters/jobs").get_data(as_text=True)
+    assert "Cancel all waiting (1)" in page and "artwork-row-cancel" in page
+    assert "artwork-actions.js" in page
+    row = client.get(f"/library/posters/jobs/{first.id}/row").get_data(as_text=True)
+    assert f"/library/posters/jobs/{first.id}/cancel" in row
+    answer = client.post(
+        f"/library/posters/jobs/{first.id}/cancel", headers={"X-Curatarr-Async": "1"}
+    ).get_json()
+    assert answer["ok"] and "Cancelled 2 pictures" in answer["messages"][0]["text"]
+    db.session.expire_all()
+    assert {i.state for i in first.images} == {"cancelled"}
+    row = client.get(f"/library/posters/jobs/{first.id}/row").get_data(as_text=True)
+    assert "artwork-row-cancel" not in row  # nothing left to cancel
+    second = artwork_jobs.create_job(media, ["Logo"])
+    answer = client.post(
+        "/library/posters/jobs/cancel-waiting", headers={"X-Curatarr-Async": "1"}
+    ).get_json()
+    assert answer["ok"] and "1 job" in answer["messages"][0]["text"]
+    db.session.expire_all()
+    assert {i.state for i in second.images} == {"cancelled"}
+    assert "Cancel all waiting" not in client.get("/library/posters/jobs").get_data(
+        as_text=True
+    )
+    counts = client.get("/library/posters/status").get_data(as_text=True)
+    assert 'data-live="status"' in counts
+    assert (
+        '<span class="artwork-stat-number">0</span><span class="artwork-stat-label">waiting'
+        in counts
+    )
+    answer = client.post(
+        "/library/posters/jobs/cancel-waiting", headers={"X-Curatarr-Async": "1"}
+    ).get_json()
+    assert answer["messages"][0]["text"] == "Nothing was waiting."
