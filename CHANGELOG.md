@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- For contributors: the pre-commit hook (`git config core.hooksPath scripts/git-hooks`) also runs ruff, the formatter check and the whole test suite, and refuses the commit if any fails, or if changes are unstaged or new files unadded (the tests would then run on something other than what's committed). AGENTS.md now asks for the GitHub Tests run to be checked after every push.
+
 ## 0.2.0rc61 (2026-10-31)
 
 - **Subtitles show when an episode file is really another episode.** When an episode's own downloaded subtitles don't match what's said in it, the subtitle check compares its speech with the rest of the season's subtitles. A file whose speech is in another episode's subtitles (most of its lines, and far more than in any other's) is that episode, whatever its name says. A season of a popular show had half a dozen of these: Blu-ray releases numbered the end of the season differently, so one episode was there twice, another was missing, and a few sat one slot off. The misfiled-episode fix (Enhance → Problems, or Settings → Automatic) now acts on this evidence too, not only on a download named for another episode. When the other slot's file matches its own subtitles, the misfiled one is a second copy: it's deleted, the download that brought it is blocklisted, and the episode is searched for again. Otherwise it's listed for you to decide. Subtitles set aside before this are checked again once.

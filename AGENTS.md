@@ -7,6 +7,8 @@ Notes for anyone changing this repository, people and coding agents alike (Codex
 - Run the whole test suite and the linters, and commit only when all pass:
   `.venv/bin/pytest && .venv/bin/ruff check . && .venv/bin/ruff format --check .`
   In a pipeline, use `set -o pipefail` so a failing test isn't hidden by `tail`.
+- The pre-commit hook in `scripts/git-hooks/` runs exactly these checks (after the personal-data check) and refuses the commit if any fails. It also refuses when changes are left unstaged or new files aren't added, because then the tests wouldn't run on exactly what's committed. Turn it on once per checkout with `git config core.hooksPath scripts/git-hooks`. **Never bypass it** (`git commit --no-verify`, `-n`, or changing `core.hooksPath` for one commit): a failing check means the commit isn't ready.
+- After pushing, check the **Tests** run on GitHub (`gh run list --workflow tests.yml --limit 1`, or `gh run watch`): it runs on a clean machine and catches what a local checkout hides. If it fails, fixing it comes before anything else.
 - For the Jellyfin plugin: `dotnet test jellyfin-plugin/Jellyfin.Plugin.Curatarr.Tests`.
 - Add a line to `CHANGELOG.md` under **Unreleased** for anything a user would notice: what changed and why, in plain words (a fix says what went wrong). Update `docs/FEATURES.md`, and the README's feature list when a feature is added or its default changes.
 

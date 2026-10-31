@@ -20,7 +20,7 @@ In a second shell, run the worker with `.venv/bin/flask --app curatarr worker`. 
 
 ### Keeping personal data out
 
-The repository is public, and a name or path committed by mistake stays in GitHub's caches even after history is rewritten. Turn on the commit checks once per checkout:
+The repository is public, and a name or path committed by mistake stays in GitHub's caches even after history is rewritten. Turn on the commit checks once per checkout (the same hooks also run ruff, the formatter check and the whole test suite before every commit, and refuse it if anything fails or isn't staged):
 
 ```bash
 git config core.hooksPath scripts/git-hooks

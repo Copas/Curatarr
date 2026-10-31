@@ -1,3 +1,46 @@
 #!/bin/sh
-# Refuses personal data in what is committed (scripts/git-hooks/private_check.py).
-exec python3 "$(dirname "$0")/private_check.py" pre-commit
+# Before every commit (turned on with: git config core.hooksPath scripts/git-hooks):
+# no personal data (private_check.py), then the linters and the whole test
+# suite, on exactly what's being committed. Any failure refuses the commit.
+hooks=$(cd "$(dirname "$0")" && pwd)
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+
+python3 "$hooks/private_check.py" pre-commit || exit 1
+
+# The tests run on the working tree, so it must be what's committed: changes
+# left unstaged, or new files git doesn't know yet, would be tested but not
+# committed (or the other way round).
+if [ -n "$(git diff --name-only)" ]; then
+    echo "Commit refused: some changes aren't staged, so the tests wouldn't test" >&2
+    echo "exactly this commit. Stage them (git add) or stash them first:" >&2
+    git diff --name-only | sed 's/^/  /' >&2
+    exit 1
+fi
+untracked=$(git ls-files --others --exclude-standard)
+if [ -n "$untracked" ]; then
+    echo "Commit refused: new files that aren't added to git would be tested but" >&2
+    echo "not committed. Add them (git add) or remove them:" >&2
+    echo "$untracked" | sed 's/^/  /' >&2
+    exit 1
+fi
+
+if [ ! -x .venv/bin/pytest ] || [ ! -x .venv/bin/ruff ]; then
+    echo "Commit refused: no .venv with the dev tools (see docs/DEVELOPMENT.md:" >&2
+    echo "  python3 -m venv .venv && .venv/bin/pip install -e '.[dev]')" >&2
+    exit 1
+fi
+
+echo "Checking before commit: ruff, formatting, tests…" >&2
+if ! .venv/bin/ruff check --quiet .; then
+    echo "Commit refused: ruff found problems (above)." >&2
+    exit 1
+fi
+if ! .venv/bin/ruff format --check --quiet .; then
+    echo "Commit refused: files need formatting (.venv/bin/ruff format .)." >&2
+    exit 1
+fi
+if ! .venv/bin/pytest -q -x -p no:cacheprovider; then
+    echo "Commit refused: a test failed (above). Fix it; don't skip the check." >&2
+    exit 1
+fi
