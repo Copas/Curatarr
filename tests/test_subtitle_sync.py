@@ -116,6 +116,18 @@ def test_too_little_speech_is_left_undecided():
     assert result.verdict == "unknown"
 
 
+def test_times_are_read_exactly():
+    lines = subtitle_sync.parse_srt(
+        "1\n00:00:46,083 --> 00:00:47,5\nA\n\n2\n01:02:03.004 --> 01:02:04,040\nB\n"
+    )
+    assert [(line.start, line.end) for line in lines] == [
+        (46.083, 47.5),
+        (3723.004, 3724.04),
+    ]
+    fixed = subtitle_sync.retime("1\n00:00:46,083 --> 00:00:48,009\nA\n", 1.0, 1.0)
+    assert "00:00:45,083 --> 00:00:47,009" in fixed
+
+
 def test_retiming_keeps_everything_but_the_times():
     text = (
         "1\r\n00:00:12,500 --> 00:00:14,000 X1:10\r\n<i>Hello</i>\r\n\r\n"
@@ -401,3 +413,27 @@ def test_files_set_aside_under_older_rules_are_put_back_and_checked_again(
     assert state.subtitle_status == "existing"
     assert state.subtitle_sync["files"]["Film.en.srt"]["outcome"] == "in_sync"
     assert outside_subtitles.revisit() == 0  # once
+
+
+def test_files_retimed_before_the_time_fix_are_retimed_again(sync_env):
+    from curatarr import outside_subtitles
+    from curatarr.enrichment import _sidecar_key
+
+    part, sidecar, speech, _calls, _arr = sync_env
+    original = _subtitles(speech, lambda t: 8.0 + t)
+    sidecar.write_text(original, encoding="utf-8")
+    state = _run(part)
+    right = sidecar.read_text()
+    # As an older version wrote it, nobody having changed it since.
+    sidecar.write_text(right.replace(",0", ",9"), encoding="utf-8")
+    record = dict(state.subtitle_sync)
+    record["files"] = {
+        "Film.en.srt": record["files"]["Film.en.srt"] | {"key": _sidecar_key(sidecar)}
+    }
+    state.subtitle_sync = record
+    db.session.commit()
+    set_setting(outside_subtitles.RULES_KEY, 3)
+    assert outside_subtitles.revisit() == 1
+    assert sidecar.read_text() == right
+    entry = _state(part).subtitle_sync["files"]["Film.en.srt"]
+    assert entry["key"] == _sidecar_key(sidecar) and entry["outcome"] == "resynced"

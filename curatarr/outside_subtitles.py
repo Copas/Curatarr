@@ -87,6 +87,32 @@ def _candidates():
     )
 
 
+def _retime_again(video, name, entry) -> bool:
+    """Re-times a file Curatarr re-timed (and nobody changed since) afresh from
+    its original, after a fix to how times are read (0.2.0rc58: ",083" was
+    read as 0.83 s)."""
+    from . import subtitle_sync
+    from .enrichment import _read_text, _sidecar_key
+
+    target = video.with_name(name)
+    backup = video.with_name(entry.get("backup") or "")
+    result = entry.get("result") or {}
+    if not entry.get("backup") or not backup.is_file() or "delay" not in result:
+        return False
+    try:
+        if _sidecar_key(target) != entry.get("key"):
+            return False  # changed since: left as it is
+        text, encoding = _read_text(backup)
+        fixed = subtitle_sync.retime(text, result["delay"], result["rate"])
+        partial = target.with_name(name + ".partial")
+        partial.write_text(fixed, encoding=encoding)
+        os.replace(partial, target)
+        entry["key"] = _sidecar_key(target)
+    except OSError:
+        return False
+    return True
+
+
 def revisit() -> int:
     """After the rules change: subtitles set aside under the old ones are put
     back (with Curatarr's own, if unchanged, removed) and checked again, and
@@ -104,6 +130,9 @@ def revisit() -> int:
         video = Path(state.part.file_path)
         for name, entry in files.items():
             outcome = entry.get("outcome")
+            if outcome == "resynced" and _retime_again(video, name, entry):
+                count += 1
+                continue
             if outcome == "unchecked":
                 files[name] = {k: v for k, v in entry.items() if k != "key"}
                 count += 1

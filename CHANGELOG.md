@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc58 (2026-10-30)
+
+- **Fixed: subtitle times with a leading zero in the milliseconds were misread.** `00:00:46,083` was read as 46.830 s, so about one time in ten was up to 0.9 s off: in subtitles Curatarr re-timed (a line could end late or start early) and, slightly, in the sync check. Times are now read exactly. Subtitles Curatarr re-timed before this, and nobody has changed since, are re-timed again from their kept originals.
+
 ## 0.2.0rc57 (2026-10-30)
 
 - **Fixed: a few stray matches could get good subtitles set aside.** Each stretch listened to was measured by the middle of all its matched lines, so in a quiet stretch two chance matches far away (with only two real ones) made subtitles that were in sync look 15 seconds out (Beetlejuice Beetlejuice). A stretch is now measured by its largest group of lines that agree with each other; a real cut, where most lines agree on a new offset, still shows. Files set aside before this are put back and checked again once more.

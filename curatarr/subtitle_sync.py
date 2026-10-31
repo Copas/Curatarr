@@ -70,7 +70,7 @@ STRETCH_SECONDS = 0.75
 
 # Bumped when the rules change in a way that should revisit earlier verdicts
 # (see outside_subtitles.revisit).
-RULES = 3
+RULES = 4
 
 TIME = re.compile(r"(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})")
 ARROW = re.compile(
@@ -113,8 +113,10 @@ class Result:
 
 
 def _seconds(match, first=1) -> float:
-    hours, minutes, secs, millis = (int(match.group(first + i)) for i in range(4))
-    return hours * 3600 + minutes * 60 + secs + int(f"{millis:<03}"[:3]) / 1000
+    hours, minutes, secs = (int(match.group(first + i)) for i in range(3))
+    # The digits after the comma are a fraction: ",083" is 83 ms, ",5" is 500.
+    fraction = match.group(first + 3).ljust(3, "0")
+    return hours * 3600 + minutes * 60 + secs + int(fraction) / 1000
 
 
 def parse_srt(text: str) -> list[Line]:
