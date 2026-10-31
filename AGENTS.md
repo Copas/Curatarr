@@ -25,6 +25,13 @@ Curatarr is open source and runs on anyone's server, so nothing in code, tests, 
 - no photos of real people, posters made from them included;
 - nothing that depends on tools outside this repository: Curatarr works on its own.
 
+This applies to every example too: a changelog line, a test fixture, a code comment or a commit message describing what you just did on your own server. Write it with made-up names and paths from the start; don't copy a real one and plan to fix it later. Once pushed, it's public for good: rewriting history doesn't remove GitHub's cached copies.
+
+Two checks back this up:
+
+- **`tests/test_no_personal_data.py`** (part of the test suite) fails on home folders, private network addresses, real email addresses and AI session links, in tracked files and in every commit message.
+- **The commit hooks in `scripts/git-hooks/`** refuse a commit whose changes or message contain a word from your own list of names, server names and paths, kept outside the repository at `~/.config/curatarr-dev/private-words`. They also refuse an author email that isn't GitHub's private one, and AI co-author or session lines. Turn them on once per checkout: `git config core.hooksPath scripts/git-hooks`. Agents: if `git config core.hooksPath` doesn't print `scripts/git-hooks`, tell the person before committing.
+
 ## Releases
 
 - **Curatarr**: the checklist in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#release-checklist). Move **Unreleased** in `CHANGELOG.md` into a dated `## X.Y.Z` section, bump `pyproject.toml` and the version in the install instructions, and push an annotated `vX.Y.Z` tag.

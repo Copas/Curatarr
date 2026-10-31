@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- For contributors: checks that keep personal data out of this public repository. A test fails on home folders, private network addresses, real email addresses and AI session links in any tracked file or commit message, and optional commit hooks (`git config core.hooksPath scripts/git-hooks`) refuse commits containing words from your own private list. See AGENTS.md and docs/DEVELOPMENT.md.
+
 ## 0.2.0rc60 (2026-10-30)
 
 - **The default look for made pictures starts from the original artwork.** It read "An extreme, heightened take on the story…", from when pictures were made from the plot. It's now a heightened take on the original artwork: its composition, mood and palette pushed further, with big, intense expressions and dramatic lighting. A look still saved as the old default (it's saved with the form) follows the new one; a look you wrote yourself is left as it is.
@@ -55,7 +57,7 @@
 ## 0.2.0rc49 (2026-10-30)
 
 - **Fixed: "Use each title's original art" usually sent nothing.** Curatarr looked for the art only beside the title's file, and most libraries keep it in Jellyfin's own metadata folder, so the AI got no original poster or logo to take the feel and lettering from. It now asks Jellyfin when the art isn't beside the file: the picture from before any custom one for everyone, or Jellyfin's own where only some accounts have their own (never your own art passed off as the original). Codex is given the title's original poster, logo and picture of the type it's making; a local model the logo, for the lettering.
-- **Review is quicker to work through.** Each picture sits large beside the versions people see now, with **Put on for**, **Approve and put on**, **Turn down** and **Make it again** right under them. What it was given (folded, with a one-line summary such as "4 photos of Amber, 4 photos of Jon, the set's poster, 3 pieces of original art", or a note when no original art was found) and how it was made are folded away until you open them. Every picture opens full screen, references and Jellyfin's own included.
+- **Review is quicker to work through.** Each picture sits large beside the versions people see now, with **Put on for**, **Approve and put on**, **Turn down** and **Make it again** right under them. What it was given (folded, with a one-line summary such as "4 photos of Alex, 4 photos of Sam, the set's poster, 3 pieces of original art", or a note when no original art was found) and how it was made are folded away until you open them. Every picture opens full screen, references and Jellyfin's own included.
 
 ## 0.2.0rc48 (2026-10-30)
 

@@ -18,6 +18,18 @@ export CURATARR_DEMO_MODE=true          # synthetic data; never contacts real se
 
 In a second shell, run the worker with `.venv/bin/flask --app curatarr worker`. The development server listens on port 8787.
 
+### Keeping personal data out
+
+The repository is public, and a name or path committed by mistake stays in GitHub's caches even after history is rewritten. Turn on the commit checks once per checkout:
+
+```bash
+git config core.hooksPath scripts/git-hooks
+mkdir -p ~/.config/curatarr-dev
+$EDITOR ~/.config/curatarr-dev/private-words   # your household's names, server names, paths, addresses
+```
+
+One word or phrase per line, matched as a whole word with its capitals as written; lines starting with `#` are notes. The list stays outside the repository. Commits whose changes or message contain one of its words are refused, and so are commits under an email other than GitHub's private `…@users.noreply.github.com` one, and messages with AI co-author or session lines. `tests/test_no_personal_data.py`, part of the test suite, catches the generic kinds (home folders, private network addresses, real email addresses) for everyone.
+
 ## Demo mode
 
 Demo mode uses synthetic adapters and never contacts private services. After creating the database, set `CURATARR_DEMO_MODE=true` and run `flask --app curatarr demo-seed`. Sign in as `demo-admin` with password `demo`, and enable `demo-viewer` from the household list to try that view. The overview includes controls for playback, favorites, time and size changes, and simulated outages. Run `flask --app curatarr worker --once` or use Reconcile in the UI to evaluate the sample libraries.

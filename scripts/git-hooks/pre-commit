@@ -1,0 +1,3 @@
+#!/bin/sh
+# Refuses personal data in what is committed (scripts/git-hooks/private_check.py).
+exec python3 "$(dirname "$0")/private_check.py" pre-commit
