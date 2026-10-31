@@ -485,6 +485,25 @@ class JellyfinClient(Client):
             },
         )
 
+    def paths(self, item_ids):
+        """{item id: its path as Jellyfin sees it} (often not Curatarr's path:
+        Jellyfin may mount the library elsewhere)."""
+        data = self.request(
+            "GET", "/Items", params={"Ids": ",".join(item_ids), "Fields": "Path"}
+        )
+        items = data.get("Items") if isinstance(data, dict) else None
+        return {i["Id"]: i["Path"] for i in items or [] if i.get("Path")}
+
+    def files_deleted(self, paths):
+        """Tell Jellyfin these files or folders are gone, as Radarr's and
+        Sonarr's own Jellyfin connection does, so it drops their items now
+        rather than at its next library scan."""
+        return self.request(
+            "POST",
+            "/Library/Media/Updated",
+            json={"Updates": [{"Path": p, "UpdateType": "Deleted"} for p in paths]},
+        )
+
     def refresh_item(self, item_id):
         """Re-read one item's file so Jellyfin picks up changed chapters.
 

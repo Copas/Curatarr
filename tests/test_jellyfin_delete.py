@@ -103,3 +103,70 @@ def test_needs_the_webhook_token(app, client, monkeypatch):
     _setup(app, monkeypatch)
     assert _post(client, {"itemId": ITEM}, token="wrong").status_code == 403
     assert _post(client, {"check": True}).get_json() == {"ok": True}
+
+
+class _Jellyfin:
+    """Jellyfin, which sees the library under its own mount."""
+
+    def __init__(self, told):
+        self.told = told
+
+    def item(self, _item_id):
+        return {"ProviderIds": {"Tmdb": "321"}}
+
+    def paths(self, ids):
+        return {i: f"/Movies/Not Very Good (2020)/{i}.mkv" for i in ids}
+
+    def files_deleted(self, paths):
+        self.told.extend(paths)
+
+
+def test_deleting_an_already_deleted_film_again_isnt_an_error(app, client, monkeypatch):
+    # Radarr deleted the file, but Jellyfin still lists the film until it
+    # notices; deleting it there again used to fail ("Radarr doesn't have a
+    # file") and Jellyfin showed an error.
+    media_id = _setup(app, monkeypatch)
+    told = []
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: _Jellyfin(told))
+    with app.app_context():
+        from curatarr.models import MediaIdentity
+
+        for part in db.session.get(MediaIdentity, media_id).parts:
+            part.has_file = False
+        db.session.commit()
+    body = _post(client, {"itemId": ITEM, "userName": "Sam", "mode": "now"}).get_json()
+    assert body["handled"] and body["result"] == "already"
+    assert "refused" not in body
+    assert told == ["/Movies/Not Very Good (2020)"]
+
+
+def test_jellyfin_is_told_when_curatarr_deletes_a_film(app, monkeypatch):
+    from curatarr.lifecycle import execute_approved, review_candidate
+    from curatarr.lifecycle import request_removal as remove
+
+    told = []
+
+    class Radarr:
+        def queue(self):
+            return {"records": []}
+
+        def request(self, _method, _path):
+            return {"tmdbId": 321, "sizeOnDisk": 100}
+
+        def list_movies(self):
+            return []
+
+        def delete_movie(self, _movie_id, exclude=False):
+            pass
+
+    monkeypatch.setattr(
+        "curatarr.lifecycle.client",
+        lambda kind: _Jellyfin(told) if kind == "jellyfin" else Radarr(),
+    )
+    with app.app_context():
+        media = _film()
+        candidate = remove(media, where="a test")
+        review_candidate(candidate.id, "delete")
+        assert execute_approved(candidate.id) == "succeeded"
+    # The film's folder, as Jellyfin sees it: Radarr deleted the whole folder.
+    assert told == ["/Movies/Not Very Good (2020)"]

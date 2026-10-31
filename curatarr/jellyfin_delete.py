@@ -124,6 +124,18 @@ def handle(item_id, user_name=None, mode=None) -> tuple[int, dict]:
             "result": "already",
             "message": f"{media.title} is already being deleted.",
         }
+    if state is None and media.parts and not any(p.has_file for p in media.parts):
+        # Already deleted (by Curatarr, or in Radarr or Sonarr) but still
+        # listed: Jellyfin hasn't noticed the files are gone. Tell it again
+        # rather than fail the delete.
+        from .lifecycle import tell_jellyfin_deleted
+
+        tell_jellyfin_deleted(media)
+        return 200, {
+            "handled": True,
+            "result": "already",
+            "message": f"{media.title} is already deleted; Jellyfin drops it shortly.",
+        }
     if state == "LEAVING_SOON":
         if mode == "leaving_soon":
             return 200, {

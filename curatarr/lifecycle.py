@@ -1597,6 +1597,7 @@ def _execute_action(action_id):
                 )
                 _snapshot_watch_state(media)
                 deleted_any = False
+                gone = set()
                 unmonitored = []
                 for file_id in sorted(target_files):
                     if _playback_preempts_delete(
@@ -1622,6 +1623,7 @@ def _execute_action(action_id):
                     for part in media.parts:
                         if part.kind == "episode" and part.arr_file_id == file_id:
                             part.has_file = False
+                            gone.add(part.id)
                     db.session.commit()
                 if candidate.reason_code == MANUAL_RESET:
                     _finish_reset(media, policy, arr, action, unmonitored)
@@ -1642,7 +1644,47 @@ def _execute_action(action_id):
     action.completed_at = utcnow()
     action.attempts += 1
     db.session.commit()
+    if action.action_type == "delete_media":
+        tell_jellyfin_deleted(media, None if media.media_type == "movie" else gone)
     return "succeeded"
+
+
+def tell_jellyfin_deleted(media, part_ids=None):
+    """Tell Jellyfin a title's deleted files are gone, so it drops them now.
+
+    Radarr and Sonarr only tell Jellyfin when their own Jellyfin connection is
+    set up; without it the title stays listed until Jellyfin's next library
+    scan, and deleting it again there fails. ``part_ids``: just these episodes
+    (MediaPart ids); otherwise the whole film, whose folder Radarr deleted.
+    Best effort: Jellyfin's scan still catches anything this misses.
+    """
+    from pathlib import PurePosixPath
+
+    if media.media_type == "movie":
+        ids = [media.jellyfin_id]
+    else:
+        ids = [
+            part.jellyfin_id
+            for part in media.parts
+            if part.jellyfin_id and (part_ids is None or part.id in part_ids)
+        ]
+    ids = [i for i in ids if i]
+    if not ids:
+        return
+    try:
+        jellyfin = client("jellyfin")
+        found = jellyfin.paths(ids)
+        paths = [
+            str(PurePosixPath(path).parent) if media.media_type == "movie" else path
+            for path in found.values()
+        ]
+        if paths:
+            jellyfin.files_deleted(paths)
+    except (IntegrationError, AttributeError, TypeError) as exc:
+        # AttributeError: the demo's stand-in Jellyfin has no such calls
+        logging.getLogger(__name__).info(
+            "Couldn't tell Jellyfin %s was deleted: %s", media.title, exc
+        )
 
 
 def run_actions(limit=50):

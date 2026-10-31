@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.0rc67 (2026-10-31)
+
+- **Fixed: a film deleted in Jellyfin stayed listed, and deleting it again failed.** With the Curatarr plugin, Delete in Jellyfin's web app deletes the title through Radarr or Sonarr. Radarr removed the files, but nothing told Jellyfin, so the title stayed in the library until Jellyfin's next scan; deleting it again there was refused ("Radarr doesn't have a file") and Jellyfin showed *There was an error deleting the item*. Curatarr now tells Jellyfin the files are gone after every delete it makes, as Radarr's and Sonarr's own Jellyfin connection would, so the title drops out within seconds. Deleting a title that's already gone is no longer an error: Curatarr tells Jellyfin again.
+
+## 0.2.0rc66 (2026-10-31)
+
+- The same as 0.2.0rc65 (tagged by mistake before these changes were committed).
+
 ## 0.2.0rc65 (2026-10-31)
 
 - **Fixed: recaps checked too early were never marked.** A recap's end is found by matching its clips with the earlier episodes' transcripts; an episode checked before those were transcribed got no recap marked, and so no *Skip Recap*, even though it plainly opens with "Previously on…". Such an episode is now recorded as unclear and checked again once more of the earlier episodes have a transcript, and its page says so. Episodes checked before this that open with a recap are checked again, once, in the background (59 in one library).
