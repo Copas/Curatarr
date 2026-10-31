@@ -3402,6 +3402,13 @@ def _check_recap(ep: _Episode, fields) -> str:
     found = _recap_finder(state, ep.part)(segments, ep.scenes(), ep.model())
     previously = state.recap_source
     _record_recap(state, ep.part, ep.media, found.as_dict() if found else None)
+    if not found:
+        # It opens with a recap but its end couldn't be placed, usually
+        # because the earlier episodes aren't transcribed yet: look again
+        # once more of them are (recap_recheck.py).
+        from .recap_recheck import unclear_source
+
+        state.recap_source = unclear_source(state, ep.part)
     if found and curatarr_wrote(state, ep.info):
         _add_recap_chapter(state, ep.part, ep.media, ep.info, found, fields)
     if found and found.source == "closing line" and previously is None:
@@ -3877,7 +3884,10 @@ def _recheck_siblings(state):
     """Once a series' closing line is known, recheck episodes that missed it."""
     for sibling in db.session.query(ChapterState).filter(
         ChapterState.media_identity_id == state.media_identity_id,
-        ChapterState.recap_source == "none",
+        or_(
+            ChapterState.recap_source == "none",
+            ChapterState.recap_source.like("unclear:%"),
+        ),
         ChapterState.job_state == "idle",
     ):
         sibling.job_state, sibling.requested_action = "queued", "recap"

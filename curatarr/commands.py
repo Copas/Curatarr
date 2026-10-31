@@ -338,6 +338,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Checking subtitles' sync failed")
     try:
+        from . import recap_recheck
+
+        recap_recheck.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Checking unclear recaps again failed")
+    try:
         from . import poster_language
 
         poster_language.sweep()

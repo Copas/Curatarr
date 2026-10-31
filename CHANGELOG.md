@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc65 (2026-10-31)
+
+- **Fixed: recaps checked too early were never marked.** A recap's end is found by matching its clips with the earlier episodes' transcripts; an episode checked before those were transcribed got no recap marked, and so no *Skip Recap*, even though it plainly opens with "Previously on…". Such an episode is now recorded as unclear and checked again once more of the earlier episodes have a transcript, and its page says so. Episodes checked before this that open with a recap are checked again, once, in the background (59 in one library).
+
 ## 0.2.0rc64 (2026-10-31)
 
 - **Logos aren't made from a film's own art any more.** Made that way, a logo comes back almost unchanged: there's no one in it to recast. Jobs starting from the film's own art leave logos out (they're still made for *a new scene from the story*), and the Posters page has **Use the original logos**, which asks first and then puts every title back on its own logo, for every account, and cancels the logos not made yet. The generated logos are kept, so any can be put on again from a title's page.

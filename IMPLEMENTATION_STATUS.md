@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc65 (2026-10-31): unclear recaps rechecked once earlier episodes are transcribed; history rescanned.
 - v0.2.0rc64 (2026-10-31): no logos from original art, Use the original logos, remake batch (oldest first).
 - v0.2.0rc62 (2026-10-31): cancel artwork jobs per row or all at once, in place.
 - v0.2.0rc61 (2026-10-31): episode files identified by their season's subtitles; misfiled fix acts on it.
