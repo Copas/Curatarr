@@ -2,10 +2,14 @@
 
 ## Unreleased
 
-## 0.2.0rc63 (2026-10-31)
+## 0.2.0rc64 (2026-10-31)
 
 - **Logos aren't made from a film's own art any more.** Made that way, a logo comes back almost unchanged: there's no one in it to recast. Jobs starting from the film's own art leave logos out (they're still made for *a new scene from the story*), and the Posters page has **Use the original logos**, which asks first and then puts every title back on its own logo, for every account, and cancels the logos not made yet. The generated logos are kept, so any can be put on again from a title's page.
 - **Remake the pictures from the old prompts.** Posters → Batches has a new choice of titles, *Remake pictures from the old prompts (oldest first)*: titles whose generated pictures came before Curatarr made them from each film's own art, oldest first, for the accounts ticked. Titles already remade, or being remade, are left out. Each new picture waits in Review beside the one it would replace.
+
+## 0.2.0rc63 (2026-10-31)
+
+- The same as 0.2.0rc62 (tagged by mistake before these changes were committed).
 
 ## 0.2.0rc62 (2026-10-31)
 
