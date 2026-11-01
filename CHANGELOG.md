@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc73 (2026-11-01)
+
+- **Misfiled episodes for other tools.** `GET /api/v1/problems/misfiled` (read with the API key from Settings, like history) lists the episodes Sonarr seems to have filed under the wrong episode that need a person, with the evidence and a link to Enhance → Problems. Ones Curatarr fixes by itself, ones waiting for their slot to be freed, and dismissed ones aren't listed, the same as on the home page. A dashboard can show it instead of running its own, less careful check.
+
 ## 0.2.0rc72 (2026-11-01)
 
 - **A picture the image service's safety system refuses is tried once as an original take.** ChatGPT's safety system sometimes turns a picture down, usually a trademarked character (a superhero's costume and emblem) with real people's faces in it. Asked the same way it was refused again, using up every try. Curatarr now recognises the refusal and asks once more for something genuinely different: a new scene, without the title's own art, designed afresh, with a note asking for no trademarked character, costume, emblem or logo. The rest of the set follows. If that's turned down too, it stops at once and says so (a local engine, or the title's own art, is left to you). Such pictures are marked *Original take, after a safety refusal* on the job and in Review, and the note can be changed on the Looks page.

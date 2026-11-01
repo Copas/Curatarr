@@ -650,6 +650,29 @@ def api_identity_flags():
     return jsonify({"flags": identity_flags_api()})
 
 
+@bp.get("/api/v1/problems/misfiled")
+def api_misfiled():
+    """Episodes Sonarr seems to have filed under the wrong episode that need a
+    person (read-only): the ones Curatarr fixes itself, or that were dismissed,
+    aren't listed."""
+    from . import misfiled
+
+    return jsonify(
+        {
+            "url": url_for("main.chapter_problems", _external=True) + "#misfiled",
+            "episodes": [
+                {
+                    "series": row["series_title"],
+                    "filed_as": row["from_code"],
+                    "looks_like": row.get("to_code"),
+                    "evidence": row["evidence"],
+                }
+                for row in misfiled.needing_a_person()
+            ],
+        }
+    )
+
+
 @bp.get("/api/v1/status")
 def api_status():
     return jsonify(_status())
@@ -923,10 +946,7 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
     from . import misfiled
 
     shows = {}
-    for row in misfiled.rows():
-        # Fixed by itself (now or once its episode is freed): nothing to do.
-        if row["plan"] == "wait" or (row["plan"] and auto["misfiled"]):
-            continue
+    for row in misfiled.needing_a_person():
         shows.setdefault(row["series_title"], []).append(row)
     for title, rows_ in list(shows.items())[:NEEDS_SHOWN]:
         codes = ", ".join(r["from_code"] for r in rows_)

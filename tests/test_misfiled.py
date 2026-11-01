@@ -197,6 +197,12 @@ def test_without_a_transcript_a_person_decides(app, client, monkeypatch):
     page = client.get("/chapters/problems").text
     assert "S01E02 “Bakery” is really S01E03 “Volcano”" in page
     assert "been transcribed" in page
+    # Other tools (the media dashboard) read the same list.
+    answer = client.get("/api/v1/problems/misfiled").get_json()
+    assert answer["url"].endswith("#misfiled")
+    assert [
+        (e["series"], e["filed_as"], e["looks_like"]) for e in answer["episodes"]
+    ] == [(media.title, "S01E02", "S01E03")]
     client.post("/chapters/problems/misfiled/12/fix", data={"mode": "move"})
     assert any(c[0] == "ManualImport" for c in sonarr.calls)
 

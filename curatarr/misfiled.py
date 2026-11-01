@@ -490,6 +490,15 @@ def count() -> int:
     return len([r for r in rows() if r["plan"] != "wait"])
 
 
+def needing_a_person() -> list[dict]:
+    """Findings nobody but a person will settle: not ones waiting for their
+    slot to be freed, nor ones the automatic fix (when on) makes itself."""
+    from . import autofix
+
+    auto = autofix.enabled()["misfiled"]
+    return [r for r in rows() if not (r["plan"] == "wait" or (r["plan"] and auto))]
+
+
 def evidence(finding) -> list[str]:
     if finding.get("by") == "subtitles":
         lines = [
