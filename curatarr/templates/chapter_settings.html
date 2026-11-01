@@ -60,6 +60,7 @@
   <h3 class="setting-group">Existing chapters</h3>
   <div class="setting-grid">
     {{ yes_no('preserve_existing', 'Keep chapters a file already has', 'Recommended. Off, they are replaced, and a copy is kept so removing Curatarr\'s restores them.') }}
+    {{ yes_no('replace_poor', 'Replace chapters that are no use', 'Keeps a file\'s own chapters unless they\'re all just numbered ("Chapter 12", "Chapitre 12") and also come every minute or so, are placed by a timer (all the same length), or there\'s only one: then Curatarr makes its own. Chapters with real names are always kept. A copy is kept, so removing Curatarr\'s chapters puts them back.') }}
     {{ yes_no('scene_detection', 'Snap chapters to scene changes') }}
     {{ yes_no('fixed_intervals', 'Fall back to fixed intervals') }}
   </div>

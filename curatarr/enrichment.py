@@ -40,6 +40,7 @@ from .chapters import (
     effective_config,
     fingerprint,
     fixed_interval_plan,
+    poor_chapters,
     scene_aligned_plan,
     semantic_plan,
     timestamp,
@@ -158,6 +159,7 @@ FIELD_PATHS = {
     "minimum_spacing_minutes": ("minimum_spacing_minutes",),
     "maximum_spacing_minutes": ("maximum_spacing_minutes",),
     "preserve_existing": ("preserve_existing",),
+    "replace_poor": ("replace_poor",),
     "scene_detection": ("fallback", "scene_detection"),
     "fixed_intervals": ("fallback", "fixed_intervals"),
     "semantic_enabled": ("semantic", "enabled"),
@@ -658,6 +660,8 @@ def queue_new_media() -> int:
             continue
         if not config["enabled"]:
             continue
+        if config["replace_poor"]:
+            queued += _queue_chapter_quality_checks(library.id, now)
         processing = config["processing"]
         if not (processing["new_media"] or processing["existing_library"]):
             continue
@@ -697,6 +701,35 @@ def queue_new_media() -> int:
             queued += 1
     db.session.commit()
     return queued
+
+
+QUALITY_CHECKS_PER_PASS = 100  # each a quick look at the file's chapters
+
+
+def _queue_chapter_quality_checks(library_id, now) -> int:
+    """With "replace chapters that are no use" on, look again at files kept
+    with their own chapters before it was (whenever they were added): a few
+    at a time. Each is looked at once; kept ones are marked embedded_ok."""
+    rows = (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaIdentity.library_id == library_id,
+            MediaIdentity.missing_since.is_(None),
+            MediaPart.has_file.is_(True),
+            ChapterState.chapter_status == "existing",
+            ChapterState.chapter_source == "embedded",
+            ChapterState.job_state == "idle",
+        )
+        .limit(QUALITY_CHECKS_PER_PASS)
+        .all()
+    )
+    for state in rows:
+        state.job_state = "queued"
+        state.requested_action = "auto"
+        state.requested_at = now
+    return len(rows)
 
 
 def _queue_follow_up(state, part, config, now) -> bool:
@@ -1085,12 +1118,19 @@ def run_job(state_id: str, *, llm=None) -> str:
         return run_recap(state, part, media, info, config, opts, fields, llm=llm)
 
     ours = curatarr_wrote(state, info)
-    # Unchanged since Curatarr last handled it: nothing to do automatically.
+    # Unchanged since Curatarr last handled it: nothing to do automatically,
+    # unless its own chapters haven't been judged yet (and must be, once).
+    unjudged = (
+        config["replace_poor"]
+        and state.chapter_status == "existing"
+        and state.chapter_source == "embedded"
+    )
     if (
         action == "auto"
         and state.chapter_status in FINAL_STATUSES
         and state.chapter_file_size == info.size
         and state.chapter_file_mtime == info.mtime
+        and not unjudged
     ):
         state.job_state, state.requested_action = "idle", None
         db.session.commit()
@@ -1109,17 +1149,27 @@ def run_job(state_id: str, *, llm=None) -> str:
             )
             db.session.commit()
             return state.chapter_status
-        if config["preserve_existing"] and action != "preview":
+        poor = (
+            poor_chapters(info.chapters, info.duration)
+            if config["replace_poor"]
+            else None
+        )
+        if config["preserve_existing"] and action != "preview" and not poor:
             _finish(
                 state,
                 "existing",
                 info=info,
-                source="embedded",
+                # Looked at with replace_poor on: not looked at again.
+                source="embedded_ok" if config["replace_poor"] else "embedded",
                 count=len(info.chapters),
             )
             db.session.commit()
             _log("chapters_preserved", **fields)
             return state.chapter_status
+        if poor:
+            # Made as if the file had none; the originals are kept (_write),
+            # so removing Curatarr's chapters puts them back.
+            _log("chapters_replacing_poor", reason=poor, **fields)
     if info.chapters and ours and action in {"auto", "generate"}:
         _finish(state, state.chapter_status, info=info)
         db.session.commit()
@@ -2976,6 +3026,7 @@ def describe(state: ChapterState | None) -> dict:
         "label": label,
         "source": {
             "embedded": "Embedded",
+            "embedded_ok": "Embedded",
             "semantic": "Semantic",
             "scene_aligned": "Scene-aligned",
             "fixed": "Fixed interval",

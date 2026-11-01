@@ -27,6 +27,8 @@ DEFAULTS: dict[str, Any] = {
     "mode": "smart",
     "minimum_duration_minutes": 20,
     "preserve_existing": True,
+    # Keep a file's own chapters unless they're no use (poor_chapters).
+    "replace_poor": False,
     "target_spacing_minutes": 7,
     "minimum_spacing_minutes": 4,
     "maximum_spacing_minutes": 10,
@@ -128,6 +130,7 @@ GENERATED_STATUSES = {
 }
 SOURCE_LABELS = {
     "embedded": "Embedded",
+    "embedded_ok": "Embedded",  # looked at, and good enough to keep
     "semantic": "Semantic",
     "scene_aligned": "Scene-aligned",
     "fixed": "Fixed interval",
@@ -438,6 +441,44 @@ def scene_aligned_plan(duration: float, scenes: list[float], config: dict) -> Pl
 
 class InvalidChapters(ValueError):
     pass
+
+
+# A chapter name that says nothing: "Chapter 12", "Chapitre 12", "Kapitel 12",
+# "12", "00:05:00" (encoders and some releases add these; DVDs and Blu-rays
+# name scenes, or number them at real breaks).
+GENERIC_NAME = re.compile(
+    r"^\s*(?:(?:chapter|chapitre|kapitel|cap[ií]tulo|capitolo|hoofdstuk|"
+    r"rozdzia[lł]|глава|chap|ch|part|scene|scène|szene|escena)\.?\s*#?\s*)?"
+    r"(?:\d{1,3}|\d{1,2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?)\s*$",
+    re.IGNORECASE,
+)
+POOR_SPACING = 120  # seconds: chapters closer than this on average aren't scenes
+EVEN_SLACK = 2.0  # seconds: gaps this alike come from a timer, not the story
+
+
+def poor_chapters(chapters: list[dict], duration: float) -> str | None:
+    """Why a file's own chapters are no use for finding your place, or None.
+
+    Only chapters that are all generically named are judged (a chapter list
+    with real names was made by someone). They're no use when they come
+    every minute or so, when a timer placed them (all the same length,
+    whatever happens), or when there's only one.
+    """
+    names = [str(c.get("name") or "").strip() for c in chapters]
+    if not chapters or not all(not n or GENERIC_NAME.match(n) for n in names):
+        return None
+    starts = sorted(float(c.get("start") or 0) for c in chapters)
+    if len(starts) == 1:
+        return "one chapter for the whole file"
+    gaps = [b - a for a, b in pairwise(starts)]
+    average = (
+        (duration - starts[0]) / len(starts) if duration else sum(gaps) / len(gaps)
+    )
+    if average < POOR_SPACING:
+        return f"{len(starts)} chapters, one every {average:.0f} seconds"
+    if len(gaps) >= 3 and max(gaps) - min(gaps) <= EVEN_SLACK:
+        return f"a chapter every {gaps[0] / 60:.0f} minutes, wherever it falls"
+    return None
 
 
 def validate_chapters(chapters: list[Chapter], duration: float) -> list[Chapter]:

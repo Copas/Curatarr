@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc77 (2026-11-01)
+
+- **Replace chapters that are no use** (Settings → Enhance → Chapters, off by default, per library). Some releases carry chapters that don't help anyone find their place: fifty-odd numbered "Chapitre 01…52" a minute apart, one every five minutes wherever it falls, or a single chapter for the whole file. With this on, a file's own chapters are kept unless every one is just numbered and they're also that dense, timer-placed or alone; then Curatarr makes its own. Numbered chapters at real story breaks (a disc's) and any with real names stay. Files already kept with their own chapters are looked at again once, a hundred at a time, and the originals of any replaced are kept, so removing Curatarr's chapters restores them.
+
 ## 0.2.0rc76 (2026-11-01)
 
 - **Subtitle tracks in other languages are removed** (Settings → Enhance → Subtitle tracks, off by default). Releases often carry a dozen subtitle tracks, and a player choosing subtitles by itself can pick the wrong one. Each MKV file is looked at once, and the tracks not in a kept language (English unless you list others) are removed: a copy without them, checked, then moved over the original, so nothing is re-encoded and video, audio and chapters stay. An untagged track stays only when its name says a kept language. One or two files per worker cycle, never one that's playing, what's about to be watched first; Enhance and Overview show the progress, and History what was removed. This does what a transcoder such as Tdarr is often kept for: on a library of about 9,000 files it decided the same as a Tdarr "English subtitles only" plugin for every file checked.

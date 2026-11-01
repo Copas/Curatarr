@@ -362,6 +362,66 @@ def test_replacing_foreign_chapters_keeps_a_copy(media_env, monkeypatch):
     assert restored == ["<Chapters/>"] and state.chapter_status == "existing"
 
 
+def test_chapters_that_are_no_use_are_replaced_when_asked(media_env, monkeypatch):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    # A chapter every minute, each just numbered (a re-encode's own).
+    poor = [{"start": 60.0 * n, "name": f"Chapitre {n + 1:02}"} for n in range(40)]
+    files.add(part.file_path, chapters=poor)
+    _navigation(library)
+    state = _run(part, "generate")
+    assert state.chapter_status == "existing"  # off by default: kept
+    assert state.chapter_source == "embedded"
+    _navigation(library, replace_poor=True)
+    monkeypatch.setattr(enrichment, "export_chapters_xml", lambda path: "<Chapters/>")
+    # Already settled as "existing": looked at again once the option is on.
+    assert enrichment.queue_new_media() == 1
+    enrichment.dispatch(synchronous=True)
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+    assert state.chapter_status == "generated_scene_aligned"
+    assert state.original_chapters_xml == "<Chapters/>"  # removing restores them
+    assert enrichment.queue_new_media() == 0  # nothing left to look at
+
+
+def test_chapters_worth_keeping_stay_and_are_not_looked_at_again(media_env):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    files.add(
+        part.file_path,
+        chapters=[{"start": 600.0 * n, "name": f"Chapter {n + 1}"} for n in range(3)]
+        + [{"start": 1900.0, "name": "Chapter 4"}],
+    )
+    _navigation(library, replace_poor=True)
+    state = _run(part, "generate")
+    assert state.chapter_status == "existing" and state.chapter_source == "embedded_ok"
+    assert files.writes == []
+    assert enrichment.queue_new_media() == 0  # looked at once: not queued again
+
+
+def test_what_makes_chapters_no_use():
+    from curatarr.chapters import poor_chapters
+
+    def numbered(starts, name="Chapter {}"):
+        return [{"start": s, "name": name.format(n + 1)} for n, s in enumerate(starts)]
+
+    hour = 3600.0
+    assert "60 chapters, one every 60 seconds" in poor_chapters(
+        numbered([55.0 * n for n in range(60)], "Chapitre {:02}"), hour
+    )
+    assert "every 5 minutes" in poor_chapters(
+        numbered([300.0 * n for n in range(12)]), hour
+    )
+    assert "one chapter" in poor_chapters(
+        [{"start": 0.0, "name": "00:00:00.054"}], hour
+    )
+    # Numbered, but at the story's breaks (a disc's chapters): kept.
+    assert poor_chapters(numbered([0, 410, 980, 1500, 2350, 3010]), hour) is None
+    # Named by someone: kept, however close together.
+    named = [{"start": 50.0 * n, "name": f"Scene of the crime {n}"} for n in range(60)]
+    assert poor_chapters(named, hour) is None
+
+
 def test_new_media_is_queued_only_after_enabling(media_env):
     files, _arr = media_env
     library, _media, old = _movie()

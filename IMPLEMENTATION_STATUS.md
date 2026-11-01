@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc77 (2026-11-01): replace chapters that are no use (numbered and dense, timer-placed, or single), optional.
 - v0.2.0rc76 (2026-11-01): Subtitle tracks: other languages' tracks removed from MKV files (replaces a Tdarr job).
 - v0.2.0rc75 (2026-11-01): stale subtitle evidence dropped after a file is moved into the slot.
 - v0.2.0rc74 (2026-11-01): misfiled runs confirmed together; subtitle evidence vetoed by clear summaries.
