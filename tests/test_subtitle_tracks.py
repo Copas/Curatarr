@@ -164,4 +164,7 @@ def test_off_by_default_and_the_languages_are_a_setting(app, client):
     ] == ["eng", "spa"]
     with pytest.raises(ChapterConfigError):
         validate_global_options({"subtitle_languages": ["English"]})
-    assert "Languages to keep" in client.get("/chapters/settings").text
+    page = client.get("/chapters/settings").text
+    assert "Languages to keep" in page and "Replace chapters that are no use" in page
+    # The card's On/Off follows its switch before saving (setting-cards.js).
+    assert 'data-toggles="subtitle_tracks"' in page and "setting-cards.js" in page

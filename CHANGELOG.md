@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc78 (2026-11-01)
+
+- **Settings → Enhance: a card's On/Off follows its switch.** Turning an option on inside a card left the card saying *Off* until the page was saved, which read as if the switch hadn't worked. The chip now changes as the switch does, and the save bar says *Not saved yet* until Save is pressed.
+
 ## 0.2.0rc77 (2026-11-01)
 
 - **Replace chapters that are no use** (Settings → Enhance → Chapters, off by default, per library). Some releases carry chapters that don't help anyone find their place: fifty-odd numbered "Chapitre 01…52" a minute apart, one every five minutes wherever it falls, or a single chapter for the whole file. With this on, a file's own chapters are kept unless every one is just numbered and they're also that dense, timer-placed or alone; then Curatarr makes its own. Numbered chapters at real story breaks (a disc's) and any with real names stay. Files already kept with their own chapters are looked at again once, a hundred at a time, and the originals of any replaced are kept, so removing Curatarr's chapters restores them.

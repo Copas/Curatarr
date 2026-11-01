@@ -14,9 +14,9 @@
 {% macro number(name, label, unit='minutes') %}
   <div class="setting"><label class="form-label w-100">{{ label }}<div class="input-group"><input class="form-control" type="number" min="1" name="{{ name }}" value="{{ values[name] if values[name] is not none else '' }}"{% if library %} placeholder="Inherit ({{ inherited_values[name] }})"{% endif %}><span class="input-group-text">{{ unit }}</span></div></label></div>
 {% endmacro %}
-{% macro card(id, icon_name, title, summary, state=None, open=False) %}
+{% macro card(id, icon_name, title, summary, state=None, open=False, toggles=None) %}
 <details class="setting-card" id="{{ id }}"{% if open %} open{% endif %}>
-  <summary>{{ icon(icon_name) }}<span class="setting-card-title"><strong>{{ title }}</strong><small>{{ summary }}</small></span>{% if state is not none %}<span class="chip{{ ' chip-on' if state else '' }}">{{ 'On' if state else 'Off' }}</span>{% endif %}{{ icon('chevron', 18) }}</summary>
+  <summary>{{ icon(icon_name) }}<span class="setting-card-title"><strong>{{ title }}</strong><small>{{ summary }}</small></span>{% if state is not none %}<span class="chip{{ ' chip-on' if state else '' }}"{% if toggles and not library %} data-toggles="{{ toggles }}"{% endif %}>{{ 'On' if state else 'Off' }}</span>{% endif %}{{ icon('chevron', 18) }}</summary>
   <div class="setting-card-body">{{ caller() }}</div>
 </details>
 {% endmacro %}
@@ -82,7 +82,7 @@
 {% if not library and opts %}
 <h2 class="section-label">This server <small>(every library)</small></h2>
 <div class="setting-cards mb-4">
-{% call card('skip-markers', 'skip', 'Skip markers', ('Movies keep only credits' if opts.movie_credits_only else 'Movies keep every marker') ~ (' · episode check on' if opts.episode_identity_check else ''), opts.movie_credits_only) %}
+{% call card('skip-markers', 'skip', 'Skip markers', ('Movies keep only credits' if opts.movie_credits_only else 'Movies keep every marker') ~ (' · episode check on' if opts.episode_identity_check else ''), opts.movie_credits_only, toggles='movie_credits_only') %}
   <p class="form-text mt-0">Recaps, previews and fixes to Intro Skipper's markers come from Smart Chapters transcripts; start a check from <a href="{{ url_for('main.chapter_maintenance') }}">Enhance → Progress</a> and review changes under <a href="{{ url_for('main.chapter_markers') }}">Skip markers</a>.</p>
   <div class="setting-grid">
     {{ option('movie_credits_only', 'Movies keep only their credits marker', 'Hides the recaps and intros Intro Skipper guesses on movies from chapter names like "Chapter 1". Credits stay, for Skip Credits and Next.') }}
@@ -90,26 +90,26 @@
     {{ option('episode_identity_check', 'Check episodes against their summaries', 'Experimental. Flags an episode whose transcript fits another episode\'s summary far better. Finds real mix-ups, but also some that are fine.') }}
   </div>
 {% endcall %}
-{% call card('dubs', 'audio', 'English dubs', ('Checking foreign films' if opts.dub_check else 'Off') ~ (' · removes other languages' if opts.dub_check and opts.dub_remove_other_languages else '') ~ (' · replaces automatically' if opts.dub_check and opts.dub_replace_automatically else ''), opts.dub_check) %}
+{% call card('dubs', 'audio', 'English dubs', ('Checking foreign films' if opts.dub_check else 'Off') ~ (' · removes other languages' if opts.dub_check and opts.dub_remove_other_languages else '') ~ (' · replaces automatically' if opts.dub_check and opts.dub_replace_automatically else ''), opts.dub_check, toggles='dub_check') %}
   <div class="setting-grid">
     {{ option('dub_check', 'Check English dubs of foreign films', 'Listens to a few moments of each audio track to tell its language. Fixes wrong labels and makes real English the default.') }}
     {{ option('dub_remove_other_languages', 'Remove audio and subtitles in other languages', 'Once English audio is confirmed. A verified copy, never a re-encode; MKV only. Unclear tracks are kept.') }}
     {{ option('dub_replace_automatically', 'Replace films with no English audio automatically', 'Blocklists the release in Radarr, deletes the file and searches again, instead of listing it under English dubs.') }}
   </div>
 {% endcall %}
-{% call card('compat-audio', 'audio', 'Playable audio', ((['AC3 for TVs'] if opts.compat_audio else []) + (['AAC for browsers'] if opts.browser_audio else []))|join(' · ') or 'Off', opts.compat_audio or opts.browser_audio) %}
+{% call card('compat-audio', 'audio', 'Playable audio', ((['AC3 for TVs'] if opts.compat_audio else []) + (['AAC for browsers'] if opts.browser_audio else []))|join(' · ') or 'Off', opts.compat_audio or opts.browser_audio, toggles='compat_audio,browser_audio') %}
   <div class="setting-grid">
     {{ option('compat_audio', 'Add a TV-friendly audio track to films and episodes', 'Rokus and many TVs can\'t play DTS, TrueHD or FLAC, so Jellyfin converts it while you watch, and some players get stuck restarting. Adds an AC3 copy as the default track and keeps the original. Only that track is encoded; MKV only, one film at a time, never while it\'s playing.') }}
     {{ option('fix_default_audio', 'Don\'t play a commentary or audio description by default', 'Some releases make the director\'s commentary or the audio description (a narrator describing the picture) the default track, so that\'s what plays. Makes the film\'s own soundtrack in the same language the default instead, in place: nothing is re-encoded.') }}
     {{ option('browser_audio', 'Add a stereo AAC track for web browsers', 'Chrome and Firefox can\'t play AC3, E-AC3 or DTS, so Jellyfin converts the sound while they watch. Adds a stereo AAC track beside the others, not as the default: TVs keep playing the surround track, and the Curatarr plugin for Jellyfin points browsers at this one. Only with the plugin connected.') }}
   </div>
 {% endcall %}
-{% call card('seek-repair', 'tools', 'Seeking on Roku', 'Repairs files Roku can\'t seek in' if opts.seek_repair else 'Off', opts.seek_repair) %}
+{% call card('seek-repair', 'tools', 'Seeking on Roku', 'Repairs files Roku can\'t seek in' if opts.seek_repair else 'Off', opts.seek_repair, toggles='seek_repair') %}
   <div class="setting-grid">
     {{ option('seek_repair', 'Repair files Roku players can\'t seek in', 'Adding chapters or fixing tracks can leave an MKV\'s seek index where Roku players don\'t look, so jumping ahead starts the episode over. Curatarr rebuilds those files (a copy, never a re-encode; everything is kept) one at a time, never while one is playing.') }}
   </div>
 {% endcall %}
-{% call card('subtitle-tracks', 'subtitles', 'Subtitle tracks', 'Keeps ' ~ opts.subtitle_languages|join(', ') ~ ' only' if opts.subtitle_tracks else 'Off', opts.subtitle_tracks) %}
+{% call card('subtitle-tracks', 'subtitles', 'Subtitle tracks', 'Keeps ' ~ opts.subtitle_languages|join(', ') ~ ' only' if opts.subtitle_tracks else 'Off', opts.subtitle_tracks, toggles='subtitle_tracks') %}
   <div class="setting-grid">
     {{ option('subtitle_tracks', 'Remove subtitle tracks in other languages', 'Releases often carry a dozen subtitle tracks, and a player choosing subtitles by itself can pick the wrong one. Removes the tracks not in a language below from each MKV file (a copy, never a re-encode; video, audio and chapters are kept), one or two at a time, never while one is playing. Untagged tracks are kept only when their name says a kept language. Subtitle files beside the video, such as Bazarr\'s, aren\'t touched.') }}
     <div><label class="form-label" for="subtitle_languages">Languages to keep</label>
@@ -117,12 +117,12 @@
       <div class="form-text" id="subtitle_languages_help">Three-letter codes, separated by commas: eng, spa, fre…</div></div>
   </div>
 {% endcall %}
-{% call card('pace-rebuilds', 'tools', 'Jellyfin thumbnails', 'Rebuilds wait for Jellyfin' if opts.pace_rebuilds else 'Off', opts.pace_rebuilds) %}
+{% call card('pace-rebuilds', 'tools', 'Jellyfin thumbnails', 'Rebuilds wait for Jellyfin' if opts.pace_rebuilds else 'Off', opts.pace_rebuilds, toggles='pace_rebuilds') %}
   <div class="setting-grid">
     {{ option('pace_rebuilds', 'Wait for Jellyfin\'s scrubbing thumbnails between file rebuilds', 'Adding TV-friendly audio or repairing seeking rebuilds a file, and Jellyfin then remakes its scrubbing thumbnails, a few minutes per file. Curatarr waits while three rebuilt files are still waiting for theirs, so titles aren\'t left without thumbnails for days.') }}
   </div>
 {% endcall %}
-{% call card('problems', 'tools', 'File problems', ('Checking films and episodes' if opts.file_check else 'Off') ~ (' · replaces automatically' if opts.file_check and opts.file_replace_automatically else ''), opts.file_check) %}
+{% call card('problems', 'tools', 'File problems', ('Checking films and episodes' if opts.file_check else 'Off') ~ (' · replaces automatically' if opts.file_check and opts.file_replace_automatically else ''), opts.file_check, toggles='file_check') %}
   <div class="setting-grid">
     {{ option('file_check', 'Check files for problems', 'Looks for subtitles burned into the picture (films), and for files that are cut short, go quiet partway through or have decoding errors. Reads a few frames and seconds of each file; nothing is changed.') }}
     {{ option('file_replace_automatically', 'Replace problem files automatically', 'Blocklists the release in Radarr or Sonarr, deletes the file and searches again, instead of listing it under Problems.') }}
@@ -153,6 +153,7 @@
 {% endcall %}
 </div>
 {% endif %}
-<div class="sticky-actions"><span class="small text-secondary">{{ 'Settings for ' ~ library.name if library else 'Settings for every library' }}</span><button class="btn btn-primary">Save</button></div>
+<div class="sticky-actions"><span class="small text-secondary" data-unsaved hidden>Not saved yet · </span><span class="small text-secondary">{{ 'Settings for ' ~ library.name if library else 'Settings for every library' }}</span><button class="btn btn-primary">Save</button></div>
 </form>
+<script src="{{ url_for('static', filename='setting-cards.js', v='1') }}"></script>
 {% endblock %}
