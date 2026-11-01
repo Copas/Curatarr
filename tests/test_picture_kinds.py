@@ -393,11 +393,11 @@ def test_prompts_ask_for_a_heightened_take_unless_told_otherwise(app, client, tm
         "made": None,
     }
     options = custom_posters.prompt_options()
-    assert "heightened take on the original artwork" in options["style"]  # the default
+    assert "heightened take on the story" in options["style"]  # the default
     text = custom_posters.prompts(
         [entry], batch=5, photos="", people="", output="/out", style=options["style"]
     )[0]
-    assert "The look: A heightened take" in text and "sexual tension" in text
+    assert "The look: An extreme, heightened take" in text and "sexual tension" in text
     assert "The look" in client.get("/library/posters").text
     client.post(
         "/library/posters/prompts",

@@ -1,0 +1,4 @@
+{# Generate and Batches: a note for this run only. Needs p, extra. #}
+<div class="mb-3"><label class="form-label" for="{{ p }}-extra">Extra for these titles <span class="text-secondary small">(optional, this run only)</span></label>
+  <input class="form-control" type="text" name="extra" id="{{ p }}-extra" value="{{ extra or '' }}" maxlength="300" placeholder="e.g. In this case we are going for funny." aria-describedby="{{ p }}-extra-help">
+  <div id="{{ p }}-extra-help" class="form-text">Added after the look for the titles in this run, then forgotten: the default look stays as it is.</div></div>

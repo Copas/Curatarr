@@ -195,21 +195,31 @@ def _common() -> dict:
         "state_names": artwork_jobs.STATE_NAMES,
         "job_state_names": artwork_jobs.JOB_STATE_NAMES,
         "engines": artwork_jobs.engines(),
-        "house": _house(),
+        "default_look": _default_look(),
         "saved_looks": _saved_looks(),
+        "look_values": _look_values(),
     }
 
 
-def _house():
-    from . import house_look
+def _look_values() -> dict:
+    """{look key: its settings as the form shows them}, for the page's look
+    picker and Restore the default."""
+    values = {"default": _look_form(_default_look())}
+    for look in _saved_looks():
+        values[f"saved:{look['id']}"] = _look_form(look)
+    return values
 
-    return house_look.current()
+
+def _default_look():
+    from . import looks
+
+    return looks.default()
 
 
 def _saved_looks():
-    from . import house_look
+    from . import looks
 
-    return house_look.looks()
+    return looks.looks()
 
 
 def _engine_label(engine: str) -> str:
@@ -230,16 +240,23 @@ def artwork_generate():
         )
         if m is not None
     ]
-    saved = _remembered("generate")
-    if request.args.get("look"):  # Try it, from a saved look's card
-        saved["look"] = request.args["look"]
-    photos = request.args.get("photos", saved.get("photos", options["photos"]))
+    from . import looks
+
+    # Choices about titles carry over; the settings start from the default
+    # look (or the look Try it names) every time.
+    remembered = _remembered("generate")
+    key = request.args.get("look") or "default"
+    saved = {
+        k: remembered[k] for k in ("kinds", "accounts", "worker") if k in remembered
+    }
+    saved |= _look_form(looks.chosen(key)) | {"look": key}
+    photos = request.args.get("photos", saved["photos"])
     engines = artwork_jobs.engines()
     local = [e for e in engines if not e["external"]]
     # Only an outside service (Codex) on offer: it's the one to choose.
     suggested = engines[0]["engine"] if engines and not local else "auto"
-    if saved.get("engine") in {"auto", *(e["engine"] for e in engines)}:
-        suggested = saved["engine"]
+    if saved.get("engine") in {e["engine"] for e in engines} or local:
+        suggested = saved.get("engine") or "auto"
     return render_template(
         "artwork_generate.html",
         suggested=suggested,
@@ -286,27 +303,59 @@ def artwork_find_titles():
     )
 
 
-OPTION_FIELDS = ("photos", "cast", "style", "originals", "external_ok", "engine")
+OPTION_FIELDS = (
+    "photos",
+    "cast",
+    "style",
+    "originals",
+    "external_ok",
+    "engine",
+    "approach",
+)
 
 
 def _look(form) -> tuple[dict, str]:
-    """(job options, engine) for a run: the house look unless the form asks
-    for other settings (``look=custom``); then the form's own. A link that
-    doesn't say gets the house look, so it can't be blanked. ``extra`` (this
-    run's own note) goes after the look either way and isn't kept."""
-    from . import house_look
+    """(job options, engine) for a run: what the form's fields say, or, from a
+    link that sends none of them, the look it names (``look=saved:<id>``) or
+    the default look, so a link can't blank the settings. ``extra`` (this
+    run's own note) goes after the look and isn't kept."""
+    from . import looks
 
-    choice = form.get("look") or ("house" if house_look.current() else "custom")
-    if choice == "house" and house_look.current():
-        return house_look.job_options(form.get("extra"))
-    if choice.startswith("saved:") and house_look.get(choice[6:]):
-        return house_look.job_options(form.get("extra"), choice[6:])
-    options = _job_options(form)
+    key = form.get("look") or "default"
+    started = looks.chosen(key)
+    if any(field in form for field in OPTION_FIELDS):
+        options = _job_options(form)
+        engine = form.get("engine") or "auto"
+    else:
+        options = _look_options(started)
+        engine = started["engine"]
     extra = " ".join((form.get("extra") or "").split())[:300]
     if extra:
         options["style"] = f"{options['style']} {extra}".strip()
         options["extra"] = extra
-    return options, form.get("engine") or "auto"
+    options["look"] = key if key.startswith("saved:") else "default"
+    options["look_name"] = started.get("name") or "Default"
+    return options, engine
+
+
+def _look_options(look) -> dict:
+    """A saved look's settings as job options."""
+    return {
+        "photos": look["photos"],
+        "cast": list(look["cast"]),
+        "style": look["style"],
+        "originals": look["originals"],
+        "external_ok": look["external_ok"],
+        "approach": look["approach"],
+    }
+
+
+def _look_form(look) -> dict:
+    """A look's settings as the Generate form shows them."""
+    return _look_options(look) | {
+        "cast": ", ".join(look["cast"]),
+        "engine": look["engine"],
+    }
 
 
 def _job_options(form) -> dict:
@@ -344,19 +393,7 @@ def artwork_generate_submit():
         "kinds": kinds,
         "accounts": _scope(request.form),
         "worker": request.form.get("worker") or "",
-        "look": options.get("look") or "custom",
     }
-    if options.get("look") != "house":  # the house look is kept on its own
-        own = _job_options(request.form)
-        remembered |= {
-            "engine": engine,
-            "photos": own["photos"],
-            "cast": ", ".join(own["cast"]),
-            "style": own["style"],
-            "originals": own["originals"],
-            "external_ok": own["external_ok"],
-            "approach": own["approach"],
-        }
     _remember("generate", _remembered("generate") | remembered)
     if options["photos"] and not Path(options["photos"]).is_dir():
         flash(f"Curatarr can't find the folder {options['photos']}.", "danger")
@@ -710,20 +747,27 @@ def artwork_batches():
     spec = None
     if request.args.get("preview"):
         spec = _batch_spec(request.args)
-        if spec["look"] != "house" and not any(
-            field in request.args for field in (*OPTION_FIELDS, "look")
-        ):
-            # A link that only picks titles keeps the look, reference photos
-            # and engine chosen before, rather than blanking them.
-            before = _remembered("batch")
-            spec["options"] = before.get("options") or spec["options"]
-            spec["engine"] = before.get("engine") or spec["engine"]
-            spec["worker"] = before.get("worker") or spec["worker"]
         _remember("batch", spec)
         titles = artwork_jobs.batch_titles(spec)
         preview = {"count": len(titles), "titles": titles[:50]}
     else:
-        spec = _remembered("batch") or None
+        # The titles chosen carry over; the settings start from the default.
+        look = _default_look()
+        spec = {
+            "titles": options["titles"],
+            "kinds": options["kinds"],
+            "accounts": [],
+            "skip_done": True,
+            "alternatives": False,
+            "worker": None,
+        }
+        spec |= _remembered("batch")
+        spec |= {
+            "options": _look_options(look),
+            "engine": look["engine"],
+            "look": "default",
+            "extra": "",
+        }
     batches = (
         db.session.query(ArtworkBatch)
         .filter_by(purpose="library")
@@ -747,27 +791,25 @@ def artwork_batches():
 
 @bp.get("/library/posters/house")
 def artwork_house():
-    """Looks: the house look, the saved looks with their trial runs, a form for
-    a new (or changed) look, and earlier house looks."""
-    from . import house_look
+    return redirect(url_for("main.artwork_looks"))
 
-    saved_looks = house_look.looks()
-    editing = house_look.get(request.args.get("edit") or "")
-    if editing:
-        draft = dict(editing)
-    else:
-        # A new look starts from the house look, else from what Generate used
-        # last; a look given in the link (to hand one over) goes in too.
-        draft = house_look.current() or house_look.clean(_remembered("generate"))
-        draft = dict(draft) | {"name": ""}
-    if request.args.get("style"):
-        draft["style"] = request.args["style"]
+
+@bp.get("/library/posters/looks")
+def artwork_looks():
+    """The default look, saved looks with what they were tried on, a form
+    for a new (or changed) look, and earlier default looks."""
+    from . import looks
+
+    saved_looks = looks.looks()
+    editing = looks.get(request.args.get("edit") or "")
+    draft = dict(editing) if editing else looks.default() | {"name": ""}
     return render_template(
-        "artwork_house.html",
+        "artwork_looks.html",
+        built_in=looks.built_in(),
         trials=_trials([f"saved:{look['id']}" for look in saved_looks]),
         draft=draft,
         editing=editing,
-        history=house_look.history(),
+        history=looks.history(),
         engine_label=_engine_label,
         **_common(),
     )
@@ -783,19 +825,62 @@ def _trials(keys, per_look=8) -> dict[str, list]:
     return found
 
 
-@bp.post("/library/posters/looks")
-def artwork_look_save():
-    from . import house_look
+def _checked_look(form):
+    """The settings from a Looks form, or None (and a message) when unusable."""
+    from . import looks
 
-    values = house_look.clean(request.form)
+    values = looks.clean(form)
     if not values["style"]:
-        _say("A look needs its look written in.", "warning")
-        return _done(url_for("main.artwork_house"))
+        _say("A look needs its words written in.", "warning")
+        return None
     if values["photos"] and not Path(values["photos"]).is_dir():
         _say(f"Curatarr can't find the folder {values['photos']}.", "danger")
-        return _done(url_for("main.artwork_house"))
+        return None
+    return values
+
+
+@bp.post("/library/posters/looks/default")
+def artwork_look_default_save():
+    from . import looks
+
+    values = _checked_look(request.form)
+    if values is not None:
+        looks.save_default(values, _who())
+        _say("Saved the default look. The one before is kept below.", "success")
+    return _done(url_for("main.artwork_looks"))
+
+
+@bp.post("/library/posters/looks/default/built-in")
+def artwork_look_default_built_in():
+    from . import looks
+
+    looks.restore_built_in(_who())
+    _say("The default look has Curatarr's built-in words again.", "success")
+    return _done(url_for("main.artwork_looks"))
+
+
+@bp.post("/library/posters/looks/default/restore/<int:index>")
+def artwork_look_default_restore(index):
+    from . import looks
+
     try:
-        look = house_look.save_look(
+        looks.restore(index, _who())
+    except ValueError as exc:
+        _say(str(exc), "warning")
+    else:
+        _say("Put back: that earlier version is the default look again.", "success")
+    return _done(url_for("main.artwork_looks"))
+
+
+@bp.post("/library/posters/looks")
+def artwork_look_save():
+    from . import looks
+
+    values = _checked_look(request.form)
+    if values is None:
+        return _done(url_for("main.artwork_looks"))
+    try:
+        look = looks.save_look(
             values,
             request.form.get("name"),
             _who(),
@@ -803,54 +888,27 @@ def artwork_look_save():
         )
     except ValueError as exc:
         _say(str(exc), "warning")
-        return _done(url_for("main.artwork_house"))
-    if request.form.get("make_house") in {"on", "1"}:
-        if request.form.get("confirm") not in {"on", "1"}:
-            _say(
-                f"Saved {look['name']}, but not as the house look: tick the box "
-                "to confirm that.",
-                "warning",
-            )
-            return _done(url_for("main.artwork_house"))
-        house_look.make_house(look["id"], _who())
-        _say(f"Saved {look['name']}; it's the house look now.", "success")
     else:
         _say(f"Saved {look['name']}. Try it on a few titles from its card.", "success")
-    return _done(url_for("main.artwork_house"))
+    return _done(url_for("main.artwork_looks"))
 
 
 @bp.post("/library/posters/looks/<look_id>/<action>")
 def artwork_look_action(look_id, action):
-    from . import house_look
+    from . import looks
 
-    if action not in ("house", "delete"):
+    if action not in ("default", "delete"):
         abort(404)
-    if request.form.get("confirm") not in {"on", "1"}:
-        _say("Tick the box to confirm.", "warning")
-        return _done(url_for("main.artwork_house"))
     try:
-        if action == "house":
-            look = house_look.make_house(look_id, _who())
-            _say(f"{look['name']} is the house look now.", "success")
+        if action == "default":
+            look = looks.make_default(look_id, _who())
+            _say(f"{look['name']} is the default look now.", "success")
         else:
-            look = house_look.delete_look(look_id)
+            look = looks.delete_look(look_id)
             _say(f"Deleted the look {look['name']}.", "success")
     except ValueError as exc:
         _say(str(exc), "warning")
-    return _done(url_for("main.artwork_house"))
-
-
-@bp.post("/library/posters/house/restore/<int:index>")
-def artwork_house_restore(index):
-    from . import house_look
-
-    try:
-        house_look.restore(index, _who())
-    except ValueError as exc:
-        _say(str(exc), "warning")
-    else:
-        _say("Put back: that earlier version is the house look again.", "success")
-    return _done(url_for("main.artwork_house"))
+    return _done(url_for("main.artwork_looks"))
 
 
 def _batch_spec(form) -> dict:
@@ -874,7 +932,7 @@ def _batch_spec(form) -> dict:
         "engine": engine,
         "worker": worker,
         "options": options,
-        "look": options.get("look") or "custom",
+        "look": options.get("look") or "default",
         "extra": options.get("extra", ""),
     }
 

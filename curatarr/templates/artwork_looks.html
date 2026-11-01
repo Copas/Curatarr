@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% from '_confirm.html' import confirm_submit %}
+{% block title %}Looks · Posters · Curatarr{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Looks</h1><p class="text-secondary mb-0">The settings that steer the pictures: the words, the reference photos, the engine. Generate and Batches start from the default look every time, and their <em>Restore the default</em> button puts it back after any change. Save other looks by name to try on a few titles, and make the one that works the default.</p></div></header>
+{% set here = 'main.artwork_looks' %}{% include '_posters_nav.html' %}
+{% macro details(look) %}<p class="mb-1">{{ look.style }}</p>
+  <div class="text-secondary small">{{ engine_label(look.engine) }} · {{ approaches.get(look.approach, look.approach) }}{% if look.photos %} · {{ look.photos }}{% if look.cast %} ({{ look.cast|join(', ') }}){% endif %}{% endif %}{% if look.originals %} · original art as a reference{% endif %}{% if look.external_ok %} · photos may go to an outside service{% endif %}{% if look.saved_at %} · saved {{ look.saved_at[:16]|replace('T', ' ') }}{% if look.by %} by {{ look.by }}{% endif %}{% endif %}</div>{% endmacro %}
+<div id="looks-page">
+<section class="card p-3 mb-4" id="default-look"><h2 class="h5">The default look{% if default_look.name and default_look.name != 'Built-in' %} <span class="text-secondary h6">(from {{ default_look.name }})</span>{% endif %}</h2>
+  <form method="post" action="{{ url_for('main.artwork_look_default_save') }}" data-looks><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% with draft = default_look, p = 'd' %}{% include '_look_fields.html' %}{% endwith %}
+    <button class="btn btn-primary">Save the default look</button>
+  </form>
+  <form method="post" action="{{ url_for('main.artwork_look_default_built_in') }}" class="mt-3" data-looks><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn btn-sm btn-outline-light">Restore the built-in look</button>
+    <span class="small text-secondary ms-2">Puts Curatarr's own words and options back, keeping your photos, cast and engine: "{{ built_in.style }}"</span>
+  </form>
+</section>
+<section class="mb-4" id="saved-looks"><h2 class="h5">Saved looks</h2>
+  {% if saved_looks %}{% for look in saved_looks %}<article class="card p-3 mb-3"><h3 class="h6">{{ look.name }}</h3>
+    {{ details(look) }}
+    <div class="d-flex flex-wrap gap-2 align-items-center mt-2">
+      <a class="btn btn-sm btn-primary" href="{{ url_for('main.artwork_generate', look='saved:' ~ look.id) }}">Try it</a>
+      <a class="btn btn-sm btn-outline-light" href="{{ url_for('main.artwork_looks', edit=look.id) }}#look-form">Change</a>
+      <form method="post" action="{{ url_for('main.artwork_look_action', look_id=look.id, action='default') }}" data-looks><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-success">Make it the default</button></form>
+      <form method="post" action="{{ url_for('main.artwork_look_action', look_id=look.id, action='delete') }}" data-looks><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{{ confirm_submit('Delete', 'Delete the look ' ~ look.name ~ '?', 'Delete it') }}</form>
+    </div>
+    {% set tried = trials.get('saved:' ~ look.id) or [] %}
+    <div class="small mt-2"><span class="text-secondary">Tried on:</span> {% if tried %}{% for job in tried %}<a href="{{ url_for('main.artwork_job', job_id=job.id) }}">{{ job.media.title if job.media else 'a title' }}</a> <span class="text-secondary">({{ job_state_names.get(job.state, job.state) }})</span>{{ ', ' if not loop.last }}{% endfor %}{% else %}<span class="text-secondary">nothing yet. Try it on a few titles: the pictures wait in Review, and nothing changes in Jellyfin until you approve them.</span>{% endif %}</div>
+  </article>{% endfor %}{% else %}<p class="text-secondary small">None yet. Save one below to try it out next to the default.</p>{% endif %}
+</section>
+<section class="card p-3 mb-4" id="look-form"><h2 class="h5">{% if editing %}Change {{ editing.name }}{% else %}Save a new look{% endif %}</h2>
+  <form method="post" action="{{ url_for('main.artwork_look_save') }}" data-looks><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% if editing %}<input type="hidden" name="id" value="{{ editing.id }}">{% endif %}
+    <div class="mb-3"><label class="form-label" for="n-name">Name</label>
+      <input class="form-control" type="text" name="name" id="n-name" value="{{ draft.name or '' }}" maxlength="80" required placeholder="e.g. Over the top"></div>
+    {% with p = 'n' %}{% include '_look_fields.html' %}{% endwith %}
+    <button class="btn btn-primary">{% if editing %}Save changes{% else %}Save look{% endif %}</button>{% if editing %} <a class="btn btn-link" href="{{ url_for('main.artwork_looks') }}">Cancel</a>{% endif %}
+  </form>
+</section>
+<section class="mb-4" id="earlier-defaults"><h2 class="h5">Earlier default looks</h2>
+  {% if history %}<ul class="list-unstyled">{% for old in history %}<li class="card card-body mb-2 small">
+    {% if old.name %}<strong class="mb-1">{{ old.name }}</strong>{% endif %}{{ details(old) }}
+    <form method="post" action="{{ url_for('main.artwork_look_default_restore', index=loop.index0) }}" class="mt-2" data-looks><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light">Put this one back</button></form>
+  </li>{% endfor %}</ul>{% else %}<p class="text-secondary small">None yet: each time the default look changes, the one before is kept here.</p>{% endif %}
+</section>
+</div>
+<div aria-live="polite" id="looks-messages"></div>
+<script src="{{ url_for('static', filename='artwork-looks.js', v='1') }}"></script>
+{% endblock %}

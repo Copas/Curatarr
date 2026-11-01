@@ -1,8 +1,8 @@
-// House look: saving and putting back an earlier version happen in place,
-// then the page's own parts are drawn afresh, without reloading the page.
+// Looks: saving, restoring and the saved looks' buttons work in place, then
+// the page's own parts are drawn afresh, without reloading the page.
 (function () {
-  var page = document.getElementById("house-page");
-  var messages = document.getElementById("house-messages");
+  var page = document.getElementById("looks-page");
+  var messages = document.getElementById("looks-messages");
   if (!page) return;
 
   function say(text, category) {
@@ -18,14 +18,14 @@
     return fetch(window.location.pathname, { headers: { Accept: "text/html" } })
       .then(function (response) { return response.text(); })
       .then(function (html) {
-        var fresh = new DOMParser().parseFromString(html, "text/html").getElementById("house-page");
+        var fresh = new DOMParser().parseFromString(html, "text/html").getElementById("looks-page");
         if (fresh) page.innerHTML = fresh.innerHTML;
       });
   }
 
   page.addEventListener("submit", function (event) {
     var form = event.target;
-    if (!form.matches("form[data-house]")) return;
+    if (!form.matches("form[data-looks]")) return;
     event.preventDefault();
     var buttons = form.querySelectorAll("button");
     buttons.forEach(function (b) { b.disabled = true; });

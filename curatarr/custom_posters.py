@@ -762,20 +762,21 @@ PROMPT_DEFAULTS = {
     "approach": "original",  # artwork_prompts.APPROACHES: from its own art, or story
 }
 DEFAULT_STYLE = (
-    "A heightened take on the original artwork, like an over-the-top movie "
-    "poster: keep its composition, mood and palette and push them further, "
-    "with big, intense facial expressions (terror, joy, rage, grief, romantic "
-    "or sexual tension, whatever the film runs on) and bold, dramatic lighting."
+    "An extreme, heightened take on the story, like an over-the-top movie "
+    "poster: big, intense facial expressions (terror, joy, rage, grief, "
+    "romantic or sexual tension, whatever the story runs on), pushed further "
+    "than the film itself, with bold, dramatic composition and lighting."
 )
 # Defaults from before, saved as they were: read as today's default, so a
-# look nobody changed follows the default (one written for plot-led prompts
-# no longer fits pictures made from the original art).
+# look nobody changed follows the default. (This one, written for pictures
+# made from the original art, made tamer pictures than today's, which works
+# well from the original art too.)
 OLD_STYLES = (
     (
-        "An extreme, heightened take on the story, like an over-the-top movie "
-        "poster: big, intense facial expressions (terror, joy, rage, grief, "
-        "romantic or sexual tension, whatever the story runs on), pushed further "
-        "than the film itself, with bold, dramatic composition and lighting."
+        "A heightened take on the original artwork, like an over-the-top movie "
+        "poster: keep its composition, mood and palette and push them further, "
+        "with big, intense facial expressions (terror, joy, rage, grief, romantic "
+        "or sexual tension, whatever the film runs on) and bold, dramatic lighting."
     ),
 )
 

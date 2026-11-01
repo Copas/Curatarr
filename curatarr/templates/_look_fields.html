@@ -1,0 +1,17 @@
+{# The Looks page's settings fields. Needs draft, engines, approaches,
+   engine_label, p (an id prefix). #}
+<div class="row g-3 mb-3">
+  <div class="col-12"><label class="form-label" for="{{ p }}-style">The look</label>
+    <textarea class="form-control" name="style" id="{{ p }}-style" rows="4" maxlength="600" required>{{ draft.style }}</textarea>
+    <div class="form-text">The words that steer every picture made with it. Keep one-title wishes ("going for funny") out: Generate and Batches have an <em>Extra for these titles</em> box for those.</div></div>
+  <div class="col-md-6"><label class="form-label" for="{{ p }}-engine">Engine</label>
+    <select class="form-select" name="engine" id="{{ p }}-engine"><option value="auto">Best available</option>{% for e in engines %}<option value="{{ e.engine }}"{% if draft.engine == e.engine %} selected{% endif %}>{{ e.label }}{% if e.external %} (outside service){% endif %}</option>{% endfor %}{% if draft.engine not in ['auto'] + engines|map(attribute='engine')|list %}<option value="{{ draft.engine }}" selected>{{ engine_label(draft.engine) }} (no worker offers it now)</option>{% endif %}</select></div>
+  <div class="col-md-6"><label class="form-label" for="{{ p }}-approach">Start from</label>
+    <select class="form-select" name="approach" id="{{ p }}-approach">{% for key, label in approaches.items() %}<option value="{{ key }}"{% if key == draft.approach %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+  <div class="col-md-6"><label class="form-label" for="{{ p }}-photos">Reference photos folder</label>
+    <input class="form-control" type="text" name="photos" id="{{ p }}-photos" value="{{ draft.photos }}" placeholder="/path/to/photos"></div>
+  <div class="col-md-6"><label class="form-label" for="{{ p }}-cast">Who's in them</label>
+    <input class="form-control" type="text" name="cast" id="{{ p }}-cast" value="{{ draft.cast|join(', ') }}" placeholder="Everyone in the folder"></div>
+  <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="originals" id="{{ p }}-originals"{% if draft.originals %} checked{% endif %}><label class="form-check-label" for="{{ p }}-originals">Use each title's original art as a reference</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" name="external_ok" id="{{ p }}-external"{% if draft.external_ok %} checked{% endif %}><label class="form-check-label" for="{{ p }}-external">Allow the reference photos to be sent to an outside service (Codex sends them to OpenAI)</label></div></div>
+</div>

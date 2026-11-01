@@ -1,11 +1,11 @@
 {# The fields Generate and Batches share: engine, worker, cast and look.
    Needs engines, workers, options. #}
-{% set p = 'f' %}{% set look_choice = spec.look if spec else None %}{% set extra = spec.extra if spec else '' %}{% include '_house_look_choice.html' %}
 <div class="row g-3 mb-3">
   <div class="col-md-6"><label class="form-label" for="f-worker">Worker</label>
     <select class="form-select" name="worker" id="f-worker"><option value="">Any that can make it</option>{% for w in workers %}<option value="{{ w.id }}"{% if spec and spec.worker == w.id %} selected{% endif %}>{{ w.name }}</option>{% endfor %}</select></div>
 </div>
-<div class="row g-3 mb-3" data-own-settings>
+{% set p = 'f' %}{% set look_choice = spec.look if spec else None %}{% include '_look_choice.html' %}
+<div class="row g-3 mb-3">
   <div class="col-md-6"><label class="form-label" for="f-engine">Engine</label>
     <select class="form-select" name="engine" id="f-engine"><option value="auto">Best available</option>{% for e in engines %}<option value="{{ e.engine }}"{% if spec and spec.engine == e.engine %} selected{% endif %}>{{ e.label }}{% if e.external %} (outside service){% endif %}</option>{% endfor %}</select></div>
   <div class="col-md-6"><label class="form-label" for="f-photos">Reference photos folder</label>
@@ -20,4 +20,5 @@
   <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="originals" id="f-originals"{% if (spec.options.originals if spec else options.originals) %} checked{% endif %}><label class="form-check-label" for="f-originals">Use each title's original art as a reference</label></div>
     <div class="form-check"><input class="form-check-input" type="checkbox" name="external_ok" id="f-external"{% if spec and spec.options.external_ok %} checked{% endif %}><label class="form-check-label" for="f-external">Allow the reference photos to be sent to an outside service (Codex sends them to OpenAI)</label></div></div>
 </div>
-<script src="{{ url_for('static', filename='look-choice.js', v='2') }}"></script>
+{% set p = 'f' %}{% set extra = spec.extra if spec else '' %}{% include '_look_extra.html' %}
+<script src="{{ url_for('static', filename='look-choice.js', v='3') }}"></script>

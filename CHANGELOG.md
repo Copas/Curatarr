@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc71 (2026-11-01)
+
+- **The default look, instead of a locked house look.** Posters → Looks now has a **default look**, which Generate and Batches start from every time (they no longer carry over whatever was typed last, which is how a one-off "going for funny" crept into later runs). Nothing's locked: change the settings for a run as you like, and **Restore the default** puts them back in one click. The default look is edited on the Looks page; each earlier one is kept there with **Put this one back**, and **Restore the built-in look** puts Curatarr's own words back while keeping your reference photos, cast and engine. Saved looks by name are still there to **Try it** and **Make it the default**. A link that sends no settings (such as one that only picks the titles of a batch) gets the default look.
+- **The built-in look** is "An extreme, heightened take on the story, like an over-the-top movie poster…" again: starting from each film's own art, it made the pictures a test run liked best. A look left on the built-in one follows it.
+
 ## 0.2.0rc70 (2026-11-01)
 
 - **Saved looks, tried out before they're locked in.** Posters → Looks (it was House look) keeps any number of named looks, each with its own look, reference photos, cast, engine and options. **Try it** on a look's card opens Generate with that look chosen: pick a few titles, and the pictures wait in Review as usual. The card lists the titles it's been tried on. When one works, **Make it the house look** (with *I'm sure* ticked) locks it in; the house look is a copy, so changing the saved look later doesn't change it. Generate and Batches offer the house look, every saved look by name, or other settings for that run; a saved look is read-only there too. Looks can be changed or deleted from their cards; deleting asks first.

@@ -1366,13 +1366,13 @@ def test_the_forms_remember_their_last_choices(app, client, monkeypatch, tmp_pat
         },
     )
     page = client.get("/library/posters/generate").text
-    assert 'name="external_ok" id="g-external" checked' in page
     assert (
         'id="g-kind-Logo" checked' in page and 'id="g-kind-Thumb" checked' not in page
     )
-    assert 'value="Sam"' in page and "Moody.</textarea>" in page
     assert f'value="{worker_row.id}" selected' in page
-    assert 'value="codex/image" selected' in page
+    # The settings start from the default look again, not what was typed.
+    assert "Moody.</textarea>" not in page
+    assert f"{custom_posters.DEFAULT_STYLE}</textarea>" in page
     client.get(
         "/library/posters/batches",
         query_string={
@@ -1383,15 +1383,7 @@ def test_the_forms_remember_their_last_choices(app, client, monkeypatch, tmp_pat
         },
     )
     page = client.get("/library/posters/batches").text
-    assert 'id="b-kind-Banner" checked' in page and 'id="f-external" checked' in page
-    assert 'value="movies" selected' in page
-    # A link that only picks the titles keeps the look and photos chosen before.
-    client.get(
-        "/library/posters/batches",
-        query_string={"preview": "1", "titles": "shows", "kinds": ["Primary"]},
-    )
-    page = client.get("/library/posters/batches").text
-    assert 'value="shows" selected' in page and 'id="f-external" checked' in page
+    assert 'id="b-kind-Banner" checked' in page and 'value="movies" selected' in page
     client.post(
         "/library/posters/benchmarks",
         data={"engines": ["codex/image"], "scenarios": ["logo"], "external_ok": "on"},
@@ -1632,7 +1624,7 @@ def test_an_untouched_old_default_look_follows_todays_default(app, client):
     old = custom_posters.OLD_STYLES[0]
     set_setting(custom_posters.KEY, {"prompts": {"style": old}})
     assert custom_posters.prompt_options()["style"] == custom_posters.DEFAULT_STYLE
-    assert "original artwork" in custom_posters.DEFAULT_STYLE
+    assert "over-the-top movie poster" in custom_posters.DEFAULT_STYLE
     set_setting(custom_posters.KEY, {"prompts": {"style": "Film noir, all shadows."}})
     assert custom_posters.prompt_options()["style"] == "Film noir, all shadows."
     set_setting(custom_posters.KEY, {"prompts": {"style": ""}})
@@ -1777,12 +1769,11 @@ def test_a_remake_batch_takes_the_oldest_old_prompt_pictures_first(app):
     assert kinds == {"Sequel": ["Primary"], "Film": ["Primary"]}  # no logos remade
 
 
-def _house(client, tmp_path, **changes):
-    """Save a look named Known good and make it the house look."""
-    photos = tmp_path / "house-photos"
+def _default_look(client, tmp_path, **changes):
+    """Save the default look (Looks page)."""
+    photos = tmp_path / "look-photos"
     photos.mkdir(exist_ok=True)
     data = {
-        "name": "Known good",
         "style": "The known good look.",
         "engine": "codex/image",
         "photos": str(photos),
@@ -1790,49 +1781,52 @@ def _house(client, tmp_path, **changes):
         "originals": "on",
         "external_ok": "on",
         "approach": "original",
-        "make_house": "on",
-        "confirm": "on",
     } | changes
-    return client.post("/library/posters/looks", data=data)
+    return client.post("/library/posters/looks/default", data=data)
 
 
-def test_the_house_look_is_used_whatever_the_form_sends(
+def test_generate_starts_from_the_default_look_and_a_link_cant_blank_it(
     app, client, monkeypatch, tmp_path
 ):
+    from curatarr import looks
+
     _library, media, _part = _movie()
     _jellyfin(monkeypatch, _picture("#223344"))
-    _house(client, tmp_path)
+    _default_look(client, tmp_path)
     page = client.get("/library/posters/generate").text
-    assert "The known good look." in page and 'value="house"' in page
-    # A form (or a link) with other values in it can't change what's used.
+    assert "The known good look.</textarea>" in page
+    assert "Restore the default" in page and 'value="Sam"' in page
+    # Not locked: what's typed in is used, and the default stays as it was.
     client.post(
         "/library/posters/generate",
         data={
             "media": [media.id],
             "kinds": ["Primary"],
-            "look": "house",
-            "style": "",
+            "style": "Something else this time.",
             "photos": "",
             "engine": "auto",
             "extra": "In this case we are going for funny.",
         },
     )
     job = db.session.query(ArtworkJob).one()
-    assert job.engine == "codex/image" and job.options["look"] == "house"
     assert job.options["style"] == (
-        "The known good look. In this case we are going for funny."
+        "Something else this time. In this case we are going for funny."
     )
-    assert job.options["cast"] == ["Sam"] and job.options["external_ok"]
-    # The extra note is for that run only: the house look is unchanged.
-    from curatarr import house_look
+    assert looks.default()["style"] == "The known good look."
+    page = client.get("/library/posters/generate").text
+    assert "The known good look.</textarea>" in page  # next time: the default
+    assert 'id="g-extra" value=""' in page  # the extra note isn't kept
+    # A link that sends no settings gets the default look, not blanks.
+    client.post(
+        "/library/posters/generate", data={"media": [media.id], "kinds": ["Primary"]}
+    )
+    job = db.session.query(ArtworkJob).order_by(ArtworkJob.created_at.desc()).first()
+    assert job.options["style"] == "The known good look."
+    assert job.engine == "codex/image" and job.options["cast"] == ["Sam"]
 
-    assert house_look.current()["style"] == "The known good look."
 
-
-def test_a_batch_link_gets_the_house_look_unless_it_asks_for_other_settings(
-    app, client, tmp_path
-):
-    _house(client, tmp_path)
+def test_a_batch_link_without_settings_gets_the_default_look(app, client, tmp_path):
+    _default_look(client, tmp_path)
     client.get(
         "/library/posters/batches",
         query_string={"preview": "1", "titles": "movies", "kinds": ["Primary"]},
@@ -1841,38 +1835,32 @@ def test_a_batch_link_gets_the_house_look_unless_it_asks_for_other_settings(
 
     with app.test_request_context():
         spec = _remembered("batch")
-    assert spec["look"] == "house"
     assert spec["options"]["style"] == "The known good look."
     assert spec["engine"] == "codex/image"
     page = client.get("/library/posters/batches").text
-    assert "The known good look." in page and "locked" in page
-    client.get(
-        "/library/posters/batches",
-        query_string={"preview": "1", "titles": "movies", "look": "custom",
-                      "style": "Something else."},
-    )  # fmt: skip
-    with app.test_request_context():
-        spec = _remembered("batch")
-    assert spec["look"] == "custom" and spec["options"]["style"] == "Something else."
+    assert "The known good look.</textarea>" in page
+    assert 'value="movies" selected' in page  # the titles chosen carry over
 
 
-def test_saved_looks_can_be_tried_then_locked_in(app, client, monkeypatch, tmp_path):
-    from curatarr import house_look
+def test_saved_looks_can_be_tried_then_made_the_default(
+    app, client, monkeypatch, tmp_path
+):
+    from curatarr import looks
 
     _library, media, _part = _movie()
     _jellyfin(monkeypatch, _picture("#223344"))
-    _house(client, tmp_path)
+    _default_look(client, tmp_path)
     client.post(
         "/library/posters/looks",
         data={"name": "Softer", "style": "A softer look.", "engine": "codex/image"},
     )
-    softer = next(look for look in house_look.looks() if look["name"] == "Softer")
-    assert house_look.current()["style"] == "The known good look."  # untouched
-    # Try it: Generate opens with it chosen, and the job is made with it.
+    softer = looks.looks()[0]
+    # Try it: Generate opens with it chosen and filled in.
     page = client.get(
         "/library/posters/generate", query_string={"look": f"saved:{softer['id']}"}
     ).text
-    assert f'value="saved:{softer["id"]}" id="g-look-{softer["id"]}" checked' in page
+    assert f'value="saved:{softer["id"]}" selected' in page
+    assert "A softer look.</textarea>" in page
     client.post(
         "/library/posters/generate",
         data={"media": [media.id], "kinds": ["Primary"], "look": f"saved:{softer['id']}"},
@@ -1880,38 +1868,38 @@ def test_saved_looks_can_be_tried_then_locked_in(app, client, monkeypatch, tmp_p
     job = db.session.query(ArtworkJob).one()
     assert job.options["style"] == "A softer look."
     assert job.options["look_name"] == "Softer"
-    page = client.get("/library/posters/house").text
+    page = client.get("/library/posters/looks").text
     assert "Tried on:" in page and media.title in page
-    # Same name twice isn't allowed; locking in needs the box ticked.
     client.post("/library/posters/looks", data={"name": "softer", "style": "x"})
-    assert len(house_look.looks()) == 2
-    client.post(f"/library/posters/looks/{softer['id']}/house")
-    assert house_look.current()["style"] == "The known good look."
-    client.post(f"/library/posters/looks/{softer['id']}/house", data={"confirm": "on"})
-    assert house_look.current()["name"] == "Softer"
-    # Changing the saved look later doesn't change the house look.
+    assert len(looks.looks()) == 1  # names are unique
+    client.post(f"/library/posters/looks/{softer['id']}/default")
+    assert looks.default()["style"] == "A softer look."
+    # Changing the saved look later doesn't change the default.
     client.post(
         "/library/posters/looks",
         data={"id": softer["id"], "name": "Softer", "style": "Changed."},
     )
-    assert house_look.current()["style"] == "A softer look."
-    assert house_look.get(softer["id"])["style"] == "Changed."
+    assert looks.default()["style"] == "A softer look."
+    client.post(f"/library/posters/looks/{softer['id']}/delete")
+    assert looks.looks() == []
 
 
-def test_changing_the_house_look_is_on_purpose_and_can_be_undone(app, client, tmp_path):
-    from curatarr import house_look
+def test_the_default_look_can_be_put_back(app, client, tmp_path):
+    from curatarr import custom_posters, looks
 
-    _house(client, tmp_path, confirm="")
-    assert house_look.current() is None  # not without the box ticked
-    assert [look["name"] for look in house_look.looks()] == ["Known good"]
-    _house(client, tmp_path, name="Known good", id=house_look.looks()[0]["id"])
-    _house(client, tmp_path, name="Worse", style="A worse look.")
-    assert house_look.current()["style"] == "A worse look."
-    page = client.get("/library/posters/house").text
+    assert looks.default()["style"] == custom_posters.DEFAULT_STYLE  # built in
+    _default_look(client, tmp_path)
+    _default_look(client, tmp_path, style="A worse look.")
+    page = client.get("/library/posters/looks").text
     assert "The known good look." in page  # kept as an earlier version
     response = client.post(
-        "/library/posters/house/restore/0", headers={"X-Curatarr-Async": "1"}
+        "/library/posters/looks/default/restore/0",
+        headers={"X-Curatarr-Async": "1"},
     )
     assert response.get_json()["ok"]
-    assert house_look.current()["style"] == "The known good look."
-    assert house_look.history()[0]["style"] == "A worse look."
+    assert looks.default()["style"] == "The known good look."
+    client.post("/library/posters/looks/default/built-in")
+    now = looks.default()
+    assert now["style"] == custom_posters.DEFAULT_STYLE
+    assert now["cast"] == ["Sam"] and now["engine"] == "codex/image"  # kept
+    assert client.get("/library/posters/house").status_code == 302

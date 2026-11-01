@@ -1,0 +1,14 @@
+{# Generate and Batches: which look the settings below start from, and
+   Restore the default. Needs default_look, saved_looks, look_values,
+   look_choice, p (an id prefix). Choosing a look fills the fields (all still
+   editable); look-choice.js does it. #}
+<div class="row g-3 mb-3 align-items-end" data-look-choice>
+  <div class="col-md-6"><label class="form-label" for="{{ p }}-look">Look</label>
+    <select class="form-select" name="look" id="{{ p }}-look">
+      <option value="default"{% if not look_choice or look_choice == 'default' %} selected{% endif %}>The default look{% if default_look.name and default_look.name != 'Built-in' %} ({{ default_look.name }}){% endif %}</option>
+      {% for look in saved_looks %}<option value="saved:{{ look.id }}"{% if look_choice == 'saved:' ~ look.id %} selected{% endif %}>{{ look.name }}</option>{% endfor %}
+    </select></div>
+  <div class="col-md-6"><button type="button" class="btn btn-outline-light" data-restore-default>Restore the default</button>
+    <span class="small text-secondary ms-2">Puts the settings below back to the default look. <a href="{{ url_for('main.artwork_looks') }}">Looks</a></span></div>
+  <script type="application/json" data-look-values>{{ look_values|tojson }}</script>
+</div>
