@@ -7,7 +7,7 @@
 {% if images %}<p class="small text-secondary">{{ total }} waiting{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}.</p>
 <div id="artwork-review">{% for image in images %}{% set existing = existing_by_image.get(image.id) %}
 <div class="artwork-review-item" data-review-item>
-<h2 class="h5 mt-4"><a href="{{ url_for('main.artwork_job', job_id=image.job_id) }}">{{ image.job.media.title if image.job.media else 'Untitled' }}</a></h2>
+<h2 class="h5 mt-4"><a href="{{ url_for('main.artwork_job', job_id=image.job_id) }}">{{ image.job.media.title if image.job.media else 'Untitled' }}</a>{% if image.job.options and image.job.options.original_take %} <span class="badge text-bg-info">Original take, after a safety refusal</span>{% endif %}</h2>
 {% include '_artwork_image.html' with context %}
 </div>
 {% endfor %}</div>

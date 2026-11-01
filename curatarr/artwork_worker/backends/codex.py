@@ -39,6 +39,13 @@ DISABLED = (
     "remote_plugin",
     "hooks",
 )
+# The image tool's safety system turning a picture down (the server tries an
+# original take once, rather than the same prompt again).
+SAFETY = re.compile(
+    r"safety system|content polic|moderation|policy violation|"
+    r"rejected the generation",
+    re.IGNORECASE,
+)
 LIMIT = re.compile(
     r'"type"\s*:\s*"usage_limit_reached".*?"resets_in_seconds"\s*:\s*(\d+)'
 )
@@ -245,7 +252,10 @@ class CodexBackend(Backend):
                 last_message.strip()[:300]
                 or (stderr.strip().splitlines() or [""])[-1][:300]
             )
-            raise Failed(f"Codex finished without making a picture. {said}".strip())
+            code = "safety" if SAFETY.search(f"{said} {stderr}") else None
+            raise Failed(
+                f"Codex finished without making a picture. {said}".strip(), code=code
+            )
         return Made(
             made.read_bytes(),
             {

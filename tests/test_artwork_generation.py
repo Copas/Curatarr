@@ -335,6 +335,47 @@ def test_a_usage_limit_waits_without_using_up_a_try(app, client):
     assert _claim(worker_row) == []  # not before it resets
 
 
+def test_a_safety_refusal_is_tried_once_as_an_original_take(app, client):
+    _library, media, _part = _movie()
+    worker_row, _token = artwork_jobs.create_worker("Codex box", 1)
+    job = artwork_jobs.create_job(
+        media,
+        ["Primary"],
+        options={"approach": "original", "originals": True},
+        details={"title": "Film"},
+    )
+    [task] = _claim(worker_row)
+    assert "original take" not in task["prompt"]
+    refused = (
+        "Codex finished without making a picture. The image tool's safety "
+        "system rejected the generation, so no poster was produced."
+    )
+    # From a worker that doesn't say why: recognised by what it says.
+    artwork_jobs.fail(worker_row, task["image"], {"error": refused})
+    image = job.images[0]
+    assert image.state == "pending" and image.attempts == 0
+    assert "original take" in image.message and job.options["original_take"]
+    image.not_before = None
+    db.session.commit()
+    [task] = _claim(worker_row)
+    assert artwork_jobs.ORIGINAL_TAKE in task["prompt"]
+    assert not any(r["role"] == "original" for r in image.task["references"])
+    # Turned down as an original take too: it stops, and says what's left.
+    artwork_jobs.fail(worker_row, task["image"], {"error": refused, "code": "safety"})
+    assert image.state == "failed" and "local engine" in image.error
+
+
+def test_the_original_take_note_can_be_changed(app, client):
+    from curatarr import looks
+
+    assert artwork_jobs.original_take_note() == artwork_jobs.ORIGINAL_TAKE
+    client.post("/library/posters/looks/original-take", data={"note": "Be original."})
+    assert artwork_jobs.original_take_note() == "Be original."
+    assert "Be original.</textarea>" in client.get("/library/posters/looks").text
+    looks.save_original_take("")
+    assert artwork_jobs.original_take_note() == artwork_jobs.ORIGINAL_TAKE
+
+
 def test_cancelling_tells_the_worker_to_stop(app, client):
     _library, media, _part = _movie()
     worker_row, _token = artwork_jobs.create_worker("W", 1)

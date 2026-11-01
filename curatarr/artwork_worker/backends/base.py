@@ -8,7 +8,9 @@ class Cancelled(Exception):
 
 class Failed(Exception):
     """The picture couldn't be made. ``code`` tells Curatarr why: usage_limit
-    and busy wait without using up a try; refused gives up at once."""
+    and busy wait without using up a try; refused gives up at once; safety
+    (the image service's safety system turned it down) is tried once more as
+    an original take."""
 
     def __init__(self, message, code=None, retry_after=None):
         super().__init__(message)

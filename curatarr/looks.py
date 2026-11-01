@@ -172,6 +172,18 @@ def make_default(look_id, who=None) -> dict:
     return save_default(look, who, name=look["name"])
 
 
+def original_take() -> str:
+    """The note added when a picture is tried again as an original take after
+    a safety refusal; empty for the built-in one."""
+    return str(_stored().get("original_take") or "")
+
+
+def save_original_take(text) -> str:
+    text = " ".join(str(text or "").split())[:600]
+    _write(_stored() | {"original_take": text})
+    return text
+
+
 def chosen(key) -> dict:
     """The look a form or link names: ``saved:<id>``, else the default."""
     if key and key.startswith("saved:"):

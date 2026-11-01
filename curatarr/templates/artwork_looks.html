@@ -38,6 +38,14 @@
     <button class="btn btn-primary">{% if editing %}Save changes{% else %}Save look{% endif %}</button>{% if editing %} <a class="btn btn-link" href="{{ url_for('main.artwork_looks') }}">Cancel</a>{% endif %}
   </form>
 </section>
+<section class="card p-3 mb-4" id="original-take"><h2 class="h5">When the image service refuses a picture</h2>
+  <p class="small text-secondary">ChatGPT's safety system sometimes turns a picture down, usually a trademarked character (a superhero's costume and emblem) with real people's faces in it. Asked the same way it's refused again, so Curatarr tries it once more as an original take: a new scene, without the title's own art, with this note added. If that's turned down too, it stops; a local engine, or the title's own art, is left to you. Pictures made this way are marked in Review.</p>
+  <form method="post" action="{{ url_for('main.artwork_look_original_take') }}" data-looks><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="form-label" for="ot-note">The note</label>
+    <textarea class="form-control mb-2" name="note" id="ot-note" rows="3" maxlength="600">{{ original_take }}</textarea>
+    <button class="btn btn-sm btn-outline-light">Save the note</button> <span class="small text-secondary ms-2">Emptied: Curatarr's own.</span>
+  </form>
+</section>
 <section class="mb-4" id="earlier-defaults"><h2 class="h5">Earlier default looks</h2>
   {% if history %}<ul class="list-unstyled">{% for old in history %}<li class="card card-body mb-2 small">
     {% if old.name %}<strong class="mb-1">{{ old.name }}</strong>{% endif %}{{ details(old) }}

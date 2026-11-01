@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc72 (2026-11-01)
+
+- **A picture the image service's safety system refuses is tried once as an original take.** ChatGPT's safety system sometimes turns a picture down, usually a trademarked character (a superhero's costume and emblem) with real people's faces in it. Asked the same way it was refused again, using up every try. Curatarr now recognises the refusal and asks once more for something genuinely different: a new scene, without the title's own art, designed afresh, with a note asking for no trademarked character, costume, emblem or logo. The rest of the set follows. If that's turned down too, it stops at once and says so (a local engine, or the title's own art, is left to you). Such pictures are marked *Original take, after a safety refusal* on the job and in Review, and the note can be changed on the Looks page.
+
 ## 0.2.0rc71 (2026-11-01)
 
 - **The default look, instead of a locked house look.** Posters → Looks now has a **default look**, which Generate and Batches start from every time (they no longer carry over whatever was typed last, which is how a one-off "going for funny" crept into later runs). Nothing's locked: change the settings for a run as you like, and **Restore the default** puts them back in one click. The default look is edited on the Looks page; each earlier one is kept there with **Put this one back**, and **Restore the built-in look** puts Curatarr's own words back while keeping your reference photos, cast and engine. Saved looks by name are still there to **Try it** and **Make it the default**. A link that sends no settings (such as one that only picks the titles of a batch) gets the default look.

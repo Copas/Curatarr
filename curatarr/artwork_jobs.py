@@ -18,6 +18,7 @@ is in the database. A picture is tried up to ``max_attempts`` times.
 
 import hashlib
 import hmac
+import re
 import secrets
 from datetime import UTC, timedelta
 from io import BytesIO
@@ -813,6 +814,13 @@ def build_task(image: ArtworkImage, engine: str, agent: bool) -> dict:
     kept with the picture, never sent."""
     job = image.job
     options = job.options or {}
+    feedback = image.feedback
+    if options.get("original_take"):
+        # After a safety refusal: a new scene, without the title's own art
+        # (its poster is the very character that was turned down).
+        options = options | {"approach": "story", "originals": False}
+        note = options.get("original_take_note") or ORIGINAL_TAKE
+        feedback = f"{note} {feedback}" if feedback else note
     details = options.get("details") or {"title": "Untitled"}
     references: list[dict] = []
 
@@ -856,7 +864,7 @@ def build_task(image: ArtworkImage, engine: str, agent: bool) -> dict:
             people_refs,
             set_image=set_number,
             originals=originals,
-            feedback=image.feedback,
+            feedback=feedback,
         )
     else:
         prompt = artwork_prompts.model_prompt(
@@ -866,7 +874,7 @@ def build_task(image: ArtworkImage, engine: str, agent: bool) -> dict:
             people_refs,
             set_image=set_number,
             lettering_image=lettering,
-            feedback=image.feedback,
+            feedback=feedback,
         )
     image.prompt = prompt
     image.task = {"references": references}
@@ -935,6 +943,31 @@ def report(worker: ArtworkWorker, image_id: str, update: dict) -> dict:
     return {"cancel": False}
 
 
+# What an image service says when its safety system turns a picture down.
+SAFETY = re.compile(
+    r"safety system|content polic|moderation|policy violation|"
+    r"rejected the generation|against (?:our|the) (?:usage )?polic",
+    re.IGNORECASE,
+)
+# A safety refusal is usually about a trademarked character (a superhero's
+# costume and emblem) with real people's faces in it. Asked again the same
+# way it's refused again, so the set is tried once more as an original take:
+# a new scene, without the title's own art, designed afresh. If that's turned
+# down too, it stops.
+ORIGINAL_TAKE = (
+    "An original take: don't depict any trademarked or copyrighted character, "
+    "costume, emblem or logo from this title. Design original characters, "
+    "costumes and imagery of your own that capture its mood, genre and setting."
+)
+
+
+def original_take_note() -> str:
+    """The note an original take adds (the Looks page can change it)."""
+    from . import looks
+
+    return looks.original_take() or ORIGINAL_TAKE
+
+
 def fail(worker: ArtworkWorker, image_id: str, report_: dict) -> dict:
     """A worker couldn't make a picture. A usage limit or a busy machine
     isn't the picture's fault: it waits, without using up a try."""
@@ -943,7 +976,31 @@ def fail(worker: ArtworkWorker, image_id: str, report_: dict) -> dict:
         return {"ok": False}
     error = str(report_.get("error") or "The worker couldn't make it.")[:2000]
     code = report_.get("code")
+    if code is None and SAFETY.search(error):
+        code = "safety"  # from a worker that doesn't say so itself
     image.error = error
+    job = image.job
+    if code == "safety" and not (job.options or {}).get("original_take"):
+        job.options = (job.options or {}) | {
+            "original_take": True,
+            "original_take_note": original_take_note(),
+        }
+        image.attempts = max(0, image.attempts - 1)
+        _requeue(image, not_before=utcnow() + timedelta(seconds=30))
+        image.message = (
+            "The image service's safety system turned it down; trying once more "
+            "as an original take (no trademarked character, costume or logo)."
+        )
+        _refresh(job)
+        db.session.commit()
+        return {"ok": True}
+    if code == "safety":
+        code = "refused"
+        error = (
+            "The image service's safety system turned it down, as an original "
+            "take too. Try a local engine, or leave this title its own art."
+        )
+        image.error = error
     if code in ("usage_limit", "busy", "unavailable"):
         image.attempts = max(0, image.attempts - 1)
         try:

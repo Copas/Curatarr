@@ -810,9 +810,19 @@ def artwork_looks():
         draft=draft,
         editing=editing,
         history=looks.history(),
+        original_take=artwork_jobs.original_take_note(),
         engine_label=_engine_label,
         **_common(),
     )
+
+
+@bp.post("/library/posters/looks/original-take")
+def artwork_look_original_take():
+    from . import looks
+
+    looks.save_original_take(request.form.get("note"))
+    _say("Saved the note for original takes.", "success")
+    return _done(url_for("main.artwork_looks"))
 
 
 def _trials(keys, per_look=8) -> dict[str, list]:
