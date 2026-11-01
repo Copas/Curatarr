@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc74 (2026-11-01)
+
+- **A run of misfiled episodes is fixed as a run.** A release numbered from another starting point (a pilot counted into the season, a special left out) files every episode the same number of slots off. Episode summaries are often too alike to settle any one of them clearly, so each was left for a person. Now three or more files in a row, each named for the episode that many slots away and each leaning towards it (none fitting where it's filed), confirm the whole run, and the pilot at its head if its own slot is empty; the automatic fix then moves them one at a time. Seen on a classic series whose release counted the feature-length pilot as episode 1.
+- **Fixed: subtitles that followed a mislabelled file were taken as proof.** Subtitles are downloaded for a file's release, so a release numbered one episode off gets subtitles numbered the same way: they agree with the file, and the subtitle evidence then pointed one episode off in the *other* direction. A whole season of a reality series was flagged one episode late when every file was one episode early (each episode is named for where it's filmed, which settled it). Subtitle evidence is now set aside when what's said in the file clearly fits a third episode's summary.
+
 ## 0.2.0rc73 (2026-11-01)
 
 - **Misfiled episodes for other tools.** `GET /api/v1/problems/misfiled` (read with the API key from Settings, like history) lists the episodes Sonarr seems to have filed under the wrong episode that need a person, with the evidence and a link to Enhance → Problems. Ones Curatarr fixes by itself, ones waiting for their slot to be freed, and dismissed ones aren't listed, the same as on the home page. A dashboard can show it instead of running its own, less careful check.

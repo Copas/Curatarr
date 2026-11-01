@@ -320,3 +320,76 @@ def test_subtitle_evidence_about_a_replaced_file_is_ignored(app, monkeypatch):
     sonarr = FakeSonarr([_episode(2, 12), _episode(3, 13)], [], {})
     monkeypatch.setattr("curatarr.services.client", lambda _kind: sonarr)
     assert misfiled._findings(sonarr, utcnow()) == {}
+
+
+def _run_finding(number, verdict="unsure", leans="other", to=None, target_file=0):
+    to_season, to_number = to or (1, number - 1)
+    return {
+        "series_id": 7,
+        "from_season": 1,
+        "from_number": number,
+        "to_id": 300 + number,
+        "to_season": to_season,
+        "to_number": to_number,
+        "target_file_id": target_file,
+        "verdict": verdict,
+        "leans": leans,
+    }
+
+
+def test_a_run_of_files_one_slot_off_is_confirmed_together():
+    # A release counting the pilot into the season: each file is one slot
+    # late. Summaries alone settle only E05 clearly, but every file leans
+    # towards the episode before it, and the pilot heads the run.
+    found = {
+        11: _run_finding(1, leans=None, to=(0, 1)),
+        12: _run_finding(2),
+        13: _run_finding(3),
+        14: _run_finding(4),
+        15: _run_finding(5, verdict="other", leans=None),
+    }
+    misfiled._confirm_runs(found)
+    assert all(f["verdict"] == "other" for f in found.values())
+    assert found[12]["by"] == "run" and found[12]["run"] == 4
+    assert "by" not in found[15]  # already confirmed by itself
+    assert "4 files in a row" in " ".join(
+        misfiled.evidence(
+            found[12]
+            | {"from_code": "S01E02", "from_title": "Two", "download": "x"}
+            | {"to_code": "S01E01", "to_title": "One"}
+        )
+    )
+
+
+def test_a_short_or_contradicted_run_stays_for_a_person():
+    short = {12: _run_finding(2), 13: _run_finding(3)}
+    misfiled._confirm_runs(short)
+    assert {f["verdict"] for f in short.values()} == {"unsure"}
+    # One file in the run leans to where it's filed: not a clean run.
+    mixed = {12: _run_finding(2), 13: _run_finding(3, leans="own"), 14: _run_finding(4)}
+    misfiled._confirm_runs(mixed)
+    assert {f["verdict"] for f in mixed.values()} == {"unsure"}
+    # Different offsets aren't one run.
+    jumbled = {
+        12: _run_finding(2),
+        13: _run_finding(3, to=(1, 5)),
+        14: _run_finding(4),
+    }
+    misfiled._confirm_runs(jumbled)
+    assert {f["verdict"] for f in jumbled.values()} == {"unsure"}
+
+
+def test_subtitles_that_followed_a_mislabelled_file_are_not_taken(monkeypatch):
+    # The file in E3's slot is really E2 (its release was numbered one late),
+    # and its downloaded subtitles, found for that release, say E4.
+    episodes = [_episode(n) for n in range(1, 6)]
+    current, target = episodes[2], episodes[3]
+    monkeypatch.setattr(
+        misfiled, "_transcript", _said({103: TOPICS[2] + " " + TOPICS[2]})
+    )
+    assert misfiled._summaries_disagree(current, target, episodes)
+    # When what's said fits the subtitles' episode, or nothing clearly, they stand.
+    monkeypatch.setattr(misfiled, "_transcript", _said({103: TOPICS[4]}))
+    assert not misfiled._summaries_disagree(current, target, episodes)
+    monkeypatch.setattr(misfiled, "_transcript", _said({}))
+    assert not misfiled._summaries_disagree(current, target, episodes)

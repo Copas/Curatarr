@@ -44,6 +44,7 @@ FIXES_PER_RUN = 2
 COMMAND_SECONDS = 180  # moving a file across a network share takes a while
 CLEAR = 1.15  # the fitting episode must beat every other by this much
 OVER_OWN = 1.25  # …and the one it's filed under by this much
+RUN = 3  # files in a row, each the same number of slots off: a misnumbered release
 
 _NOISE = re.compile(
     r"[ ._-](?:\d{3,4}p|MULTi|FiNAL|HEVC|AV1|x26[45]|h\.?26[45]|WEB|WEBRip|WEB-DL|"
@@ -151,18 +152,24 @@ def _transcript(episode_id) -> str | None:
     )
 
 
-def fits(text, episodes, own_id, other_id) -> str:
-    """Which of two episodes a transcript is: "other" when it fits the other
-    episode best, clearly; "own" when it fits its own best, clearly; else
-    "unsure". Scored against the whole season (and the other episode, if it's
-    in another season), so vague summaries can't win by default."""
+def _fit(text, episodes, own_id, other_id) -> dict:
+    """How well a transcript fits each episode of the season (and the other
+    episode, if it's in another season)."""
     own = next(e for e in episodes if e["id"] == own_id)
     summaries = {
         e["id"]: f"{e.get('title') or ''}. {e.get('overview') or ''}"
         for e in episodes
         if e.get("seasonNumber") == own.get("seasonNumber") or e["id"] == other_id
     }
-    fit = scores(text or "", summaries)
+    return scores(text or "", summaries)
+
+
+def fits(text, episodes, own_id, other_id) -> str:
+    """Which of two episodes a transcript is: "other" when it fits the other
+    episode best, clearly; "own" when it fits its own best, clearly; else
+    "unsure". Scored against the whole season (and the other episode, if it's
+    in another season), so vague summaries can't win by default."""
+    fit = _fit(text, episodes, own_id, other_id)
     if own_id not in fit or other_id not in fit:
         return "unsure"
     order = sorted(fit, key=fit.get, reverse=True)
@@ -175,6 +182,79 @@ def fits(text, episodes, own_id, other_id) -> str:
     if best == own_id:
         return "own"
     return "unsure"
+
+
+def leaning(text, episodes, own_id, other_id) -> str | None:
+    """ "other" or "own" when that episode fits a transcript best of all,
+    however narrowly; else None. Too weak alone, but a run of files all
+    leaning the same way is evidence (see _confirm_runs)."""
+    fit = _fit(text, episodes, own_id, other_id)
+    if not fit:
+        return None
+    best = max(fit, key=fit.get)
+    if fit[best] < MIN_SCORE:
+        return None
+    return {other_id: "other", own_id: "own"}.get(best)
+
+
+def _confirm_runs(found) -> None:
+    """Confirm misfiled files that come as a run.
+
+    A release numbered from another starting point (a pilot counted into the
+    season, a special left out) puts a run of files each the same number of
+    slots from where it belongs. Episode summaries are often too alike to
+    settle any one of them clearly, but RUN or more files in a row, each named
+    for the episode that offset away and each leaning towards it, none fitting
+    where it's filed, settle the run. So does the file just before it, filed
+    into another season's empty slot (the pilot itself) when nothing it says
+    places it where it's filed.
+    """
+    groups: dict = {}
+    for finding in found.values():
+        if finding.get("to_id") and finding.get("verdict") in {"other", "unsure"}:
+            key = (finding["series_id"], finding["from_season"])
+            groups.setdefault(key, {})[finding["from_number"]] = finding
+
+    def offset(finding):
+        if finding["to_season"] != finding["from_season"]:
+            return None
+        return finding["to_number"] - finding["from_number"]
+
+    for slots in groups.values():
+        runs, current = [], []
+        for number in sorted(slots):
+            finding = slots[number]
+            step = offset(finding)
+            if (
+                current
+                and step is not None
+                and number == current[-1]["from_number"] + 1
+                and step == offset(current[-1])
+            ):
+                current.append(finding)
+                continue
+            if current:
+                runs.append(current)
+            current = [finding] if step is not None else []
+        if current:
+            runs.append(current)
+        for run in runs:
+            if len(run) < RUN or not all(
+                f["verdict"] == "other" or f.get("leans") == "other" for f in run
+            ):
+                continue
+            for finding in run:
+                if finding["verdict"] == "unsure":
+                    finding |= {"verdict": "other", "by": "run", "run": len(run)}
+            head = slots.get(run[0]["from_number"] - 1)
+            if (
+                head is not None
+                and head["verdict"] == "unsure"
+                and offset(head) is None
+                and not head["target_file_id"]
+                and head.get("leans") != "own"
+            ):
+                head |= {"verdict": "other", "by": "run", "run": len(run)}
 
 
 # Finding them ----------------------------------------------------------------
@@ -257,20 +337,48 @@ def _findings(sonarr, now) -> dict:
             > _rank(target_file.get("quality")),
             "scene": scene,
         }
+        finding |= {
+            "from_season": current.get("seasonNumber"),
+            "from_number": current.get("episodeNumber"),
+            "to_season": target.get("seasonNumber"),
+            "to_number": target.get("episodeNumber"),
+        }
         text = _transcript(current["id"])
         finding["verdict"] = (
             "no_transcript"
             if text is None
             else fits(text, episodes, current["id"], target["id"])
         )
+        if finding["verdict"] == "unsure":
+            finding["leans"] = leaning(text, episodes, current["id"], target["id"])
         if target_file is not None:
             target_text = _transcript(target["id"])
             finding["target_is_target"] = target_text is not None and (
                 fits(target_text, episodes, target["id"], current["id"]) == "own"
             )
         found[file_id] = finding
+    _confirm_runs(found)
     _add_subtitle_findings(sonarr, series, episodes_by_series, files_by_series, found)
     return found
+
+
+def _summaries_disagree(current, target, episodes) -> bool:
+    """Whether what's said in a file clearly fits a third episode's summary.
+
+    Downloaded subtitles are found for a file's release, so a misnumbered
+    release gets subtitles numbered the same wrong way: they agree with the
+    file and point one episode off in the other direction. The episodes'
+    own summaries are independent of both, so when they clearly place the
+    file elsewhere, the subtitles' word isn't taken.
+    """
+    text = _transcript(current["id"])
+    if text is None:
+        return False
+    fit = _fit(text, episodes, current["id"], target["id"])
+    best = max(fit, key=fit.get) if fit else None
+    return best not in (None, target["id"], current["id"]) and (
+        fits(text, episodes, current["id"], best) == "other"
+    )
 
 
 def _subtitles_fit(state) -> bool:
@@ -330,6 +438,8 @@ def _add_subtitle_findings(sonarr, series, episodes_by_series, files_by_series, 
         )
         file_id = int((current or {}).get("episodeFileId") or 0)
         if not current or not target or not file_id or file_id in found:
+            continue
+        if _summaries_disagree(current, target, episodes):
             continue
         target_file = (
             files_by_series[series_id].get(target.get("episodeFileId"))
@@ -533,13 +643,22 @@ def evidence(finding) -> list[str]:
         f"Filed as {finding['from_code']} “{finding['from_title']}”; the name says "
         f"{finding['to_code']} “{finding['to_title']}”"
     )
+    if finding.get("by") == "run":
+        lines.append(
+            f"One of {finding['run']} files in a row each filed the same number of "
+            "slots from the episode its name gives, and leaning towards that episode: "
+            "a release numbered from another starting point"
+        )
     lines.append(
         {
-            "other": f"What's said in it fits {finding['to_code']} best",
+            "other": f"What's said in it fits {finding['to_code']} best"
+            if finding.get("by") != "run"
+            else "",
             "unsure": "What's said in it doesn't clearly fit either episode",
             "no_transcript": "It hasn't been transcribed, so what's said in it can't confirm it",
         }.get(finding.get("verdict"), "")
     )
+    lines = [line for line in lines if line]
     if finding.get("target_file_id"):
         lines.append(
             f"{finding['to_code']} already has a file ({finding['target_quality']})"
