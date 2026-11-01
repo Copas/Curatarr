@@ -14,6 +14,7 @@ regenerates chapters it can show it wrote (see ChapterState).
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -264,12 +265,21 @@ def parse_options(form) -> dict:
         "fix_default_audio",
         "finish_at_credits",
         "seek_repair",
+        "subtitle_tracks",
         "pace_rebuilds",
     ):
         if f"{key}_shown" in form:
             values[key] = form.get(key) in {"true", "on", "1"}
         else:
             values[key] = options()[key]
+    if "subtitle_languages" in form:
+        values["subtitle_languages"] = [
+            code.strip().lower()
+            for code in re.split(r"[,\s]+", form.get("subtitle_languages") or "")
+            if code.strip()
+        ] or ["eng"]
+    else:
+        values["subtitle_languages"] = options()["subtitle_languages"]
     mappings = []
     for line in (form.get("path_mappings") or "").splitlines():
         if not line.strip():

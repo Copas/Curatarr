@@ -453,6 +453,9 @@ class ChapterState(db.Model, Timed):
     # Seek index repair for files Roku players couldn't seek in (seek_repair.py).
     seek_layout_size = db.Column(db.BigInteger)  # the file that was checked
     seek_layout = db.Column(db.JSON)
+    # Subtitle tracks in other languages removed (subtitle_tracks.py).
+    subtitle_tracks_size = db.Column(db.BigInteger)  # the file that was checked
+    subtitle_tracks = db.Column(db.JSON)
     part = db.relationship("MediaPart")
     media = db.relationship("MediaIdentity")
 

@@ -108,6 +108,14 @@
     {{ option('seek_repair', 'Repair files Roku players can\'t seek in', 'Adding chapters or fixing tracks can leave an MKV\'s seek index where Roku players don\'t look, so jumping ahead starts the episode over. Curatarr rebuilds those files (a copy, never a re-encode; everything is kept) one at a time, never while one is playing.') }}
   </div>
 {% endcall %}
+{% call card('subtitle-tracks', 'subtitles', 'Subtitle tracks', 'Keeps ' ~ opts.subtitle_languages|join(', ') ~ ' only' if opts.subtitle_tracks else 'Off', opts.subtitle_tracks) %}
+  <div class="setting-grid">
+    {{ option('subtitle_tracks', 'Remove subtitle tracks in other languages', 'Releases often carry a dozen subtitle tracks, and a player choosing subtitles by itself can pick the wrong one. Removes the tracks not in a language below from each MKV file (a copy, never a re-encode; video, audio and chapters are kept), one or two at a time, never while one is playing. Untagged tracks are kept only when their name says a kept language. Subtitle files beside the video, such as Bazarr\'s, aren\'t touched.') }}
+    <div><label class="form-label" for="subtitle_languages">Languages to keep</label>
+      <input class="form-control" type="text" name="subtitle_languages" id="subtitle_languages" value="{{ opts.subtitle_languages|join(', ') }}" aria-describedby="subtitle_languages_help">
+      <div class="form-text" id="subtitle_languages_help">Three-letter codes, separated by commas: eng, spa, fre…</div></div>
+  </div>
+{% endcall %}
 {% call card('pace-rebuilds', 'tools', 'Jellyfin thumbnails', 'Rebuilds wait for Jellyfin' if opts.pace_rebuilds else 'Off', opts.pace_rebuilds) %}
   <div class="setting-grid">
     {{ option('pace_rebuilds', 'Wait for Jellyfin\'s scrubbing thumbnails between file rebuilds', 'Adding TV-friendly audio or repairing seeking rebuilds a file, and Jellyfin then remakes its scrubbing thumbnails, a few minutes per file. Curatarr waits while three rebuilt files are still waiting for theirs, so titles aren\'t left without thumbnails for days.') }}

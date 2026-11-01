@@ -187,6 +187,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Audio for web browsers](docs/FEATURES.md#playing-smoothly-on-every-device) | A stereo AAC track beside AC3, E-AC3 and DTS, for the files browser viewers are about to watch. TVs keep their surround. | **On**, with the plugin |
 | [Audio every TV plays](docs/FEATURES.md#playing-smoothly-on-every-device) | An AC3 copy beside DTS, TrueHD or FLAC, so Rokus and TVs don't stumble over conversion. | Off |
 | [Seeking on Roku](docs/FEATURES.md#seeking-on-roku) | Files Roku can't seek in are rebuilt (nothing re-encoded), so skipping ahead doesn't start over. | **On** (asks first) |
+| [Subtitle tracks](docs/FEATURES.md#subtitle-tracks) | Subtitle tracks in languages you don't keep are removed from MKV files (nothing re-encoded), so players can't pick the wrong one. | Off |
 | [Makes room for viewers](docs/FEATURES.md#sharing-the-machine-with-playback) | Measures CPU, GPU and who's watching, and backs off when someone starts a stream. | **On** |
 
 ### 🎉 Just for fun
@@ -233,7 +234,7 @@ Quick start on Linux:
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc75
+git checkout v0.2.0rc76
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 

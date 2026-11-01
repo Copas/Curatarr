@@ -10,6 +10,7 @@ Times are seconds from the start of the media.
 import copy
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import Any
@@ -84,6 +85,9 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "fix_default_audio": True,
     "finish_at_credits": True,
     "seek_repair": True,
+    # Remove subtitle tracks in other languages from MKV files (subtitle_tracks.py).
+    "subtitle_tracks": False,
+    "subtitle_languages": ["eng"],
     "pace_rebuilds": True,
     "settle_minutes": 10,
     "scene_threshold": 0.3,
@@ -273,6 +277,19 @@ def validate_global_options(values: dict) -> dict:
         raise ChapterConfigError("Invalid finished-at-credits setting")
     if type(merged["seek_repair"]) is not bool:
         raise ChapterConfigError("Invalid seek repair setting")
+    if type(merged["subtitle_tracks"]) is not bool:
+        raise ChapterConfigError("Invalid subtitle tracks setting")
+    languages = merged["subtitle_languages"]
+    if (
+        not isinstance(languages, list)
+        or not languages
+        or not all(
+            isinstance(c, str) and re.fullmatch(r"[a-z]{3}", c) for c in languages
+        )
+    ):
+        raise ChapterConfigError(
+            "Subtitle languages to keep are three-letter codes, such as eng, spa"
+        )
     if type(merged["pace_rebuilds"]) is not bool:
         raise ChapterConfigError("Invalid rebuild pacing setting")
     if merged["whisper_device"] not in WHISPER_DEVICES:

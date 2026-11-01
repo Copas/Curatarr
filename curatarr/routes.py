@@ -1004,7 +1004,7 @@ def _library_care() -> dict | None:
     summary = maintenance_summary()
     if not summary["scanned"]:
         return None
-    from . import compat_audio, seek_repair
+    from . import compat_audio, seek_repair, subtitle_tracks
 
     activity = job_activity()
     return {
@@ -1012,6 +1012,7 @@ def _library_care() -> dict | None:
         "activity": activity,
         "compat": compat_audio.progress(),
         "seek": seek_repair.progress(),
+        "subtitle_tracks": subtitle_tracks.progress(),
     }
 
 

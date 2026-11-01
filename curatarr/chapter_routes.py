@@ -193,6 +193,7 @@ def chapter_maintenance():
         summary=maintenance_summary(library_id),
         compat=_compat_progress(),
         seek=_seek_progress(),
+        subtitle_tracks=_subtitle_tracks_progress(),
         thumbs=_thumbnail_status(),
         smart_blocked=smart_chapters_blocked(),
         **_gpu_hint(),
@@ -1003,6 +1004,12 @@ def _seek_progress():
     from . import seek_repair
 
     return seek_repair.progress()
+
+
+def _subtitle_tracks_progress():
+    from . import subtitle_tracks
+
+    return subtitle_tracks.progress()
 
 
 def _compat_progress():

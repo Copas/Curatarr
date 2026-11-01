@@ -239,6 +239,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Starting the seek index repair failed")
     try:
+        from . import subtitle_tracks
+
+        subtitle_tracks.start()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Starting the subtitle track clean-up failed")
+    try:
         from . import filecheck_jobs
 
         filecheck_jobs.start()

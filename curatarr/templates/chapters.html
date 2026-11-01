@@ -30,6 +30,7 @@
   {% if compat %}{{ coverage('Playable audio: films', 0, compat.films.done, compat.films.total, 'films', None, 'given a playable track') }}
   {{ coverage('Playable audio: episodes', 0, compat.episodes.done, compat.episodes.total, 'episodes', None, 'given a playable track') }}{% endif %}
   {% if seek %}{{ coverage('Seeking on Roku', 0, seek.checked, seek.total, 'files', None, 'checked, ' ~ seek.rebuilt ~ ' repaired') }}{% endif %}
+  {% if subtitle_tracks %}{{ coverage('Subtitle tracks in other languages', 0, subtitle_tracks.checked, subtitle_tracks.total, 'files', None, 'checked, ' ~ subtitle_tracks.rewritten ~ ' cleaned up') }}{% endif %}
   {% if thumbs and thumbs.paused and (seek or compat) %}<p class="small text-secondary mb-0">File rebuilds are waiting for Jellyfin to remake scrubbing thumbnails for {{ thumbs.waiting }} rebuilt files; they carry on once it has.</p>{% endif %}
 </section>
 <div class="row g-3 mb-4">

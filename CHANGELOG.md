@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc76 (2026-11-01)
+
+- **Subtitle tracks in other languages are removed** (Settings → Enhance → Subtitle tracks, off by default). Releases often carry a dozen subtitle tracks, and a player choosing subtitles by itself can pick the wrong one. Each MKV file is looked at once, and the tracks not in a kept language (English unless you list others) are removed: a copy without them, checked, then moved over the original, so nothing is re-encoded and video, audio and chapters stay. An untagged track stays only when its name says a kept language. One or two files per worker cycle, never one that's playing, what's about to be watched first; Enhance and Overview show the progress, and History what was removed. This does what a transcoder such as Tdarr is often kept for: on a library of about 9,000 files it decided the same as a Tdarr "English subtitles only" plugin for every file checked.
+
 ## 0.2.0rc75 (2026-11-01)
 
 - **Fixed: misfiled-episode evidence outlived the file it was about.** The subtitle check's finding that a file is another episode is kept with the file's name, and a file moved into that slot afterwards (fixing the mix-up) takes the same name, so the old finding stayed listed. The size of the file is now kept with new findings, and any finding is dropped once what's said in the file clearly fits the episode it's filed as.
