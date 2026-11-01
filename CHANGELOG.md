@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc69 (2026-11-01)
+
+- **The house look: artwork settings that are known to work, locked in.** Posters → House look keeps one set of settings: the look, the reference-photo folder, who's in the pictures, the engine, whether to start from the film's own art, and the two reference options. Generate and Batches start from it and show it read-only; while it's chosen, nothing else the form or a link sends is used, so it can't be blanked or changed by accident. To change it, edit it on its own page and tick the box to confirm. Every earlier version is listed there with **Put this one back**, and both work in place, without reloading the page. Choose *Other settings, for this run only* to try something different without touching it.
+- **Extra for these titles.** Generate and Batches have a box for a wish that's only for this run ("In this case we are going for funny."). It's added after the look for those titles and never kept, so it can't creep into the next batch.
+
 ## 0.2.0rc68 (2026-10-31)
 
 - **Fixed: a link to Posters → Batches blanked the saved look and reference photos.** The batch page remembers what you chose, and opening it from a link that picked only the titles saved an empty look, no reference-photo folder and the default engine over your own. Such a link now keeps them.

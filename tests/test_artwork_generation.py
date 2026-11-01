@@ -1775,3 +1775,97 @@ def test_a_remake_batch_takes_the_oldest_old_prompt_pictures_first(app):
         for j in db.session.query(artwork_jobs.ArtworkJob).filter_by(batch_id=batch.id)
     }
     assert kinds == {"Sequel": ["Primary"], "Film": ["Primary"]}  # no logos remade
+
+
+def _house(client, tmp_path, **changes):
+    photos = tmp_path / "house-photos"
+    photos.mkdir(exist_ok=True)
+    data = {
+        "style": "The known good look.",
+        "engine": "codex/image",
+        "photos": str(photos),
+        "cast": "Sam",
+        "originals": "on",
+        "external_ok": "on",
+        "approach": "original",
+        "confirm": "on",
+    } | changes
+    return client.post("/library/posters/house", data=data)
+
+
+def test_the_house_look_is_used_whatever_the_form_sends(
+    app, client, monkeypatch, tmp_path
+):
+    _library, media, _part = _movie()
+    _jellyfin(monkeypatch, _picture("#223344"))
+    _house(client, tmp_path)
+    page = client.get("/library/posters/generate").text
+    assert "The known good look." in page and 'value="house"' in page
+    # A form (or a link) with other values in it can't change what's used.
+    client.post(
+        "/library/posters/generate",
+        data={
+            "media": [media.id],
+            "kinds": ["Primary"],
+            "look": "house",
+            "style": "",
+            "photos": "",
+            "engine": "auto",
+            "extra": "In this case we are going for funny.",
+        },
+    )
+    job = db.session.query(ArtworkJob).one()
+    assert job.engine == "codex/image" and job.options["look"] == "house"
+    assert job.options["style"] == (
+        "The known good look. In this case we are going for funny."
+    )
+    assert job.options["cast"] == ["Sam"] and job.options["external_ok"]
+    # The extra note is for that run only: the house look is unchanged.
+    from curatarr import house_look
+
+    assert house_look.current()["style"] == "The known good look."
+
+
+def test_a_batch_link_gets_the_house_look_unless_it_asks_for_other_settings(
+    app, client, tmp_path
+):
+    _house(client, tmp_path)
+    client.get(
+        "/library/posters/batches",
+        query_string={"preview": "1", "titles": "movies", "kinds": ["Primary"]},
+    )
+    from curatarr.artwork_routes import _remembered
+
+    with app.test_request_context():
+        spec = _remembered("batch")
+    assert spec["look"] == "house"
+    assert spec["options"]["style"] == "The known good look."
+    assert spec["engine"] == "codex/image"
+    page = client.get("/library/posters/batches").text
+    assert "The known good look." in page and "locked" in page
+    client.get(
+        "/library/posters/batches",
+        query_string={"preview": "1", "titles": "movies", "look": "custom",
+                      "style": "Something else."},
+    )  # fmt: skip
+    with app.test_request_context():
+        spec = _remembered("batch")
+    assert spec["look"] == "custom" and spec["options"]["style"] == "Something else."
+
+
+def test_changing_the_house_look_is_on_purpose_and_can_be_undone(app, client, tmp_path):
+    from curatarr import house_look
+
+    assert _house(client, tmp_path, confirm="").status_code == 302
+    assert house_look.current() is None  # not without the box ticked
+    _house(client, tmp_path)
+    _house(client, tmp_path, style="A worse look.")
+    assert house_look.current()["style"] == "A worse look."
+    page = client.get("/library/posters/house").text
+    assert "The known good look." in page  # kept as an earlier version
+    response = client.post(
+        "/library/posters/house/restore/0", headers={"X-Curatarr-Async": "1"}
+    )
+    assert response.get_json()["ok"]
+    assert house_look.current()["style"] == "The known good look."
+    assert house_look.history()[0]["style"] == "A worse look."

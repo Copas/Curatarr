@@ -21,9 +21,10 @@
 </form>
 {% if preview is not none %}
 <section class="card p-3 mb-4" id="preview"><h2 class="h5">{{ preview.count }} title{{ '' if preview.count == 1 else 's' }} would get pictures</h2>
-  {% if preview.count %}<p class="small text-secondary">{% for k in spec.kinds %}{{ kind_names[k] }}{{ ', ' if not loop.last }}{% endfor %}, for {{ 'chosen accounts' if spec.accounts else 'everyone' }}, made by {{ engine_label(spec.engine) }}.{% if preview.count > preview.titles|length %} The first {{ preview.titles|length }}:{% endif %}</p>
+  {% if preview.count %}<p class="small text-secondary">{% for k in spec.kinds %}{{ kind_names[k] }}{{ ', ' if not loop.last }}{% endfor %}, for {{ 'chosen accounts' if spec.accounts else 'everyone' }}, made by {{ engine_label(spec.engine) }}, with {{ 'the house look' if spec.look == 'house' else 'other settings' }}{% if spec.extra %} plus "{{ spec.extra }}"{% endif %}.{% if preview.count > preview.titles|length %} The first {{ preview.titles|length }}:{% endif %}</p>
   <ol class="small artwork-preview-list">{% for m in preview.titles %}<li>{{ m.title }}</li>{% endfor %}</ol>
   <form method="post" action="{{ url_for('main.artwork_batch_create') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="look" value="{{ spec.look or 'custom' }}"><input type="hidden" name="extra" value="{{ spec.extra or '' }}">
     {% for key in ['titles', 'name', 'engine', 'worker'] %}<input type="hidden" name="{{ key }}" value="{{ request.args.get(key, '') }}">{% endfor %}
     {% for k in spec.kinds %}<input type="hidden" name="kinds" value="{{ k }}">{% endfor %}{% for a in spec.accounts %}<input type="hidden" name="accounts" value="{{ a }}">{% endfor %}
     {% if spec.skip_done %}<input type="hidden" name="skip_done" value="1">{% endif %}{% if spec.alternatives %}<input type="hidden" name="alternatives" value="1">{% endif %}{% if spec.options.originals %}<input type="hidden" name="originals" value="1">{% endif %}{% if spec.options.external_ok %}<input type="hidden" name="external_ok" value="1">{% endif %}

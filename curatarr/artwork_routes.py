@@ -195,7 +195,14 @@ def _common() -> dict:
         "state_names": artwork_jobs.STATE_NAMES,
         "job_state_names": artwork_jobs.JOB_STATE_NAMES,
         "engines": artwork_jobs.engines(),
+        "house": _house(),
     }
+
+
+def _house():
+    from . import house_look
+
+    return house_look.current()
 
 
 def _engine_label(engine: str) -> str:
@@ -273,6 +280,24 @@ def artwork_find_titles():
 OPTION_FIELDS = ("photos", "cast", "style", "originals", "external_ok", "engine")
 
 
+def _look(form) -> tuple[dict, str]:
+    """(job options, engine) for a run: the house look unless the form asks
+    for other settings (``look=custom``); then the form's own. A link that
+    doesn't say gets the house look, so it can't be blanked. ``extra`` (this
+    run's own note) goes after the look either way and isn't kept."""
+    from . import house_look
+
+    choice = form.get("look") or ("house" if house_look.current() else "custom")
+    if choice == "house" and house_look.current():
+        return house_look.job_options(form.get("extra"))
+    options = _job_options(form)
+    extra = " ".join((form.get("extra") or "").split())[:300]
+    if extra:
+        options["style"] = f"{options['style']} {extra}".strip()
+        options["extra"] = extra
+    return options, form.get("engine") or "auto"
+
+
 def _job_options(form) -> dict:
     cast = [n.strip() for n in (form.get("cast") or "").split(",") if n.strip()]
     return {
@@ -303,22 +328,25 @@ def artwork_generate_submit():
         flash("Choose at least one title.", "warning")
         return redirect(url_for("main.artwork_generate"))
     kinds = request.form.getlist("kinds")
-    options = _job_options(request.form)
-    _remember(
-        "generate",
-        {
-            "kinds": kinds,
-            "accounts": _scope(request.form),
-            "engine": request.form.get("engine") or "auto",
-            "worker": request.form.get("worker") or "",
-            "photos": options["photos"],
-            "cast": ", ".join(options["cast"]),
-            "style": options["style"],
-            "originals": options["originals"],
-            "external_ok": options["external_ok"],
-            "approach": options["approach"],
-        },
-    )
+    options, engine = _look(request.form)
+    remembered = {
+        "kinds": kinds,
+        "accounts": _scope(request.form),
+        "worker": request.form.get("worker") or "",
+        "look": options.get("look") or "custom",
+    }
+    if options.get("look") != "house":  # the house look is kept on its own
+        own = _job_options(request.form)
+        remembered |= {
+            "engine": engine,
+            "photos": own["photos"],
+            "cast": ", ".join(own["cast"]),
+            "style": own["style"],
+            "originals": own["originals"],
+            "external_ok": own["external_ok"],
+            "approach": own["approach"],
+        }
+    _remember("generate", _remembered("generate") | remembered)
     if options["photos"] and not Path(options["photos"]).is_dir():
         flash(f"Curatarr can't find the folder {options['photos']}.", "danger")
         return redirect(url_for("main.artwork_generate", media=[m.id for m in titles]))
@@ -332,7 +360,7 @@ def artwork_generate_submit():
                 media,
                 kinds,
                 accounts=_scope(request.form),
-                engine=request.form.get("engine") or "auto",
+                engine=engine,
                 worker_id=worker,
                 options=options,
                 created_by=_who(),
@@ -671,7 +699,9 @@ def artwork_batches():
     spec = None
     if request.args.get("preview"):
         spec = _batch_spec(request.args)
-        if not any(field in request.args for field in OPTION_FIELDS):
+        if spec["look"] != "house" and not any(
+            field in request.args for field in (*OPTION_FIELDS, "look")
+        ):
             # A link that only picks titles keeps the look, reference photos
             # and engine chosen before, rather than blanking them.
             before = _remembered("batch")
@@ -704,6 +734,61 @@ def artwork_batches():
     )
 
 
+@bp.get("/library/posters/house")
+def artwork_house():
+    """The house look: what it is, changing it on purpose, and earlier ones."""
+    from . import house_look
+
+    house = house_look.current()
+    if house is None:
+        # Nothing saved yet: start from what Generate used last, and a look
+        # given in the link (so the known good one can be handed over).
+        saved = _remembered("generate")
+        house = house_look.clean(saved)
+    draft = dict(house)
+    if request.args.get("style"):
+        draft["style"] = request.args["style"]
+    return render_template(
+        "artwork_house.html",
+        draft=draft,
+        history=house_look.history(),
+        engine_label=_engine_label,
+        **_common(),
+    )
+
+
+@bp.post("/library/posters/house")
+def artwork_house_save():
+    from . import house_look
+
+    if request.form.get("confirm") not in {"on", "1"}:
+        _say("Tick the box to confirm: this changes every new picture.", "warning")
+        return _done(url_for("main.artwork_house"))
+    values = house_look.clean(request.form)
+    if not values["style"]:
+        _say("The house look needs a look.", "warning")
+        return _done(url_for("main.artwork_house"))
+    if values["photos"] and not Path(values["photos"]).is_dir():
+        _say(f"Curatarr can't find the folder {values['photos']}.", "danger")
+        return _done(url_for("main.artwork_house"))
+    house_look.save(values, _who())
+    _say("Saved: new pictures use this house look.", "success")
+    return _done(url_for("main.artwork_house"))
+
+
+@bp.post("/library/posters/house/restore/<int:index>")
+def artwork_house_restore(index):
+    from . import house_look
+
+    try:
+        house_look.restore(index, _who())
+    except ValueError as exc:
+        _say(str(exc), "warning")
+    else:
+        _say("Put back: that earlier version is the house look again.", "success")
+    return _done(url_for("main.artwork_house"))
+
+
 def _batch_spec(form) -> dict:
     which = form.get("titles") or "favourites"
     if not (
@@ -714,6 +799,7 @@ def _batch_spec(form) -> dict:
     worker = form.get("worker") or None
     if worker and db.session.get(ArtworkWorker, worker) is None:
         worker = None
+    options, engine = _look(form)
     return {
         "titles": which,
         "kinds": [k for k in custom_posters.KINDS if k in form.getlist("kinds")]
@@ -721,9 +807,11 @@ def _batch_spec(form) -> dict:
         "accounts": _scope(form),
         "skip_done": form.get("skip_done") in {"on", "1"},
         "alternatives": form.get("alternatives") in {"on", "1"},
-        "engine": form.get("engine") or "auto",
+        "engine": engine,
         "worker": worker,
-        "options": _job_options(form),
+        "options": options,
+        "look": options.get("look") or "custom",
+        "extra": options.get("extra", ""),
     }
 
 

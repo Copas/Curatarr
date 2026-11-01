@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}House look · Posters · Curatarr{% endblock %}
+{% block content %}
+<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>House look</h1><p class="text-secondary mb-0">The settings known to make good pictures, locked in. Generate and Batches use them unless you choose other settings for one run, and nothing there can change them: they change only here, on purpose. Every earlier version is kept below.</p></div></header>
+{% set here = 'main.artwork_house' %}{% include '_posters_nav.html' %}
+<div id="house-page">
+<section class="card p-3 mb-4" id="house-current">
+  <h2 class="h5">{% if house %}Now in use{% else %}Not saved yet{% endif %}</h2>
+  {% if house %}<p class="small text-secondary">Saved {{ house.saved_at[:16]|replace('T', ' ') }}{% if house.by %} by {{ house.by }}{% endif %}.</p>{% else %}<p class="small text-secondary">Filled in from what Generate used last. Check it, then save it to lock it in.</p>{% endif %}
+  <form method="post" action="{{ url_for('main.artwork_house_save') }}" data-house><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="row g-3 mb-3">
+      <div class="col-12"><label class="form-label" for="h-style">The look</label>
+        <textarea class="form-control" name="style" id="h-style" rows="4" maxlength="600" required>{{ draft.style }}</textarea>
+        <div class="form-text">For every title, so keep one-title wishes ("going for funny") out of it: Generate and Batches have an <em>Extra for these titles</em> box for those.</div></div>
+      <div class="col-md-6"><label class="form-label" for="h-engine">Engine</label>
+        <select class="form-select" name="engine" id="h-engine"><option value="auto">Best available</option>{% for e in engines %}<option value="{{ e.engine }}"{% if draft.engine == e.engine %} selected{% endif %}>{{ e.label }}{% if e.external %} (outside service){% endif %}</option>{% endfor %}{% if draft.engine not in ['auto'] + engines|map(attribute='engine')|list %}<option value="{{ draft.engine }}" selected>{{ engine_label(draft.engine) }} (no worker offers it now)</option>{% endif %}</select></div>
+      <div class="col-md-6"><label class="form-label" for="h-approach">Start from</label>
+        <select class="form-select" name="approach" id="h-approach">{% for key, label in approaches.items() %}<option value="{{ key }}"{% if key == draft.approach %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="col-md-6"><label class="form-label" for="h-photos">Reference photos folder</label>
+        <input class="form-control" type="text" name="photos" id="h-photos" value="{{ draft.photos }}" placeholder="/path/to/photos"></div>
+      <div class="col-md-6"><label class="form-label" for="h-cast">Who's in them</label>
+        <input class="form-control" type="text" name="cast" id="h-cast" value="{{ draft.cast|join(', ') }}" placeholder="Everyone in the folder"></div>
+      <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="originals" id="h-originals"{% if draft.originals %} checked{% endif %}><label class="form-check-label" for="h-originals">Use each title's original art as a reference</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="external_ok" id="h-external"{% if draft.external_ok %} checked{% endif %}><label class="form-check-label" for="h-external">Allow the reference photos to be sent to an outside service (Codex sends them to OpenAI)</label></div></div>
+    </div>
+    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="confirm" id="h-confirm"><label class="form-check-label" for="h-confirm">I want every new picture made with these settings{% if house %} (the version in use now is kept below){% endif %}</label></div>
+    <button class="btn btn-primary">{% if house %}Save as the house look{% else %}Lock this in as the house look{% endif %}</button>
+  </form>
+</section>
+<section class="mb-4" id="house-history"><h2 class="h5">Earlier versions</h2>
+  {% if history %}<ul class="list-unstyled">{% for old in history %}<li class="card card-body mb-2 small">
+    <p class="mb-1">{{ old.style }}</p>
+    <div class="text-secondary mb-2">Saved {{ (old.saved_at or '')[:16]|replace('T', ' ') }}{% if old.by %} by {{ old.by }}{% endif %} · {{ engine_label(old.engine) }}{% if old.photos %} · {{ old.photos }}{% endif %}</div>
+    <form method="post" action="{{ url_for('main.artwork_house_restore', index=loop.index0) }}" data-house><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light">Put this one back</button></form>
+  </li>{% endfor %}</ul>{% else %}<p class="text-secondary small">None yet: each time the house look is saved, the one before is kept here.</p>{% endif %}
+</section>
+</div>
+<div class="house-messages" aria-live="polite" id="house-messages"></div>
+<script src="{{ url_for('static', filename='artwork-house.js', v='1') }}"></script>
+{% endblock %}

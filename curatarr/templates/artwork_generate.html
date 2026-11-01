@@ -22,12 +22,16 @@
     {% if accounts %}<div class="d-flex flex-wrap gap-3">{% for id, name in accounts %}<div class="form-check"><input class="form-check-input" type="checkbox" name="accounts" value="{{ id }}" id="g-acc-{{ id }}"{% if id in saved.get('accounts', []) %} checked{% endif %}><label class="form-check-label" for="g-acc-{{ id }}">{{ name }}</label></div>{% endfor %}</div>
     <div class="form-text">None ticked: everyone. Ticked accounts get them through the Curatarr plugin; everyone else keeps the usual art.</div>{% else %}<p class="small text-secondary mb-0">Everyone (Curatarr hasn't read Jellyfin's accounts yet).</p>{% endif %}
   </fieldset>
+  {% set p = 'g' %}{% set look_choice = saved.get('look') %}{% set extra = '' %}{% include '_house_look_choice.html' %}
+  <div class="row g-3 mb-3">
+    <div class="col-md-6"><label class="form-label" for="g-worker">Worker</label>
+      <select class="form-select" name="worker" id="g-worker"><option value="">Any that can make it</option>{% for w in workers %}<option value="{{ w.id }}"{% if saved.get('worker') == w.id %} selected{% endif %}>{{ w.name }}</option>{% endfor %}</select></div>
+  </div>
+  <div data-own-settings>
   <div class="row g-3 mb-3">
     <div class="col-md-6"><label class="form-label" for="g-engine">Engine</label>
       <select class="form-select" name="engine" id="g-engine"><option value="auto">Best available on this computer's workers</option>{% for e in engines %}<option value="{{ e.engine }}"{% if e.engine == suggested %} selected{% endif %}>{{ e.label }}{% if e.external %} (outside service){% endif %}{% if not e.workers|selectattr(1)|list %} (no worker online){% endif %}</option>{% endfor %}</select>
       <div class="form-text">"Best available" picks the engine chosen for each type under Workers, else one on your own computers. An outside service (Codex, ChatGPT) is only used when chosen here.{% if suggested != 'auto' %} Your workers only offer {{ engines[0].label }}, so it's chosen.{% endif %}</div></div>
-    <div class="col-md-6"><label class="form-label" for="g-worker">Worker</label>
-      <select class="form-select" name="worker" id="g-worker"><option value="">Any that can make it</option>{% for w in workers %}<option value="{{ w.id }}"{% if saved.get('worker') == w.id %} selected{% endif %}>{{ w.name }}</option>{% endfor %}</select></div>
   </div>
   <h2 class="h5 mt-2">Cast and look</h2>
   <div class="row g-3 mb-3">
@@ -46,7 +50,9 @@
     <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="originals" id="g-originals"{% if saved.get('originals', options.originals) %} checked{% endif %}><label class="form-check-label" for="g-originals">Use each title's original art as a reference (its logo's lettering, and for Codex, its poster's feel)</label></div>
       <div class="form-check"><input class="form-check-input" type="checkbox" name="external_ok" id="g-external"{% if saved.get('external_ok') %} checked{% endif %}><label class="form-check-label" for="g-external">Allow the reference photos to be sent to an outside service (Codex sends them to OpenAI). Local engines never send anything off the worker.</label></div></div>
   </div>
+  </div>
   <div><button class="btn btn-primary">Generate</button> <span class="small text-secondary ms-2">Prefer to paste prompts into an AI yourself? <a href="{{ url_for('main.custom_posters_page') }}#prompts">Write prompts</a> still works.</span></div>
 </form>
 <script src="{{ url_for('static', filename='artwork-generate.js', v='1') }}"></script>
+<script src="{{ url_for('static', filename='look-choice.js', v='1') }}"></script>
 {% endblock %}
