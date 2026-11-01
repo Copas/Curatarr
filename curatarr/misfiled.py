@@ -363,17 +363,22 @@ def _findings(sonarr, now) -> dict:
 
 
 def _summaries_disagree(current, target, episodes) -> bool:
-    """Whether what's said in a file clearly fits a third episode's summary.
+    """Whether what's said in a file clearly fits another episode's summary
+    than the one its subtitle evidence names.
 
     Downloaded subtitles are found for a file's release, so a misnumbered
     release gets subtitles numbered the same wrong way: they agree with the
-    file and point one episode off in the other direction. The episodes'
-    own summaries are independent of both, so when they clearly place the
-    file elsewhere, the subtitles' word isn't taken.
+    file and point one episode off in the other direction. And evidence is
+    kept by the file's name, which a file moved into that slot inherits. The
+    episodes' own summaries are independent of both: when they clearly place
+    the file where it's filed (it was moved there since), or at a third
+    episode, the subtitles' word isn't taken.
     """
     text = _transcript(current["id"])
     if text is None:
         return False
+    if fits(text, episodes, current["id"], target["id"]) == "own":
+        return True
     fit = _fit(text, episodes, current["id"], target["id"])
     best = max(fit, key=fit.get) if fit else None
     return best not in (None, target["id"], current["id"]) and (
@@ -411,6 +416,12 @@ def _add_subtitle_findings(sonarr, series, episodes_by_series, files_by_series, 
             continue
         if evidence.get("file") != os.path.basename(part.file_path or ""):
             continue  # about a file that has since been replaced
+        if (
+            evidence.get("size")
+            and part.size_bytes
+            and evidence["size"] != (part.size_bytes)
+        ):
+            continue  # another file moved in under the same name
         series_id = media.sonarr_id
         if series_id not in episodes_by_series:
             episodes_by_series[series_id] = sonarr.episodes(series_id) or []

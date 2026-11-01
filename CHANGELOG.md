@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc75 (2026-11-01)
+
+- **Fixed: misfiled-episode evidence outlived the file it was about.** The subtitle check's finding that a file is another episode is kept with the file's name, and a file moved into that slot afterwards (fixing the mix-up) takes the same name, so the old finding stayed listed. The size of the file is now kept with new findings, and any finding is dropped once what's said in the file clearly fits the episode it's filed as.
+
 ## 0.2.0rc74 (2026-11-01)
 
 - **A run of misfiled episodes is fixed as a run.** A release numbered from another starting point (a pilot counted into the season, a special left out) files every episode the same number of slots off. Episode summaries are often too alike to settle any one of them clearly, so each was left for a person. Now three or more files in a row, each named for the episode that many slots away and each leaning towards it (none fitting where it's filed), confirm the whole run, and the pilot at its head if its own slot is empty; the automatic fix then moves them one at a time. Seen on a classic series whose release counted the feature-length pilot as episode 1.

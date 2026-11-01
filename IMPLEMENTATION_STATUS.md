@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc75 (2026-11-01): stale subtitle evidence dropped after a file is moved into the slot.
 - v0.2.0rc74 (2026-11-01): misfiled runs confirmed together; subtitle evidence vetoed by clear summaries.
 - v0.2.0rc73 (2026-11-01): read-only API for misfiled episodes that need a person.
 - v0.2.0rc72 (2026-11-01): safety refusals tried once as an original take, then stop; marked in Review.

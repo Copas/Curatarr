@@ -393,3 +393,7 @@ def test_subtitles_that_followed_a_mislabelled_file_are_not_taken(monkeypatch):
     assert not misfiled._summaries_disagree(current, target, episodes)
     monkeypatch.setattr(misfiled, "_transcript", _said({}))
     assert not misfiled._summaries_disagree(current, target, episodes)
+    # What's said now clearly fits where it's filed: the right file was moved
+    # in under the old name, and the evidence is about the one before.
+    monkeypatch.setattr(misfiled, "_transcript", _said({103: TOPICS[3] * 2}))
+    assert misfiled._summaries_disagree(current, target, episodes)

@@ -1656,7 +1656,12 @@ def _check_sync(state, part, media, path, info, names, config, opts, fields):
         if result.verdict == "mismatch" and part.kind == "episode":
             other = _other_episode(part, segments)
             if other:
-                record["episode"] = other | {"file": video.name, "subtitles": name}
+                record["episode"] = other | {
+                    "file": video.name,
+                    # A file moved into this slot later takes the name too.
+                    "size": video.stat().st_size,
+                    "subtitles": name,
+                }
         if result.verdict == "mismatch":
             aside = target.with_name(name + ".out-of-sync")
             try:
