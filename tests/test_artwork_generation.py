@@ -1778,9 +1778,11 @@ def test_a_remake_batch_takes_the_oldest_old_prompt_pictures_first(app):
 
 
 def _house(client, tmp_path, **changes):
+    """Save a look named Known good and make it the house look."""
     photos = tmp_path / "house-photos"
     photos.mkdir(exist_ok=True)
     data = {
+        "name": "Known good",
         "style": "The known good look.",
         "engine": "codex/image",
         "photos": str(photos),
@@ -1788,9 +1790,10 @@ def _house(client, tmp_path, **changes):
         "originals": "on",
         "external_ok": "on",
         "approach": "original",
+        "make_house": "on",
         "confirm": "on",
     } | changes
-    return client.post("/library/posters/house", data=data)
+    return client.post("/library/posters/looks", data=data)
 
 
 def test_the_house_look_is_used_whatever_the_form_sends(
@@ -1853,13 +1856,56 @@ def test_a_batch_link_gets_the_house_look_unless_it_asks_for_other_settings(
     assert spec["look"] == "custom" and spec["options"]["style"] == "Something else."
 
 
+def test_saved_looks_can_be_tried_then_locked_in(app, client, monkeypatch, tmp_path):
+    from curatarr import house_look
+
+    _library, media, _part = _movie()
+    _jellyfin(monkeypatch, _picture("#223344"))
+    _house(client, tmp_path)
+    client.post(
+        "/library/posters/looks",
+        data={"name": "Softer", "style": "A softer look.", "engine": "codex/image"},
+    )
+    softer = next(look for look in house_look.looks() if look["name"] == "Softer")
+    assert house_look.current()["style"] == "The known good look."  # untouched
+    # Try it: Generate opens with it chosen, and the job is made with it.
+    page = client.get(
+        "/library/posters/generate", query_string={"look": f"saved:{softer['id']}"}
+    ).text
+    assert f'value="saved:{softer["id"]}" id="g-look-{softer["id"]}" checked' in page
+    client.post(
+        "/library/posters/generate",
+        data={"media": [media.id], "kinds": ["Primary"], "look": f"saved:{softer['id']}"},
+    )  # fmt: skip
+    job = db.session.query(ArtworkJob).one()
+    assert job.options["style"] == "A softer look."
+    assert job.options["look_name"] == "Softer"
+    page = client.get("/library/posters/house").text
+    assert "Tried on:" in page and media.title in page
+    # Same name twice isn't allowed; locking in needs the box ticked.
+    client.post("/library/posters/looks", data={"name": "softer", "style": "x"})
+    assert len(house_look.looks()) == 2
+    client.post(f"/library/posters/looks/{softer['id']}/house")
+    assert house_look.current()["style"] == "The known good look."
+    client.post(f"/library/posters/looks/{softer['id']}/house", data={"confirm": "on"})
+    assert house_look.current()["name"] == "Softer"
+    # Changing the saved look later doesn't change the house look.
+    client.post(
+        "/library/posters/looks",
+        data={"id": softer["id"], "name": "Softer", "style": "Changed."},
+    )
+    assert house_look.current()["style"] == "A softer look."
+    assert house_look.get(softer["id"])["style"] == "Changed."
+
+
 def test_changing_the_house_look_is_on_purpose_and_can_be_undone(app, client, tmp_path):
     from curatarr import house_look
 
-    assert _house(client, tmp_path, confirm="").status_code == 302
+    _house(client, tmp_path, confirm="")
     assert house_look.current() is None  # not without the box ticked
-    _house(client, tmp_path)
-    _house(client, tmp_path, style="A worse look.")
+    assert [look["name"] for look in house_look.looks()] == ["Known good"]
+    _house(client, tmp_path, name="Known good", id=house_look.looks()[0]["id"])
+    _house(client, tmp_path, name="Worse", style="A worse look.")
     assert house_look.current()["style"] == "A worse look."
     page = client.get("/library/posters/house").text
     assert "The known good look." in page  # kept as an earlier version

@@ -196,6 +196,7 @@ def _common() -> dict:
         "job_state_names": artwork_jobs.JOB_STATE_NAMES,
         "engines": artwork_jobs.engines(),
         "house": _house(),
+        "saved_looks": _saved_looks(),
     }
 
 
@@ -203,6 +204,12 @@ def _house():
     from . import house_look
 
     return house_look.current()
+
+
+def _saved_looks():
+    from . import house_look
+
+    return house_look.looks()
 
 
 def _engine_label(engine: str) -> str:
@@ -224,6 +231,8 @@ def artwork_generate():
         if m is not None
     ]
     saved = _remembered("generate")
+    if request.args.get("look"):  # Try it, from a saved look's card
+        saved["look"] = request.args["look"]
     photos = request.args.get("photos", saved.get("photos", options["photos"]))
     engines = artwork_jobs.engines()
     local = [e for e in engines if not e["external"]]
@@ -290,6 +299,8 @@ def _look(form) -> tuple[dict, str]:
     choice = form.get("look") or ("house" if house_look.current() else "custom")
     if choice == "house" and house_look.current():
         return house_look.job_options(form.get("extra"))
+    if choice.startswith("saved:") and house_look.get(choice[6:]):
+        return house_look.job_options(form.get("extra"), choice[6:])
     options = _job_options(form)
     extra = " ".join((form.get("extra") or "").split())[:300]
     if extra:
@@ -736,43 +747,96 @@ def artwork_batches():
 
 @bp.get("/library/posters/house")
 def artwork_house():
-    """The house look: what it is, changing it on purpose, and earlier ones."""
+    """Looks: the house look, the saved looks with their trial runs, a form for
+    a new (or changed) look, and earlier house looks."""
     from . import house_look
 
-    house = house_look.current()
-    if house is None:
-        # Nothing saved yet: start from what Generate used last, and a look
-        # given in the link (so the known good one can be handed over).
-        saved = _remembered("generate")
-        house = house_look.clean(saved)
-    draft = dict(house)
+    saved_looks = house_look.looks()
+    editing = house_look.get(request.args.get("edit") or "")
+    if editing:
+        draft = dict(editing)
+    else:
+        # A new look starts from the house look, else from what Generate used
+        # last; a look given in the link (to hand one over) goes in too.
+        draft = house_look.current() or house_look.clean(_remembered("generate"))
+        draft = dict(draft) | {"name": ""}
     if request.args.get("style"):
         draft["style"] = request.args["style"]
     return render_template(
         "artwork_house.html",
+        trials=_trials([f"saved:{look['id']}" for look in saved_looks]),
         draft=draft,
+        editing=editing,
         history=house_look.history(),
         engine_label=_engine_label,
         **_common(),
     )
 
 
-@bp.post("/library/posters/house")
-def artwork_house_save():
+def _trials(keys, per_look=8) -> dict[str, list]:
+    """{look key: its latest jobs}, from the last few hundred jobs."""
+    found: dict[str, list] = {key: [] for key in keys}
+    for job in _jobs_query().limit(400):
+        key = (job.options or {}).get("look")
+        if key in found and len(found[key]) < per_look:
+            found[key].append(job)
+    return found
+
+
+@bp.post("/library/posters/looks")
+def artwork_look_save():
     from . import house_look
 
-    if request.form.get("confirm") not in {"on", "1"}:
-        _say("Tick the box to confirm: this changes every new picture.", "warning")
-        return _done(url_for("main.artwork_house"))
     values = house_look.clean(request.form)
     if not values["style"]:
-        _say("The house look needs a look.", "warning")
+        _say("A look needs its look written in.", "warning")
         return _done(url_for("main.artwork_house"))
     if values["photos"] and not Path(values["photos"]).is_dir():
         _say(f"Curatarr can't find the folder {values['photos']}.", "danger")
         return _done(url_for("main.artwork_house"))
-    house_look.save(values, _who())
-    _say("Saved: new pictures use this house look.", "success")
+    try:
+        look = house_look.save_look(
+            values,
+            request.form.get("name"),
+            _who(),
+            look_id=request.form.get("id") or None,
+        )
+    except ValueError as exc:
+        _say(str(exc), "warning")
+        return _done(url_for("main.artwork_house"))
+    if request.form.get("make_house") in {"on", "1"}:
+        if request.form.get("confirm") not in {"on", "1"}:
+            _say(
+                f"Saved {look['name']}, but not as the house look: tick the box "
+                "to confirm that.",
+                "warning",
+            )
+            return _done(url_for("main.artwork_house"))
+        house_look.make_house(look["id"], _who())
+        _say(f"Saved {look['name']}; it's the house look now.", "success")
+    else:
+        _say(f"Saved {look['name']}. Try it on a few titles from its card.", "success")
+    return _done(url_for("main.artwork_house"))
+
+
+@bp.post("/library/posters/looks/<look_id>/<action>")
+def artwork_look_action(look_id, action):
+    from . import house_look
+
+    if action not in ("house", "delete"):
+        abort(404)
+    if request.form.get("confirm") not in {"on", "1"}:
+        _say("Tick the box to confirm.", "warning")
+        return _done(url_for("main.artwork_house"))
+    try:
+        if action == "house":
+            look = house_look.make_house(look_id, _who())
+            _say(f"{look['name']} is the house look now.", "success")
+        else:
+            look = house_look.delete_look(look_id)
+            _say(f"Deleted the look {look['name']}.", "success")
+    except ValueError as exc:
+        _say(str(exc), "warning")
     return _done(url_for("main.artwork_house"))
 
 

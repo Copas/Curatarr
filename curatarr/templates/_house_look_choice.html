@@ -1,17 +1,22 @@
-{# Generate and Batches: the house look (locked) or other settings for this
-   run, and this run's own extra note. Needs house, look_choice, extra, p (an
-   id prefix); the other settings follow in [data-own-settings]. #}
-{% if house %}
+{# Generate and Batches: the house look (locked), a saved look, or other
+   settings for this run, and this run's own extra note. Needs house,
+   saved_looks, look_choice, extra, p (an id prefix); the other settings
+   follow in [data-own-settings]. #}
+{% macro summary(look) %}<div class="card card-body small my-2 house-look-summary">
+    <p class="mb-2">{{ look.style }}</p>
+    <div class="text-secondary">Made by {{ engine_label(look.engine) }} · {{ approaches.get(look.approach, look.approach) }}{% if look.photos %} · reference photos: {{ look.photos }}{% if look.cast %} ({{ look.cast|join(', ') }}){% endif %}{% endif %}{% if look.originals %} · original art as a reference{% endif %}{% if look.external_ok %} · photos may go to an outside service{% endif %}</div>
+  </div>{% endmacro %}
+{% if house or saved_looks %}
+{% set chosen = look_choice or ('house' if house else 'custom') %}
 <fieldset class="mb-3" data-look-choice><legend class="h6">Settings</legend>
-  <div class="form-check"><input class="form-check-input" type="radio" name="look" value="house" id="{{ p }}-look-house"{% if look_choice != 'custom' %} checked{% endif %}><label class="form-check-label" for="{{ p }}-look-house"><strong>The house look</strong> <span class="badge text-bg-secondary">locked</span></label></div>
-  <div class="card card-body small my-2 house-look-summary">
-    <p class="mb-2">{{ house.style }}</p>
-    <div class="text-secondary">Made by {{ engine_label(house.engine) }} · {{ approaches.get(house.approach, house.approach) }}{% if house.photos %} · reference photos: {{ house.photos }}{% if house.cast %} ({{ house.cast|join(', ') }}){% endif %}{% endif %}{% if house.originals %} · original art as a reference{% endif %}{% if house.external_ok %} · photos may go to an outside service{% endif %}</div>
-    <div class="mt-1"><a href="{{ url_for('main.artwork_house') }}">Change the house look</a> (on its own page, so it isn't changed by accident)</div>
-  </div>
-  <div class="form-check"><input class="form-check-input" type="radio" name="look" value="custom" id="{{ p }}-look-custom"{% if look_choice == 'custom' %} checked{% endif %}><label class="form-check-label" for="{{ p }}-look-custom">Other settings, for this run only</label></div>
+  {% if house %}<div class="form-check"><input class="form-check-input" type="radio" name="look" value="house" id="{{ p }}-look-house"{% if chosen == 'house' %} checked{% endif %}><label class="form-check-label" for="{{ p }}-look-house"><strong>The house look</strong>{% if house.name and house.name != 'House look' %} ({{ house.name }}){% endif %} <span class="badge text-bg-secondary">locked</span></label></div>
+  {{ summary(house) }}{% endif %}
+  {% for look in saved_looks %}<div class="form-check"><input class="form-check-input" type="radio" name="look" value="saved:{{ look.id }}" id="{{ p }}-look-{{ look.id }}"{% if chosen == 'saved:' ~ look.id %} checked{% endif %}><label class="form-check-label" for="{{ p }}-look-{{ look.id }}">Saved look: {{ look.name }}</label></div>
+  {% if chosen == 'saved:' ~ look.id %}{{ summary(look) }}{% endif %}{% endfor %}
+  <div class="form-check"><input class="form-check-input" type="radio" name="look" value="custom" id="{{ p }}-look-custom"{% if chosen == 'custom' %} checked{% endif %}><label class="form-check-label" for="{{ p }}-look-custom">Other settings, for this run only</label></div>
+  <div class="form-text"><a href="{{ url_for('main.artwork_house') }}">Looks</a>: save, try out and lock in looks there, so they aren't changed by accident here.</div>
 </fieldset>
 {% endif %}
 <div class="mb-3"><label class="form-label" for="{{ p }}-extra">Extra for these titles <span class="text-secondary small">(optional, this run only)</span></label>
   <input class="form-control" type="text" name="extra" id="{{ p }}-extra" value="{{ extra or '' }}" maxlength="300" placeholder="e.g. In this case we are going for funny." aria-describedby="{{ p }}-extra-help">
-  <div id="{{ p }}-extra-help" class="form-text">Added after the look for the titles in this run, then forgotten: it never changes the house look.</div></div>
+  <div id="{{ p }}-extra-help" class="form-text">Added after the look for the titles in this run, then forgotten: it never changes a saved look.</div></div>

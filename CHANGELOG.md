@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.0rc70 (2026-11-01)
+
+- **Saved looks, tried out before they're locked in.** Posters → Looks (it was House look) keeps any number of named looks, each with its own look, reference photos, cast, engine and options. **Try it** on a look's card opens Generate with that look chosen: pick a few titles, and the pictures wait in Review as usual. The card lists the titles it's been tried on. When one works, **Make it the house look** (with *I'm sure* ticked) locks it in; the house look is a copy, so changing the saved look later doesn't change it. Generate and Batches offer the house look, every saved look by name, or other settings for that run; a saved look is read-only there too. Looks can be changed or deleted from their cards; deleting asks first.
+
 ## 0.2.0rc69 (2026-11-01)
 
 - **The house look: artwork settings that are known to work, locked in.** Posters → House look keeps one set of settings: the look, the reference-photo folder, who's in the pictures, the engine, whether to start from the film's own art, and the two reference options. Generate and Batches start from it and show it read-only; while it's chosen, nothing else the form or a link sends is used, so it can't be blanked or changed by accident. To change it, edit it on its own page and tick the box to confirm. Every earlier version is listed there with **Put this one back**, and both work in place, without reloading the page. Choose *Other settings, for this run only* to try something different without touching it.
