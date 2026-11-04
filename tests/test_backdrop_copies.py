@@ -2,7 +2,7 @@
 replacing the first one: every redraw of the Leaving Soon tag used to leave
 the old one behind."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from hashlib import sha256
 from io import BytesIO
 
@@ -23,8 +23,13 @@ from curatarr.models import (
     MediaIdentity,
     PosterSnapshot,
     PurgeCandidate,
-    utcnow,
 )
+
+
+def _noon_in_nine_days():
+    """Nine days on by the calendar, whatever the time of day the tests run."""
+    noon = datetime.now().astimezone().replace(hour=12, minute=0, second=0)
+    return noon + timedelta(days=9)
 
 
 def _picture(colour, stripes):
@@ -100,7 +105,7 @@ def test_one_tagged_backdrop_however_often_it_is_redrawn(app, monkeypatch):
             reason_code="requested",
             reason_text="Asked",
             reclaimable_bytes=100,
-            scheduled_delete_at=utcnow() + timedelta(days=9, hours=1),
+            scheduled_delete_at=_noon_in_nine_days(),
         )
         db.session.add(candidate)
         db.session.commit()
