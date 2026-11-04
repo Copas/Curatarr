@@ -21,6 +21,11 @@ changes unless it's heard clearly as English. Curatarr's own chapters and subtit
 came from the old default, so they're queued to be redone from the new one, and
 the file is looked at again for a TV-friendly copy of its English track.
 
+With its own switch, off by default because only downloading again brings them
+back, audio tagged as other languages is also removed from those files, and
+from files where English already leads. Only once English has been heard; a
+file with no such track, and untagged tracks, are left as they are.
+
 Every file is looked at once, a few each worker cycle (it means reading each
 file's track list), and again when it's replaced. Files being played, and
 files in dry-run libraries, wait.
@@ -43,6 +48,7 @@ HEARD_PER_RUN = 3  # each is a few clips of one track through Whisper
 MOVES_PER_RUN = 2  # each copies a whole file
 HEARING_TRIES = 3
 LANGUAGE_RESET = "default_audio_first_track_started"
+ENGLISH_ONLY_RESET = "default_audio_english_only_started"
 UNTAGGED = {"", "und"}
 EXTRA_NAME = re.compile(
     r"comment|descri|narrat|visually impaired|\bad\b|\bdvs\b", re.IGNORECASE
@@ -64,6 +70,15 @@ def english_enabled() -> bool:
     try:
         return bool(options()["english_default_audio"])
     except Exception:  # noqa: BLE001  an unreadable config turns nothing on
+        return False
+
+
+def english_only() -> bool:
+    from .enrichment import options
+
+    try:
+        return english_enabled() and bool(options()["english_only_audio"])
+    except Exception:  # noqa: BLE001  an unreadable config removes nothing
         return False
 
 
@@ -118,6 +133,28 @@ def english_instead(streams) -> int | None:
     )["index"]
 
 
+def plan(streams) -> tuple[int | None, list[int]]:
+    """The English track to lead the file, and the audio tracks to remove: only
+    with English-only on, those tagged as other languages. (None, []) when
+    there's nothing to do, or no clear English track to do it with."""
+    choice = english_instead(streams)
+    if not english_only():
+        return choice, []
+    audio = [s for s in streams if s.get("codec_type") == "audio"]
+    other = [
+        s["index"]
+        for s in audio
+        if str(s.get("language") or "").lower() not in ENGLISH | UNTAGGED
+    ]
+    if choice is None and other and audio:
+        current = next((s for s in audio if s.get("default")), audio[0])
+        if str(current.get("language") or "").lower() in ENGLISH and not _extra(
+            current
+        ):
+            choice = current["index"]
+    return choice, other if choice is not None else []
+
+
 def _label(stream, why) -> str:
     name = stream.get("title") or stream.get("codec_name") or "audio"
     if why == "language":
@@ -130,14 +167,18 @@ def _look_again_for_language():
     again, except those waiting for Fix or Leave it."""
     from .services import set_setting, setting
 
-    if not english_enabled() or setting(LANGUAGE_RESET):
+    if english_enabled() and not setting(LANGUAGE_RESET):
+        key = LANGUAGE_RESET
+    elif english_only() and not setting(ENGLISH_ONLY_RESET):
+        key = ENGLISH_ONLY_RESET  # the first time it's switched on
+    else:
         return
     found = ChapterState.default_audio["found"].as_boolean()
     db.session.query(ChapterState).filter(
         ChapterState.default_audio_size.isnot(None),
         or_(found.is_(None), found.is_(False)),
     ).update({ChapterState.default_audio_size: None}, synchronize_session=False)
-    set_setting(LANGUAGE_RESET, utcnow().isoformat())
+    set_setting(key, utcnow().isoformat())
     db.session.commit()
 
 
@@ -252,8 +293,10 @@ def sweep() -> int:
         except (MediaToolError, OSError):
             continue
         choice, why = better_default(info.streams) if enabled() else None, "extra"
+        drop = []
         if choice is None and english_enabled():
-            choice, why = english_instead(info.streams), "language"
+            choice, drop = plan(info.streams)
+            why = "language"
         record = {"at": utcnow().isoformat()}
         redo_chapters = False
         previous = state.default_audio or {}
@@ -287,7 +330,7 @@ def sweep() -> int:
                 }
                 if why == "language":
                     record["heard_english"] = True
-            elif why == "language" and choice != audio[0]["index"]:
+            elif why == "language" and (drop or choice != audio[0]["index"]):
                 # A whole file to copy: not in this cycle (move_first).
                 if previous.get("move"):
                     continue
@@ -406,7 +449,7 @@ def move_first(limit=MOVES_PER_RUN) -> int:
             info = enrichment.probe(path)
         except (MediaToolError, OSError):
             continue
-        choice = english_instead(info.streams)
+        choice, drop = plan(info.streams)
         if info.size != state.default_audio_size or choice is None:
             state.default_audio, state.default_audio_size = None, None
             db.session.commit()
@@ -418,9 +461,12 @@ def move_first(limit=MOVES_PER_RUN) -> int:
             info.mtime,
         )
         had_thumbnails = thumbnails.has_thumbnails(part, part.media)
+        removed = sorted(
+            {str(s.get("language")) for s in info.streams if s["index"] in drop}
+        )
         db.session.commit()  # never hold the write lock while a file is copied
         try:
-            after = remove_tracks(path, info, [], choice, first=True)
+            after = remove_tracks(path, info, drop, choice, first=True)
         except (MediaToolError, OSError) as exc:
             state.default_audio = record | {"error": str(exc)[:200]}
             db.session.commit()
@@ -438,6 +484,7 @@ def move_first(limit=MOVES_PER_RUN) -> int:
             "fixed": True,
             "why": "language",
             "moved": True,
+            "removed": removed,
             "from": waiting.get("from"),
             "to": waiting.get("to"),
         }
@@ -457,11 +504,12 @@ def move_first(limit=MOVES_PER_RUN) -> int:
         audit(
             "default_audio_fixed",
             part.media_identity_id,
-            f"{enrichment.file_label(state)} played “{waiting.get('from')}” first; "
-            "its English track, heard to be English, is first and the default now "
-            "(nothing re-encoded).",
+            f"{enrichment.file_label(state)}: its English track, heard to be "
+            "English, is first and the default now"
+            + (f"; removed audio in {', '.join(removed)}" if removed else "")
+            + " (nothing re-encoded).",
             f"default-audio-first:{state.id}:{record['at']}",
-            payload={"file": path, "stream": choice},
+            payload={"file": path, "stream": choice, "removed": removed},
         )
         db.session.commit()
         done += 1
@@ -512,7 +560,7 @@ def hear(limit=HEARD_PER_RUN) -> int:
             info = enrichment.probe(path)
         except (MediaToolError, OSError):
             continue
-        choice = english_instead(info.streams)
+        choice, _drop = plan(info.streams)
         now = utcnow().isoformat()
         if info.size != state.default_audio_size or choice is None:
             # Replaced or changed since: looked at again from the start.

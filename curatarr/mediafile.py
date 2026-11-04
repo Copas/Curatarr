@@ -512,10 +512,10 @@ def remove_tracks(
         ]
     if first:
         # Everything keeps its place; the track takes the first audio track's.
-        moved = ids[default_audio]
-        order = [t["id"] for t in tracks if t["id"] != moved]
-        lead = next(t["id"] for t in tracks if t.get("type") == "audio")
-        position = order.index(lead) if lead != moved else 0
+        moved, gone = ids[default_audio], {ids[i] for i in drop}
+        kept = [t for t in tracks if t["id"] not in gone]
+        position = next(n for n, t in enumerate(kept) if t.get("type") == "audio")
+        order = [t["id"] for t in kept if t["id"] != moved]
         order.insert(position, moved)
         args += ["--track-order", ",".join(f"0:{track}" for track in order)]
     args.append(path)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc81 (2026-11-04)
+
+- **Audio in other languages can be removed** (Settings → Enhance → Playable audio, off by default). With Play English first on, once Curatarr has heard a file's English track, audio tracks tagged as other languages are removed, including from files where English already leads. Only downloading the file again brings them back. English and untagged tracks stay, files with no English track aren't touched, nothing is re-encoded, and History lists what went.
+
 ## 0.2.0rc80 (2026-11-04)
 
 - **English plays first means the first track.** Jellyfin's Roku app direct-plays a file's first audio track whatever the default flag or the track picked says, so rc79's change of flag wasn't enough. A file with another language ahead of a track heard to be English is now copied with English first and default, nothing re-encoded, checked, and moved over the original, including files where English was already the default. One or two at a time, never one that's playing. Files are looked at again once. Audio track numbers change in those files, so someone's saved track choice for one may point at another track.

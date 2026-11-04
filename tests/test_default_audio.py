@@ -136,6 +136,24 @@ def test_which_english_track_should_be_the_default():
     assert choose([japanese, hard, easy]) == 3
 
 
+def _english_first(path):
+    subprocess.run(
+        [tool("ffmpeg"), "-v", "error",
+         "-f", "lavfi", "-i", "testsrc=duration=2:size=64x64",
+         "-f", "lavfi", "-i", "sine=duration=2",
+         "-f", "lavfi", "-i", "sine=duration=2:frequency=600",
+         "-f", "lavfi", "-i", "sine=duration=2:frequency=800",
+         "-map", "0", "-map", "1", "-map", "2", "-map", "3",
+         "-c:v", "mpeg4", "-c:a", "aac",
+         "-metadata:s:a:0", "language=eng", "-metadata:s:a:1", "language=jpn",
+         "-metadata:s:a:2", "language=und",
+         "-disposition:a:0", "default", "-disposition:a:1", "0",
+         "-disposition:a:2", "0",
+         path],
+        check=True,
+    )  # fmt: skip
+
+
 def _two_languages(path):
     subprocess.run(
         [tool("ffmpeg"), "-v", "error",
@@ -208,7 +226,7 @@ def test_english_heard_becomes_the_default(app, media_env, monkeypatch, tmp_path
         .filter_by(action_type="default_audio_fixed")
         .one()
     )
-    assert "jpn" in action.reason_text and "English" in action.reason_text
+    assert "first and the default" in action.reason_text
     # Done: nothing more to hear or fix, so no loop.
     assert default_audio.hear() == 0
     assert default_audio.sweep() == 0
@@ -336,3 +354,101 @@ def test_what_counts_as_hearing_english():
     assert not hears([("en", 0.9), ("ja", 0.9), silent])
     assert not hears([("ja", 0.9)] * 5)
     assert not hears([])
+
+
+def _languages(path):
+    return [s["language"] for s in probe(path).streams if s["codec_type"] == "audio"]
+
+
+def _english_only():
+    from curatarr.services import set_setting
+
+    set_setting("chapter_options", {"english_only_audio": True})
+    db.session.commit()
+
+
+def test_removing_other_languages_is_off_until_asked_for(app):
+    streams = [_audio(1, default=True), _audio(2, language="jpn")]
+    assert default_audio.plan(streams) == (None, [])
+    _english_only()
+    assert default_audio.plan(streams) == (1, [2])
+    # Ahead of English: moved and removed. Untagged stays; no English, no change.
+    assert default_audio.plan(
+        [
+            _audio(1, language="jpn", default=True),
+            _audio(2),
+            _audio(3, language="und"),
+        ]
+    ) == (2, [1])
+    assert default_audio.plan(
+        [_audio(1, language="jpn", default=True), _audio(2, language="fre")]
+    ) == (None, [])
+    assert default_audio.plan(
+        [_audio(1, language="und", default=True), _audio(2, language="jpn")]
+    ) == (None, [])
+
+
+@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvmerge")), reason="needs FFmpeg")
+def test_other_languages_go_once_english_is_heard(
+    app,
+    media_env,  # noqa: F811
+    monkeypatch,
+    tmp_path,
+):
+    path = str(tmp_path / "Film.mkv")
+    _english_first(path)
+    _movie(path)
+    listened = _language_setup(monkeypatch, "en")
+    default_audio.sweep()
+    assert default_audio.hear() == 0 and not listened  # switched off: left alone
+    _english_only()
+    default_audio.sweep()  # files already looked at are looked at again
+    assert _languages(path) == ["eng", "jpn", None]  # not before it's heard
+    assert default_audio.hear() == 1
+    default_audio.sweep()
+    assert default_audio.move_first() == 1
+    assert _languages(path) == ["eng", None]
+    state = db.session.query(ChapterState).one()
+    assert state.default_audio["removed"] == ["jpn"]
+    action = (
+        db.session.query(LifecycleAction)
+        .filter_by(action_type="default_audio_fixed")
+        .one()
+    )
+    assert "removed audio in jpn" in action.reason_text
+    assert default_audio.sweep() == 0 and default_audio.hear() == 0
+
+
+@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvmerge")), reason="needs FFmpeg")
+def test_nothing_is_removed_when_english_isnt_heard(
+    app,
+    media_env,  # noqa: F811
+    monkeypatch,
+    tmp_path,
+):
+    path = str(tmp_path / "Film.mkv")
+    _two_languages(path)
+    _movie(path)
+    _english_only()
+    _language_setup(monkeypatch, "ja")
+    default_audio.sweep()
+    default_audio.hear()
+    default_audio.sweep()
+    assert default_audio.move_first() == 0
+    assert _languages(path) == ["jpn", "eng"]
+
+
+@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvmerge")), reason="needs FFmpeg")
+def test_removing_the_track_ahead_of_english(app, media_env, monkeypatch, tmp_path):  # noqa: F811
+    path = str(tmp_path / "Film.mkv")
+    _two_languages(path)
+    _movie(path)
+    _english_only()
+    _language_setup(monkeypatch, "en")
+    default_audio.sweep()
+    default_audio.hear()
+    default_audio.sweep()
+    assert default_audio.move_first() == 1
+    assert _languages(path) == ["eng"]
+    audio = [s for s in probe(path).streams if s["codec_type"] == "audio"]
+    assert audio[0]["default"]

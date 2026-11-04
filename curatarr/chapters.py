@@ -87,6 +87,8 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "fix_default_audio": True,
     # Make a track heard to be English the default over another language's.
     "english_default_audio": True,
+    # And remove audio in other languages once English has been heard.
+    "english_only_audio": False,
     "finish_at_credits": True,
     "seek_repair": True,
     # Remove subtitle tracks in other languages from MKV files (subtitle_tracks.py).
@@ -280,6 +282,8 @@ def validate_global_options(values: dict) -> dict:
         raise ChapterConfigError("Invalid default audio setting")
     if type(merged["english_default_audio"]) is not bool:
         raise ChapterConfigError("Invalid English audio setting")
+    if type(merged["english_only_audio"]) is not bool:
+        raise ChapterConfigError("Invalid English-only audio setting")
     if type(merged["finish_at_credits"]) is not bool:
         raise ChapterConfigError("Invalid finished-at-credits setting")
     if type(merged["seek_repair"]) is not bool:
