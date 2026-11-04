@@ -13,7 +13,7 @@ also for problems found before it was switched on:
 - **wrong_show**: replace files of another show with the same name (wrong_version);
 - **missing**: search once for always-keep episodes that never arrived (missing_keep);
 - **misfiled**: move episodes Sonarr filed under the wrong episode (misfiled);
-- **default_audio**: make a file's own soundtrack the default (default_audio);
+- **default_audio**: make a file's own soundtrack or English track the default (default_audio);
 - **seek**: rebuild files Roku players can't seek in (seek_repair);
 - **favourites**: Find Favorites, the rest of a favourite film's series (franchises).
 
@@ -39,8 +39,9 @@ KINDS = {
     "missing": "Search once for always-keep episodes that never arrived",
     "misfiled": "Move episodes Sonarr filed under the wrong episode, when what's "
     "said in them agrees with their download's name",
-    "default_audio": "Make a file's own soundtrack its default audio when it plays "
-    "a commentary or audio description first (the file is edited, not re-encoded)",
+    "default_audio": "Make a file's own soundtrack, or its English track once it's "
+    "heard to be English, its default audio when it plays a commentary, an audio "
+    "description or another language first (the file is edited, not re-encoded)",
     "seek": "Rebuild files Roku players can't seek in (copied, not re-encoded)",
     "favourites": "Find Favorites: add the rest of a favourite film's series to "
     "Radarr and search for it",

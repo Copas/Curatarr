@@ -171,6 +171,12 @@ def _due(radarr_ids, episode_file_ids):
                     MediaPart.kind == "episode",
                     MediaPart.arr_file_id.in_(episode_file_ids),
                 ),
+                # Its English track was just made the default (default_audio):
+                # Radarr and Sonarr only report the codec of the first track.
+                and_(
+                    ChapterState.compat_audio_size.is_(None),
+                    ChapterState.default_audio["fixed"].as_boolean().is_(True),
+                ),
             ),
             or_(
                 ChapterState.id.is_(None),
@@ -248,10 +254,8 @@ def sweep(limit=PER_RUN) -> int:
         films, episodes = hard_files()
     except IntegrationError:
         return 0
-    due = _due(films, episodes) if films or episodes else None
+    due = _due(films, episodes)
     _remember_remaining(due)
-    if due is None:
-        return 0
     e = _enrichment()
     done = 0
     for part in due.limit(limit * 3).all():

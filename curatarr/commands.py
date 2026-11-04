@@ -291,6 +291,7 @@ def _dispatch_chapters():
         from . import default_audio
 
         default_audio.sweep()
+        default_audio.start()
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Checking default audio tracks failed")

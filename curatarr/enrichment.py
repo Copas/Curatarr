@@ -265,6 +265,7 @@ def parse_options(form) -> dict:
         "compat_audio",
         "browser_audio",
         "fix_default_audio",
+        "english_default_audio",
         "finish_at_credits",
         "seek_repair",
         "subtitle_tracks",
