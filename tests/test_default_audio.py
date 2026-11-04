@@ -127,6 +127,13 @@ def test_which_english_track_should_be_the_default():
     assert choose([japanese]) is None
     # No default flag: players start with the first track.
     assert choose([_audio(1, language="tur"), _audio(2)]) == 2
+    # English is the default, but another language is ahead of it.
+    assert choose([_audio(1, language="jpn"), _audio(2, default=True)]) == 2
+    assert choose([_audio(1, language="und"), _audio(2, default=True)]) is None
+    # Level on channels: the one a TV can play.
+    hard = _audio(2, channels=6) | {"codec_name": "dts"}
+    easy = _audio(3, channels=6) | {"codec_name": "ac3"}
+    assert choose([japanese, hard, easy]) == 3
 
 
 def _two_languages(path):
@@ -144,6 +151,14 @@ def _two_languages(path):
     )  # fmt: skip
 
 
+class _Arr:
+    def rescan_movie(self, movie_id):
+        pass
+
+    def items_trickplay(self, ids):
+        return []
+
+
 def _language_setup(monkeypatch, heard):
     monkeypatch.setattr(enrichment, "probe", probe)
     monkeypatch.setattr(enrichment, "file_exists", lambda p: True)
@@ -153,6 +168,10 @@ def _language_setup(monkeypatch, heard):
     monkeypatch.setattr("curatarr.compat_audio._playing", lambda part: False)
     monkeypatch.setattr("curatarr.filecheck_jobs._dry_run", lambda media: False)
     monkeypatch.setattr(default_audio, "_automatic", lambda: True)
+    monkeypatch.setattr("curatarr.services.client", lambda kind: _Arr())
+    monkeypatch.setattr("curatarr.thumbnails.room", lambda **kw: True)
+    monkeypatch.setattr("curatarr.thumbnails.has_thumbnails", lambda *a: False)
+    monkeypatch.setattr("curatarr.thumbnails.note_rebuilt", lambda *a: None)
     listened = []
 
     def listen(info, tracks, device, model, make_room=None):
@@ -163,7 +182,7 @@ def _language_setup(monkeypatch, heard):
     return listened
 
 
-@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvpropedit")), reason="needs FFmpeg")
+@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvmerge")), reason="needs FFmpeg")
 def test_english_heard_becomes_the_default(app, media_env, monkeypatch, tmp_path):  # noqa: F811
     path = str(tmp_path / "Film.mkv")
     _two_languages(path)
@@ -174,9 +193,13 @@ def test_english_heard_becomes_the_default(app, media_env, monkeypatch, tmp_path
     assert [s["default"] for s in audio] == [True, False]
     assert default_audio.hear() == 1
     assert listened == [[audio[1]["index"]]]
-    assert default_audio.sweep() == 1
+    # The file is copied in the background, not in the cycle.
+    assert default_audio.sweep() == 0
+    assert len([s for s in probe(path).streams if s["codec_type"] == "audio"]) == 2
+    assert default_audio.move_first() == 1
     audio = [s for s in probe(path).streams if s["codec_type"] == "audio"]
-    assert [s["default"] for s in audio] == [False, True]
+    assert [s["language"] for s in audio] == ["eng", "jpn"]
+    assert [s["default"] for s in audio] == [True, False]
     state = db.session.query(ChapterState).one()
     assert state.default_audio["fixed"] and state.default_audio["why"] == "language"
     assert state.compat_audio_size is None
@@ -189,6 +212,7 @@ def test_english_heard_becomes_the_default(app, media_env, monkeypatch, tmp_path
     # Done: nothing more to hear or fix, so no loop.
     assert default_audio.hear() == 0
     assert default_audio.sweep() == 0
+    assert default_audio.move_first() == 0
     assert len(listened) == 1
     # The TV-friendly copy is looked at again, whatever Radarr says of the codec.
     from curatarr.compat_audio import _due as compat_due
@@ -218,7 +242,7 @@ def test_a_track_not_heard_as_english_is_left_alone(
     assert [s["default"] for s in audio] == [True, False]
 
 
-@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvpropedit")), reason="needs FFmpeg")
+@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvmerge")), reason="needs FFmpeg")
 def test_the_english_check_has_its_own_switch_and_asks_when_not_automatic(
     app,
     media_env,  # noqa: F811
@@ -242,7 +266,8 @@ def test_the_english_check_has_its_own_switch_and_asks_when_not_automatic(
     page = app.test_client().get("/chapters/problems").text
     assert "another language first" in page and "jpn" in page
     app.test_client().post(f"/chapters/problems/audio/{found.id}/fix")
-    assert default_audio.sweep() == 1
+    default_audio.sweep()
+    assert default_audio.move_first() == 1
 
     set_setting("chapter_options", {"english_default_audio": False})
     db.session.commit()
@@ -262,3 +287,52 @@ def test_files_already_looked_at_are_looked_at_again_once(app, media_env):  # no
     db.session.commit()
     default_audio._look_again_for_language()
     assert state.default_audio_size == 5
+
+
+@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvmerge")), reason="needs FFmpeg")
+def test_a_playing_file_waits_and_english_ahead_needs_no_copy(
+    app,
+    media_env,  # noqa: F811
+    monkeypatch,
+    tmp_path,
+):
+    path = str(tmp_path / "Film.mkv")
+    _two_languages(path)
+    _movie(path)
+    _language_setup(monkeypatch, "en")
+    default_audio.sweep()
+    default_audio.hear()
+    default_audio.sweep()
+    monkeypatch.setattr("curatarr.compat_audio._playing", lambda part: True)
+    assert default_audio.move_first() == 0
+    assert db.session.query(ChapterState).one().default_audio["move"]
+    monkeypatch.setattr("curatarr.compat_audio._playing", lambda part: False)
+    assert default_audio.move_first() == 1
+    # English first but another language flagged: only the flag changes.
+    from curatarr.mediafile import set_default_audio
+
+    info = probe(path)
+    jpn = next(s for s in info.streams if s.get("language") == "jpn")
+    set_default_audio(path, info, jpn["index"])
+    state = db.session.query(ChapterState).one()
+    state.default_audio = {"at": "then", "heard_english": True}
+    state.default_audio_size = probe(path).size
+    db.session.query(enrichment.MediaPart).one().size_bytes = 1
+    db.session.commit()
+    assert default_audio.sweep() == 1
+    audio = [s for s in probe(path).streams if s["codec_type"] == "audio"]
+    assert [(s["language"], s["default"]) for s in audio] == [
+        ("eng", True),
+        ("jpn", False),
+    ]
+
+
+def test_what_counts_as_hearing_english():
+    hears = default_audio.sounds_english
+    silent = ("en", 0.541)  # what a clip with no speech comes back as
+    assert hears([("en", 0.97), silent, silent, silent, silent])
+    assert hears([("en", 0.9)] * 5)
+    assert not hears([silent] * 5)
+    assert not hears([("en", 0.9), ("ja", 0.9), silent])
+    assert not hears([("ja", 0.9)] * 5)
+    assert not hears([])

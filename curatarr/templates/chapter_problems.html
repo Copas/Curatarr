@@ -58,7 +58,7 @@
   <div class="d-flex gap-2">{% for action, label in [('fix', 'Fix'), ('dismiss', 'Leave it')] %}<form method="post" action="{{ url_for('main.found_file_action', kind=kind, state_id=state.id, action=action) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm {{ 'btn-primary' if action == 'fix' else 'btn-outline-light' }}">{{ label }}</button></form>{% endfor %}</div>
 </div></div>{% endfor %}{% endif %}{% endmacro %}
 {% macro audio_what(state) %}plays “{{ state.default_audio.from }}” first; would play “{{ state.default_audio.to }}”{% endmacro %}
-{{ found_files('audio', audio_found, 'Files that play a commentary, an audio description or another language first', 'Fix makes the file\'s own soundtrack, or its English track, the default: an edit in place, nothing re-encoded.', audio_what) }}
+{{ found_files('audio', audio_found, 'Files that play a commentary, an audio description or another language first', 'Fix makes the file\'s own soundtrack, or its English track, the default, and English first: nothing re-encoded.', audio_what) }}
 {{ found_files('seek', seek_found, "Files Roku players can't seek in", 'Seeking starts these over on a Roku. Fix rebuilds the file with its tracks as they are, nothing re-encoded, one or two at a time in the background.', none) }}
 <h2 class="section-title">Files</h2>
 {% if not enabled %}<div class="alert alert-secondary">This check is off. Turn on “Check files for problems” in <a href="{{ url_for('main.chapter_settings') }}">Settings → Enhance</a> to use it.</div>{% endif %}

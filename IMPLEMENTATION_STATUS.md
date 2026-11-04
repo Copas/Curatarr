@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc80 (2026-11-04): English first really is first: files copied with the English track ahead, for players that ignore the default flag.
 - v0.2.0rc79 (2026-11-04): English first (heard before it becomes the default, TV-friendly copy from it); retry stuck downloads from Problems; title cleanup status.
 - v0.2.0rc78 (2026-11-01): Enhance setting cards' On/Off follows switches; Not saved yet note.
 - v0.2.0rc77 (2026-11-01): replace chapters that are no use (numbered and dense, timer-placed, or single), optional.

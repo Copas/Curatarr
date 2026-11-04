@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc80 (2026-11-04)
+
+- **English plays first means the first track.** Jellyfin's Roku app direct-plays a file's first audio track whatever the default flag or the track picked says, so rc79's change of flag wasn't enough. A file with another language ahead of a track heard to be English is now copied with English first and default, nothing re-encoded, checked, and moved over the original, including files where English was already the default. One or two at a time, never one that's playing. Files are looked at again once. Audio track numbers change in those files, so someone's saved track choice for one may point at another track.
+
 ## 0.2.0rc79 (2026-11-04)
 
 - **English plays first when a file has it** (Settings → Enhance, on by default). Curatarr only corrected a commentary or audio description set as the default, and only films had their languages checked, so an episode whose release made Japanese or Turkish the default played that on players that follow the file, even with Jellyfin set to prefer English. When the default track is tagged as another language and another track is tagged English, Curatarr now listens to the English track and, once it hears English, makes it the default in place. Files already checked are looked at again once. Nothing is re-encoded, and the other languages stay. It follows Settings → Automatic, or asks on Problems. Curatarr's chapters and subtitles made from the old default are redone, and the TV-friendly AC3 copy is made from the English track, so it no longer has to be converted during playback.

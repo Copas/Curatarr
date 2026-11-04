@@ -11,9 +11,13 @@ Fix and Leave it, and changed only once Fix is pressed.
 
 Another language works the same way (its own switch, on by default): when the
 default track is tagged as another language and a track is tagged English, the
-English track becomes the default. Tags can be wrong, so that track is listened
-to first, a few files each worker cycle in the background, and nothing changes
-unless it's heard clearly as English. Curatarr's own chapters and subtitles
+English track becomes the default. Some players, Jellyfin's Roku app among
+them, play the first audio track whatever the default flag says, so English
+also has to be first: a file with another language ahead of it is copied with
+English moved up, nothing re-encoded, checked, and moved over the original,
+even when English is already its default. Tags can be wrong, so that track is
+listened to first, a few files each worker cycle in the background, and nothing
+changes unless it's heard clearly as English. Curatarr's own chapters and subtitles
 came from the old default, so they're queued to be redone from the new one, and
 the file is looked at again for a TV-friendly copy of its English track.
 
@@ -31,13 +35,14 @@ from sqlalchemy import or_
 
 from . import db, dubs, throttle
 from .integrations import IntegrationError
-from .mediafile import ENGLISH
+from .mediafile import EASY_AUDIO, ENGLISH
 from .models import ChapterState, MediaIdentity, MediaPart, utcnow
 
 RUN_SECONDS = 20
 HEARD_PER_RUN = 3  # each is a few clips of one track through Whisper
+MOVES_PER_RUN = 2  # each copies a whole file
 HEARING_TRIES = 3
-LANGUAGE_RESET = "default_audio_language_started"
+LANGUAGE_RESET = "default_audio_first_track_started"
 UNTAGGED = {"", "und"}
 EXTRA_NAME = re.compile(
     r"comment|descri|narrat|visually impaired|\bad\b|\bdvs\b", re.IGNORECASE
@@ -88,24 +93,29 @@ def better_default(streams) -> int | None:
 
 
 def english_instead(streams) -> int | None:
-    """The English track to make the default (most channels), when the default
-    is tagged as another language; None when it's English, untagged, or a
+    """The English track that should be the default and first: the default
+    when that's already English but another language is ahead of it, else (the
+    default being tagged as another language) the English track with the most
+    channels, one TVs can play when that's level. None when English already
+    leads, or the default or first track is untagged, or the default is a
     commentary or description (better_default looks after those)."""
     audio = [s for s in streams if s.get("codec_type") == "audio"]
     if len(audio) < 2:
         return None
+    language = lambda s: str(s.get("language") or "").lower()
     current = next((s for s in audio if s.get("default")), audio[0])
-    language = str(current.get("language") or "").lower()
-    if language in ENGLISH or language in UNTAGGED or _extra(current):
+    if _extra(current) or language(current) in UNTAGGED:
         return None
-    english = [
-        s
-        for s in audio
-        if str(s.get("language") or "").lower() in ENGLISH and not _extra(s)
-    ]
+    if language(current) in ENGLISH:
+        lead = language(audio[0])
+        return None if lead in ENGLISH or lead in UNTAGGED else current["index"]
+    english = [s for s in audio if language(s) in ENGLISH and not _extra(s)]
     if not english:
         return None
-    return max(english, key=lambda s: s.get("channels") or 0)["index"]
+    return max(
+        english,
+        key=lambda s: (s.get("channels") or 0, s.get("codec_name") in EASY_AUDIO),
+    )["index"]
 
 
 def _label(stream, why) -> str:
@@ -210,7 +220,6 @@ def sweep() -> int:
         file_label,
         local_path,
         probe,
-        request,
         state_for,
     )
     from .filecheck_jobs import _dry_run
@@ -278,6 +287,18 @@ def sweep() -> int:
                 }
                 if why == "language":
                     record["heard_english"] = True
+            elif why == "language" and choice != audio[0]["index"]:
+                # A whole file to copy: not in this cycle (move_first).
+                if previous.get("move"):
+                    continue
+                after = next(s for s in info.streams if s["index"] == choice)
+                record |= {
+                    "move": True,
+                    "heard_english": True,
+                    "why": why,
+                    "from": _label(before, why),
+                    "to": _label(after, why),
+                }
             elif _playing(part):
                 continue  # look again once it's stopped
             else:
@@ -302,9 +323,7 @@ def sweep() -> int:
                         "why": why,
                     }
                     if why == "language":
-                        # A TV-friendly copy should be of the English track,
-                        # and Radarr's or Sonarr's codec may not show the need.
-                        state.compat_audio_size = None
+                        state.compat_audio_size = None  # see _after_english
                         redo_chapters = (
                             curatarr_wrote(state, info) and state.job_state == "idle"
                         )
@@ -332,12 +351,132 @@ def sweep() -> int:
         state.default_audio = record
         db.session.commit()
         if redo_chapters:
-            if state.subtitle_fingerprint:
-                state.subtitle_status = None  # redone after the chapters
-            db.session.commit()
-            request(part, "regenerate")
-            db.session.commit()
+            _redo_chapters(state, part)
     return fixed
+
+
+def _redo_chapters(state, part):
+    from .enrichment import request
+
+    if state.subtitle_fingerprint:
+        state.subtitle_status = None  # redone after the chapters
+    db.session.commit()
+    request(part, "regenerate")
+    db.session.commit()
+
+
+def _waiting_to_move():
+    from . import up_next
+
+    return (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            ChapterState.default_audio["move"].as_boolean().is_(True),
+            MediaPart.has_file.is_(True),
+            MediaIdentity.missing_since.is_(None),
+        )
+        .order_by(up_next.rank(MediaPart.id), MediaPart.id)
+    )
+
+
+def move_first(limit=MOVES_PER_RUN) -> int:
+    """Copy a few files with their English track first and default (never one
+    that's playing); returns how many were done."""
+    from . import enrichment, thumbnails
+    from .compat_audio import _playing
+    from .filecheck_jobs import _dry_run
+    from .mediafile import MediaToolError, file_identity_of, remove_tracks
+    from .services import audit, client
+
+    done = 0
+    for state in _waiting_to_move().limit(limit * 3).all():
+        if done >= limit:
+            break
+        part = state.part
+        path = enrichment.local_path(part.file_path)
+        if not path or not enrichment.file_exists(path):
+            continue  # unreachable for now
+        if _dry_run(part.media) or _playing(part):
+            continue
+        if not thumbnails.room():
+            break  # Jellyfin is still making thumbnails for earlier ones
+        try:
+            info = enrichment.probe(path)
+        except (MediaToolError, OSError):
+            continue
+        choice = english_instead(info.streams)
+        if info.size != state.default_audio_size or choice is None:
+            state.default_audio, state.default_audio_size = None, None
+            db.session.commit()
+            continue  # changed since: looked at again from the start
+        record = {"at": utcnow().isoformat()}
+        waiting = dict(state.default_audio)
+        in_sync = (state.chapter_file_size, state.chapter_file_mtime) == (
+            info.size,
+            info.mtime,
+        )
+        had_thumbnails = thumbnails.has_thumbnails(part, part.media)
+        db.session.commit()  # never hold the write lock while a file is copied
+        try:
+            after = remove_tracks(path, info, [], choice, first=True)
+        except (MediaToolError, OSError) as exc:
+            state.default_audio = record | {"error": str(exc)[:200]}
+            db.session.commit()
+            continue
+        thumbnails.note_rebuilt(part, part.media, had_thumbnails)
+        if in_sync:  # Curatarr's chapters are still its own
+            state.chapter_file_size, state.chapter_file_mtime = file_identity_of(path)
+        for column in ("seek_layout_size", "subtitle_tracks_size"):
+            if getattr(state, column) == info.size:
+                setattr(state, column, after.size)
+        part.size_bytes = after.size  # as Radarr or Sonarr will report it
+        state.default_audio_size = after.size
+        state.compat_audio_size = None  # see compat_audio._due
+        state.default_audio = record | {
+            "fixed": True,
+            "why": "language",
+            "moved": True,
+            "from": waiting.get("from"),
+            "to": waiting.get("to"),
+        }
+        db.session.commit()
+        try:
+            enrichment._refresh_jellyfin(part, part.media)
+            if part.kind == "movie_file":
+                client("radarr").rescan_movie(part.media.radarr_id)
+            elif part.media.sonarr_id:
+                client("sonarr").request(
+                    "POST",
+                    "/api/v3/command",
+                    json={"name": "RescanSeries", "seriesId": part.media.sonarr_id},
+                )
+        except IntegrationError:
+            pass  # they notice on their next rescan
+        audit(
+            "default_audio_fixed",
+            part.media_identity_id,
+            f"{enrichment.file_label(state)} played “{waiting.get('from')}” first; "
+            "its English track, heard to be English, is first and the default now "
+            "(nothing re-encoded).",
+            f"default-audio-first:{state.id}:{record['at']}",
+            payload={"file": path, "stream": choice},
+        )
+        db.session.commit()
+        done += 1
+        if enrichment.curatarr_wrote(state, after) and state.job_state == "idle":
+            _redo_chapters(state, part)
+    return done
+
+
+def sounds_english(samples) -> bool:
+    """Whether what was heard backs up a track's English tag: at least one clip
+    clearly English, and none clearly anything else. Stricter would miss quiet
+    films, where most clips have no speech in them (dubs.heard, with no tag to
+    go on, needs more)."""
+    confident = [lang for lang, chance in samples if chance >= dubs.CONFIDENT]
+    return bool(confident) and all(lang == "en" for lang in confident)
 
 
 def _waiting_to_hear():
@@ -404,8 +543,8 @@ def hear(limit=HEARD_PER_RUN) -> int:
             db.session.commit()
             continue
         listened += 1
-        heard = dubs.heard(samples.get(choice, []))
-        if heard == "en":
+        heard = samples.get(choice, [])
+        if sounds_english(heard):
             audio = [s for s in info.streams if s.get("codec_type") == "audio"]
             before = next((s for s in audio if s.get("default")), audio[0])
             after = next(s for s in audio if s["index"] == choice)
@@ -419,7 +558,10 @@ def hear(limit=HEARD_PER_RUN) -> int:
                 "dismissed": False,
             }
         else:
-            state.default_audio = {"at": now, "not_english": heard or "unclear"}
+            state.default_audio = {
+                "at": now,
+                "not_english": dubs.heard(heard) or "unclear",
+            }
         db.session.commit()
     return listened
 
@@ -436,7 +578,7 @@ def start(app=None) -> bool:
     with _lock:
         if _thread and _thread.is_alive():
             return False
-        if not _waiting_to_hear().first():
+        if not _waiting_to_hear().first() and not _waiting_to_move().first():
             return False
         app = app or current_app._get_current_object()
         _thread = threading.Thread(
@@ -450,6 +592,7 @@ def _run(app):
     with app.app_context():
         try:
             hear()
+            move_first()
         except throttle.Interrupted:
             db.session.rollback()  # all work paused; carries on after resuming
         except Exception:

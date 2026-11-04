@@ -461,9 +461,10 @@ def set_audio_language(
 
 
 def remove_tracks(
-    path: str, info: MediaInfo, drop: list[int], default_audio: int
+    path: str, info: MediaInfo, drop: list[int], default_audio: int, *, first=False
 ) -> MediaInfo:
     """Rewrite the file without some tracks (a copy, never a re-encode).
+    ``first``: the default audio track also becomes the first audio track.
 
     The copy is written beside the file, checked (same length, chapters and
     video, the expected audio and subtitles) and only then moved over it.
@@ -509,7 +510,16 @@ def remove_tracks(
             "--default-track-flag",
             f"{ids[index]}:{'1' if index == default_audio else '0'}",
         ]
+    if first:
+        # Everything keeps its place; the track takes the first audio track's.
+        moved = ids[default_audio]
+        order = [t["id"] for t in tracks if t["id"] != moved]
+        lead = next(t["id"] for t in tracks if t.get("type") == "audio")
+        position = order.index(lead) if lead != moved else 0
+        order.insert(position, moved)
+        args += ["--track-order", ",".join(f"0:{track}" for track in order)]
     args.append(path)
+    wanted = next(s for s in info.streams if s["index"] == default_audio)
     try:
         result = throttle.run(args, timeout=4 * 3600)
         if result.returncode not in (0, 1) or not os.path.exists(target):
@@ -519,12 +529,23 @@ def remove_tracks(
             )
         after = probe(target)
         count = lambda i, kind: sum(1 for s in i.streams if s.get("codec_type") == kind)
+        lead_after = next(
+            (s for s in after.streams if s.get("codec_type") == "audio"), {}
+        )
         if (
             abs(after.duration - info.duration) > 2
             or len(after.chapters) != len(info.chapters)
             or count(after, "video") != count(info, "video")
             or count(after, "audio") != len(keep_audio)
             or count(after, "subtitle") != len(keep_subtitles)
+            or (
+                first
+                and (
+                    not lead_after.get("default")
+                    or lead_after.get("language") != wanted.get("language")
+                    or lead_after.get("codec_name") != wanted.get("codec_name")
+                )
+            )
         ):
             raise MediaToolError("The rewritten file didn't check out; left unchanged")
         os.replace(target, path)

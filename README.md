@@ -96,7 +96,7 @@ Each problem is listed with a button to fix it, and once you trust a kind of fix
 - **Audio every TV can play**: films and episodes with DTS, TrueHD or FLAC sound get an AC3 copy beside the original, so a Roku or TV plays them directly instead of stumbling over conversion.
 - **Audio for web browsers**: Chrome and Firefox can't play AC3 or DTS, so files browser viewers are about to watch get a stereo AAC track, and the Curatarr plugin points browsers at it. TVs keep their surround track.
 - **The film's own soundtrack first**: when a release makes the director's commentary or the audio description the default track, the film's soundtrack becomes the default instead.
-- **English first**: when a release makes another language the default track and the file also has English, Curatarr listens to confirm it, then makes English the default, with nothing re-encoded.
+- **English first**: when a release makes another language the default track and the file also has English, Curatarr listens to confirm it, then makes English the first and default track, with nothing re-encoded, for players that only follow the first.
 - **Seeking that works on Roku**: files whose seek index sits where Roku players don't look are rebuilt (nothing re-encoded), so skipping ahead doesn't start the episode over.
 - **Posters in your language**: a new release that arrived with only a foreign poster gets one in your language once TMDB has it.
 
@@ -174,7 +174,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Recaps and previews](docs/FEATURES.md#recaps-previews-and-skip-markers) | "Previously on…" and "Next time on…" get Jellyfin's Skip button. | With Intro Skipper |
 | [Better skip markers](docs/FEATURES.md#recaps-previews-and-skip-markers) | Intro Skipper guesses that are plainly wrong are hidden, each undoable; films keep only their credits. | With Intro Skipper |
 | [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** (asks first) |
-| [English first](docs/FEATURES.md#playing-smoothly-on-every-device) | A track heard to be English becomes the default over another language's |
+| [English first](docs/FEATURES.md#playing-smoothly-on-every-device) | A track heard to be English becomes first and default over another language's |
 | [Custom posters](docs/FEATURES.md#custom-posters) | Your own poster for any title, and its wide tile, background, logo and banner, uploaded or picked up from a folder (or made by an AI from prompts Curatarr writes), with the originals kept to restore. | One click |
 | [Posters for one account](docs/FEATURES.md#for-everyone-or-for-chosen-accounts) | A poster only chosen accounts see, in every app (Roku included); everyone else keeps the usual one. | With the plugin |
 | [Favourite ribbons](docs/FEATURES.md#favourite-ribbons) | A gold band with a star and Sam's face on what someone favourited (and "★ Sam" on its page), shown to the accounts you choose; NEW for a week, "♥ Household favourite" for everyone's, and on favourite episodes too. | Off, with the plugin |
@@ -238,7 +238,7 @@ Quick start on Linux:
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc79
+git checkout v0.2.0rc80
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 
