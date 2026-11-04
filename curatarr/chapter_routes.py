@@ -765,6 +765,7 @@ def chapter_problems():
     from . import (
         autofix,
         default_audio,
+        failed_downloads,
         filecheck_jobs,
         misfiled,
         missing_keep,
@@ -772,8 +773,11 @@ def chapter_problems():
         wrong_version,
     )
 
+    downloads, download_errors = failed_downloads.review()
     return render_template(
         "chapter_problems.html",
+        failed_downloads=downloads,
+        download_errors=download_errors,
         audio_found=default_audio.found_rows(),
         seek_found=seek_repair.found_rows(),
         misfiled=[r for r in misfiled.rows() if r["plan"] != "wait"],
@@ -786,6 +790,27 @@ def chapter_problems():
         describe=filecheck_jobs.describe,
         file_label=file_label,
     )
+
+
+@bp.post("/chapters/problems/download/<service>/<int:queue_id>/retry")
+def failed_download_retry(service, queue_id):
+    """Remove a completed, blocked download and ask for another release."""
+    from . import failed_downloads
+
+    in_place = request.headers.get("X-Requested-With") == "fetch"
+    try:
+        message = failed_downloads.retry(service, queue_id)
+    except (IntegrationError, ValueError) as exc:
+        db.session.rollback()
+        message = f"Couldn't retry the download: {exc}"
+        if in_place:
+            return jsonify(ok=False, message=message)
+        flash(message, "danger")
+    else:
+        if in_place:
+            return jsonify(ok=True, message=message)
+        flash(message, "success")
+    return redirect(url_for("main.chapter_problems") + "#failed-downloads")
 
 
 @bp.post("/chapters/problems/<kind>/<state_id>/<action>")

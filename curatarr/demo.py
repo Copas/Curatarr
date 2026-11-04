@@ -324,6 +324,10 @@ class DemoClient:
         key = "seriesId" if self.kind == "sonarr" else "movieId"
         return {"records": [{key: 2}]}
 
+    def queue_records(self, quick=False):
+        self._check()
+        return []
+
     def commands(self):
         self._check()
         return []

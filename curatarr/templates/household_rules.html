@@ -1,11 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="eyebrow">Manage · Global defaults</div><h1>Household choices</h1>
-<ul class="nav nav-tabs mb-3">
-  <li class="nav-item"><a class="nav-link" href="{{ url_for('main.rules', section='acquisition') }}">Acquisition</a></li>
-  <li class="nav-item"><a class="nav-link" href="{{ url_for('main.rules', section='retention') }}">Retention</a></li>
-  <li class="nav-item"><a class="nav-link active" href="{{ url_for('main.rules', section='household') }}">Household choices</a></li>
-</ul>
 <p class="text-secondary">What people ask for, rewatch and save for a time of year changes what cleanup picks. These apply to every library.</p>
 <form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="row g-3">
   <div class="col-12"><h2 class="h5 mb-1">Requests</h2>

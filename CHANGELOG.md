@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Completed downloads that cannot import can be retried from Problems.** Curatarr groups a stuck season pack into one item. Blocklist and try another removes the download and its files through Sonarr or Radarr, blocklists that release, and searches for the missing episodes or film. It checks the live queue, library files and dry-run policy again before acting, and says when a search may find no acceptable source. It asks first, works in place without reloading the page, and is recorded in History, including when the search couldn't start. A download whose episode or film already has a file gets a note instead of the button, and the page doesn't wait long on a Sonarr or Radarr that isn't answering.
+- **The main pages put decisions first.** Overview's library-care card no longer stretches beside a long list of things needing attention, and shows its three main coverage measures; the rest remain on Enhance. A title now states its cleanup status before its controls. Household settings no longer repeat the settings navigation.
+
 ## 0.2.0rc78 (2026-11-01)
 
 - **Settings → Enhance: a card's On/Off follows its switch.** Turning an option on inside a card left the card saying *Off* until the page was saved, which read as if the switch hadn't worked. The chip now changes as the switch does, and the save bar says *Not saved yet* until Save is pressed.

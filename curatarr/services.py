@@ -2638,6 +2638,7 @@ def title_view(media):
             1 for p in episodes if p.has_file and not retained(p, values)
         ),
         "reset_kept": sum(1 for p in episodes if p.has_file and retained(p, values)),
+        "active_candidate": _active_candidate(media.id),
         "candidates": db.session.query(PurgeCandidate)
         .filter_by(media_identity_id=media.id)
         .order_by(PurgeCandidate.eligible_at.desc())

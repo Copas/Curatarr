@@ -28,6 +28,37 @@ def test_demo_exposes_review_leaving_soon_policy_and_history(app, client):
     assert client.get("/history").status_code == 200
 
 
+def test_title_shows_current_cleanup_status_before_controls(app, client):
+    app.config["DEMO_MODE"] = True
+    seed_demo()
+    review = db.session.query(PurgeCandidate).filter_by(state="REVIEW").one()
+    leaving = db.session.query(PurgeCandidate).filter_by(state="LEAVING_SOON").one()
+
+    page = client.get(f"/titles/{review.media_identity_id}").text
+    assert "Waiting for a cleanup decision." in page
+    assert page.index("Cleanup status") < page.index("Lifecycle decisions")
+
+    page = client.get(f"/titles/{leaving.media_identity_id}").text
+    assert "Leaving Soon: scheduled for" in page
+    assert "See the decision details" in page
+
+    client.post(f"/review/{review.id}/snooze_30")
+    page = client.get(f"/titles/{review.media_identity_id}").text
+    assert "Cleanup is snoozed until" in page
+
+    # Only some episodes leaving: the show isn't.
+    leaving.target_part_ids = ["one", "two"]
+    db.session.commit()
+    page = client.get(f"/titles/{leaving.media_identity_id}").text
+    assert "2 episodes up for cleanup, scheduled for" in page
+    assert "The show itself stays." in page
+    assert "Leaving Soon: scheduled for" not in page
+
+    protected = db.session.query(MediaIdentity).filter_by(title="Demo Series 04").one()
+    page = client.get(f"/titles/{protected.id}").text
+    assert "Protected: Never Purge is on for this title." in page
+
+
 def test_demo_outage_is_visible_in_integration_health(app, client):
     app.config["DEMO_MODE"] = True
     with app.app_context():

@@ -3,7 +3,16 @@
 {% from '_signals.html' import household_notes with context %}{% from '_shrink.html' import shrink_actions with context %}{% from '_confirm.html' import confirm_submit %}
 <div class="eyebrow">{{ 'TV show' if media.media_type == 'series' else 'Movie' }} · {{ media.library.name }}</div><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h1 class="mb-0">{{ media.title }}</h1>{% if jellyfin_url(media.jellyfin_id) %}<a class="btn btn-sm btn-outline-light" href="{{ jellyfin_url(media.jellyfin_id) }}" target="_blank" rel="noopener">Open in Jellyfin</a>{% endif %}</div><p class="text-secondary mt-2">Decisions{% if is_admin %}, recent activity,{% endif %} and options for this title.</p>
 {% set notes = household_notes(signals)|trim %}{% if notes %}<div class="d-flex flex-wrap gap-1 mb-4">{{ notes }}</div>{% endif %}
-{% set removable = media.radarr_id and media.parts|selectattr('has_file')|list and not candidates|selectattr('state', 'in', ['REVIEW', 'LEAVING_SOON', 'ELIGIBLE', 'SNOOZED', 'APPROVED'])|list and not values.never_purge %}
+<section class="card p-3 mb-4" aria-labelledby="title-status-heading">
+  <h2 class="h5 mb-2" id="title-status-heading">Cleanup status</h2>
+  {% if values.never_purge %}<p class="mb-0">Protected: Never Purge is on for this title.</p>
+  {% elif active_candidate %}
+    <p class="mb-1">{% if active_candidate.target_part_ids %}{% set leaving_count = active_candidate.target_part_ids|length %}{{ leaving_count }} episode{{ '' if leaving_count == 1 else 's' }} up for cleanup{% if active_candidate.scheduled_delete_at %}, scheduled for {{ active_candidate.scheduled_delete_at|when('date') }}{% endif %}. The show itself stays. Playing {{ 'it' if leaving_count == 1 else 'one of them' }} again or choosing Keep cancels the removal.{% elif active_candidate.state == 'REVIEW' %}Waiting for a cleanup decision.{% elif active_candidate.state == 'LEAVING_SOON' %}Leaving Soon{% if active_candidate.scheduled_delete_at %}: scheduled for {{ active_candidate.scheduled_delete_at|when('date') }}{% endif %}. Playing it or choosing Keep cancels the removal.{% elif active_candidate.state == 'SNOOZED' %}Cleanup is snoozed{% if active_candidate.snooze_until %} until {{ active_candidate.snooze_until|when('date') }}{% endif %}.{% elif active_candidate.state == 'APPROVED' %}Cleanup has been approved and is waiting to run.{% elif active_candidate.state == 'EXECUTING' %}Cleanup is running.{% else %}Eligible for cleanup under the current rules.{% endif %}</p>
+    <p class="small text-secondary mb-1">{{ active_candidate.reason_text }}</p>
+    <a class="small" href="#lifecycle-decisions">See the decision details</a>
+  {% else %}<p class="mb-0">No cleanup is scheduled for this title.</p>{% endif %}
+</section>
+{% set removable = media.radarr_id and media.parts|selectattr('has_file')|list and not active_candidate and not values.never_purge %}
 {% if is_admin and media.media_type == 'movie' and (shrink.offered or shrink.status or removable) %}<div class="card mb-4">
   <h2 class="h5 px-3 pt-3 mb-2">Actions</h2>
   {% if shrink.offered or shrink.status %}<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 px-3 py-3 border-top border-secondary-subtle">
@@ -58,7 +67,7 @@
     </div>
   </div>
 </div>{% endif %}
-<div class="card p-3 mb-4"><h2 class="h5">Lifecycle decisions</h2>
+<div class="card p-3 mb-4" id="lifecycle-decisions"><h2 class="h5">Lifecycle decisions</h2>
 {% for candidate in candidates %}<div class="border-top border-secondary-subtle pt-2 mt-2"><strong>{{ candidate.state.replace('_',' ')|title }}</strong> · {{ candidate.reason_text }}<br>
 <span class="text-secondary">{{ candidate.reclaimable_bytes|size }} reclaimable{% if is_admin %} · {{ candidate.reason_code.replace('_',' ')|title }}{% endif %}{% if candidate.scheduled_delete_at %} · Scheduled {{ candidate.scheduled_delete_at|when('date') }}{% endif %}</span>
 {% if candidate.state in ('REVIEW', 'LEAVING_SOON', 'ELIGIBLE', 'SNOOZED') %}<div class="d-flex flex-wrap gap-1 my-2">{% for choice in ['keep', 'snooze_30', 'snooze_90', 'never_purge'] %}<form method="post" action="{{ url_for('main.review_action', candidate_id=candidate.id, choice=choice) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="title"><button class="btn btn-sm btn-outline-secondary" data-tip="{{ 'Keeps this title and cancels any scheduled deletion. The rules may suggest it again later; Never purge stops that for good.' if choice == 'keep' else 'Keeps this title for good: Curatarr will never suggest deleting it.' if choice == 'never_purge' else 'Takes it off the list for ' ~ choice.split('_')[1] ~ ' days, then the rules look at it again.' }}">{{ choice.replace('_', ' ')|title }}</button></form>{% endfor %}{% if is_admin and candidate.state != 'ELIGIBLE' %}<a class="btn btn-sm btn-outline-danger" href="{{ url_for('main.review_delete_confirm', candidate_id=candidate.id) }}" data-tip="Opens a confirmation page. Nothing is deleted until you confirm there.">Approve deletion…</a>{% endif %}</div>{% endif %}

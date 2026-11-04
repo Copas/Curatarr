@@ -81,6 +81,7 @@ Curatarr checks every file so you don't find out halfway through a film:
 - **No English audio** on a film that was sold as an English dub
 - **Wrong episodes**: a file whose dialogue matches a different episode's summary
 - **Misfiled episodes**: an episode Sonarr filed in another's slot is moved back where it belongs
+- **Downloads that never imported**: blocklist a stuck release, clear its download files and ask Sonarr or Radarr to try another
 
 Each problem is listed with a button to fix it, and once you trust a kind of fix, Settings → Automatic lets Curatarr do it by itself whenever it can be sure. Every **Replace** first checks that a better copy actually exists; only then does it blocklist the bad release, delete the file and grab the new one. If nothing better is out there, it keeps what you have and tells you so.
 
@@ -157,6 +158,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [File problems](docs/FEATURES.md#problems-burned-in-subtitles-and-broken-files) | Burned-in subtitles, files cut short or cut off, decoding errors, films that go quiet. | **On** (asks first) |
 | [The wrong show](docs/FEATURES.md#shows-that-are-another-show-with-the-same-name) | A namesake (a remake, a foreign show) filed under your series. | **On** (asks first) |
 | [Misfiled episodes](docs/FEATURES.md#episodes-filed-under-the-wrong-episode) | An episode Sonarr filed in another's slot is moved back, when what's said in it agrees with its download's name. | **On** (asks first) |
+| [Failed imports](docs/FEATURES.md#problems-burned-in-subtitles-and-broken-files) | Completed downloads stuck in Sonarr or Radarr can be blocklisted and retried from Problems. | **On** (manual action) |
 | [English dubs](docs/FEATURES.md#english-dubs) | Listens to films sold as English dubs: relabels wrong tracks, makes real English the default, replaces ones with none. | **On** (asks first) |
 | [Wrong episodes](docs/FEATURES.md#recaps-previews-and-skip-markers) | Flags an episode whose dialogue fits another episode's summary. Experimental. | Off |
 | [Automatic fixes](docs/FEATURES.md#automatic-fixes) | The fixes above happen by themselves when Curatarr can be confident, each switchable. Until then, each problem waits on Problems with a button to fix it. | Off |

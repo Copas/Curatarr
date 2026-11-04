@@ -618,6 +618,38 @@ class SonarrClient(Client):
     def queue(self):
         return self.request("GET", "/api/v3/queue/details")
 
+    def queue_records(self, quick=False):
+        """Current downloads, including import warnings and episode details.
+        ``quick``: one short try, for a page that's waiting on the answer."""
+        page = self.request(
+            "GET",
+            "/api/v3/queue",
+            read_timeout=5 if quick else None,
+            attempts=1 if quick else None,
+            params={
+                "page": 1,
+                "pageSize": 1000,
+                "includeUnknownSeriesItems": "true",
+                "includeEpisode": "true",
+            },
+        )
+        if page.get("totalRecords", 0) > len(page.get("records", [])):
+            raise IntegrationError("Sonarr queue is too large to review safely")
+        return page.get("records", [])
+
+    def remove_failed_download(self, queue_id):
+        """Remove and blocklist one download without Sonarr auto-redownloading."""
+        return self.request(
+            "DELETE",
+            f"/api/v3/queue/{queue_id}",
+            params={
+                "removeFromClient": "true",
+                "blocklist": "true",
+                "skipRedownload": "true",
+            },
+            destructive=True,
+        )
+
     def commands(self):
         return self.request("GET", "/api/v3/command")
 
@@ -836,6 +868,38 @@ class RadarrClient(Client):
 
     def queue(self):
         return self.request("GET", "/api/v3/queue/details")
+
+    def queue_records(self, quick=False):
+        """Current downloads, including import warnings and movie details.
+        ``quick``: one short try, for a page that's waiting on the answer."""
+        page = self.request(
+            "GET",
+            "/api/v3/queue",
+            read_timeout=5 if quick else None,
+            attempts=1 if quick else None,
+            params={
+                "page": 1,
+                "pageSize": 1000,
+                "includeUnknownMovieItems": "true",
+                "includeMovie": "true",
+            },
+        )
+        if page.get("totalRecords", 0) > len(page.get("records", [])):
+            raise IntegrationError("Radarr queue is too large to review safely")
+        return page.get("records", [])
+
+    def remove_failed_download(self, queue_id):
+        """Remove and blocklist one download without Radarr auto-redownloading."""
+        return self.request(
+            "DELETE",
+            f"/api/v3/queue/{queue_id}",
+            params={
+                "removeFromClient": "true",
+                "blocklist": "true",
+                "skipRedownload": "true",
+            },
+            destructive=True,
+        )
 
     def commands(self):
         return self.request("GET", "/api/v3/command")

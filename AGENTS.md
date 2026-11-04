@@ -2,6 +2,13 @@
 
 Notes for anyone changing this repository, people and coding agents alike (Codex, Claude Code and others read this file). [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has the setup, tests and release checklist.
 
+## Working preferences
+
+- When giving someone a command to run, provide the complete, copy-ready command. Use absolute paths or an explicit `cd`, and put any pending action at the end of the response.
+- Page updates should preserve open sections, focus and scroll position. On pages where people work through many items, update the affected item in place after an action instead of reloading the whole page when practical.
+- Before running a database migration or destructive database command, confirm the target of `DATABASE_URL`. Use an isolated database for development checks; the default local database may contain valuable data.
+- When an integration behaves unexpectedly, compare its assumptions with a direct response from the upstream service before changing the integration code. Keep credentials out of command output and logs.
+
 ## Before every commit
 
 - Run the whole test suite and the linters, and commit only when all pass:
