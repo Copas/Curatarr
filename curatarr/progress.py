@@ -32,9 +32,10 @@ def _per_hour(action_types, now) -> float | None:
 
 
 def overall(now=None) -> dict | None:
-    from . import compat_audio, seek_repair
+    from . import compat_audio, default_audio, seek_repair, subtitle_tracks
     from .enrichment import (
         _duration_words,
+        chapter_quality_progress,
         job_forecast,
         marker_forecast,
         subtitle_forecast,
@@ -57,8 +58,21 @@ def overall(now=None) -> dict | None:
                     "approximate": False,
                 }
             )
-    # TV-friendly audio and the seek repair share one limit (rebuilds wait for
-    # Jellyfin's thumbnails), so they get one estimate from their joint pace.
+    quality = chapter_quality_progress()
+    if quality and quality["left"]:
+        # Looked at a batch at a time, each library's on the hourly refresh.
+        hours = quality["left"] / quality["per_hour"]
+        parts.append(
+            {
+                "name": "Chapter quality checks",
+                "done": quality["checked"],
+                "left": quality["left"],
+                "finishes_at": now + timedelta(hours=hours),
+                "approximate": False,
+            }
+        )
+    # What rewrites whole files shares one limit (rebuilds wait for Jellyfin's
+    # thumbnails), so it all gets one estimate from its joint pace.
     rebuilds_left, rebuild_parts = 0.0, []
     audio = compat_audio.progress()
     if audio and audio["on"]:
@@ -77,8 +91,39 @@ def overall(now=None) -> dict | None:
         rebuild_parts.append(
             {"name": "Seeking on Roku", "done": seek["checked"], "left": seek["left"]}
         )
+    tracks = subtitle_tracks.progress()
+    if tracks and tracks["on"] and tracks["left"]:
+        share = tracks["rewritten"] / tracks["checked"] if tracks["checked"] else 0.25
+        rebuilds_left += tracks["left"] * share
+        rebuild_parts.append(
+            {
+                "name": "Subtitle tracks",
+                "done": tracks["checked"],
+                "left": tracks["left"],
+            }
+        )
+    english = default_audio.progress()
+    if english and english["on"] and english["left"]:
+        # Most files just get a look; those already found get the rewrite.
+        share = english["fixed"] / english["checked"] if english["checked"] else 0.05
+        rebuilds_left += english["waiting"] + english["to_look"] * share
+        rebuild_parts.append(
+            {
+                "name": "English audio",
+                "done": english["checked"],
+                "left": english["left"],
+            }
+        )
     if rebuild_parts:
-        rate = _per_hour(("compat_audio_added", "seek_index_repaired"), now)
+        rate = _per_hour(
+            (
+                "compat_audio_added",
+                "seek_index_repaired",
+                "subtitle_tracks_removed",
+                "default_audio_fixed",
+            ),
+            now,
+        )
         finishes = now + timedelta(hours=rebuilds_left / rate) if rate else None
         for part in rebuild_parts:
             parts.append(part | {"finishes_at": finishes, "approximate": True})

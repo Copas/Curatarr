@@ -1004,7 +1004,18 @@ def _library_care() -> dict | None:
     summary = maintenance_summary()
     if not summary["scanned"]:
         return None
-    return {"summary": summary, "activity": job_activity()}
+    from . import compat_audio, default_audio, seek_repair, subtitle_tracks
+    from .enrichment import chapter_quality_progress
+
+    return {
+        "summary": summary,
+        "activity": job_activity(),
+        "quality": chapter_quality_progress(),
+        "compat": compat_audio.progress(),
+        "english": default_audio.progress(),
+        "seek": seek_repair.progress(),
+        "subtitle_tracks": subtitle_tracks.progress(),
+    }
 
 
 @bp.get("/overview/reconcile-status")

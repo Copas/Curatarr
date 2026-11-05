@@ -194,6 +194,8 @@ def chapter_maintenance():
         compat=_compat_progress(),
         seek=_seek_progress(),
         subtitle_tracks=_subtitle_tracks_progress(),
+        english=_english_progress(),
+        quality=_quality_progress(),
         thumbs=_thumbnail_status(),
         smart_blocked=smart_chapters_blocked(),
         **_gpu_hint(),
@@ -1035,6 +1037,18 @@ def _subtitle_tracks_progress():
     from . import subtitle_tracks
 
     return subtitle_tracks.progress()
+
+
+def _english_progress():
+    from . import default_audio
+
+    return default_audio.progress()
+
+
+def _quality_progress():
+    from .enrichment import chapter_quality_progress
+
+    return chapter_quality_progress()
 
 
 def _compat_progress():

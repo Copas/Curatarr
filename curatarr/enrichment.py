@@ -708,6 +708,41 @@ def queue_new_media() -> int:
 QUALITY_CHECKS_PER_PASS = 100  # each a quick look at the file's chapters
 
 
+def chapter_quality_progress() -> dict | None:
+    """Files kept with their own chapters that "replace chapters that are no
+    use" has looked at, and still has to; None when no library has it on."""
+    libraries = []
+    for library in db.session.query(Library).all():
+        try:
+            config = config_for(library.id)
+        except ChapterConfigError:
+            continue
+        if library.managed and config["enabled"] and config["replace_poor"]:
+            libraries.append(library.id)
+    if not libraries:
+        return None
+    count = lambda source: (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaIdentity.library_id.in_(libraries),
+            MediaIdentity.missing_since.is_(None),
+            MediaPart.has_file.is_(True),
+            ChapterState.chapter_status == "existing",
+            ChapterState.chapter_source == source,
+        )
+        .count()
+    )
+    kept, left = count("embedded_ok"), count("embedded")
+    return {
+        "checked": kept,
+        "left": left,
+        "total": kept + left,
+        "per_hour": QUALITY_CHECKS_PER_PASS * len(libraries),
+    }
+
+
 def _queue_chapter_quality_checks(library_id, now) -> int:
     """With "replace chapters that are no use" on, look again at files kept
     with their own chapters before it was (whenever they were added): a few

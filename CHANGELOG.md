@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc82 (2026-11-05)
+
+- **The progress bars count everything Curatarr is working through.** Chapter quality checks, English audio and subtitle tracks in other languages now count towards the overall bar. Each has its own bar on Enhance → Progress and Overview's Library care. Overview's Playable audio, Seeking on Roku and Subtitle tracks bars are back, alongside the three main measures.
+
 ## 0.2.0rc81 (2026-11-04)
 
 - **Audio in other languages can be removed** (Settings → Enhance → Playable audio, off by default). With Play English first on, once Curatarr has heard a file's English track, audio tracks tagged as other languages are removed, including from files where English already leads. Only downloading the file again brings them back. English and untagged tracks stay, files with no English track aren't touched, nothing is re-encoded, and History lists what went.

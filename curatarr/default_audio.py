@@ -49,6 +49,7 @@ MOVES_PER_RUN = 2  # each copies a whole file
 HEARING_TRIES = 3
 LANGUAGE_RESET = "default_audio_first_track_started"
 ENGLISH_ONLY_RESET = "default_audio_english_only_started"
+REMAINING_KEY = "default_audio_remaining"
 UNTAGGED = {"", "und"}
 EXTRA_NAME = re.compile(
     r"comment|descri|narrat|visually impaired|\bad\b|\bdvs\b", re.IGNORECASE
@@ -395,7 +396,49 @@ def sweep() -> int:
         db.session.commit()
         if redo_chapters:
             _redo_chapters(state, part)
+    _remember_remaining()
     return fixed
+
+
+def _remember_remaining():
+    from .services import set_setting
+
+    set_setting(
+        REMAINING_KEY,
+        {"files": _due().order_by(None).count(), "at": utcnow().isoformat()},
+    )
+    db.session.commit()
+
+
+def progress() -> dict | None:
+    """Files looked at, changed and still to do: to look at, to listen to, to
+    copy. None when English first is off and it never changed anything."""
+    from .services import setting
+
+    checked = fixed = waiting = 0
+    for result, size in db.session.query(
+        ChapterState.default_audio, ChapterState.default_audio_size
+    ).filter(ChapterState.default_audio.isnot(None)):
+        result = result or {}
+        if result.get("listen") or result.get("move"):
+            waiting += 1
+        elif size is not None:
+            checked += 1
+            fixed += bool(result.get("fixed") and result.get("why") == "language")
+    on = english_enabled()
+    if not on and not fixed:
+        return None
+    to_look = (setting(REMAINING_KEY, {}) or {}).get("files", 0) if on else 0
+    left = to_look + (waiting if on else 0)
+    return {
+        "on": on,
+        "checked": checked,
+        "fixed": fixed,
+        "waiting": waiting if on else 0,
+        "to_look": to_look,
+        "left": left,
+        "total": checked + left,
+    }
 
 
 def _redo_chapters(state, part):

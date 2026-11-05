@@ -185,3 +185,77 @@ def test_a_paused_hour_does_not_set_the_pace():
 
     rate = enrichment._recent_pace(finished_since, now - timedelta(days=2), now)
     assert round(rate) == 63  # the six hours' pace, not 3 an hour
+
+
+def test_chapter_quality_english_audio_and_subtitle_tracks_are_counted(
+    app, client, monkeypatch
+):
+    from test_enrichment import _movie
+
+    from curatarr import db, default_audio, subtitle_tracks
+    from curatarr.models import ChapterState, MediaPart
+    from curatarr.services import set_setting
+
+    _movie("/movies/Film (2020)/Film.mkv")
+    part = db.session.query(MediaPart).one()
+    state = enrichment.state_for(part)
+    state.chapter_status = "existing"  # scanned: Overview shows Library care
+    state.duration_seconds = 60.0
+    state.default_audio = {"at": "then", "listen": True}
+    state.default_audio_size = part.size_bytes
+    set_setting("chapter_options", {"subtitle_tracks": True})
+    set_setting(default_audio.REMAINING_KEY, {"files": 4})
+    set_setting(subtitle_tracks.REMAINING_KEY, {"files": 7})
+    db.session.commit()
+    monkeypatch.setattr(enrichment, "job_forecast", lambda now=None: None)
+    monkeypatch.setattr(enrichment, "marker_forecast", lambda now=None: None)
+    monkeypatch.setattr(enrichment, "subtitle_forecast", lambda now=None: None)
+    monkeypatch.setattr(compat_audio, "progress", lambda: None)
+    monkeypatch.setattr(seek_repair, "progress", lambda: None)
+    monkeypatch.setattr(
+        enrichment,
+        "chapter_quality_progress",
+        lambda: {"checked": 90, "left": 10, "total": 100, "per_hour": 100},
+    )
+    result = progress.overall()
+    parts = {p["name"]: p for p in result["parts"]}
+    assert parts["Chapter quality checks"]["left"] == 10
+    assert parts["Chapter quality checks"]["finishes_at"]
+    assert parts["English audio"]["left"] == 5  # four to look at, one to hear
+    assert parts["Subtitle tracks"]["left"] == 7
+    assert result["left"] == 22
+
+    english = default_audio.progress()
+    assert english["waiting"] == 1 and english["to_look"] == 4
+    state = db.session.query(ChapterState).one()
+    state.default_audio = {"at": "now", "fixed": True, "why": "language"}
+    db.session.commit()
+    english = default_audio.progress()
+    assert english["fixed"] == 1 and english["checked"] == 1
+
+    for address in ("/chapters", "/"):
+        page = client.get(address).text
+        assert "Chapter quality checks" in page, address
+        assert "English audio" in page
+        assert "Subtitle tracks in other languages" in page
+
+
+def test_quality_progress_only_when_a_library_has_it_on(app):
+    from test_enrichment import _movie
+
+    from curatarr import db
+    from curatarr.models import MediaPart
+
+    _movie("/movies/Film (2020)/Film.mkv")
+    assert enrichment.chapter_quality_progress() is None
+    library = db.session.query(MediaPart).one().media.library
+    from curatarr.services import set_setting
+
+    set_setting("chapter_settings", {"enabled": True, "replace_poor": True})
+    db.session.commit()
+    state = enrichment.state_for(db.session.query(MediaPart).one())
+    state.chapter_status, state.chapter_source = "existing", "embedded"
+    db.session.commit()
+    assert library.managed
+    result = enrichment.chapter_quality_progress()
+    assert result["left"] == 1 and result["checked"] == 0
