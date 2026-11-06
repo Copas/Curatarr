@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc90 (2026-11-06): wrong-episode downloads again at most once a week per episode; Remove it (blocklist, delete, unmonitor).
 - v0.2.0rc89 (2026-11-06): Overview buttons work in place (Reconcile now and Discover still reload).
 - v0.2.0rc88 (2026-11-06): Enhance → Problems buttons work in place (live-page.js), several at once.
 - v0.2.0rc87 (2026-11-06): wrong-episode cards with nowhere to move the file offer Download it again (automatic when the transcript clearly fits another episode).

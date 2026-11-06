@@ -42,7 +42,8 @@ RECENT = timedelta(days=14)
 RUN_SECONDS = 20
 FIXES_PER_RUN = 2
 COMMAND_SECONDS = 180  # moving a file across a network share takes a while
-FIXES = {"move", "replace", "discard", "redownload"}
+FIXES = {"move", "replace", "discard", "redownload", "remove"}
+AGAIN_AFTER = timedelta(days=7)  # one automatic download again per episode
 CLEAR = 1.15  # the fitting episode must beat every other by this much
 OVER_OWN = 1.25  # …and the one it's filed under by this much
 RUN = 3  # files in a row, each the same number of slots off: a misnumbered release
@@ -535,7 +536,9 @@ def _plan(finding, findings) -> str | None:
     should look), or "redownload" (it isn't the episode it's filed under, and
     there's no one episode to move it to: download that episode again)."""
     if finding.get("verdict") == "ambiguous":
-        return "redownload" if finding.get("own_fit") == "not_own" else None
+        if finding.get("own_fit") != "not_own" or _redownloaded_lately(finding):
+            return None  # a person decides (a copy that came back wrong too)
+        return "redownload"
     if finding.get("verdict") != "other":
         return None
     if not finding["target_file_id"]:
@@ -692,6 +695,11 @@ def evidence(finding) -> list[str]:
                 "can't confirm it",
             }.get(finding.get("own_fit"), "")
         )
+        if _redownloaded_lately(finding):
+            lines.append(
+                f"{finding['from_code']} was downloaded again this week and this copy "
+                "is the wrong episode too: its releases may all be numbered this way"
+            )
         if finding.get("failed"):
             lines.append(f"Fixing it failed: {finding['failed']}")
         return [line for line in lines if line]
@@ -770,12 +778,12 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
     finding = found.get(str(file_id))
     by_file = {int(k): v for k, v in found.items()}
     plan = mode or (_plan(finding, by_file) if finding else None)
-    if not finding or not (finding.get("to_id") or plan == "redownload"):
+    if not finding or not (finding.get("to_id") or plan in {"redownload", "remove"}):
         raise ValueError("Nothing is flagged for that file any more")
     if plan not in FIXES:
         raise ValueError("The evidence doesn't settle this one; choose what to do")
-    if plan == "redownload":
-        return _redownload(file_id, finding, stored, automatic)
+    if plan in {"redownload", "remove"}:
+        return _redownload(file_id, finding, stored, automatic, remove=plan == "remove")
     if plan == "move" and finding["target_file_id"]:
         plan = "replace"  # a person chose to move it onto a filled slot
     media = (
@@ -903,9 +911,11 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
     return summary[0].upper() + summary[1:]
 
 
-def _redownload(file_id, finding, stored, automatic) -> str:
+def _redownload(file_id, finding, stored, automatic, *, remove=False) -> str:
     """The file isn't the episode it's filed under: blocklist its release,
-    delete it and search for the episode again."""
+    delete it and search for the episode again; with ``remove``, unmonitor the
+    episode instead (every release of it is numbered this way). Sonarr may
+    search by itself once a release is blocklisted (its Redownload Failed)."""
     from .filecheck_jobs import _dry_run
     from .services import audit, client, set_setting
 
@@ -929,7 +939,12 @@ def _redownload(file_id, finding, stored, automatic) -> str:
             steps.append("blocklisted its release")
         sonarr.delete_episode_file(file_id)
         steps.append("deleted the file")
-        if finding.get("from_monitored"):
+        if remove:
+            sonarr.set_episodes_monitored([finding["from_id"]], False)
+            steps.append(
+                f"unmonitored {finding['from_code']} so it isn't downloaded again"
+            )
+        elif finding.get("from_monitored"):
             sonarr.episode_search([finding["from_id"]])
             steps.append(f"searched for the real {finding['from_code']}")
     except _Changed as exc:
@@ -956,7 +971,30 @@ def _redownload(file_id, finding, stored, automatic) -> str:
         media.id if media else None,
         ("Automatically: " if automatic else "") + summary,
         f"misfiled:{file_id}:{at}",
-        payload={"finding": finding, "plan": "redownload"},
+        payload={
+            "finding": finding,
+            "plan": "remove" if remove else "redownload",
+            "from_id": finding["from_id"],
+        },
     )
     db.session.commit()
     return summary[0].upper() + summary[1:]
+
+
+def _redownloaded_lately(finding) -> bool:
+    """Whether this episode was downloaded again in the last week (by hand or
+    automatically): a new copy that's wrong too means every release of it is
+    numbered this way, and doing it again would go round in circles."""
+    from .models import LifecycleAction
+
+    since = utcnow() - AGAIN_AFTER
+    rows = db.session.query(LifecycleAction.payload_json).filter(
+        LifecycleAction.action_type == "misfiled_episode_fixed",
+        LifecycleAction.created_at >= since,
+    )
+    return any(
+        (payload or {}).get("plan") == "redownload"
+        and (payload.get("from_id") or (payload.get("finding") or {}).get("from_id"))
+        == finding.get("from_id")
+        for (payload,) in rows
+    )

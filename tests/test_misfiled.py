@@ -446,3 +446,37 @@ def test_every_card_offers_a_fix_not_only_its_right(app, client, monkeypatch):
     assert "Download it again" in page and "another show with the same name" in page
     client.post("/chapters/problems/misfiled/12/fix", data={"mode": "redownload"})
     assert ("delete", 12) in sonarr.calls and ("search", [102]) in sonarr.calls
+
+
+def test_a_copy_that_comes_back_wrong_is_left_to_a_person(app, client, monkeypatch):
+    """Sonarr searches by itself after a blocklist, and a release group that
+    numbers a season its own way sends the same mix-up straight back."""
+    from curatarr import filecheck_jobs
+
+    monkeypatch.setattr(filecheck_jobs, "_dry_run", lambda media: False)
+    _show()
+    sonarr = _two_volcanoes()
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: sonarr)
+    talk = "lava volcano erupting molten geologists sampling climb " * 5
+    monkeypatch.setattr(misfiled, "_transcript", _said({102: talk}))
+    monkeypatch.setattr(autofix, "ON_BY_DEFAULT", True)
+    assert misfiled.sweep() == 1
+    # The same release comes back as a new file.
+    sonarr._episodes[102].update(episodeFileId=16, hasFile=True)
+    sonarr._files[16] = {"id": 16, "path": "/tv/Show/S01E02b.mkv", "quality": {}}
+    sonarr._imports = [_imported(102, 16, "Show.S01E02.Volcano.1080p.WEB")]
+    stored = setting(misfiled.KEY)
+    stored.pop("checked_at")
+    set_setting(misfiled.KEY, stored)
+    db.session.commit()
+    sonarr.calls.clear()
+    assert misfiled.sweep() == 0 and sonarr.calls == []
+    (row,) = misfiled.rows()
+    assert row["plan"] is None
+    assert any("downloaded again this week" in line for line in row["evidence"])
+    page = client.get("/chapters/problems").text
+    assert "Remove it" in page
+    client.post("/chapters/problems/misfiled/16/fix", data={"mode": "remove"})
+    assert ("delete", 16) in sonarr.calls
+    assert ("monitor", [102], False) in sonarr.calls
+    assert not any(c[0] == "search" for c in sonarr.calls)

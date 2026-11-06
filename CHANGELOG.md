@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0rc90 (2026-11-06)
+
+- **Downloading a wrong episode again no longer goes round in circles.** Once a release is blocklisted, Sonarr searches by itself. A release group that numbers a season its own way sends the same mix-up straight back, so the automatic fix downloaded it again and again. An episode is now downloaded again automatically at most once a week. If the new copy is the wrong episode too, the card says so and waits for a person.
+- **Remove it**, on the same cards: blocklist the release, delete the file and unmonitor the episode, for an episode whose releases are all numbered that way.
+
 ## 0.2.0rc89 (2026-11-06)
 
 - **Overview's buttons work in place too**, like Problems: Keep, Replace, Search, the wrong-episode buttons and the rest send in the background and redraw the page where you are. Reconcile now and Discover still load the page afresh, so their progress line follows the job. A message from an action that went to another page now shows too.
