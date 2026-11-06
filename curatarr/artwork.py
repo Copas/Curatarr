@@ -769,13 +769,35 @@ def restore_badge(snapshot):
         )
         return True
     except (IntegrationError, OSError, ValueError) as exc:
+        db.session.rollback()
+        if _item_gone(exc, snapshot):
+            return True
         current_app.logger.warning(
             "Poster restoration failed for snapshot %s: %s",
             snapshot.id,
             type(exc).__name__,
         )
-        db.session.rollback()
         return False
+
+
+def _item_gone(exc, snapshot) -> bool:
+    """When Jellyfin no longer has the title (it was removed, or re-added under
+    a new id), there's no poster to put back: the snapshot is retired instead
+    of being retried every cycle."""
+    if not isinstance(exc, IntegrationError) or exc.status_code != 404:
+        return False
+    try:
+        client("jellyfin").item(snapshot.jellyfin_item_id)
+        return False  # the title is there; only that one picture is missing
+    except IntegrationError as missing:
+        if missing.status_code != 404:
+            return False
+    snapshot.active = False
+    db.session.commit()
+    current_app.logger.info(
+        "Snapshot %s retired: Jellyfin no longer has the title", snapshot.id
+    )
+    return True
 
 
 def _restore_from_providers(snapshot):
@@ -794,12 +816,14 @@ def _restore_from_providers(snapshot):
             )
         return True
     except IntegrationError as exc:
+        db.session.rollback()
+        if _item_gone(exc, snapshot):
+            return True
         current_app.logger.warning(
             "Artwork refresh failed for snapshot %s: %s",
             snapshot.id,
             type(exc).__name__,
         )
-        db.session.rollback()
         return False
 
 

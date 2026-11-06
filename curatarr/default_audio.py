@@ -49,6 +49,9 @@ MOVES_PER_RUN = 2  # each copies a whole file
 HEARING_TRIES = 3
 LANGUAGE_RESET = "default_audio_first_track_started"
 ENGLISH_ONLY_RESET = "default_audio_english_only_started"
+# Rewrites refused before the length check compared the picture's length, not
+# the file's: a dub running past the film made every copy look cut short.
+LENGTH_RETRY = "default_audio_length_retry"
 REMAINING_KEY = "default_audio_remaining"
 UNTAGGED = {"", "und"}
 EXTRA_NAME = re.compile(
@@ -183,6 +186,27 @@ def _look_again_for_language():
     db.session.commit()
 
 
+def _retry_failed_rewrites():
+    """Once: copies refused by the old length check are made again."""
+    from .services import set_setting, setting
+
+    if setting(LENGTH_RETRY):
+        return
+    failed = ChapterState.default_audio["error"].as_string()
+    db.session.query(ChapterState).filter(failed.like("%didn't check out%")).update(
+        {ChapterState.default_audio_size: None, ChapterState.default_audio: None},
+        synchronize_session=False,
+    )
+    # The other-language subtitle cleanup makes its copies the same way.
+    refused = ChapterState.subtitle_tracks["error"].as_string()
+    db.session.query(ChapterState).filter(refused.like("%didn't check out%")).update(
+        {ChapterState.subtitle_tracks_size: None, ChapterState.subtitle_tracks: None},
+        synchronize_session=False,
+    )
+    set_setting(LENGTH_RETRY, utcnow().isoformat())
+    db.session.commit()
+
+
 def _due():
     return (
         db.session.query(MediaPart)
@@ -271,6 +295,7 @@ def sweep() -> int:
     if not enabled() and not english_enabled():
         return 0
     _look_again_for_language()
+    _retry_failed_rewrites()
     started, fixed = time.monotonic(), 0
     automatic = _automatic()
     waiting = [

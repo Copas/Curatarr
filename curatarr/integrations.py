@@ -233,7 +233,7 @@ class JellyfinClient(Client):
         )
         items = data.get("Items") if isinstance(data, dict) else None
         if not items:
-            raise IntegrationError("Jellyfin item not found")
+            raise IntegrationError("Jellyfin item not found", status_code=404)
         return items[0]
 
     def items(self, parent_id=None, start=0, limit=100):

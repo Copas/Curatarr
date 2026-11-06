@@ -659,3 +659,55 @@ def test_a_suspect_original_is_repaired_and_restored_from_providers(app, monkeyp
         reconcile_artwork()
         db.session.refresh(snapshot)
         assert not snapshot.active and fake.refreshed == ["Film", "Film"]
+
+
+def test_a_poster_for_a_title_jellyfin_no_longer_has_is_not_retried(
+    app, monkeypatch, tmp_path
+):
+    """A removed title's snapshot was retried every cycle, each one a warning."""
+
+    class GoneJellyfin:
+        calls = 0
+
+        def item(self, _item_id):
+            raise IntegrationError("Jellyfin item not found", status_code=404)
+
+        def image(self, _item_id, _kind="Primary"):
+            self.calls += 1
+            raise IntegrationError("Not found", status_code=404)
+
+    class MissingPicture(GoneJellyfin):
+        def item(self, _item_id):
+            return {"ImageTags": {}}
+
+    with app.app_context():
+        library = Library(
+            jellyfin_library_id="gone-lib", name="Films", media_type="movie"
+        )
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id, media_type="movie", title="Film", jellyfin_id="gone"
+        )
+        db.session.add(media)
+        db.session.flush()
+        for name in ("original", "badged"):
+            (tmp_path / f"{name}.jpg").write_bytes(_poster())
+        snapshot = PosterSnapshot(
+            media_identity_id=media.id,
+            jellyfin_item_id="gone",
+            original_image_bytes_path=str(tmp_path / "original.jpg"),
+            badged_image_bytes_path=str(tmp_path / "badged.jpg"),
+            image_type="Primary",
+            active=True,
+        )
+        db.session.add(snapshot)
+        db.session.commit()
+        # The title is there, only this picture isn't: kept, to try again.
+        monkeypatch.setattr("curatarr.artwork.client", lambda _kind: MissingPicture())
+        assert not restore_badge(snapshot)
+        assert db.session.get(PosterSnapshot, snapshot.id).active
+        # The title itself is gone: retired, nothing more to do.
+        monkeypatch.setattr("curatarr.artwork.client", lambda _kind: GoneJellyfin())
+        assert restore_badge(snapshot)
+        assert not db.session.get(PosterSnapshot, snapshot.id).active

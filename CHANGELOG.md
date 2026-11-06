@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0rc83 (2026-11-05)
+
+- **A dub that runs past the film no longer stops its removal.** A file is as long as its longest track, often a foreign dub that runs a few seconds (in one case 95 seconds) past the film, so after removing it the copy looked cut short and was refused, leaving the other language first. The check now compares how long the picture runs. Copies refused that way, for English first and for subtitle tracks in other languages, are made again once.
+- **No more repeated poster warnings for removed titles.** When a title that had a *Leaving soon* poster was removed, Curatarr kept trying to put its original poster back every cycle, logging a warning each time. A poster whose title Jellyfin no longer has is now let go. One whose title is still there but is missing just that picture is tried again as before.
+
 ## 0.2.0rc82 (2026-11-05)
 
 - **The progress bars count everything Curatarr is working through.** Chapter quality checks, English audio and subtitle tracks in other languages now count towards the overall bar. Each has its own bar on Enhance → Progress and Overview's Library care. Overview's Playable audio, Seeking on Roku and Subtitle tracks bars are back, alongside the three main measures.

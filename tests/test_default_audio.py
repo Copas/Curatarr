@@ -452,3 +452,46 @@ def test_removing_the_track_ahead_of_english(app, media_env, monkeypatch, tmp_pa
     assert _languages(path) == ["eng"]
     audio = [s for s in probe(path).streams if s["codec_type"] == "audio"]
     assert audio[0]["default"]
+
+
+@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvmerge")), reason="needs FFmpeg")
+def test_a_dub_running_past_the_film_can_still_go(tmp_path):
+    """The file's length is its longest track: often a dub a few seconds past
+    the film. Removing it shortens the file, not the film."""
+    from curatarr.mediafile import remove_tracks
+
+    path = str(tmp_path / "Film.mkv")
+    subprocess.run(
+        [tool("ffmpeg"), "-v", "error",
+         "-f", "lavfi", "-i", "testsrc=size=160x90:rate=24:duration=10",
+         "-f", "lavfi", "-i", "sine=frequency=300:duration=16",
+         "-f", "lavfi", "-i", "sine=frequency=500:duration=10",
+         "-map", "0", "-map", "1", "-map", "2",
+         "-c:v", "libx264", "-c:a", "aac",
+         "-metadata:s:a:0", "language=ita", "-metadata:s:a:1", "language=eng",
+         "-disposition:a:0", "0", "-disposition:a:1", "default", path],
+        check=True,
+    )  # fmt: skip
+    info = probe(path)
+    assert info.duration > 15 and abs(info.video_length - 10) < 0.5
+    after = remove_tracks(path, info, [1], 2, first=True)
+    assert abs(after.duration - 10) < 0.5
+    assert _languages(path) == ["eng"]
+
+
+def test_copies_refused_by_the_old_length_check_are_made_again_once(app, media_env):  # noqa: F811
+    _movie("/movies/Film (2020)/Film.mkv")
+    state = enrichment.state_for(db.session.query(enrichment.MediaPart).one())
+    refused = "The rewritten file didn't check out; left unchanged"
+    state.default_audio_size, state.default_audio = 5, {"error": refused}
+    state.subtitle_tracks_size, state.subtitle_tracks = 5, {"error": refused}
+    db.session.commit()
+    default_audio._retry_failed_rewrites()
+    db.session.refresh(state)
+    assert state.default_audio is None and state.default_audio_size is None
+    assert state.subtitle_tracks is None and state.subtitle_tracks_size is None
+    state.default_audio_size, state.default_audio = 5, {"error": refused}
+    db.session.commit()
+    default_audio._retry_failed_rewrites()  # once only
+    db.session.refresh(state)
+    assert state.default_audio_size == 5

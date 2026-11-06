@@ -73,6 +73,16 @@ class MediaInfo:
         )
 
     @property
+    def video_length(self) -> float | None:
+        """How long the picture runs, in seconds, when the file says."""
+        lengths = [
+            s["length"]
+            for s in self.streams
+            if s.get("codec_type") == "video" and s.get("length")
+        ]
+        return max(lengths) if lengths else None
+
+    @property
     def stream_signature(self) -> list[tuple]:
         """What must be identical before and after a chapter edit."""
         return [
@@ -89,6 +99,26 @@ class MediaInfo:
             "chapters": self.chapters,
             "streams": len(self.streams),
         }
+
+
+def _stream_length(stream) -> float | None:
+    """A track's own length: ffprobe's duration, or Matroska's DURATION tag."""
+    try:
+        if stream.get("duration") not in (None, "N/A"):
+            return round(float(stream["duration"]), 3)
+        hours, minutes, seconds = (stream.get("tags") or {})["DURATION"].split(":")
+        return round(int(hours) * 3600 + int(minutes) * 60 + float(seconds), 3)
+    except (KeyError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def _same_length(before: MediaInfo, after: MediaInfo, slack=2.0) -> bool:
+    """The picture runs as long as before. A file's own length is its longest
+    track, often a dub that runs on a few seconds (once 95 s) past the film,
+    so after removing that dub the picture's length is what's compared."""
+    if before.video_length and after.video_length:
+        return abs(after.video_length - before.video_length) <= slack
+    return abs(after.duration - before.duration) <= slack
 
 
 def probe(path: str) -> MediaInfo:
@@ -142,6 +172,7 @@ def probe(path: str) -> MediaInfo:
                 "language": (s.get("tags") or {}).get("language"),
                 "channels": s.get("channels"),
                 "title": (s.get("tags") or {}).get("title"),
+                "length": _stream_length(s),
                 # A commentary, or a narrator describing the picture.
                 "extra": bool(
                     (s.get("disposition") or {}).get("comment")
@@ -533,7 +564,7 @@ def remove_tracks(
             (s for s in after.streams if s.get("codec_type") == "audio"), {}
         )
         if (
-            abs(after.duration - info.duration) > 2
+            not _same_length(info, after)
             or len(after.chapters) != len(info.chapters)
             or count(after, "video") != count(info, "video")
             or count(after, "audio") != len(keep_audio)
