@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc89 (2026-11-06)
+
+- **Overview's buttons work in place too**, like Problems: Keep, Replace, Search, the wrong-episode buttons and the rest send in the background and redraw the page where you are. Reconcile now and Discover still load the page afresh, so their progress line follows the job. A message from an action that went to another page now shows too.
+
 ## 0.2.0rc88 (2026-11-06)
 
 - **Enhance → Problems works in place.** Every button on the page is sent in the background. Only that button shows it's working, and the page is redrawn where you are, keeping your scroll position and open sections. Several things can be clicked one after another without waiting for the page to reload. What happened comes up as a note in the corner, and the page's badge updates. If the background request fails, the click is sent the usual way.

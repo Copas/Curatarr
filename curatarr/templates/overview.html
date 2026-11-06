@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 {% from '_replace_actions.html' import replace_actions, search_actions with context %}
-{% block content %}
+{% block content %}<div data-live-page>
 {% from '_overall_progress.html' import overall_bar with context %}
 <div class="page-heading">
   <div><div class="eyebrow">Home</div><h1>Overview</h1></div>
   {% if is_admin %}
   <div class="d-flex gap-2">
-    <form method="post" action="{{ url_for('main.discover_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary" data-tip="Looks for new or changed libraries and titles in Jellyfin, Sonarr and Radarr. Runs in the background.">Discover</button></form>
-    <form method="post" action="{{ url_for('main.reconcile_route') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-primary" data-tip="Syncs with Jellyfin, Sonarr and Radarr now and re-checks every title against the rules, instead of waiting for the next scheduled run.">Reconcile</button></form>
+    <form method="post" action="{{ url_for('main.discover_route') }}" data-reload><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary" data-tip="Looks for new or changed libraries and titles in Jellyfin, Sonarr and Radarr. Runs in the background.">Discover</button></form>
+    <form method="post" action="{{ url_for('main.reconcile_route') }}" data-reload><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-primary" data-tip="Syncs with Jellyfin, Sonarr and Radarr now and re-checks every title against the rules, instead of waiting for the next scheduled run.">Reconcile</button></form>
   </div>
   {% endif %}
 </div>
@@ -101,6 +101,8 @@
 {% for action in actions %}<tr><td>{{ action.created_at|when }}</td><td>{{ media_titles.get(action.media_identity_id, '—') }}{{ jellyfin_link_for(action.media_identity_id) if action.media_identity_id }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action_name(action) }}</a></td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No decisions yet.</td></tr>{% endfor %}
 </tbody></table></div></div></details>
 {% endif %}
-{% if is_admin and demo_mode %}<div class="card p-3 mt-4"><h2 class="h5">Demo controls</h2><form class="d-flex flex-wrap gap-2" method="post" action="{{ url_for('main.demo_simulate') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select class="form-select w-auto" name="choice">{% for value in ['complete_episode','start_playback','favorite','unfavorite','advance_30_days','add_movie','increase_movie_size','outage_sonarr','outage_radarr','outage_jellyfin','restore_integrations'] %}<option value="{{ value }}">{{ value.replace('_',' ')|title }}</option>{% endfor %}</select><button class="btn btn-outline-light">Simulate</button></form></div>{% endif %}
+{% if is_admin and demo_mode %}<div class="card p-3 mt-4"><h2 class="h5">Demo controls</h2><form class="d-flex flex-wrap gap-2" method="post" action="{{ url_for('main.demo_simulate') }}" data-reload><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select class="form-select w-auto" name="choice">{% for value in ['complete_episode','start_playback','favorite','unfavorite','advance_30_days','add_movie','increase_movie_size','outage_sonarr','outage_radarr','outage_jellyfin','restore_integrations'] %}<option value="{{ value }}">{{ value.replace('_',' ')|title }}</option>{% endfor %}</select><button class="btn btn-outline-light">Simulate</button></form></div>{% endif %}
+</div>
 <script src="{{ url_for('static', filename='reconcile-status.js', v='1') }}" defer></script>
+<script src="{{ url_for('static', filename='live-page.js', v='2') }}"></script>
 {% endblock %}

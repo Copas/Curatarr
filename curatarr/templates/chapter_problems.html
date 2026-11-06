@@ -74,5 +74,5 @@
 </div>
 {% else %}<div class="empty-state"><h2 class="h6">Nothing to look at</h2><p class="mb-0">{{ 'No problems found in the files checked so far.' if found.files_checked else 'Files are checked in the background, a few at a time, and listed here if something is wrong.' }}</p></div>{% endfor %}
 </div>
-<script src="{{ url_for('static', filename='live-page.js', v='1') }}"></script>
+<script src="{{ url_for('static', filename='live-page.js', v='2') }}"></script>
 {% endblock %}

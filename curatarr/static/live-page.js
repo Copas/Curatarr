@@ -1,4 +1,4 @@
-// Buttons on a page marked data-live-page work in place: the click is sent in
+// Buttons on a page marked data-live-page (Problems, Overview) work in place: the click is sent in
 // the background, only that button shows it's working, and the page's content
 // is then redrawn where it is (scroll kept, details left open stay open). So
 // several things can be clicked one after another without waiting for a reload.
@@ -44,13 +44,18 @@
     });
   }
 
-  var drawing = null;
-  function redraw(html) {
-    var doc = new DOMParser().parseFromString(html, "text/html");
+  function parse(html) {
+    return new DOMParser().parseFromString(html, "text/html");
+  }
+
+  function notesFrom(doc) {
     doc.querySelectorAll("main > .alert:not([id])").forEach(function (alert) {
       var category = (alert.className.match(/alert-(\w+)/) || [])[1];
       note(alert.textContent.trim(), category === "danger" ? "danger" : category);
     });
+  }
+
+  function redraw(doc) {
     var fresh = doc.querySelector("[data-live-page]");
     var here = document.querySelector("[data-live-page]");
     if (!fresh || !here) return;
@@ -73,17 +78,23 @@
   }
 
   function refresh(html, url) {
-    // The answer is usually this page already; otherwise fetch it afresh.
+    // The answer is usually this page already; otherwise fetch it afresh
+    // (its messages were shown on the page the action went to).
+    var doc = parse(html);
+    notesFrom(doc);
     if (url && new URL(url).pathname === location.pathname) {
-      redraw(html);
+      redraw(doc);
       return Promise.resolve();
     }
-    return fetch(location.href).then(function (r) { return r.text(); }).then(redraw);
+    return fetch(location.href)
+      .then(function (r) { return r.text(); })
+      .then(function (page) { redraw(parse(page)); });
   }
 
   document.addEventListener("submit", function (event) {
     var form = event.target;
     if (event.defaultPrevented || !form.closest("[data-live-page]")) return;
+    if (form.hasAttribute("data-reload")) return; // starts something the page follows after loading
     if ((form.method || "").toLowerCase() !== "post" || form.target === "_blank") return;
     var button = event.submitter;
     var k = key(form, button);

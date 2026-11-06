@@ -109,3 +109,10 @@ def test_history_filter_choices_come_from_recorded_values(app, client):
     assert '<option value="sonarr_season_search" >Sonarr Season Search</option>' in page
     assert client.get("/history?from=not-a-date").status_code == 400
     assert client.get("/history/unknown").status_code == 404
+
+
+def test_overview_buttons_work_in_place_but_long_jobs_reload(client):
+    page = client.get("/").text
+    assert "data-live-page" in page and "live-page.js" in page
+    # Reconcile now starts something the page follows from a fresh load.
+    assert 'action="/reconcile" data-reload' in page
