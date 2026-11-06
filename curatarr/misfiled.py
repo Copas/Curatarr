@@ -539,7 +539,7 @@ def _plan(finding, findings) -> str | None:
         if finding.get("own_fit") != "not_own" or _redownloaded_lately(finding):
             return None  # a person decides (a copy that came back wrong too)
         return "redownload"
-    if finding.get("verdict") != "other":
+    if finding.get("verdict") != "other" or _redownloaded_lately(finding):
         return None
     if not finding["target_file_id"]:
         return "move"
@@ -551,9 +551,10 @@ def _plan(finding, findings) -> str | None:
     return None
 
 
-def sweep(now=None) -> int:
-    """Look at recent imports every half hour; fix confirmed ones when the
-    automatic fix is on. Returns how many were fixed."""
+def sweep(now=None, *, force=False, fix_any=True) -> int:
+    """Look at recent imports every half hour (``force``: now); fix confirmed
+    ones when the automatic fix is on (and ``fix_any``). Returns how many were
+    fixed."""
     from . import autofix
     from .services import client, set_setting, setting
 
@@ -562,7 +563,7 @@ def sweep(now=None) -> int:
 
     stored = dict(setting(KEY, {}) or {})
     checked = _as_datetime(stored.get("checked_at"))
-    if checked and now - checked < EVERY:
+    if checked and now - checked < EVERY and not force:
         found = stored.get("findings") or {}
     else:
         try:
@@ -583,7 +584,7 @@ def sweep(now=None) -> int:
         stored = {"checked_at": now.isoformat(), "findings": found}
         set_setting(KEY, stored)
         db.session.commit()
-    if not autofix.automatic("misfiled"):
+    if not fix_any or not autofix.automatic("misfiled"):
         return 0
     by_file = {int(k): v for k, v in found.items()}
     fixed, started = 0, time.monotonic()
@@ -634,6 +635,7 @@ def rows() -> list[dict]:
             | {
                 "file_id": file_id,
                 "plan": plan,
+                "repeat": _redownloaded_lately(finding),
                 "media": media.get(finding["series_id"]),
                 "evidence": evidence(finding),
             }
@@ -675,6 +677,7 @@ def evidence(finding) -> list[str]:
                     else ""
                 )
             )
+        lines += _repeat_line(finding)
         if finding.get("failed"):
             lines.append(f"Fixing it failed: {finding['failed']}")
         return lines
@@ -695,11 +698,7 @@ def evidence(finding) -> list[str]:
                 "can't confirm it",
             }.get(finding.get("own_fit"), "")
         )
-        if _redownloaded_lately(finding):
-            lines.append(
-                f"{finding['from_code']} was downloaded again this week and this copy "
-                "is the wrong episode too: its releases may all be numbered this way"
-            )
+        lines += _repeat_line(finding)
         if finding.get("failed"):
             lines.append(f"Fixing it failed: {finding['failed']}")
         return [line for line in lines if line]
@@ -728,9 +727,22 @@ def evidence(finding) -> list[str]:
             f"{finding['to_code']} already has a file ({finding['target_quality']})"
             + (", which is that episode too" if finding.get("target_is_target") else "")
         )
+    lines += _repeat_line(finding)
     if finding.get("failed"):
         lines.append(f"Fixing it failed: {finding['failed']}")
     return [line for line in lines if line]
+
+
+def _repeat_line(finding) -> list[str]:
+    if not _redownloaded_lately(finding):
+        return []
+    return [
+        (
+            f"{finding['from_code']} was fixed this week and the same mix-up came "
+            "back: its releases may all be numbered this way. Fixing it now "
+            f"unmonitors {finding['from_code']} instead of searching again"
+        )
+    ]
 
 
 def dismiss(file_id) -> None:
@@ -858,7 +870,14 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
             f.get("to_id") == finding["from_id"] and f.get("verdict") == "other"
             for f in found.values()
         )
-        if not refilled and finding.get("from_monitored"):
+        repeat = _redownloaded_lately(finding)
+        if not refilled and finding.get("from_monitored") and repeat:
+            sonarr.set_episodes_monitored([finding["from_id"]], False)
+            steps.append(
+                f"unmonitored {finding['from_code']}: the same mix-up came back after "
+                "searching for it, so its releases must all be numbered this way"
+            )
+        elif not refilled and finding.get("from_monitored"):
             if finding.get("scene"):
                 sonarr.set_episodes_monitored([finding["from_id"]], False)
                 steps.append(
@@ -877,12 +896,12 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
                     steps.append("blocklisted the release, which is numbered wrong")
                 sonarr.episode_search([finding["from_id"]])
                 steps.append(f"searched for the real {finding['from_code']}")
-    except _Changed as exc:
+    except _Changed:
         # Not a failure: look again on the next pass, with Sonarr as it is now.
         stored.pop("checked_at", None)
         set_setting(KEY, stored)
         db.session.commit()
-        raise ValueError(str(exc)) from exc
+        raise
     except (IntegrationError, ValueError, KeyError) as exc:
         found[str(file_id)] = {**finding, "failed": str(exc)}
         stored["findings"] = found
@@ -947,11 +966,11 @@ def _redownload(file_id, finding, stored, automatic, *, remove=False) -> str:
         elif finding.get("from_monitored"):
             sonarr.episode_search([finding["from_id"]])
             steps.append(f"searched for the real {finding['from_code']}")
-    except _Changed as exc:
+    except _Changed:
         stored.pop("checked_at", None)
         set_setting(KEY, stored)
         db.session.commit()
-        raise ValueError(str(exc)) from exc
+        raise
     except (IntegrationError, ValueError, KeyError) as exc:
         found[str(file_id)] = {**finding, "failed": str(exc)}
         stored["findings"] = found
@@ -982,9 +1001,11 @@ def _redownload(file_id, finding, stored, automatic, *, remove=False) -> str:
 
 
 def _redownloaded_lately(finding) -> bool:
-    """Whether this episode was downloaded again in the last week (by hand or
-    automatically): a new copy that's wrong too means every release of it is
-    numbered this way, and doing it again would go round in circles."""
+    """Whether this episode was fixed in the last week (moved away, or
+    downloaded again, by hand or automatically): the same mix-up back again
+    means every release of it is numbered this way, and fixing it the same
+    way again would go round in circles (Sonarr searches by itself once a
+    release is blocklisted)."""
     from .models import LifecycleAction
 
     since = utcnow() - AGAIN_AFTER
@@ -993,8 +1014,14 @@ def _redownloaded_lately(finding) -> bool:
         LifecycleAction.created_at >= since,
     )
     return any(
-        (payload or {}).get("plan") == "redownload"
+        (payload or {}).get("plan") != "remove"
         and (payload.get("from_id") or (payload.get("finding") or {}).get("from_id"))
         == finding.get("from_id")
         for (payload,) in rows
     )
+
+
+def look_again() -> None:
+    """Sonarr changed under a finding (often: it was fixed already, or the
+    same mix-up came back): read it afresh so the page shows what's there."""
+    sweep(force=True, fix_any=False)

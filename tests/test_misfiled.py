@@ -210,7 +210,7 @@ def test_without_a_transcript_a_person_decides(app, client, monkeypatch):
     assert any(c[0] == "ManualImport" for c in sonarr.calls)
 
 
-def test_a_chain_moves_one_slot_at_a_time():
+def test_a_chain_moves_one_slot_at_a_time(app):
     # E2's file is E1; E1's file is the same episode as E1 (a duplicate).
     findings = {
         12: {"verdict": "other", "target_file_id": 11, "to_id": 101},
@@ -340,7 +340,7 @@ def _run_finding(number, verdict="unsure", leans="other", to=None, target_file=0
     }
 
 
-def test_a_run_of_files_one_slot_off_is_confirmed_together():
+def test_a_run_of_files_one_slot_off_is_confirmed_together(app):
     # A release counting the pilot into the season: each file is one slot
     # late. Summaries alone settle only E05 clearly, but every file leans
     # towards the episode before it, and the pilot heads the run.
@@ -473,10 +473,86 @@ def test_a_copy_that_comes_back_wrong_is_left_to_a_person(app, client, monkeypat
     assert misfiled.sweep() == 0 and sonarr.calls == []
     (row,) = misfiled.rows()
     assert row["plan"] is None
-    assert any("downloaded again this week" in line for line in row["evidence"])
+    assert any("same mix-up came back" in line for line in row["evidence"])
     page = client.get("/chapters/problems").text
     assert "Remove it" in page
     client.post("/chapters/problems/misfiled/16/fix", data={"mode": "remove"})
     assert ("delete", 16) in sonarr.calls
     assert ("monitor", [102], False) in sonarr.calls
     assert not any(c[0] == "search" for c in sonarr.calls)
+
+
+def test_a_move_that_brings_the_same_mix_up_back_stops_searching(
+    app, client, monkeypatch
+):
+    """Moved to E3 and E2 searched for: the release that comes back for E2 is
+    numbered the same wrong way, so moving it again would go round in circles."""
+    from curatarr import filecheck_jobs
+
+    monkeypatch.setattr(filecheck_jobs, "_dry_run", lambda media: False)
+    _show()
+    sonarr = FakeSonarr(
+        [
+            _episode(1, 11),
+            _episode(2, 12),
+            _episode(3),
+            _episode(4, 14),
+            _episode(5, 15),
+        ],
+        [_imported(102, 12, "Show.S01E02.Volcano.1080p.WEB")],
+        {12: {"id": 12, "path": "/tv/Show/S01E02.mkv", "quality": {}}},
+    )
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: sonarr)
+    talk = "lava volcano erupting molten geologists sampling climb " * 5
+    monkeypatch.setattr(misfiled, "_transcript", _said({102: talk}))
+    monkeypatch.setattr(autofix, "ON_BY_DEFAULT", True)
+    assert misfiled.sweep() == 1 and ("search", [102]) in sonarr.calls
+    # Another copy of the same release lands on E2.
+    sonarr._episodes[102].update(episodeFileId=16, hasFile=True)
+    sonarr._files[16] = {"id": 16, "path": "/tv/Show/S01E02b.mkv", "quality": {}}
+    sonarr._imports = [_imported(102, 16, "Show.S01E02.Volcano.1080p.WEB")]
+    sonarr.calls.clear()
+    misfiled.look_again()
+    assert misfiled.sweep() == 0 and sonarr.calls == []
+    (row,) = misfiled.rows()
+    assert row["plan"] is None and row["repeat"]
+    assert any("same mix-up came back" in line for line in row["evidence"])
+    page = client.get("/chapters/problems").text
+    assert "Remove it" in page
+    page = client.post(
+        "/chapters/problems/misfiled/16/fix",
+        data={"mode": "discard"},
+        follow_redirects=True,
+    ).text
+    assert "unmonitored S01E02" in page, page[page.find("alert") :][:300]
+    assert ("monitor", [102], False) in sonarr.calls
+    assert not any(c[0] == "search" for c in sonarr.calls)
+
+
+def test_a_finding_sonarr_changed_under_is_looked_at_again(app, client, monkeypatch):
+    _show()
+    sonarr = FakeSonarr(
+        [
+            _episode(1, 11),
+            _episode(2, 12),
+            _episode(3),
+            _episode(4, 14),
+            _episode(5, 15),
+        ],
+        [_imported(102, 12, "Show.S01E02.Volcano.1080p.WEB")],
+        {12: {"id": 12, "path": "/tv/Show/S01E02.mkv", "quality": {}}},
+    )
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: sonarr)
+    monkeypatch.setattr(misfiled, "_transcript", _said({}))
+    misfiled.sweep()
+    assert misfiled.rows()
+    # Fixed elsewhere meanwhile: E2's file is gone.
+    sonarr._episodes[102].update(episodeFileId=0, hasFile=False)
+    sonarr._imports = []
+    answer = client.post(
+        "/chapters/problems/misfiled/12/fix",
+        data={"mode": "move"},
+        follow_redirects=True,
+    ).text
+    assert "Looked again" in answer
+    assert misfiled.rows() == []

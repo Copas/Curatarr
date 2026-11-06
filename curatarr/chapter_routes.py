@@ -872,6 +872,20 @@ def misfiled_action(file_id, action):
         else:
             misfiled.dismiss(file_id)
             flash("Kept where it is. It won't be listed again.", "success")
+    except misfiled._Changed:
+        db.session.rollback()
+        try:
+            misfiled.look_again()
+            flash(
+                "Sonarr changed since this was found, so nothing was done. "
+                "Looked again: the list shows what's there now.",
+                "warning",
+            )
+        except IntegrationError as exc:
+            flash(
+                f"Sonarr changed since this was found, and couldn't be read: {exc}",
+                "danger",
+            )
     except (IntegrationError, ValueError) as exc:
         db.session.rollback()
         flash(f"Couldn't do that: {exc}", "danger")

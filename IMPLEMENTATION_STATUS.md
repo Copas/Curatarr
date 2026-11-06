@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc92 (2026-11-06): misfiled repeat guard covers all fixes (unmonitor instead of searching on a repeat); stale cards looked at again.
 - v0.2.0rc91 (2026-11-06): Overview lists new pictures waiting for review.
 - v0.2.0rc90 (2026-11-06): wrong-episode downloads again at most once a week per episode; Remove it (blocklist, delete, unmonitor).
 - v0.2.0rc89 (2026-11-06): Overview buttons work in place (Reconcile now and Discover still reload).
