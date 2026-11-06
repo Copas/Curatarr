@@ -452,14 +452,20 @@ class InvalidChapters(ValueError):
 
 
 # A chapter name that says nothing: "Chapter 12", "Chapitre 12", "Kapitel 12",
-# "12", "00:05:00" (encoders and some releases add these; DVDs and Blu-rays
-# name scenes, or number them at real breaks).
+# "12", "00:05:00", "part 01 (00:07)" (encoders and some releases add these;
+# DVDs and Blu-rays name scenes, or number them at real breaks).
+_TIME = r"\d{1,2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?"
 GENERIC_NAME = re.compile(
     r"^\s*(?:(?:chapter|chapitre|kapitel|cap[ií]tulo|capitolo|hoofdstuk|"
     r"rozdzia[lł]|глава|chap|ch|part|scene|scène|szene|escena)\.?\s*#?\s*)?"
-    r"(?:\d{1,3}|\d{1,2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?)\s*$",
+    rf"(?:\d{{1,3}}|{_TIME})"
+    # …with the time it starts at after it: "part 01 (00:07)", "Chapter 3 - 0:21"
+    rf"(?:\s*(?:[-–—:]\s*)?[(\[]?\s*{_TIME}\s*[)\]]?)?\s*$",
     re.IGNORECASE,
 )
+# Raised when what counts as no use changes: files kept with their own
+# chapters are looked at once more (enrichment._judge_kept_chapters_again).
+POOR_RULE = 2
 POOR_SPACING = 120  # seconds: chapters closer than this on average aren't scenes
 EVEN_SLACK = 2.0  # seconds: gaps this alike come from a timer, not the story
 

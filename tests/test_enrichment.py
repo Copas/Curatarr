@@ -396,6 +396,9 @@ def test_chapters_worth_keeping_stay_and_are_not_looked_at_again(media_env):
     state = _run(part, "generate")
     assert state.chapter_status == "existing" and state.chapter_source == "embedded_ok"
     assert files.writes == []
+    enrichment._judge_kept_chapters_again()  # an installation's one look again
+    state.chapter_source = "embedded_ok"
+    db.session.commit()
     assert enrichment.queue_new_media() == 0  # looked at once: not queued again
 
 
@@ -417,6 +420,20 @@ def test_what_makes_chapters_no_use():
     )
     # Numbered, but at the story's breaks (a disc's chapters): kept.
     assert poor_chapters(numbered([0, 410, 980, 1500, 2350, 3010]), hour) is None
+    # Numbered with the time each starts at, placed by a timer.
+    timed = [
+        {
+            "start": 420.0 * n,
+            "name": f"part {n + 1:02} ({7 * n // 60:02}:{7 * n % 60:02})",
+        }
+        for n in range(15)
+    ]
+    assert "every 7 minutes" in poor_chapters(timed, 6288.0)
+    from curatarr.chapters import GENERIC_NAME
+
+    for name in ("part 01 (00:07)", "Chapter 3 - 0:21", "Chapter 12 [01:02:03]"):
+        assert GENERIC_NAME.match(name), name
+    assert not GENERIC_NAME.match("Part 1 (The Arrival)")
     # Named by someone: kept, however close together.
     named = [{"start": 50.0 * n, "name": f"Scene of the crime {n}"} for n in range(60)]
     assert poor_chapters(named, hour) is None
@@ -2699,3 +2716,18 @@ def test_an_unexpected_error_says_what_it_was(app, client, media_env, monkeypatc
     assert "Traceback" in state.chapter_error_detail
     page = client.get("/chapters").text
     assert "Unexpected error: KeyError" in page and "<summary" in page
+
+
+def test_kept_chapters_are_judged_again_when_the_rule_changes(media_env):
+    from curatarr.services import setting
+
+    _library, _media, part = _movie()
+    state = enrichment.state_for(part)
+    state.chapter_status, state.chapter_source = "existing", "embedded_ok"
+    db.session.commit()
+    enrichment._judge_kept_chapters_again()
+    assert state.chapter_source == "embedded" and setting("chapter_poor_rule") == 2
+    state.chapter_source = "embedded_ok"
+    db.session.commit()
+    enrichment._judge_kept_chapters_again()  # once only
+    assert state.chapter_source == "embedded_ok"

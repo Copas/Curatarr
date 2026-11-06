@@ -663,6 +663,7 @@ def queue_new_media() -> int:
         if not config["enabled"]:
             continue
         if config["replace_poor"]:
+            _judge_kept_chapters_again()
             queued += _queue_chapter_quality_checks(library.id, now)
         processing = config["processing"]
         if not (processing["new_media"] or processing["existing_library"]):
@@ -741,6 +742,22 @@ def chapter_quality_progress() -> dict | None:
         "total": kept + left,
         "per_hour": QUALITY_CHECKS_PER_PASS * len(libraries),
     }
+
+
+def _judge_kept_chapters_again() -> None:
+    """Once per change to what counts as no use (chapters.POOR_RULE): files
+    kept with their own chapters are looked at again, a few at a time."""
+    from .chapters import POOR_RULE
+    from .services import set_setting, setting
+
+    if (setting("chapter_poor_rule", 1) or 1) >= POOR_RULE:
+        return
+    db.session.query(ChapterState).filter(
+        ChapterState.chapter_status == "existing",
+        ChapterState.chapter_source == "embedded_ok",
+    ).update({ChapterState.chapter_source: "embedded"}, synchronize_session=False)
+    set_setting("chapter_poor_rule", POOR_RULE)
+    db.session.commit()
 
 
 def _queue_chapter_quality_checks(library_id, now) -> int:

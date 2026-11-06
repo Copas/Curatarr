@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc93 (2026-11-06)
+
+- **Chapters named with their start time are recognised as no use.** Names like "part 01 (00:07)" or "Chapter 3 - 0:21" didn't count as generic, so a film with a chapter every 7 minutes kept them. They now count, and files kept with their own chapters are looked at once more, a few at a time.
+
 ## 0.2.0rc92 (2026-11-06)
 
 - **A wrong-episode mix-up that comes back is no longer fixed in circles.** Moving a misnumbered file away blocklists its release and searches for the episode it was filed under, but another copy of the same misnumbered release could come straight back, and be moved again (Top Gear went round twice in 40 minutes). rc90's once-a-week limit now covers every fix, not only downloading again. When the same mix-up returns within a week, the card says so and waits for a person. Fixing it then unmonitors the episode instead of searching again, and **Remove it** is offered too.
