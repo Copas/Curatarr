@@ -219,7 +219,8 @@ def test_the_page_asks_quickly_and_the_button_works_in_place(app, client, monkey
     monkeypatch.setattr(failed_downloads, "client", lambda service: arr)
     page = client.get("/chapters/problems").text
     assert asked and all(asked)
-    assert "data-download-retry" in page and "download-retry.js" in page
+    # Every button on Problems works in place (live-page.js), this one too.
+    assert "data-live-page" in page and "live-page.js" in page
     assert "delete its download files" in page
     answer = client.post(
         "/chapters/problems/download/sonarr/10/retry",
