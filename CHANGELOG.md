@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc91 (2026-11-06)
+
+- **New pictures to review show on Overview.** Posters and backdrops Curatarr made and waiting for approval were only counted on the Posters pages. Overview's *Needs you* now lists them too, linking to Review.
+
 ## 0.2.0rc90 (2026-11-06)
 
 - **Downloading a wrong episode again no longer goes round in circles.** Once a release is blocklisted, Sonarr searches by itself. A release group that numbers a season its own way sends the same mix-up straight back, so the automatic fix downloaded it again and again. An episode is now downloaded again automatically at most once a week. If the new copy is the wrong episode too, the card says so and waits for a person.

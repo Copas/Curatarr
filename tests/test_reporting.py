@@ -116,3 +116,14 @@ def test_overview_buttons_work_in_place_but_long_jobs_reload(client):
     assert "data-live-page" in page and "live-page.js" in page
     # Reconcile now starts something the page follows from a fresh load.
     assert 'action="/reconcile" data-reload' in page
+
+
+def test_pictures_to_review_show_on_overview(client, monkeypatch):
+    from curatarr import artwork_jobs
+
+    real = artwork_jobs.overview
+    monkeypatch.setattr(artwork_jobs, "overview", lambda: real() | {"review": 3})
+    page = client.get("/").text
+    assert "3 new pictures to review" in page and "/library/posters/review" in page
+    monkeypatch.setattr(artwork_jobs, "overview", lambda: real() | {"review": 0})
+    assert "to review" not in client.get("/").text

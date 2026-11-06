@@ -865,6 +865,20 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
                 "href": url_for("main.settings"),
             },
         )
+    from . import artwork_jobs
+
+    pictures = artwork_jobs.overview()["review"]
+    if pictures:
+        needs.append(
+            {
+                "icon": "review",
+                "title": f"{pictures} new picture"
+                + ("s" if pictures != 1 else "")
+                + " to review",
+                "detail": "Posters and backdrops Curatarr made: approve or turn down",
+                "href": url_for("main.artwork_review"),
+            }
+        )
     from . import autofix, better_copy, dub_jobs
     from .enrichment import file_label, maintenance_failed_count
 
