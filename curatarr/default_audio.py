@@ -453,12 +453,34 @@ def _remember_remaining():
     db.session.commit()
 
 
+def _changed_count() -> int:
+    """Files whose English track Curatarr made the default or put first, from
+    History: a file's own record is replaced when it's looked at again (after
+    its TV-friendly copy is added, say), which made the count read low."""
+    from sqlalchemy import func
+
+    from .models import LifecycleAction
+
+    english = or_(
+        LifecycleAction.idempotency_key.like("default-audio-first:%"),
+        LifecycleAction.reason_text.like("%its English track%"),
+    )
+    return (
+        db.session.query(
+            func.count(func.distinct(LifecycleAction.payload_json["file"].as_string()))
+        )
+        .filter(LifecycleAction.action_type == "default_audio_fixed", english)
+        .scalar()
+        or 0
+    )
+
+
 def progress() -> dict | None:
     """Files looked at, changed and still to do: to look at, to listen to, to
     copy. None when English first is off and it never changed anything."""
     from .services import setting
 
-    checked = fixed = waiting = 0
+    checked = waiting = 0
     for result, size in db.session.query(
         ChapterState.default_audio, ChapterState.default_audio_size
     ).filter(ChapterState.default_audio.isnot(None)):
@@ -467,7 +489,7 @@ def progress() -> dict | None:
             waiting += 1
         elif size is not None:
             checked += 1
-            fixed += bool(result.get("fixed") and result.get("why") == "language")
+    fixed = _changed_count()
     on = english_enabled()
     if not on and not fixed:
         return None

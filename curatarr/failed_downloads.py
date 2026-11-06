@@ -1,6 +1,7 @@
 """Manual recovery for completed downloads that Radarr or Sonarr cannot import."""
 
 import time
+from datetime import timedelta
 
 from . import db
 from .integrations import IntegrationError
@@ -8,6 +9,10 @@ from .models import utcnow
 from .services import audit, client
 
 SERVICES = ("sonarr", "radarr")
+WAITING_KEY = "failed_downloads_waiting"  # {"count", "at"}: for the Problems badge
+CHECK_EVERY = timedelta(minutes=10)
+AUTO_PER_WEEK = 2  # automatic retries for the same episode or film, then a person
+AUTO_PER_RUN = 2
 
 
 def _stuck(row):
@@ -100,12 +105,88 @@ def review():
                     "count": len(group),
                     "messages": messages,
                     "blocked_reason": blocked_reason,
+                    "targets": sorted(
+                        {
+                            row.get("episodeId" if service == "sonarr" else "movieId")
+                            for row in group
+                        }
+                        - {None}
+                    ),
                 }
             )
-    return sorted(found, key=lambda row: (row["service"], row["title"])), errors
+    found.sort(key=lambda row: (row["service"], row["title"]))
+    if not errors:
+        _remember(len(found))
+    return found, errors
 
 
-def retry(service, queue_id):
+def _remember(count):
+    from .services import set_setting
+
+    set_setting(WAITING_KEY, {"count": count, "at": utcnow().isoformat()})
+    db.session.commit()
+
+
+def count() -> int:
+    """Stuck downloads found on the last look (no Sonarr or Radarr call)."""
+    from .services import setting
+
+    return int((setting(WAITING_KEY, {}) or {}).get("count", 0))
+
+
+def _retried_lately(service, targets) -> int:
+    """Automatic retries in the last week touching any of these targets."""
+    from .models import LifecycleAction
+
+    since = utcnow() - timedelta(days=7)
+    rows = db.session.query(LifecycleAction.payload_json).filter(
+        LifecycleAction.action_type == "failed_download_removed",
+        LifecycleAction.created_at >= since,
+    )
+    return sum(
+        1
+        for (payload,) in rows
+        if (payload or {}).get("auto")
+        and payload.get("service") == service
+        and set(payload.get("targets") or []) & set(targets)
+    )
+
+
+def sweep() -> int:
+    """Worker cycle, every few minutes: count stuck downloads for the Problems
+    badge and, with Settings → Automatic on, blocklist them and search again.
+    The same episode or film is retried at most twice a week, so a release
+    that keeps failing comes back to a person. Returns how many were retried."""
+    from . import autofix
+    from .services import _as_datetime, setting
+
+    last = _as_datetime((setting(WAITING_KEY, {}) or {}).get("at"))
+    if last and utcnow() - last < CHECK_EVERY:
+        return 0
+    found, errors = review()
+    if errors:
+        _remember(count())  # try again later, keeping the last count
+        return 0
+    if not autofix.automatic("downloads"):
+        return 0
+    retried = 0
+    for row in found:
+        if retried >= AUTO_PER_RUN or row["blocked_reason"]:
+            continue
+        if _retried_lately(row["service"], row["targets"]) >= AUTO_PER_WEEK:
+            continue
+        try:
+            retry(row["service"], row["queue_id"], auto=True)
+        except (ValueError, IntegrationError):
+            db.session.rollback()
+            continue
+        retried += 1
+    if retried:
+        _remember(max(len(found) - retried, 0))
+    return retried
+
+
+def retry(service, queue_id, *, auto=False):
     """Blocklist one stuck download, remove its client files, then search again.
 
     The queue is read again before acting. A stale card cannot remove a newer
@@ -150,9 +231,9 @@ def retry(service, queue_id):
         "failed_download_removed",
         media_id,
         f"Blocklisted “{title}” in {service.title()} and removed its download "
-        "files, because it could not be imported.",
+        "files, because it could not be imported" + (" (automatic)." if auto else "."),
         history_key,
-        payload={"service": service, "targets": sorted(target_ids)},
+        payload={"service": service, "targets": sorted(target_ids), "auto": auto},
     )
     db.session.commit()
 

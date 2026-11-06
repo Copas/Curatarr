@@ -35,6 +35,7 @@ def test_each_can_be_switched_off(app, client):
         "default_audio": False,
         "seek": False,
         "favourites": False,
+        "downloads": False,
     }
     assert setting("chapter_options")["file_replace_automatically"] is True
 

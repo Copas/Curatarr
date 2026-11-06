@@ -231,3 +231,48 @@ def test_the_page_asks_quickly_and_the_button_works_in_place(app, client, monkey
         headers={"X-Requested-With": "fetch"},
     ).get_json()
     assert not answer["ok"] and "no longer waiting" in answer["message"]
+
+
+def test_the_worker_counts_them_and_retries_only_when_automatic(app, monkeypatch):
+    from curatarr import db
+    from curatarr.services import set_setting
+
+    sonarr, radarr = FakeArr("sonarr", [row(10, 101)]), FakeArr("radarr", [])
+    monkeypatch.setattr(
+        failed_downloads, "client", lambda s: sonarr if s == "sonarr" else radarr
+    )
+    monkeypatch.setattr(failed_downloads, "_dry_run_for", lambda *_args: False)
+
+    def again():  # the next look, past the ten minutes between looks
+        set_setting(failed_downloads.WAITING_KEY, {"count": failed_downloads.count()})
+        db.session.commit()
+        return failed_downloads.sweep()
+
+    assert failed_downloads.sweep() == 0  # off: counted for Problems, not touched
+    assert failed_downloads.count() == 1 and not sonarr.calls
+    assert failed_downloads.sweep() == 0  # not looked at again so soon
+
+    set_setting("auto_fixes", {"downloads": True})
+    db.session.commit()
+    for attempt in (1, 2, 3):
+        sonarr.rows = [row(10 + attempt, 101)]  # the next release fails too
+        retried = again()
+        assert retried == (1 if attempt < 3 else 0), attempt
+    # Twice in a week for the same episode, then it's left for a person.
+    assert [c for c in sonarr.calls if c[0] == "remove"] == [
+        ("remove", 11),
+        ("remove", 12),
+    ]
+    assert failed_downloads.count() == 1
+
+
+def test_stuck_downloads_count_on_problems(app, monkeypatch):
+    from curatarr import db
+    from curatarr.routes import _nav_counts
+    from curatarr.services import set_setting
+
+    with app.test_request_context("/chapters/problems"):
+        before = _nav_counts(True, True)["problems"]
+        set_setting(failed_downloads.WAITING_KEY, {"count": 2, "at": "2026-01-01"})
+        db.session.commit()
+        assert _nav_counts(True, True)["problems"] == before + 2

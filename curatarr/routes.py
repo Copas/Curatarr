@@ -565,10 +565,17 @@ def _nav_counts(signed_in_user, is_admin) -> dict:
         from .enrichment import maintenance_failed_count
 
         counts["dubs"] = dub_jobs.counts()["dubs_to_act"]
-        from . import filecheck_jobs, misfiled, missing_keep, wrong_version
+        from . import (
+            failed_downloads,
+            filecheck_jobs,
+            misfiled,
+            missing_keep,
+            wrong_version,
+        )
 
         counts["problems"] = (
             filecheck_jobs.counts()["problems_to_act"]
+            + failed_downloads.count()
             + missing_keep.count()
             + wrong_version.count()
             + misfiled.count()

@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc86 (2026-11-06): automatic retry of downloads that can't be imported (twice a week per target), counted on Problems; English changed count from History; rules pages drop repeated tabs.
 - v0.2.0rc85 (2026-11-05): Enhance coverage counts stay right-aligned when they wrap.
 - v0.2.0rc84 (2026-11-05): English heard despite one clip in another language (three clearly English); turned-down tracks heard again once.
 - v0.2.0rc83 (2026-11-05): track removal compares the picture's length, not the file's (dubs running past the film); refused copies retried once; poster snapshots of removed titles let go.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0rc86 (2026-11-06)
+
+- **Downloads that can't be imported can be retried automatically** (Settings → Automatic, off by default). The worker looks at Sonarr's and Radarr's queues every ten minutes. With this on, it blocklists a download that finished but can't be imported, removes its files and searches for another release, with the same checks as the button on Problems. The same episode or film is retried at most twice a week, then left on Problems for a person. These downloads now count towards the Problems badge.
+- **English audio's "changed" count comes from History.** A file's own record is replaced when it's looked at again, after its TV-friendly copy is added for example, so the count read low.
+- **Acquisition and Retention no longer repeat the settings navigation**, like Household.
+
 ## 0.2.0rc85 (2026-11-05)
 
 - **Enhance's coverage figures line up on the right.** Where a bar's name was too long to share a line with its count, the count and percentage moved under it on the left, so the percentages no longer lined up down the page. They now stay on the right either way.

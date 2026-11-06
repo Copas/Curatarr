@@ -367,6 +367,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Starting automatic fixes failed")
     try:
+        from . import failed_downloads
+
+        failed_downloads.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Checking downloads that didn't import failed")
+    try:
         from . import better_copy
 
         better_copy.sweep()

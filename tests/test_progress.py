@@ -228,7 +228,19 @@ def test_chapter_quality_english_audio_and_subtitle_tracks_are_counted(
     english = default_audio.progress()
     assert english["waiting"] == 1 and english["to_look"] == 4
     state = db.session.query(ChapterState).one()
-    state.default_audio = {"at": "now", "fixed": True, "why": "language"}
+    # Counted from History: the file's own record is replaced when it's looked
+    # at again, and a file changed twice counts once.
+    from curatarr.services import audit
+
+    for n in (1, 2):
+        audit(
+            "default_audio_fixed",
+            part.media_identity_id,
+            "Film: its English track, heard to be English, is first and the default now.",
+            f"default-audio-first:{state.id}:{n}",
+            payload={"file": part.file_path},
+        )
+    state.default_audio = {"at": "now"}
     db.session.commit()
     english = default_audio.progress()
     assert english["fixed"] == 1 and english["checked"] == 1

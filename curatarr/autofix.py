@@ -15,7 +15,8 @@ also for problems found before it was switched on:
 - **misfiled**: move episodes Sonarr filed under the wrong episode (misfiled);
 - **default_audio**: make a file's own soundtrack or English track the default (default_audio);
 - **seek**: rebuild files Roku players can't seek in (seek_repair);
-- **favourites**: Find Favorites, the rest of a favourite film's series (franchises).
+- **favourites**: Find Favorites, the rest of a favourite film's series (franchises);
+- **downloads**: blocklist downloads that can't be imported and search again (failed_downloads).
 
 Those last two only edit or rebuild the file: nothing is deleted or downloaded.
 
@@ -45,6 +46,8 @@ KINDS = {
     "seek": "Rebuild files Roku players can't seek in (copied, not re-encoded)",
     "favourites": "Find Favorites: add the rest of a favourite film's series to "
     "Radarr and search for it",
+    "downloads": "Blocklist downloads that finished but can't be imported, and "
+    "search for another release",
 }
 # The first two were Enhance options before this page existed; they stay there.
 ENHANCE_OPTION = {
