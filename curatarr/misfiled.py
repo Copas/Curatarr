@@ -42,6 +42,7 @@ RECENT = timedelta(days=14)
 RUN_SECONDS = 20
 FIXES_PER_RUN = 2
 COMMAND_SECONDS = 180  # moving a file across a network share takes a while
+FIXES = {"move", "replace", "discard", "redownload"}
 CLEAR = 1.15  # the fitting episode must beat every other by this much
 OVER_OWN = 1.25  # …and the one it's filed under by this much
 RUN = 3  # files in a row, each the same number of slots off: a misnumbered release
@@ -184,6 +185,24 @@ def fits(text, episodes, own_id, other_id) -> str:
     return "unsure"
 
 
+def own_fit(text, episodes, own_id) -> str:
+    """Whether a transcript is the episode it's filed under, when the name
+    gives no single other episode: "own" when it fits its own best, clearly;
+    "not_own" when another episode of the season clearly fits better; else
+    "unsure" (a file of another show fits none of them well)."""
+    fit = _fit(text, episodes, own_id, own_id)
+    if own_id not in fit:
+        return "unsure"
+    order = sorted(fit, key=fit.get, reverse=True)
+    best, top = order[0], fit[order[0]]
+    second = fit[order[1]] if len(order) > 1 else 0.0
+    if top < MIN_SCORE or top < CLEAR * second:
+        return "unsure"
+    if best == own_id:
+        return "own"
+    return "not_own" if top >= OVER_OWN * fit[own_id] else "unsure"
+
+
 def leaning(text, episodes, own_id, other_id) -> str | None:
     """ "other" or "own" when that episode fits a transcript best of all,
     however narrowly; else None. Too weak alone, but a run of files all
@@ -315,6 +334,15 @@ def _findings(sonarr, now) -> dict:
         if len(matches) > 1:
             finding["verdict"] = "ambiguous"
             finding["candidates"] = [f"{code(e)} “{e.get('title')}”" for e in matches]
+            finding["named"] = got
+            text = _transcript(current["id"])
+            finding["own_fit"] = (
+                "no_transcript"
+                if text is None
+                else own_fit(text, episodes, current["id"])
+            )
+            if finding["own_fit"] == "own":
+                continue  # what's said fits where it's filed: the name was wrong
             found[file_id] = finding
             continue
         target = matches[0]
@@ -504,7 +532,10 @@ def _plan(finding, findings) -> str | None:
     """How a confirmed finding is fixed now: "move" (the slot is free),
     "replace"/"discard" (the slot holds the same episode: keep the better
     copy), "wait" (the slot's file moves elsewhere first), or None (a person
-    should look)."""
+    should look), or "redownload" (it isn't the episode it's filed under, and
+    there's no one episode to move it to: download that episode again)."""
+    if finding.get("verdict") == "ambiguous":
+        return "redownload" if finding.get("own_fit") == "not_own" else None
     if finding.get("verdict") != "other":
         return None
     if not finding["target_file_id"]:
@@ -558,7 +589,7 @@ def sweep(now=None) -> int:
             break
         if finding.get("dismissed") or finding.get("failed") or finding.get("fixed"):
             continue
-        if _plan(finding, by_file) in {"move", "replace", "discard"}:
+        if _plan(finding, by_file) in FIXES:
             try:
                 fix(file_id, automatic=True)
                 fixed += 1
@@ -646,10 +677,24 @@ def evidence(finding) -> list[str]:
         return lines
     lines = [f"Downloaded as “{finding['download']}”"]
     if finding.get("verdict") == "ambiguous":
+        named = f"“{finding['named']}”" if finding.get("named") else "Its title"
         lines.append(
-            "Its title fits more than one episode: " + ", ".join(finding["candidates"])
+            f"{named} isn't {finding['from_code']} “{finding['from_title']}”, and is "
+            "only close to several episodes: " + ", ".join(finding["candidates"])
         )
-        return lines
+        lines.append(
+            {
+                "not_own": f"What's said in it fits another episode, not "
+                f"{finding['from_code']}",
+                "unsure": f"What's said in it doesn't clearly fit {finding['from_code']} "
+                "or any other episode: it may be another show with the same name",
+                "no_transcript": "It hasn't been transcribed, so what's said in it "
+                "can't confirm it",
+            }.get(finding.get("own_fit"), "")
+        )
+        if finding.get("failed"):
+            lines.append(f"Fixing it failed: {finding['failed']}")
+        return [line for line in lines if line]
     lines.append(
         f"Filed as {finding['from_code']} “{finding['from_title']}”; the name says "
         f"{finding['to_code']} “{finding['to_title']}”"
@@ -723,12 +768,14 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
     stored = dict(setting(KEY, {}) or {})
     found = dict(stored.get("findings") or {})
     finding = found.get(str(file_id))
-    if not finding or not finding.get("to_id"):
-        raise ValueError("Nothing is flagged for that file any more")
     by_file = {int(k): v for k, v in found.items()}
-    plan = mode or _plan(finding, by_file)
-    if plan not in {"move", "replace", "discard"}:
+    plan = mode or (_plan(finding, by_file) if finding else None)
+    if not finding or not (finding.get("to_id") or plan == "redownload"):
+        raise ValueError("Nothing is flagged for that file any more")
+    if plan not in FIXES:
         raise ValueError("The evidence doesn't settle this one; choose what to do")
+    if plan == "redownload":
+        return _redownload(file_id, finding, stored, automatic)
     if plan == "move" and finding["target_file_id"]:
         plan = "replace"  # a person chose to move it onto a filled slot
     media = (
@@ -851,6 +898,65 @@ def fix(file_id, *, automatic=False, mode=None) -> str:
         ("Automatically: " if automatic else "") + summary,
         f"misfiled:{file_id}:{at}",
         payload={"finding": finding, "plan": plan},
+    )
+    db.session.commit()
+    return summary[0].upper() + summary[1:]
+
+
+def _redownload(file_id, finding, stored, automatic) -> str:
+    """The file isn't the episode it's filed under: blocklist its release,
+    delete it and search for the episode again."""
+    from .filecheck_jobs import _dry_run
+    from .services import audit, client, set_setting
+
+    found = dict(stored.get("findings") or {})
+    media = (
+        db.session.query(MediaIdentity)
+        .filter_by(sonarr_id=finding["series_id"], media_type="series")
+        .first()
+    )
+    if media is not None and _dry_run(media):
+        raise ValueError(
+            "dry run is on for this library, so Curatarr won't delete files"
+        )
+    sonarr = client("sonarr")
+    steps = []
+    try:
+        source = sonarr.episode(finding["from_id"])
+        if int(source.get("episodeFileId") or 0) != int(file_id):
+            raise _Changed("The episode changed in Sonarr since this was found")
+        if _blocklist_release(sonarr, finding) or _blocklist_latest(sonarr, finding):
+            steps.append("blocklisted its release")
+        sonarr.delete_episode_file(file_id)
+        steps.append("deleted the file")
+        if finding.get("from_monitored"):
+            sonarr.episode_search([finding["from_id"]])
+            steps.append(f"searched for the real {finding['from_code']}")
+    except _Changed as exc:
+        stored.pop("checked_at", None)
+        set_setting(KEY, stored)
+        db.session.commit()
+        raise ValueError(str(exc)) from exc
+    except (IntegrationError, ValueError, KeyError) as exc:
+        found[str(file_id)] = {**finding, "failed": str(exc)}
+        stored["findings"] = found
+        set_setting(KEY, stored)
+        db.session.commit()
+        raise ValueError(str(exc)) from exc
+    at = utcnow().isoformat()
+    found[str(file_id)] = {**finding, "fixed": at}
+    stored["findings"] = found
+    set_setting(KEY, stored)
+    summary = (
+        f"{finding['series_title']} {finding['from_code']} held “{finding['download']}”, "
+        "another episode: " + "; ".join(steps) + "."
+    )
+    audit(
+        "misfiled_episode_fixed",
+        media.id if media else None,
+        ("Automatically: " if automatic else "") + summary,
+        f"misfiled:{file_id}:{at}",
+        payload={"finding": finding, "plan": "redownload"},
     )
     db.session.commit()
     return summary[0].upper() + summary[1:]

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc87 (2026-11-06)
+
+- **Every wrong-episode card offers a fix.** When a download's name was close to several episodes, there was nowhere to move the file, so the card offered only *It's right*. Such cards now offer **Download it again**: blocklist the release, delete the file and search for the episode it's filed under. With the automatic fix for misfiled episodes on, Curatarr does this itself when what's said in the file clearly fits another episode. When it fits none of them, the card says it may be another show with the same name, and leaves it to a person.
+
 ## 0.2.0rc86 (2026-11-06)
 
 - **Downloads that can't be imported can be retried automatically** (Settings → Automatic, off by default). The worker looks at Sonarr's and Radarr's queues every ten minutes. With this on, it blocklists a download that finished but can't be imported, removes its files and searches for another release, with the same checks as the button on Problems. The same episode or film is retried at most twice a week, then left on Problems for a person. These downloads now count towards the Problems badge.

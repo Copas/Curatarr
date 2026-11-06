@@ -866,7 +866,7 @@ def misfiled_action(file_id, action):
     try:
         if action == "fix":
             mode = request.form.get("mode") or None
-            if mode not in (None, "move", "replace", "discard"):
+            if mode not in (None, "move", "replace", "discard", "redownload"):
                 abort(400)
             flash(misfiled.fix(file_id, mode=mode), "success")
         else:

@@ -84,6 +84,9 @@ class FakeSonarr:
     def mark_failed(self, history_id):
         self.calls.append(("blocklist", history_id))
 
+    def queue_records(self, quick=False):
+        return []
+
     def set_episodes_monitored(self, ids, monitored):
         self.calls.append(("monitor", list(ids), monitored))
 
@@ -397,3 +400,49 @@ def test_subtitles_that_followed_a_mislabelled_file_are_not_taken(monkeypatch):
     # in under the old name, and the evidence is about the one before.
     monkeypatch.setattr(misfiled, "_transcript", _said({103: TOPICS[3] * 2}))
     assert misfiled._summaries_disagree(current, target, episodes)
+
+
+def _two_volcanoes():
+    fourth = _episode(4, 14) | {"title": "Volcano 2"}
+    return FakeSonarr(
+        [_episode(1, 11), _episode(2, 12), _episode(3), fourth, _episode(5, 15)],
+        [_imported(102, 12, "Show.S01E02.Volcano.1080p.WEB")],
+        {12: {"id": 12, "path": "/tv/Show/S01E02.mkv", "quality": {}}},
+    )
+
+
+def test_not_this_episode_and_no_one_place_for_it_is_downloaded_again(app, monkeypatch):
+    """A name close to several episodes gives nowhere to move the file, but
+    with what's said in it fitting another episode, it isn't this one."""
+    from curatarr import filecheck_jobs
+
+    monkeypatch.setattr(filecheck_jobs, "_dry_run", lambda media: False)
+    _show()
+    sonarr = _two_volcanoes()
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: sonarr)
+    talk = "lava volcano erupting molten geologists sampling climb " * 5
+    monkeypatch.setattr(misfiled, "_transcript", _said({102: talk}))
+    monkeypatch.setattr(autofix, "ON_BY_DEFAULT", True)
+    assert misfiled.sweep() == 1
+    assert sonarr.calls == [("blocklist", 900), ("delete", 12), ("search", [102])]
+    assert misfiled.rows() == []
+
+
+def test_every_card_offers_a_fix_not_only_its_right(app, client, monkeypatch):
+    from curatarr import filecheck_jobs
+
+    monkeypatch.setattr(filecheck_jobs, "_dry_run", lambda media: False)
+    _show()
+    sonarr = _two_volcanoes()
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: sonarr)
+    # Another show with the same name: fits none of this season's episodes.
+    talk = "spaceship alien planet orbit galaxy " * 5
+    monkeypatch.setattr(misfiled, "_transcript", _said({102: talk}))
+    monkeypatch.setattr(autofix, "ON_BY_DEFAULT", True)
+    assert misfiled.sweep() == 0  # not sure enough to do it unasked
+    (row,) = misfiled.rows()
+    assert row["plan"] is None
+    page = client.get("/chapters/problems").text
+    assert "Download it again" in page and "another show with the same name" in page
+    client.post("/chapters/problems/misfiled/12/fix", data={"mode": "redownload"})
+    assert ("delete", 12) in sonarr.calls and ("search", [102]) in sonarr.calls
