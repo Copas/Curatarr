@@ -52,6 +52,8 @@ ENGLISH_ONLY_RESET = "default_audio_english_only_started"
 # Rewrites refused before the length check compared the picture's length, not
 # the file's: a dub running past the film made every copy look cut short.
 LENGTH_RETRY = "default_audio_length_retry"
+# Tracks not taken as English over a single clip in another language.
+ONE_CLIP_RETRY = "default_audio_one_clip_retry"
 REMAINING_KEY = "default_audio_remaining"
 UNTAGGED = {"", "und"}
 EXTRA_NAME = re.compile(
@@ -207,6 +209,21 @@ def _retry_failed_rewrites():
     db.session.commit()
 
 
+def _listen_again_once():
+    """Once: tracks turned down before one odd clip was allowed are heard again."""
+    from .services import set_setting, setting
+
+    if setting(ONE_CLIP_RETRY):
+        return
+    turned_down = ChapterState.default_audio["not_english"].as_string()
+    db.session.query(ChapterState).filter(turned_down.isnot(None)).update(
+        {ChapterState.default_audio_size: None, ChapterState.default_audio: None},
+        synchronize_session=False,
+    )
+    set_setting(ONE_CLIP_RETRY, utcnow().isoformat())
+    db.session.commit()
+
+
 def _due():
     return (
         db.session.query(MediaPart)
@@ -296,6 +313,7 @@ def sweep() -> int:
         return 0
     _look_again_for_language()
     _retry_failed_rewrites()
+    _listen_again_once()
     started, fixed = time.monotonic(), 0
     automatic = _automatic()
     waiting = [
@@ -590,9 +608,15 @@ def sounds_english(samples) -> bool:
     """Whether what was heard backs up a track's English tag: at least one clip
     clearly English, and none clearly anything else. Stricter would miss quiet
     films, where most clips have no speech in them (dubs.heard, with no tag to
-    go on, needs more)."""
+    go on, needs more).
+
+    One clip in another language is allowed once three are clearly English:
+    a theme song in Japanese, a scene spoken in Portuguese, or a line misheard
+    as Welsh otherwise left English tracks second."""
     confident = [lang for lang, chance in samples if chance >= dubs.CONFIDENT]
-    return bool(confident) and all(lang == "en" for lang in confident)
+    english = confident.count("en")
+    others = len(confident) - english
+    return (english >= 1 and others == 0) or (english >= 3 and others <= 1)
 
 
 def _waiting_to_hear():

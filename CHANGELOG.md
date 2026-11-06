@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc84 (2026-11-05)
+
+- **One clip in another language no longer stops English going first.** Curatarr listens to a few short clips of a track before trusting its English tag. One clip in another language was enough to leave the track second: a theme song in Japanese, a scene spoken in Portuguese, or a line misheard as Welsh. Once three clips are clearly English, one in another language is now allowed. Tracks turned down before are heard again once.
+
 ## 0.2.0rc83 (2026-11-05)
 
 - **A dub that runs past the film no longer stops its removal.** A file is as long as its longest track, often a foreign dub that runs a few seconds (in one case 95 seconds) past the film, so after removing it the copy looked cut short and was refused, leaving the other language first. The check now compares how long the picture runs. Copies refused that way, for English first and for subtitle tracks in other languages, are made again once.

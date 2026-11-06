@@ -354,6 +354,25 @@ def test_what_counts_as_hearing_english():
     assert not hears([("en", 0.9), ("ja", 0.9), silent])
     assert not hears([("ja", 0.9)] * 5)
     assert not hears([])
+    # One clip in another language (a theme song, a scene) among clear English.
+    assert hears([silent, ("en", 0.89), ("en", 0.98), ("en", 0.91), ("ja", 0.76)])
+    assert not hears([("en", 0.98), ("en", 0.99), ("es", 0.95), ("es", 0.65)])
+    assert not hears([("en", 0.9), ("en", 0.9), ("ja", 0.9)])
+
+
+def test_tracks_turned_down_are_heard_again_once(app, media_env):  # noqa: F811
+    _movie("/movies/Film (2020)/Film.mkv")
+    state = enrichment.state_for(db.session.query(enrichment.MediaPart).one())
+    state.default_audio_size, state.default_audio = 5, {"not_english": "en"}
+    db.session.commit()
+    default_audio._listen_again_once()
+    db.session.refresh(state)
+    assert state.default_audio is None and state.default_audio_size is None
+    state.default_audio_size, state.default_audio = 5, {"not_english": "en"}
+    db.session.commit()
+    default_audio._listen_again_once()
+    db.session.refresh(state)
+    assert state.default_audio_size == 5
 
 
 def _languages(path):

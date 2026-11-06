@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc84 (2026-11-05): English heard despite one clip in another language (three clearly English); turned-down tracks heard again once.
 - v0.2.0rc83 (2026-11-05): track removal compares the picture's length, not the file's (dubs running past the film); refused copies retried once; poster snapshots of removed titles let go.
 - v0.2.0rc82 (2026-11-05): overall and individual progress bars for chapter quality checks, English audio and subtitle tracks; Overview's rows restored.
 - v0.2.0rc81 (2026-11-04): optional removal of audio in other languages once English has been heard (off by default).
