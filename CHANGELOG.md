@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc85 (2026-11-05)
+
+- **Enhance's coverage figures line up on the right.** Where a bar's name was too long to share a line with its count, the count and percentage moved under it on the left, so the percentages no longer lined up down the page. They now stay on the right either way.
+
 ## 0.2.0rc84 (2026-11-05)
 
 - **One clip in another language no longer stops English going first.** Curatarr listens to a few short clips of a track before trusting its English tag. One clip in another language was enough to leave the track second: a theme song in Japanese, a scene spoken in Portuguese, or a line misheard as Welsh. Once three clips are clearly English, one in another language is now allowed. Tracks turned down before are heard again once.

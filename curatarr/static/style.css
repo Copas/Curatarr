@@ -66,7 +66,7 @@ a { text-underline-offset: .18em; }
 .stat-grid-done .stat-value { color: var(--app-success); }
 .coverage + .coverage { margin-top: 1rem; }
 .coverage-label { font-size: .9rem; font-weight: 600; }
-.coverage-total { font-size: .9rem; color: var(--app-muted); }
+.coverage-total { font-size: .9rem; color: var(--app-muted); margin-left: auto; text-align: right; } /* stays right when it wraps under a long label */
 .coverage-total strong { color: var(--bs-emphasis-color); }
 .coverage-bar { display: block; margin: .35rem 0 .3rem; border-radius: 6px; overflow: hidden; }
 .coverage-track { fill: rgba(127, 127, 127, .22); }
