@@ -303,6 +303,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Finding what people will watch next failed")
     try:
+        from .enrichment import remake_subtitles
+
+        remake_subtitles()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Remaking subtitles made the old way failed")
+    try:
         from . import custom_posters
 
         custom_posters.sweep()

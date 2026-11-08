@@ -408,6 +408,10 @@ class ChapterState(db.Model, Timed):
     subtitle_fingerprint = db.Column(db.String(64))
     subtitle_processed_at = db.Column(db.DateTime(timezone=True))
     subtitle_error = db.Column(db.Text)
+    # How Curatarr's subtitle file was made: the transcriber, its model and
+    # how lines were timed (subtitles.made_with), so files made an older way
+    # can be made again when that improves (enrichment.remake_subtitles).
+    subtitle_made_with = db.Column(db.JSON)
     # Whether an English subtitle file beside the video, not Curatarr's, lines
     # up with the speech, and what was done about it (subtitle_sync.py). Keyed
     # by the file's name, size and time, so it's checked again if it changes.

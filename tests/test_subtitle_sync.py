@@ -146,7 +146,7 @@ def sync_env(subtitle_env, monkeypatch):  # noqa: F811
     _files, arr, _library, _media, part, calls = subtitle_env
     speech = _speech()
 
-    def fake_transcribe(info, model, device, cache, window=None):
+    def fake_transcribe(info, model, device, cache, window=None, **_kwargs):
         calls.append(info.path if window is None else window)
         found = (
             speech
@@ -362,7 +362,7 @@ def test_one_stretch_in_another_language_doesnt_stop_the_check(sync_env, monkeyp
     part, sidecar, speech, _calls, _arr = sync_env
     first = subtitle_sync.windows(DURATION)[0]
 
-    def fake_transcribe(info, model, device, cache, window=None):
+    def fake_transcribe(info, model, device, cache, window=None, **_kwargs):
         found = [s for s in speech if window and window[0] <= s.start < window[1]]
         return found, {"language": "cy" if window == first else "en"}
 

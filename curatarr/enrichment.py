@@ -68,14 +68,20 @@ from .models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
 from .semantic import LanguageModelUnavailable
 from .services import _as_datetime, audit, client, set_setting, setting
 from .subtitles import (
+    TIMING as SUBTITLE_TIMING,
+)
+from .subtitles import (
     cues_from,
     digest,
     embedded_english,
     generated_path,
+    made_with,
     read_text,
     sidecar_english,
     srt_text,
 )
+from .subtitles import describe as describe_subtitles
+from .subtitles import outdated as subtitles_outdated
 
 log = logging.getLogger("curatarr.chapters")
 
@@ -1617,6 +1623,97 @@ def _context(part, media):
 # --- Subtitles ---------------------------------------------------------------
 
 
+REMADE_KEY = "subtitles_remade"  # how they were made when none were left to remake
+
+
+def remake_subtitles(now=None) -> int:
+    """Worker cycle: make again the subtitle files Curatarr made an older way
+    (before word timing, or with another Whisper model than the one set now).
+
+    Files someone is watching or will watch next go straight away. The rest
+    go one at a time, only while nothing else is waiting: each needs its
+    audio transcribed again. Returns how many were queued.
+    """
+    from . import up_next
+
+    now = now or utcnow()
+    models: dict = {}
+
+    def model_for(library_id):
+        if library_id not in models:
+            try:
+                models[library_id] = config_for(library_id)["semantic"]["model"]
+            except ChapterConfigError:
+                models[library_id] = None
+        return models[library_id]
+
+    rows = (
+        db.session.query(
+            ChapterState.id, ChapterState.media_part_id, ChapterState.subtitle_made_with
+        )
+        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .add_columns(MediaIdentity.library_id)
+        .filter(
+            ChapterState.subtitle_status == "generated",
+            ChapterState.subtitle_fingerprint.isnot(None),
+            ChapterState.job_state == "idle",
+        )
+    )
+    soon = set(up_next.part_ids())
+    due = []
+    if soon:
+        due = [
+            r.id
+            for r in rows.filter(ChapterState.media_part_id.in_(soon))
+            if model_for(r.library_id)
+            and subtitles_outdated(r.subtitle_made_with, model_for(r.library_id))
+        ]
+    done = {"timing": SUBTITLE_TIMING, "models": None}
+    if not due and not _work_waiting(now):
+        done["models"] = sorted({str(model_for(lib)) for (lib,) in _library_ids()})
+        if setting(REMADE_KEY) != done:
+            due = [
+                r.id
+                for r in rows
+                if model_for(r.library_id)
+                and subtitles_outdated(r.subtitle_made_with, model_for(r.library_id))
+            ][:1]
+            if not due:
+                set_setting(REMADE_KEY, done)  # nothing left until something changes
+    for state_id in due:
+        state = db.session.get(ChapterState, state_id)
+        state.job_state = "queued"
+        state.requested_action = "subtitles"
+        state.requested_at = now
+    db.session.commit()
+    return len(due)
+
+
+def _library_ids():
+    return db.session.query(MediaIdentity.library_id).distinct().all()
+
+
+def _work_waiting(now) -> bool:
+    """Any job queued and due, or running."""
+    return (
+        db.session.query(ChapterState.id)
+        .filter(
+            or_(
+                ChapterState.job_state == "running",
+                and_(
+                    ChapterState.job_state == "queued",
+                    or_(
+                        ChapterState.next_attempt_at.is_(None),
+                        ChapterState.next_attempt_at <= now,
+                    ),
+                ),
+            )
+        )
+        .first()
+        is not None
+    )
+
+
 def _chain_subtitles(state_id):
     """After a chapter job, add subtitles while the transcript is fresh."""
     db.session.expire_all()
@@ -1931,6 +2028,7 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
             return _subtitles_done(state, "failed", error=str(exc), fields=fields)
         state.subtitle_fingerprint = None
         state.subtitle_path = None
+        state.subtitle_made_with = None
         restored = _restore_set_aside(state, path)
         _refresh_jellyfin(part, media)
         audit(
@@ -1986,6 +2084,7 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
             config["semantic"]["model"],
             opts["whisper_device"],
             cache_dir() / "transcripts",
+            words=True,
         )
     except (MediaToolError, RuntimeError) as exc:
         return _subtitles_done(state, "failed", error=str(exc), fields=fields)
@@ -2010,6 +2109,7 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
         return _subtitles_done(state, "failed", error=str(exc), fields=fields)
     state.subtitle_fingerprint = digest(text)
     state.subtitle_path = str(target)
+    state.subtitle_made_with = made_with(details, config["semantic"]["model"])
     refresh_error = _refresh_jellyfin(part, media)
     audit(
         "subtitles_generated",
@@ -3167,6 +3267,11 @@ def describe(state: ChapterState | None) -> dict:
             "failed": "Failed",
         }.get(state.subtitle_status if state else None, "—"),
         "subtitles_ours": bool(state and state.subtitle_fingerprint),
+        "subtitles_made_with": (
+            describe_subtitles(state.subtitle_made_with)
+            if state and state.subtitle_fingerprint
+            else None
+        ),
         "queued": bool(state and state.job_state in {"queued", "running"}),
         "recap": (state.recap_start, state.recap_end)
         if state and state.recap_end is not None

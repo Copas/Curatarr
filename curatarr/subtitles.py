@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .chapters import Segment
+from .models import utcnow
 
 ENGLISH = {"en", "eng", "english"}
 # Tracks with no language tag are usually the film's own language; counting
@@ -248,8 +249,123 @@ def _chunks(text: str) -> list[str]:
     return chunks
 
 
+# How subtitles are timed. Raised when that changes, so the files Curatarr
+# made before are made again (enrichment.retime_subtitles).
+TIMING = 2  # 2: from when each word is said
+PAUSE_SECONDS = 0.7  # a pause this long between words starts a new line
+LEAD_SECONDS = 0.1  # a line appears this much before its first word
+LINGER_SECONDS = 0.5  # …and stays this long after its last, when there's room
+MAX_LINGER_SECONDS = 2.0  # never longer than this after the last word…
+READING_CPS = 17  # …except to give time to read it, at this many characters a second
+LONGEST_WORD = 1.5  # seconds: a word timed longer took in the silence beside it
+SENTENCE_CHARS = 8  # a sentence this long ends its line ("Aye, sir." is a line)
+
+
+ENGINE = "faster-whisper"
+
+
+def made_with(details: dict, model: str) -> dict:
+    """What made a subtitle file, from the transcript's details."""
+    return {
+        "engine": ENGINE,
+        "model": details.get("model") or model,
+        "device": details.get("device"),
+        "timing": TIMING,
+        "made": utcnow().date().isoformat(),
+    }
+
+
+def outdated(record: dict | None, model: str) -> str | None:
+    """Why a file made by ``record`` would be better made again, or None."""
+    if not record:
+        return "made before Curatarr kept track of how"
+    if (record.get("timing") or 1) < TIMING:
+        return "timed the old way"
+    if record.get("engine") != ENGINE or record.get("model") != model:
+        return f"made with {record.get('engine')} {record.get('model')}"
+    return None
+
+
+def describe(record: dict | None) -> str:
+    """For people: "Whisper medium, timed by word, 8 Nov 2026"."""
+    if not record:
+        return "Made before Curatarr kept track of how"
+    timing = "timed by word" if (record.get("timing") or 1) >= 2 else "timed by segment"
+    engine = "Whisper" if record.get("engine") == ENGINE else record.get("engine")
+    return f"{engine} {record.get('model')}, {timing}"
+
+
+# Words ending in a full stop that don't end a sentence.
+_TITLES = {"mr.", "mrs.", "ms.", "dr.", "st.", "lt.", "sgt.", "capt.", "col.", "gen."}
+
+
+def _ends_sentence(word: str) -> bool:
+    word = word.strip()
+    return bool(re.search(r"[.?!][\"')\]]*$", word)) and word.lower() not in _TITLES
+
+
+def _joined(words) -> str:
+    return " ".join("".join(w for _s, _e, w in words).split())
+
+
+def _cues_from_words(segments: list[Segment]) -> list[Cue]:
+    """Each line from its first word to just after its last.
+
+    A line ends at a pause, at the end of a sentence, when two lines are
+    full, or after seven seconds. Whisper's segments sometimes end in the
+    middle of a sentence, so a segment's end alone doesn't end a line.
+    """
+    # Whisper's words carry their own leading space; a number or a
+    # contraction can come in pieces ("1" ",014") that join without one.
+    words = [
+        (start, max(end, start), word)
+        for segment in segments
+        for start, end, word in segment.words
+        if word.strip()
+    ]
+    if words and not words[0][2].startswith(" "):
+        words[0] = (words[0][0], words[0][1], " " + words[0][2])
+    groups: list[list[tuple[float, float, str]]] = []
+    current: list[tuple[float, float, str]] = []
+    for start, end, word in words:
+        if current:
+            text = _joined(current)
+            joins = not word.startswith(" ")  # the rest of the word before it
+            if not joins and (
+                start - current[-1][1] >= PAUSE_SECONDS
+                or len(_wrap(_joined(current + [(start, end, word)]).split()))
+                > MAX_LINES
+                or end - current[0][0] > MAX_CUE_SECONDS
+                or (_ends_sentence(current[-1][2]) and len(text) >= SENTENCE_CHARS)
+            ):
+                groups.append(current)
+                current = []
+        current.append((start, end, word))
+    if current:
+        groups.append(current)
+    cues = []
+    for group in groups:
+        first_start, first_end, _ = group[0]
+        last_start, last_end, _ = group[-1]
+        spoken_from = max(first_start, first_end - LONGEST_WORD)
+        spoken_to = min(last_end, last_start + LONGEST_WORD)
+        text = _joined(group)
+        start = max(0.0, spoken_from - LEAD_SECONDS)
+        end = spoken_to + LINGER_SECONDS
+        reading = min(len(text) / READING_CPS, MAX_CUE_SECONDS)
+        end = max(end, min(start + reading, spoken_to + MAX_LINGER_SECONDS))
+        end = max(end, start + MIN_CUE_SECONDS)
+        cues.append(Cue(start, end, _balance(text)))
+    return cues
+
+
 def cues_from(segments: list[Segment]) -> list[Cue]:
-    """Readable cues: at most two lines of ~42 characters, at most 7 seconds."""
+    """Readable cues: at most two lines of ~42 characters, at most 7 seconds.
+
+    Timed from each word when the transcript has word times; otherwise
+    spread over each segment by length (older transcripts)."""
+    if any(segment.words for segment in segments):
+        return _tidy(_cues_from_words(segments))
     cues: list[Cue] = []
     for segment in segments:
         text = " ".join(segment.text.split())
@@ -271,7 +387,12 @@ def cues_from(segments: list[Segment]) -> list[Cue]:
                 cue_start += MAX_CUE_SECONDS
             cues.append(Cue(cue_start, end, _balance(piece)))
             start = end
-    # No overlaps, and nothing flashes by too fast when there is room.
+    return _tidy(cues)
+
+
+def _tidy(cues: list[Cue]) -> list[Cue]:
+    """No overlaps, and nothing flashes by too fast when there is room."""
+    cues = sorted(cues, key=lambda cue: cue.start)
     for index, cue in enumerate(cues):
         following = cues[index + 1].start if index + 1 < len(cues) else None
         if cue.end - cue.start < MIN_CUE_SECONDS:

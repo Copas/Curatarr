@@ -89,7 +89,7 @@ def subtitle_env(media_env, tmp_path, monkeypatch):  # noqa: F811
     )
     calls = []
 
-    def fake_transcribe(info, model, device, cache, window=None):
+    def fake_transcribe(info, model, device, cache, window=None, **_kwargs):
         calls.append(info.path if window is None else window)
         return [Segment(1, 3, "Hello."), Segment(4, 6, "Goodbye.")], {
             "language": "en",
@@ -325,3 +325,128 @@ def test_a_film_with_only_foreign_subtitles_gets_english_ones(subtitle_env):
     enrichment.dispatch(synchronous=True)
     assert _state(part).subtitle_status == "generated"
     assert foreign.read_text(encoding="utf-8") == SPANISH_LINES  # left alone
+
+
+def _said(*words):
+    """A segment from (start, end, word) triples, Whisper-style."""
+    return Segment(words[0][0], words[-1][1], "".join(w for _s, _e, w in words), words)
+
+
+def test_lines_are_timed_from_each_word():
+    segments = [
+        # A segment padded with silence: said only at the end.
+        Segment(
+            6.8,
+            26.6,
+            " Hold for the calculation.",
+            (
+                (25.1, 25.4, " Hold"),
+                (25.4, 25.6, " for"),
+                (25.6, 25.8, " the"),
+                (25.8, 26.6, " calculation."),
+            ),
+        ),
+        # A number in pieces, and a sentence running into the next segment.
+        _said(
+            (29.9, 30.2, " 1"),
+            (30.2, 30.6, ",014"),
+            (30.6, 31.0, " feet"),
+            (31.0, 31.4, " and"),
+            (31.4, 31.6, " no"),
+        ),
+        _said((31.6, 31.9, " one"), (31.9, 32.3, " else.")),
+        # A pause: a new line.
+        _said((40.0, 40.4, " Dump"), (40.4, 40.7, " it")),
+        _said((42.0, 42.3, " out.")),
+    ]
+    cues = cues_from(segments)
+    text = [" ".join(c.lines) for c in cues]
+    assert text == [
+        "Hold for the calculation.",
+        "1,014 feet and no one else.",
+        "Dump it",
+        "out.",
+    ]
+    hold = cues[0]
+    assert 24.9 <= hold.start <= 25.1 and hold.end <= 27.6  # not from 6.8, once
+    assert 29.7 <= cues[1].start <= 29.9
+    assert cues[2].end < cues[3].start
+
+
+def test_a_long_word_doesnt_stretch_its_line_into_silence():
+    cues = cues_from([_said((10.0, 18.0, " Hello."))])
+    assert cues[0].start >= 16.3 and cues[0].end <= 19.0
+
+
+def test_transcripts_keep_word_times(tmp_path):
+    import json
+
+    from curatarr.transcribe import has_words, load
+
+    path = tmp_path / "t.json"
+    path.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 1,
+                        "end": 2,
+                        "text": " Hi.",
+                        "words": [[1.1, 1.5, " Hi."]],
+                    }
+                ]
+            }
+        )
+    )
+    segments, _details = load(path)
+    assert segments[0].words == ((1.1, 1.5, " Hi."),) and has_words(segments)
+    path.write_text(json.dumps({"segments": [{"start": 1, "end": 2, "text": " Hi."}]}))
+    assert not has_words(load(path)[0])  # made before words were timed
+    assert has_words([])  # nothing said: nothing to time
+
+
+def test_how_subtitles_were_made_is_kept_and_old_ones_are_remade(
+    subtitle_env, monkeypatch
+):
+    from curatarr import up_next
+    from curatarr.services import setting
+    from curatarr.subtitles import TIMING
+
+    _files, _arr, _library, _media, part, _calls = subtitle_env
+    enrichment.request(part, "subtitles")
+    enrichment.dispatch(synchronous=True)
+    state = _state(part)
+    assert state.subtitle_made_with["timing"] == TIMING
+    assert state.subtitle_made_with["engine"] == "faster-whisper"
+    assert enrichment.remake_subtitles() == 0  # made the current way
+    assert setting(enrichment.REMADE_KEY)["timing"] == TIMING
+
+    state.subtitle_made_with = None  # one made before this was kept
+    db.session.commit()
+    assert enrichment.remake_subtitles() == 0  # "all done" is remembered…
+    set_setting(enrichment.REMADE_KEY, None)  # …until something changes
+    other = ChapterState(
+        media_part_id="busy", media_identity_id=state.media_identity_id
+    )
+    other.job_state = "queued"
+    db.session.add(other)
+    db.session.commit()
+    assert enrichment.remake_subtitles() == 0  # other work waits: not now
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [part.id])
+    assert enrichment.remake_subtitles() == 1  # about to be watched: straight away
+    db.session.delete(other)
+    db.session.commit()
+    enrichment.dispatch(synchronous=True)
+    assert _state(part).subtitle_made_with["timing"] == TIMING
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
+    assert enrichment.remake_subtitles() == 0
+
+
+def test_a_new_whisper_model_remakes_them():
+    from curatarr.subtitles import TIMING, outdated
+
+    now = {"engine": "faster-whisper", "model": "medium", "timing": TIMING}
+    assert outdated(now, "medium") is None
+    assert outdated(now, "large-v3") == "made with faster-whisper medium"
+    assert outdated({**now, "timing": 1}, "medium") == "timed the old way"
+    assert outdated(None, "medium")

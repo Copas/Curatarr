@@ -559,6 +559,9 @@ class Segment:
     start: float
     end: float
     text: str
+    # (start, end, word) for each word, when the transcript has them: a
+    # segment's own times often take in the silence around what's said.
+    words: tuple = ()
 
 
 PAUSE_SECONDS = 2.0  # a gap in speech at least this long is a candidate boundary

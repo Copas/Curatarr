@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0rc95 (2026-11-08)
+
+- **Generated subtitles are timed from each word.** Lines were spread over Whisper's segments, which often take in the silence around what's said, and a long segment showed the same line again in seven-second pieces. Lines could appear seconds before anyone spoke and stay long after. Now each starts just before its first word and ends a moment after its last, with time to read it. Against a Blu-ray's own subtitles for one episode, no line now appears more than 0.7 seconds early. The old file had 50 lines more than 2 seconds early and 45 more than 2 seconds late.
+- **Each subtitle file records how it was made**: the transcriber, its model and how lines were timed, shown on the file's page. Files made an older way, or with another Whisper model than the one now set, are made again. What someone is watching or will watch next goes first; the rest go one at a time while nothing else is waiting. Transcripts now keep each word's time; one saved before is made again when subtitles need it.
+
 ## 0.2.0rc94 (2026-11-08)
 
 - **Numbered chapters at real breaks are named from the transcript.** A disc's "Chapter 1", "Chapter 2"… at the story's breaks were kept as they were, since only machine-placed numbered chapters were replaced. With Smart Chapters on, they now keep their breaks and each is named from what's said in it, one short language-model request per chapter. A file with no speech keeps its numbers, and the originals are kept, so removing Curatarr's chapters puts them back. Files kept with their own chapters are looked at once more, a few at a time.

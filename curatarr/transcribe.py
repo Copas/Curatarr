@@ -119,13 +119,30 @@ def cached(info: MediaInfo, model: str, cache_dir: Path, opening=False, window=N
     return load(cache_dir / f"{cache_key(info, model)}.json")
 
 
+def has_words(segments) -> bool:
+    """Whether a transcript times each word (made since that was added), or
+    has nothing said to time."""
+    spoken = [s for s in segments if s.text.strip()]
+    return not spoken or any(s.words for s in spoken)
+
+
 def load(path: Path):
     """(segments, details) from one transcript file, or None."""
     if not path.exists():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        segments = [Segment(s["start"], s["end"], s["text"]) for s in data["segments"]]
+        segments = [
+            Segment(
+                s["start"],
+                s["end"],
+                s["text"],
+                tuple(
+                    (float(w[0]), float(w[1]), str(w[2])) for w in s.get("words") or ()
+                ),
+            )
+            for s in data["segments"]
+        ]
         return segments, data.get("details") or {}
     except (OSError, ValueError, KeyError, TypeError):
         return None
@@ -153,6 +170,7 @@ def transcribe(
     make_room=None,
     opening=False,
     window=None,
+    words=False,
 ):
     """Segments for a media file, from the cache or a fresh transcription.
 
@@ -162,9 +180,13 @@ def transcribe(
     free GPU memory, typically by unloading Ollama's model. With ``opening``
     only the first five minutes are transcribed (for finding a recap); with a
     ``window`` (start, end seconds) only that part, timed from the file's start.
+    With ``words``, a saved transcript made before words were timed doesn't
+    count: it's made again (and saved, with them, for everything else).
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
     hit = cached(info, model, cache_dir, opening, window)
+    if hit is not None and words and not has_words(hit[0]):
+        hit = None
     if hit is not None:
         segments, details = hit
         return segments, {**details, "cached": True}
@@ -240,10 +262,22 @@ def _run_model(audio, model_name, device):
         try:
             model = WhisperModel(model_name, device=name, compute_type=compute)
             segments, info = model.transcribe(
-                audio, vad_filter=True, beam_size=5, condition_on_previous_text=False
+                audio,
+                vad_filter=True,
+                beam_size=5,
+                condition_on_previous_text=False,
+                word_timestamps=True,
             )
             rows = [
-                {"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text}
+                {
+                    "start": round(s.start, 2),
+                    "end": round(s.end, 2),
+                    "text": s.text,
+                    "words": [
+                        [round(w.start, 2), round(w.end, 2), w.word]
+                        for w in s.words or ()
+                    ],
+                }
                 for s in segments
             ]
             return rows, {
@@ -275,6 +309,10 @@ def main(argv=None):
     for row in rows:
         row["start"] = round(row["start"] + args.offset, 2)
         row["end"] = round(row["end"] + args.offset, 2)
+        row["words"] = [
+            [round(s + args.offset, 2), round(e + args.offset, 2), word]
+            for s, e, word in row.get("words") or ()
+        ]
     Path(args.out).write_text(
         json.dumps({"segments": rows, "details": details}), encoding="utf-8"
     )
