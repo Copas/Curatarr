@@ -2726,8 +2726,61 @@ def test_kept_chapters_are_judged_again_when_the_rule_changes(media_env):
     state.chapter_status, state.chapter_source = "existing", "embedded_ok"
     db.session.commit()
     enrichment._judge_kept_chapters_again()
-    assert state.chapter_source == "embedded" and setting("chapter_poor_rule") == 2
+    assert state.chapter_source == "embedded" and setting("chapter_poor_rule") == 3
     state.chapter_source = "embedded_ok"
     db.session.commit()
     enrichment._judge_kept_chapters_again()  # once only
     assert state.chapter_source == "embedded_ok"
+
+
+def test_numbered_chapters_at_real_breaks_are_named_from_the_transcript(
+    media_env, monkeypatch
+):
+    files, _arr = media_env
+    library, _media, part = _movie()
+    starts = [0.4, 338.8, 369.6, 968.1, 1321.2, 1615.9, 1901.9]
+    files.add(
+        part.file_path,
+        chapters=[
+            {"start": s, "name": f"Chapter {n + 1}"} for n, s in enumerate(starts)
+        ],
+    )
+    _smart_library_with_transcript(library, monkeypatch)
+    from curatarr.services import setting
+
+    settings = dict(setting("chapter_library_settings"))
+    settings[library.id] = {**settings[library.id], "replace_poor": True}
+    set_setting("chapter_library_settings", settings)
+    monkeypatch.setattr(enrichment, "export_chapters_xml", lambda path: "<Chapters/>")
+
+    class Model:
+        model = "fake"
+        calls = 0
+
+        def ask(self, prompt, schema):
+            assert "choice" not in schema["properties"]  # no breaks are chosen
+            self.calls += 1
+            return {"summary": "Something happens.", "name": f"The Ice {self.calls}"}
+
+    enrichment.request(part, "auto")
+    enrichment.dispatch(synchronous=True, llm=Model())
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+    assert state.chapter_status == "generated_semantic"
+    chapters = files.files[part.file_path]["chapters"]
+    assert [round(c["start"], 1) for c in chapters] == [0.0, *starts[1:]]
+    assert [c["name"] for c in chapters] == [f"The Ice {n}" for n in range(1, 8)]
+    assert state.original_chapters_xml == "<Chapters/>"  # removing restores them
+
+
+def test_numbered_chapters_with_nothing_said_keep_their_numbers():
+    from curatarr.chapters import InvalidChapters, named_breaks_plan
+
+    config = {"naming": {"fallback_format": "Chapter {number}"}}
+    with pytest.raises(InvalidChapters):
+        named_breaks_plan(600.0, [0.0, 300.0], [], config, lambda e: [])
+    from curatarr.chapters import Segment
+
+    said = [Segment(10, 20, "hello")]
+    with pytest.raises(InvalidChapters):  # the model named none of them
+        named_breaks_plan(600.0, [0.0, 300.0], said, config, lambda e: ["", ""])

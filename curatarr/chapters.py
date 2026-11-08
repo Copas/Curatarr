@@ -465,9 +465,15 @@ GENERIC_NAME = re.compile(
 )
 # Raised when what counts as no use changes: files kept with their own
 # chapters are looked at once more (enrichment._judge_kept_chapters_again).
-POOR_RULE = 2
+POOR_RULE = 3
 POOR_SPACING = 120  # seconds: chapters closer than this on average aren't scenes
 EVEN_SLACK = 2.0  # seconds: gaps this alike come from a timer, not the story
+
+
+def numbered_only(chapters: list[dict]) -> bool:
+    """Every chapter just numbered ("Chapter 1", "Chapter 2"…) or unnamed."""
+    names = [str(c.get("name") or "").strip() for c in chapters]
+    return bool(chapters) and all(not n or GENERIC_NAME.match(n) for n in names)
 
 
 def poor_chapters(chapters: list[dict], duration: float) -> str | None:
@@ -478,8 +484,7 @@ def poor_chapters(chapters: list[dict], duration: float) -> str | None:
     every minute or so, when a timer placed them (all the same length,
     whatever happens), or when there's only one.
     """
-    names = [str(c.get("name") or "").strip() for c in chapters]
-    if not chapters or not all(not n or GENERIC_NAME.match(n) for n in names):
+    if not numbered_only(chapters):
         return None
     starts = sorted(float(c.get("start") or 0) for c in chapters)
     if len(starts) == 1:
@@ -645,6 +650,43 @@ def clean_name(value, fallback: str) -> str:
 RECAP_CHAPTER_NAME = "Previously On"
 
 
+def _name_from_transcript(chapters, segments, duration, config, name) -> int:
+    """Names each chapter from what is said in it; returns how many got a
+    name of their own (the rest keep their numbered one)."""
+    excerpts = []
+    for index, chapter in enumerate(chapters):
+        end = chapters[index + 1].start if index + 1 < len(chapters) else duration
+        excerpts.append(
+            (chapter.start, transcript_excerpt(segments, chapter.start, end, 3000))
+        )
+    names = name(excerpts) or []
+    named = 0
+    for index, chapter in enumerate(chapters):
+        fallback = fallback_name(config, index + 1)
+        chapter.name = clean_name(
+            names[index] if index < len(names) else None, fallback
+        )
+        named += chapter.name != fallback
+    return named
+
+
+def named_breaks_plan(duration, starts, segments, config, name) -> Plan:
+    """The file's own chapter breaks, kept where they are (a disc's are
+    usually at the story's breaks), each named from what is said in it."""
+    if not segments:
+        raise InvalidChapters("The transcript has no speech")
+    # The first chapter starts at zero, even when the file's starts a moment later.
+    later = sorted({round(s, 3) for s in starts if 1.0 <= s < duration})
+    chapters = [Chapter(start) for start in [0.0, *later]]
+    if not _name_from_transcript(chapters, segments, duration, config, name):
+        raise InvalidChapters("No chapter could be named from the transcript")
+    kept = f"Kept the file's {len(chapters)} chapter breaks"
+    notes = [f"{kept} and named them from the transcript."]
+    if len({c.name for c in chapters}) < len(chapters):
+        notes.append("Some generated names repeat.")
+    return Plan("semantic", chapters, notes)
+
+
 def semantic_plan(duration, scenes, segments, config, choose, name, recap=None) -> Plan:
     """Boundaries chosen by the language model from scene/pause candidates.
 
@@ -705,18 +747,7 @@ def semantic_plan(duration, scenes, segments, config, choose, name, recap=None) 
     chapters = [Chapter(start) for start in starts]
     own = chapters[fixed:]
     if config["naming"]["semantic_names"]:
-        excerpts = []
-        for index, chapter in enumerate(own):
-            end = own[index + 1].start if index + 1 < len(own) else duration
-            excerpts.append(
-                (chapter.start, transcript_excerpt(segments, chapter.start, end, 3000))
-            )
-        names = name(excerpts) or []
-        for index, chapter in enumerate(own):
-            fallback = fallback_name(config, index + 1)
-            chapter.name = clean_name(
-                names[index] if index < len(names) else None, fallback
-            )
+        _name_from_transcript(own, segments, duration, config, name)
         if len({c.name for c in own}) < len(own):
             notes.append("Some generated names repeat.")
     else:

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc94 (2026-11-08)
+
+- **Numbered chapters at real breaks are named from the transcript.** A disc's "Chapter 1", "Chapter 2"… at the story's breaks were kept as they were, since only machine-placed numbered chapters were replaced. With Smart Chapters on, they now keep their breaks and each is named from what's said in it, one short language-model request per chapter. A file with no speech keeps its numbers, and the originals are kept, so removing Curatarr's chapters puts them back. Files kept with their own chapters are looked at once more, a few at a time.
+
 ## 0.2.0rc93 (2026-11-06)
 
 - **Chapters named with their start time are recognised as no use.** Names like "part 01 (00:07)" or "Chapter 3 - 0:21" didn't count as generic, so a film with a chapter every 7 minutes kept them. They now count, and files kept with their own chapters are looked at once more, a few at a time.

@@ -40,6 +40,8 @@ from .chapters import (
     effective_config,
     fingerprint,
     fixed_interval_plan,
+    named_breaks_plan,
+    numbered_only,
     poor_chapters,
     scene_aligned_plan,
     semantic_plan,
@@ -474,8 +476,12 @@ def analyse(
     llm=None,
     context="",
     find_recap=None,
+    keep_starts=None,
 ):
     """Plan chapters, falling back Smart → scene-aligned → fixed intervals.
+
+    With ``keep_starts`` (a file's own, just-numbered chapter breaks) only
+    those are named from the transcript; there is nothing to fall back to.
 
     ``find_recap(segments, scenes, model)`` returns a recaps.Recap or None; a
     recap becomes a "Previously On" first chapter in the Smart plan.
@@ -496,7 +502,9 @@ def analyse(
     }
     smart = config["mode"] == "smart" and config["semantic"]["enabled"]
     scenes = None
-    if config["fallback"]["scene_detection"] or smart or every_method:
+    if keep_starts is not None:
+        pass  # the breaks are already there: no scenes to look for
+    elif config["fallback"]["scene_detection"] or smart or every_method:
         try:
             raw, was_cached = scene_changes(info, opts["scene_threshold"])
             scenes = [time_ for time_, _score in raw]
@@ -526,29 +534,52 @@ def analyse(
             result["chosen"] = method
         return plan
 
+    def transcript(model):
+        from .transcribe import cache_key, transcribe
+
+        segments, details = transcribe(
+            info,
+            config["semantic"]["model"],
+            opts["whisper_device"],
+            cache_dir() / "transcripts",
+            make_room=getattr(model, "unload", None),
+        )
+        result["transcript"] = {
+            **details,
+            "key": cache_key(info, config["semantic"]["model"]),
+            "segments": len(segments),
+            "words": sum(len(s.text.split()) for s in segments),
+            "sample": [[round(s.start, 1), s.text.strip()] for s in segments[:12]],
+        }
+        return segments
+
+    if keep_starts is not None:
+
+        def naming_plan():
+            from .semantic import name_chapters
+
+            model = llm or _language_model(config, opts)
+            plan = named_breaks_plan(
+                info.duration,
+                keep_starts,
+                transcript(model),
+                config,
+                lambda excerpts: name_chapters(model, excerpts, context),
+            )
+            plan.notes.append(f"{model.calls} Ollama requests to {model.model}")
+            return plan
+
+        attempt("semantic", naming_plan)
+        result["elapsed_seconds"] = round(time.monotonic() - started, 1)
+        return result
+
     if smart or (every_method and config["semantic"]["enabled"]):
 
         def smart_plan():
             from .semantic import choose_boundary, name_chapters
-            from .transcribe import transcribe
 
             model = llm or _language_model(config, opts)
-            segments, details = transcribe(
-                info,
-                config["semantic"]["model"],
-                opts["whisper_device"],
-                cache_dir() / "transcripts",
-                make_room=getattr(model, "unload", None),
-            )
-            from .transcribe import cache_key
-
-            result["transcript"] = {
-                **details,
-                "key": cache_key(info, config["semantic"]["model"]),
-                "segments": len(segments),
-                "words": sum(len(s.text.split()) for s in segments),
-                "sample": [[round(s.start, 1), s.text.strip()] for s in segments[:12]],
-            }
+            segments = transcript(model)
             recap = None
             if find_recap is not None:
                 recap = find_recap(segments, scenes or [], model)
@@ -1193,6 +1224,7 @@ def run_job(state_id: str, *, llm=None) -> str:
     if action == "remove":
         return _remove(state, part, media, info, ours, fields, started)
 
+    rename = False  # the file's own chapters, kept but named (below)
     if info.chapters and not ours:
         if action == "regenerate":
             _fail(
@@ -1208,7 +1240,23 @@ def run_job(state_id: str, *, llm=None) -> str:
             if config["replace_poor"]
             else None
         )
-        if config["preserve_existing"] and action != "preview" and not poor:
+        # Just numbered, at breaks worth keeping: named from the transcript.
+        rename = (
+            not poor
+            and config["replace_poor"]
+            and config["preserve_existing"]
+            and action != "preview"
+            and config["mode"] == "smart"
+            and config["semantic"]["enabled"]
+            and config["naming"]["semantic_names"]
+            and numbered_only(info.chapters)
+        )
+        if (
+            config["preserve_existing"]
+            and action != "preview"
+            and not poor
+            and not rename
+        ):
             _finish(
                 state,
                 "existing",
@@ -1274,7 +1322,14 @@ def run_job(state_id: str, *, llm=None) -> str:
         every_method=action == "preview",
         llm=llm,
         context=_context(part, media),
-        find_recap=_recap_finder(state, part) if part.kind == "episode" else None,
+        find_recap=(
+            _recap_finder(state, part)
+            if part.kind == "episode" and not rename
+            else None
+        ),
+        keep_starts=[float(c.get("start") or 0) for c in info.chapters]
+        if rename
+        else None,
     )
     if (analysis.get("transcript") or {}).get("key"):
         state.transcript_key = analysis["transcript"]["key"]
@@ -1310,6 +1365,18 @@ def run_job(state_id: str, *, llm=None) -> str:
         db.session.commit()
         _log("chapters_deferred", reason=state.chapter_error, **fields)
         return "deferred"
+    if rename and not analysis["chosen"]:
+        # Couldn't be named (no speech, say): the numbered ones stay as they are.
+        _finish(
+            state,
+            "existing",
+            info=info,
+            source="embedded_ok",
+            count=len(info.chapters),
+        )
+        db.session.commit()
+        _log("chapters_preserved", **fields)
+        return state.chapter_status
     if not analysis["chosen"]:
         errors = "; ".join(
             f"{a['method']}: {a['error']}" for a in analysis["attempts"] if not a["ok"]
