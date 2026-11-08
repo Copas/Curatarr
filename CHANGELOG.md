@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc96 (2026-11-08)
+
+- **A deletion is no longer stuck when the show has since left Sonarr.** When Sonarr answered a deletion too slowly to be sure it worked, Curatarr checked again each cycle by asking Sonarr for the show's files. If the show had been removed from Sonarr in the meantime, it kept asking about a show Sonarr no longer had, a bad request every 20 seconds, and the deletion never finished. A show or film no longer in Sonarr or Radarr now counts as deleted.
+
 ## 0.2.0rc95 (2026-11-08)
 
 - **Generated subtitles are timed from each word.** Lines were spread over Whisper's segments, which often take in the silence around what's said, and a long segment showed the same line again in seven-second pieces. Lines could appear seconds before anyone spoke and stay long after. Now each starts just before its first word and ends a moment after its last, with time to read it. Against a Blu-ray's own subtitles for one episode, no line now appears more than 0.7 seconds early. The old file had 50 lines more than 2 seconds early and 45 more than 2 seconds late.

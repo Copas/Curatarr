@@ -1726,8 +1726,15 @@ def reconcile_unknown_actions():
             db.session.commit()
             resolved += 1
             continue
+        arr_id = media.radarr_id if media.media_type == "movie" else media.sonarr_id
         try:
-            if media.media_type == "movie":
+            if arr_id is None:
+                # Removed from Sonarr (or Radarr) since: nothing left there to
+                # delete. Asking about it anyway was a bad request every cycle.
+                complete = True
+                for part in media.parts:
+                    part.has_file = False
+            elif media.media_type == "movie":
                 try:
                     client("radarr").movie(media.radarr_id)
                     complete = False

@@ -157,3 +157,54 @@ def test_radarr_timeout_after_delete_is_reconciled_without_second_delete(
         assert action.state == "SUCCEEDED"
         assert candidate.state == "COMPLETED"
         assert deleted == [12]
+
+
+def test_a_show_removed_from_sonarr_since_is_reconciled_without_asking_it(
+    app, monkeypatch
+):
+    class NoSonarr:
+        def episode_files(self, series_id):
+            raise AssertionError(f"asked Sonarr about {series_id}")
+
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda _kind: NoSonarr())
+    with app.app_context():
+        library = Library(jellyfin_library_id="gone-show", name="TV", media_type="tv")
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="series",
+            title="Sample Show",
+            sonarr_id=None,
+            tvdb_id=321,
+        )
+        db.session.add(media)
+        db.session.flush()
+        part = MediaPart(
+            media_identity_id=media.id, kind="episode", has_file=True, arr_file_id=7
+        )
+        db.session.add(part)
+        candidate = PurgeCandidate(
+            media_identity_id=media.id,
+            state="EXECUTING",
+            reason_code="inactivity",
+            reason_text="Old",
+            reclaimable_bytes=100,
+        )
+        db.session.add(candidate)
+        db.session.flush()
+        action = LifecycleAction(
+            idempotency_key="gone-show-delete",
+            action_type="delete_media",
+            state="UNKNOWN_RECONCILE",
+            media_identity_id=media.id,
+            candidate_id=candidate.id,
+            reason_text="Old",
+            payload_json={},
+        )
+        db.session.add(action)
+        db.session.commit()
+        assert reconcile_unknown_actions() == 1
+        assert action.state == "SUCCEEDED"
+        assert candidate.state == "COMPLETED"
+        assert part.has_file is False
