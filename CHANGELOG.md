@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0rc107 (2026-11-09)
+
+- **Skip-marker re-checks move along while chapter work runs.** Episodes checked under older rules (credits, intros, recaps) were queued one at a time, and only when no other job was waiting, so a long chapter backlog held them all up. They have a job slot of their own, so a few are now kept queued for it all the time. What's up next still goes first.
+- **Fingerprints cover only the first 45% of an episode**, where intros are, so making one takes about half as long. Fingerprints already made are kept. On the labelled episodes the intros found are the same.
+
 ## 0.2.0rc106 (2026-11-09)
 
 - **An intro edge moves only when it moves a second or more.** rc105 widened Intro Skipper's intros by as little as half a second, which nobody notices when watching. It now leaves an edge alone unless it moves at least a second, as credits starts already do. Intros rc105 widened are put back and checked again.

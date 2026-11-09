@@ -103,6 +103,7 @@ RETRY_MINUTES = 30
 DEFER_MINUTES = 15
 LEASE_SECONDS = 600
 RECAP_BATCH = 100  # recap checks run back to back in a slot, a batch per slot
+RECHECK_QUEUED = 5  # re-checks kept queued for the skip-marker slot
 SCAN_BATCH = 200
 IMPORT_COMMANDS = {
     "DownloadedEpisodesScan",
@@ -1715,9 +1716,10 @@ def remake_subtitles(now=None) -> int:
 
 def recheck_credits(now=None) -> int:
     """Worker cycle: check again the credits, intros and recaps of episodes
-    checked under older rules (CREDITS_RULE, INTRO_RULE, RECAP_RULE). Episodes someone will watch next go straight away;
-    the rest one at a time, only while nothing else is waiting (each reads
-    the last minutes of the picture). Returns how many were queued."""
+    checked under older rules (CREDITS_RULE, INTRO_RULE, RECAP_RULE).
+    Episodes someone will watch next go straight away; the rest a few at a
+    time, kept queued for the skip-marker checks' own job slot (chapter work
+    waiting doesn't hold them back). Returns how many were queued."""
     from . import up_next
 
     now = now or utcnow()
@@ -1747,8 +1749,20 @@ def recheck_credits(now=None) -> int:
     )
     soon = up_next.part_ids()
     due = rows.filter(ChapterState.media_part_id.in_(soon)).all() if soon else []
-    if not due and not _work_waiting(now):
-        due = rows.order_by(ChapterState.markers_checked_at).limit(1).all()
+    if not due:
+        # Skip-marker checks have a job slot of their own, so chapter work
+        # waiting doesn't hold these back: keep a few queued for it.
+        waiting = (
+            db.session.query(func.count(ChapterState.id))
+            .filter(
+                ChapterState.job_state.in_(("queued", "running")),
+                ChapterState.requested_action == "recap",
+            )
+            .scalar()
+        )
+        room = RECHECK_QUEUED - waiting
+        if room > 0:
+            due = rows.order_by(ChapterState.markers_checked_at).limit(room).all()
     for state in due:
         if (state.credits_rule or 0) < CREDITS_RULE or (
             state.intro_rule or 0
@@ -3800,7 +3814,7 @@ class _Episode:
         if len(others) < footage.MIN_SIBLINGS:
             return None
         mine = footage.fingerprint(self.info.path, self.info.duration, cache)
-        return footage.intro_block(mine, others)
+        return footage.intro_block(mine, others, self.info.duration)
 
     def others(self, limit=12):
         """Other episodes' saved transcripts (whole or openings), nearest first."""

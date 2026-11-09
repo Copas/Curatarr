@@ -185,14 +185,21 @@ def test_episodes_checked_under_older_rules_are_checked_again(app, monkeypatch):
         db.session.add(state)
         states.append(state)
     db.session.commit()
-    assert enrichment.recheck_credits() == 1  # one at a time…
+    monkeypatch.setattr(enrichment, "RECHECK_QUEUED", 1)
+    busy = ChapterState(media_part_id="busy", media_identity_id=show.id)
+    busy.job_state, busy.requested_action = "queued", "auto"
+    db.session.add(busy)
+    db.session.commit()
+    # chapter work waiting doesn't hold them back: a few kept queued…
+    assert enrichment.recheck_credits() == 1
     assert states[1].requested_action == "recap"  # …longest-checked first
     assert states[1].markers_checked_at is None
-    assert enrichment.recheck_credits() == 0  # …and not while it's waiting
+    assert enrichment.recheck_credits() == 0  # …and no more while that waits
     monkeypatch.setattr(
         up_next, "part_ids", lambda users=None: [states[0].media_part_id]
     )
     assert enrichment.recheck_credits() == 1  # about to be watched: straight away
+    db.session.delete(busy)
     for state in states:
         state.job_state, state.credits_rule = "idle", enrichment.CREDITS_RULE
         state.intro_rule = enrichment.INTRO_RULE

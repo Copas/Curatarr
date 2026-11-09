@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc107 (2026-11-09): recheck_credits keeps RECHECK_QUEUED (5) recap jobs queued regardless of other work; footage.PRINTED 0.45 (intro_block takes duration).
 - v0.2.0rc106 (2026-11-09): footage.MIN_MOVE 1.0 s; INTRO_RULE 2 redoes rc105 widenings.
 - v0.2.0rc105 (2026-11-09): footage.py (season fingerprints, cached in cache_dir/fingerprints); _place_intro widens Intro Skipper intros ≤10 s per edge; INTRO_RULE 1 + intro_rule column in recheck_credits.
 - v0.2.0rc104 (2026-11-09): subtitles.reading (standard/relaxed/slow, subtitles.READING); made_with records it; remake_subtitles queues reading-only retimes RETIME_BATCH at a time first.

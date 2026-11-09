@@ -41,7 +41,8 @@ AUDIO_GAP_SECONDS = 1.0
 SHARE = 0.3  # of the other episodes
 BRIDGE = 4  # seconds not shared allowed inside a stretch
 MIN_LEN, MAX_LEN = 5, 150  # seconds
-EARLY = 0.4  # the intro starts in this first part of the episode
+EARLY = 0.4  # the intro starts in this first part of the episode…
+PRINTED = 0.45  # …so only this first part is fingerprinted
 SNAP = 3.0  # an edge moves to the nearest cut this close
 WIDEN = 10.0  # Intro Skipper's edges move out at most this far…
 MIN_MOVE = 1.0  # …and at least this far, or they're left as they are
@@ -73,9 +74,9 @@ def picture_hashes(thumbnails):
     return hashes, flat
 
 
-def _extract(path):
-    """(thumbnails, sound) for a file: keyframes only, about half a minute an
-    episode."""
+def _extract(path, seconds):
+    """(thumbnails, sound) for the first ``seconds`` of a file: keyframes only,
+    about 20 seconds an episode."""
     import numpy as np
 
     ffmpeg = required_tool("ffmpeg")
@@ -83,10 +84,11 @@ def _extract(path):
         pics, sound = os.path.join(folder, "p.raw"), os.path.join(folder, "s.fp")
         for args in (
             [ffmpeg, "-v", "error", "-nostdin", "-y", "-skip_frame", "nokey",
-             "-i", path, "-map", "0:v:0", "-an", "-sn", "-dn",
+             "-t", f"{seconds:.0f}", "-i", path, "-map", "0:v:0", "-an", "-sn", "-dn",
              "-vf", f"fps=1,scale={W}:{H}:flags=area,format=gray",
              "-f", "rawvideo", pics],
-            [ffmpeg, "-v", "error", "-nostdin", "-y", "-i", path, "-map", "0:a:0",
+            [ffmpeg, "-v", "error", "-nostdin", "-y", "-t", f"{seconds:.0f}",
+             "-i", path, "-map", "0:a:0",
              "-ac", "1", "-ar", "11025", "-f", "chromaprint", "-fp_format", "raw",
              sound],
         ):  # fmt: skip
@@ -101,7 +103,8 @@ def _extract(path):
 
 
 def fingerprint(path: str, duration: float, cache: Path) -> Print:
-    """A file's fingerprint, made once and kept in ``cache``."""
+    """The fingerprint of a file's first part (PRINTED), made once and kept in
+    ``cache``."""
     import numpy as np
 
     key = hashlib.sha256(f"{path}|{round(duration, 1)}".encode()).hexdigest()[:32]
@@ -110,7 +113,7 @@ def fingerprint(path: str, duration: float, cache: Path) -> Print:
         saved = np.load(target)
         thumbnails, sound = saved["pics"], saved["sound"]
     except (OSError, ValueError, KeyError):
-        thumbnails, sound = _extract(path)
+        thumbnails, sound = _extract(path, duration * PRINTED + 1)
         cache.mkdir(parents=True, exist_ok=True)
         partial = target.with_suffix(".partial.npz")
         np.savez(partial, pics=thumbnails, sound=sound)
@@ -208,11 +211,11 @@ def blocks(shared) -> list[tuple[int, int]]:
     return [(a, b + 1) for a, b in found if b + 1 - a >= MIN_LEN]
 
 
-def intro_block(here: Print, others: list) -> tuple[int, int] | None:
+def intro_block(here: Print, others: list, duration: float) -> tuple[int, int] | None:
     """The shared stretch that is the intro, in seconds, or None."""
     if len(others) < MIN_SIBLINGS:
         return None
-    seconds = range(int(len(here.hashes) * EARLY))
+    seconds = range(min(int(duration * EARLY), len(here.hashes)))
     found = [b for b in blocks(share(here, others, seconds)) if b[1] - b[0] <= MAX_LEN]
     return max(found, key=lambda b: b[1] - b[0], default=None)
 

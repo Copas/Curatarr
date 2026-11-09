@@ -25,8 +25,8 @@ def test_the_intro_is_the_footage_the_season_shares():
         thumbs[5:9] = titles[:4]  # a 4-second logo: too short to be the intro
         hashes, flat = footage.picture_hashes(thumbs)
         episodes.append(footage.Print(hashes, flat, None))
-    assert footage.intro_block(episodes[0], episodes[1:]) == (60, 100)
-    assert footage.intro_block(episodes[0], episodes[1:3]) is None  # too few
+    assert footage.intro_block(episodes[0], episodes[1:], 1200.0) == (60, 100)
+    assert footage.intro_block(episodes[0], episodes[1:3], 1200.0) is None  # too few
 
 
 def test_blank_pictures_are_no_evidence():
