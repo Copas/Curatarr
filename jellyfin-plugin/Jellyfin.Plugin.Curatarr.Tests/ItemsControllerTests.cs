@@ -19,7 +19,7 @@ public class ItemsControllerTests
     private readonly List<string> _modes = new();
     private DeleteAnswer? _answer;
 
-    private ItemsController Controller(bool mayDelete = true)
+    private ItemsController Controller(bool mayDelete = true, Guid? userId = null)
     {
         var library = new Mock<ILibraryManager>();
         library.Setup(l => l.GetItemById(EpisodeId)).Returns(new FakeEpisode { Allowed = mayDelete });
@@ -40,10 +40,19 @@ public class ItemsControllerTests
             {
                 HttpContext = new DefaultHttpContext
                 {
-                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(DeleteFilter.UserIdClaim, UserId.ToString())], "test")),
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(DeleteFilter.UserIdClaim, (userId ?? UserId).ToString())], "test")),
                 },
             },
         };
+    }
+
+    [Fact]
+    public async Task An_api_key_with_no_user_gets_no_menu_rather_than_an_error()
+    {
+        _answer = new DeleteAnswer(true, null, null, null);
+        var status = (await Controller(userId: Guid.Empty).Status(EpisodeId, CancellationToken.None)).Value!;
+        Assert.False(status.CanLeave);
+        Assert.Empty(_modes);
     }
 
     [Fact]

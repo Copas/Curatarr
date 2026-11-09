@@ -1,4 +1,6 @@
 using Jellyfin.Plugin.Curatarr.Configuration;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
@@ -22,6 +24,17 @@ public sealed class DeleteFilter : IAsyncActionFilter
 
     /// <summary>The claim with the app's name, e.g. "Jellyfin Web".</summary>
     internal const string ClientClaim = "Jellyfin-Client";
+
+    /// <summary>
+    /// The header carrying Curatarr's sentence about what it did (URI-encoded),
+    /// which the web app's menu script shows.
+    /// </summary>
+    internal const string MessageHeader = "X-Curatarr-Message";
+
+    /// <summary>How often, and how many times, to look whether a film's file is gone.</summary>
+    internal static TimeSpan GoneEvery { get; set; } = TimeSpan.FromSeconds(2);
+
+    internal static int GoneTries { get; set; } = 90;
 
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
@@ -83,6 +96,7 @@ public sealed class DeleteFilter : IAsyncActionFilter
         var web = WebMenu.Active && context.HttpContext.User.FindFirst(ClientClaim)?.Value == WebMenu.Client;
         var mode = web ? Modes.Now : Modes.Delete;
         var toJellyfin = new List<Guid>();
+        var messages = new List<string>();
         string? refused = null;
         foreach (var id in ids)
         {
@@ -117,10 +131,21 @@ public sealed class DeleteFilter : IAsyncActionFilter
             else if (answer.Result == "deleting")
             {
                 _logger.LogInformation("{Item} ({Name}) deleted by {User} is being deleted by Curatarr", id, item.Name, user.Username);
+                if (item is Movie)
+                {
+                    // Radarr deletes the file in a few seconds; Jellyfin would
+                    // only notice at its next library scan.
+                    _ = RemoveWhenGoneAsync(_libraryManager, item, path => File.Exists(path) || Directory.Exists(path), _logger);
+                }
             }
             else
             {
                 _logger.LogInformation("{Item} ({Name}) deleted by {User} is Leaving Soon in Curatarr instead", id, item.Name, user.Username);
+            }
+
+            if (answer is { Handled: true, Refused: null, Message: { } said } && !string.IsNullOrWhiteSpace(said))
+            {
+                messages.Add(said);
             }
         }
 
@@ -131,6 +156,11 @@ public sealed class DeleteFilter : IAsyncActionFilter
                 StatusCode = 409,
             };
             return;
+        }
+
+        if (messages.Count > 0)
+        {
+            context.HttpContext.Response.Headers[MessageHeader] = Uri.EscapeDataString(string.Join(" ", messages));
         }
 
         if (toJellyfin.Count == 0)
@@ -145,6 +175,49 @@ public sealed class DeleteFilter : IAsyncActionFilter
         }
 
         await next().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Once a film's file is gone (Curatarr deleted it through Radarr), drop it
+    /// from Jellyfin's library without touching any file, so it stops showing
+    /// straight away. If the file is still there after a few minutes it's left
+    /// to Jellyfin's next library scan.
+    /// </summary>
+    /// <param name="library">Jellyfin's library.</param>
+    /// <param name="item">The film.</param>
+    /// <param name="exists">Whether a path is still on disk.</param>
+    /// <param name="logger">The log.</param>
+    /// <returns>Whether it was dropped.</returns>
+    internal static async Task<bool> RemoveWhenGoneAsync(ILibraryManager library, BaseItem item, Func<string, bool> exists, ILogger logger)
+    {
+        var path = item.Path;
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
+
+        for (var tries = 0; tries < GoneTries; tries++)
+        {
+            await Task.Delay(GoneEvery).ConfigureAwait(false);
+            if (exists(path))
+            {
+                continue;
+            }
+
+            try
+            {
+                library.DeleteItem(item, new DeleteOptions { DeleteFileLocation = false });
+                logger.LogInformation("{Name} is gone from disk; dropped it from the library", item.Name);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException)
+            {
+                logger.LogWarning(ex, "Couldn't drop {Name} from the library; the next library scan will", item.Name);
+                return false;
+            }
+        }
+
+        return false;
     }
 
     private static (string? Argument, IReadOnlyList<Guid> Ids) ItemIds(ActionExecutingContext context)

@@ -629,6 +629,13 @@ Found by end-to-end testing: every page and form, odd input to every route, a co
 
 The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed and updated from Jellyfin's plugin catalogue once Curatarr adds its repository. Each version's notes below are what Jellyfin shows as its changelog, and the release page's notes.
 
+### 0.9.0.0 (2026-11-09)
+
+- Fixed: the web app's Leaving Soon and Leave after I watch menu items never appeared. Jellyfin sends the plugin's answers with capitalised names ("CanLeave"), and the menu looked for "canLeave".
+- Delete in the web app says what Curatarr did ("… is being deleted.", "… is Leaving Soon."). Before, nothing showed, and the title stayed listed, so it looked as if nothing had happened.
+- A film Curatarr deletes leaves Jellyfin's library a few seconds after its file is gone, not at Jellyfin's next library scan, a few minutes later. Only the library entry is removed; files are left to Radarr.
+- Fixed: asking for a title's menu with an API key instead of a signed-in account was an error; it now answers that there's no menu.
+
 ### 0.8.1.0 (2026-10-25)
 
 - After Jellyfin restarts, the account pictures already downloaded show straight away, and new ones as they arrive. Before, nobody saw their own pictures until every download had finished, which after the update to 0.8.0.0 took several minutes.

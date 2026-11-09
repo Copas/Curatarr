@@ -126,7 +126,8 @@ public class ItemsController : ControllerBase
         }
 
         var claim = User.FindFirst(DeleteFilter.UserIdClaim)?.Value;
-        var user = Guid.TryParse(claim, out var userId) ? _userManager.GetUserById(userId) : null;
+        // An API key has no user (an empty id), and no menu to show.
+        var user = Guid.TryParse(claim, out var userId) && userId != Guid.Empty ? _userManager.GetUserById(userId) : null;
         var item = _libraryManager.GetItemById(itemId);
         if (user is null || item is null || !item.CanDelete(user))
         {

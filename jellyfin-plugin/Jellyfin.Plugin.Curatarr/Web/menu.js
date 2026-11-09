@@ -44,6 +44,34 @@
         setTimeout(function () { box.remove(); }, 5000);
     }
 
+    // Jellyfin's API names fields with a capital (CanLeave); read either.
+    function field(object, name) {
+        if (!object) {
+            return undefined;
+        }
+        return name in object ? object[name] : object[name.charAt(0).toUpperCase() + name.slice(1)];
+    }
+
+    // Curatarr's sentence about a Delete it took over (deleting now, or
+    // Leaving Soon), sent back in a header: shown, since the app says nothing.
+    if (window.fetch) {
+        var originalFetch = window.fetch;
+        window.fetch = function (input, init) {
+            var method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+            return originalFetch.apply(this, arguments).then(function (response) {
+                if (method === 'DELETE' && response && response.headers) {
+                    var said = response.headers.get('X-Curatarr-Message');
+                    if (said) {
+                        try {
+                            toast(decodeURIComponent(said));
+                        } catch (e) { /* not encoded as expected: say nothing */ }
+                    }
+                }
+                return response;
+            });
+        };
+    }
+
     function api(method, path) {
         var client = window.ApiClient;
         if (!client) {
@@ -83,21 +111,21 @@
             if (!status || !del.isConnected) {
                 return;
             }
-            if (status.canLeaveAfterWatched || status.leavesAfterWatched) {
-                var undo = !!status.leavesAfterWatched;
+            if (field(status, 'canLeaveAfterWatched') || field(status, 'leavesAfterWatched')) {
+                var undo = !!field(status, 'leavesAfterWatched');
                 menuItem(del, 'curatarr-leave-after', undo ? 'event_available' : 'event_busy',
                     undo ? "Don't leave after watched" : 'Leave after I watch', function () {
                         api('POST', 'Curatarr/Items/' + id + '/LeaveAfterWatched' + (undo ? '?undo=true' : '')).then(function (answer) {
-                            toast((answer && answer.message) || 'Done.');
+                            toast(field(answer, 'message') || 'Done.');
                         }, function () {
                             toast("Curatarr couldn't be reached.");
                         });
                     });
             }
-            if (status.canLeave) {
+            if (field(status, 'canLeave')) {
                 menuItem(del, 'curatarr-leaving-soon', 'auto_delete', 'Leaving Soon', function () {
                     api('POST', 'Curatarr/Items/' + id + '/LeavingSoon').then(function (answer) {
-                        toast((answer && answer.message) || 'Marked Leaving Soon.');
+                        toast(field(answer, 'message') || 'Marked Leaving Soon.');
                     }, function () {
                         toast("Curatarr couldn't mark it Leaving Soon.");
                     });

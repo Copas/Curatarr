@@ -88,6 +88,31 @@ public class DeleteFilterTests
     }
 
     [Fact]
+    public async Task What_Curatarr_did_is_sent_back_for_the_web_app_to_say()
+    {
+        var context = Context("DeleteItem", "itemId", Item(new DeleteAnswer(true, null, "leaving_soon", "Film is Leaving Soon.")));
+        Assert.False(await Run(Filter(), context));
+        Assert.Equal("Film is Leaving Soon.", Uri.UnescapeDataString(context.HttpContext.Response.Headers[DeleteFilter.MessageHeader].ToString()));
+    }
+
+    [Fact]
+    public async Task A_deleted_film_leaves_the_library_once_its_file_is_gone()
+    {
+        DeleteFilter.GoneEvery = TimeSpan.FromMilliseconds(1);
+        DeleteFilter.GoneTries = 5;
+        var film = new FakeMovie { Allowed = true, Path = "/films/Film (2026)/Film.mkv" };
+        var library = new Mock<ILibraryManager>();
+        var looks = 0;
+        Assert.True(await DeleteFilter.RemoveWhenGoneAsync(library.Object, film, _ => ++looks < 3, NullLogger.Instance));
+        library.Verify(l => l.DeleteItem(film, It.Is<DeleteOptions>(o => !o.DeleteFileLocation)), Times.Once);
+
+        // still on disk: left to Jellyfin's own scan
+        var kept = new Mock<ILibraryManager>();
+        Assert.False(await DeleteFilter.RemoveWhenGoneAsync(kept.Object, film, _ => true, NullLogger.Instance));
+        kept.Verify(l => l.DeleteItem(It.IsAny<BaseItem>(), It.IsAny<DeleteOptions>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Anything_else_is_deleted_by_Jellyfin()
     {
         var context = Context("DeleteItem", "itemId", Item(NotMine));
