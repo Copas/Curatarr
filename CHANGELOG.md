@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc109 (2026-11-09)
+
+- **The time left for chapter quality checks is honest.** It assumed a hundred files an hour for each library, the size of the batches queued. Most of those files need new chapters, a few minutes each, so the real pace was nearer forty an hour in all. The ones already queued were also counted twice, as chapter jobs and as quality checks. The estimate now follows how many were judged over the last day, and counts each file once. On one library it went from "11 h" to "2 days 8 h".
+
 ## 0.2.0rc108 (2026-11-09)
 
 - **New episodes no longer wait behind files being looked at again.** With *Replace chapters that are no use* on, files kept with their own chapters are looked at again a hundred at a time. A hundred more were queued every hour however many were still waiting, and most need new chapters, which takes a few minutes each, so the queue grew by about seventy an hour. Being queued earlier, they also went before newly imported files, which could wait days for chapters, subtitles and skip markers. Now the queue is only topped up to a hundred, and new files go first.

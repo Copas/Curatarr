@@ -60,14 +60,18 @@ def overall(now=None) -> dict | None:
             )
     quality = chapter_quality_progress()
     if quality and quality["left"]:
-        # Looked at a batch at a time, each library's on the hourly refresh.
-        hours = quality["left"] / quality["per_hour"]
+        # Queued a batch at a time as chapter jobs: those waiting are counted
+        # with the chapter jobs, the rest here. The time is all of them at the
+        # pace they've been judged lately.
+        pace = quality["per_hour"]
         parts.append(
             {
                 "name": "Chapter quality checks",
                 "done": quality["checked"],
-                "left": quality["left"],
-                "finishes_at": now + timedelta(hours=hours),
+                "left": quality["left"] - quality.get("waiting", 0),
+                "finishes_at": now + timedelta(hours=quality["left"] / pace)
+                if pace
+                else None,
                 "approximate": False,
             }
         )

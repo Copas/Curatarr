@@ -780,11 +780,32 @@ def chapter_quality_progress() -> dict | None:
         .count()
     )
     kept, left = count("embedded_ok"), count("embedded")
+    base = (
+        db.session.query(func.count(ChapterState.id))
+        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .filter(MediaIdentity.library_id.in_(libraries))
+    )
+    waiting = base.filter(
+        ChapterState.chapter_status == "existing",
+        ChapterState.chapter_source == "embedded",
+        ChapterState.job_state.in_(("queued", "running")),
+    ).scalar()
+    # The pace is how many were judged over the last day, kept or replaced;
+    # most need new chapters, so it's far slower than the batches queued.
+    judged = base.filter(
+        ChapterState.chapter_processed_at >= utcnow() - FORECAST_WINDOW,
+        or_(
+            ChapterState.chapter_source == "embedded_ok",
+            ChapterState.original_chapters_xml.isnot(None),
+        ),
+    ).scalar()
+    hours = FORECAST_WINDOW.total_seconds() / 3600
     return {
         "checked": kept,
         "left": left,
+        "waiting": waiting,  # queued as chapter jobs, counted there too
         "total": kept + left,
-        "per_hour": QUALITY_CHECKS_PER_PASS * len(libraries),
+        "per_hour": judged / hours if judged >= FORECAST_MIN_SAMPLES else None,
     }
 
 

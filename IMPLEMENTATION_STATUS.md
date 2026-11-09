@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc109 (2026-11-09): chapter_quality_progress per_hour measured (judged in FORECAST_WINDOW) and waiting split out; progress.overall counts queued quality checks once.
 - v0.2.0rc108 (2026-11-09): _queue_chapter_quality_checks tops up to QUALITY_CHECKS_PER_PASS; _due_jobs ranks auto jobs on existing-chapter files after new ones (priority 3).
 - v0.2.0rc107 (2026-11-09): recheck_credits keeps RECHECK_QUEUED (5) recap jobs queued regardless of other work; footage.PRINTED 0.45 (intro_block takes duration).
 - v0.2.0rc106 (2026-11-09): footage.MIN_MOVE 1.0 s; INTRO_RULE 2 redoes rc105 widenings.

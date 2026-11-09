@@ -271,3 +271,22 @@ def test_quality_progress_only_when_a_library_has_it_on(app):
     assert library.managed
     result = enrichment.chapter_quality_progress()
     assert result["left"] == 1 and result["checked"] == 0
+    assert result["per_hour"] is None  # nothing judged lately: no guess
+
+    # judged at their real pace, and the ones queued aren't counted twice
+    from curatarr.models import ChapterState, MediaIdentity, utcnow
+
+    media = db.session.query(MediaIdentity).one()
+    for n in range(48):
+        done = ChapterState(media_part_id=f"done-{n}", media_identity_id=media.id)
+        done.chapter_status, done.chapter_source = "existing", "embedded_ok"
+        done.chapter_processed_at = utcnow()
+        db.session.add(done)
+    state.job_state = "queued"
+    db.session.commit()
+    result = enrichment.chapter_quality_progress()
+    assert result["per_hour"] == 2.0 and result["waiting"] == 1
+    from curatarr.progress import overall
+
+    quality = next(p for p in overall()["parts"] if p["name"].startswith("Chapter q"))
+    assert quality["left"] == 0  # waiting as a chapter job, counted there
