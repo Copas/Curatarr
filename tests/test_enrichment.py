@@ -2802,3 +2802,47 @@ def test_numbered_chapters_with_nothing_said_keep_their_numbers():
     said = [Segment(10, 20, "hello")]
     with pytest.raises(InvalidChapters):  # the model named none of them
         named_breaks_plan(600.0, [0.0, 300.0], said, config, lambda e: ["", ""])
+
+
+def test_looking_again_at_kept_chapters_never_piles_up_or_holds_up_new_files(
+    app, monkeypatch
+):
+    from curatarr import up_next
+    from curatarr.models import Library, MediaIdentity, MediaPart, utcnow
+
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
+    monkeypatch.setattr(enrichment, "QUALITY_CHECKS_PER_PASS", 2)
+    library = Library(jellyfin_library_id="tv", name="TV", media_type="tv")
+    db.session.add(library)
+    db.session.flush()
+    show = MediaIdentity(library_id=library.id, media_type="series", title="Show")
+    db.session.add(show)
+    db.session.flush()
+    states = []
+    for number in range(1, 6):
+        part = MediaPart(
+            media_identity_id=show.id,
+            kind="episode",
+            season_number=1,
+            episode_number=number,
+            has_file=True,
+            file_path=f"/tv/Show/S01E0{number}.mkv",
+        )
+        db.session.add(part)
+        db.session.flush()
+        state = ChapterState(media_part_id=part.id, media_identity_id=show.id)
+        state.job_state = "idle"
+        state.chapter_status, state.chapter_source = "existing", "embedded"
+        db.session.add(state)
+        states.append(state)
+    db.session.commit()
+    now = utcnow()
+    assert enrichment._queue_chapter_quality_checks(library.id, now) == 2
+    assert enrichment._queue_chapter_quality_checks(library.id, now) == 0  # topped up
+    # a new import queued after them still goes first
+    new = states[4]
+    new.chapter_status, new.chapter_source = "not_processed", None
+    new.job_state, new.requested_action = "queued", "auto"
+    new.requested_at = utcnow()
+    db.session.commit()
+    assert enrichment._due_jobs(1, scans=False)[0].id == new.id

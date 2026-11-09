@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc108 (2026-11-09)
+
+- **New episodes no longer wait behind files being looked at again.** With *Replace chapters that are no use* on, files kept with their own chapters are looked at again a hundred at a time. A hundred more were queued every hour however many were still waiting, and most need new chapters, which takes a few minutes each, so the queue grew by about seventy an hour. Being queued earlier, they also went before newly imported files, which could wait days for chapters, subtitles and skip markers. Now the queue is only topped up to a hundred, and new files go first.
+
 ## 0.2.0rc107 (2026-11-09)
 
 - **Skip-marker re-checks move along while chapter work runs.** Episodes checked under older rules (credits, intros, recaps) were queued one at a time, and only when no other job was waiting, so a long chapter backlog held them all up. They have a job slot of their own, so a few are now kept queued for it all the time. What's up next still goes first.

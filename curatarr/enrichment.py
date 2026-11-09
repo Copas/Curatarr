@@ -807,7 +807,23 @@ def _judge_kept_chapters_again() -> None:
 def _queue_chapter_quality_checks(library_id, now) -> int:
     """With "replace chapters that are no use" on, look again at files kept
     with their own chapters before it was (whenever they were added): a few
-    at a time. Each is looked at once; kept ones are marked embedded_ok."""
+    at a time: topped up to QUALITY_CHECKS_PER_PASS waiting, never piled up
+    faster than they're done. Each is looked at once; kept ones are marked
+    embedded_ok."""
+    waiting = (
+        db.session.query(func.count(ChapterState.id))
+        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaIdentity.library_id == library_id,
+            ChapterState.chapter_status == "existing",
+            ChapterState.chapter_source == "embedded",
+            ChapterState.job_state.in_(("queued", "running")),
+        )
+        .scalar()
+    )
+    room = QUALITY_CHECKS_PER_PASS - waiting
+    if room <= 0:
+        return 0
     rows = (
         db.session.query(ChapterState)
         .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
@@ -820,7 +836,7 @@ def _queue_chapter_quality_checks(library_id, now) -> int:
             ChapterState.chapter_source == "embedded",
             ChapterState.job_state == "idle",
         )
-        .limit(QUALITY_CHECKS_PER_PASS)
+        .limit(room)
         .all()
     )
     for state in rows:
@@ -2347,6 +2363,14 @@ def _due_jobs(limit, *, scans, recaps=False):
         ),
         (ChapterState.requested_action == "regenerate", 1),
         (ChapterState.requested_action == "recap", 1),
+        # Files kept with their own chapters, looked at again: after new ones.
+        (
+            and_(
+                ChapterState.requested_action == "auto",
+                ChapterState.chapter_status == "existing",
+            ),
+            3,
+        ),
         (ChapterState.requested_action == "auto", 2),
         (ChapterState.requested_action == "subtitles", 4),
         else_=3,
