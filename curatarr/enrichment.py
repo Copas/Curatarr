@@ -224,6 +224,8 @@ def parse_layer(form, *, library: bool) -> dict:
                 _assign(layer, path, raw in {"true", "on", "1"})
             continue
         raw = (raw or "").strip()
+        if field_name == "whisper_model" and raw == "default":
+            continue  # follow the recommended model, even when it changes
         if raw in {"", "inherit"}:
             if library or field_name == "llm_model":
                 continue
@@ -348,6 +350,9 @@ def form_values(library=None) -> dict:
         )
     else:
         values["chapter_mode"] = shown["mode"] if shown["enabled"] else "disabled"
+        values["whisper_model"] = (layer.get("semantic") or {}).get(
+            "model"
+        ) or "default"
     return values
 
 

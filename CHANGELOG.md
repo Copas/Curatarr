@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc102 (2026-11-09)
+
+- **The transcription model can follow the recommended one.** The settings page saved the model with everything else, so installs that never chose one were stuck on medium after rc101 made large-v3-turbo the default. The list now starts with **Recommended (turbo)**, which isn't saved as a fixed choice, so a better default reaches it later. An install whose saved model was medium switches to Recommended on upgrade, unless transcription is set to run on the processor, where medium is quicker.
+
 ## 0.2.0rc101 (2026-11-09)
 
 - **Transcripts no longer drop lines, and the default model is large-v3-turbo.** Whisper ran behind a speech filter that drops anything it doesn't take for speech, and it also dropped lines said quietly or over music. Against the official subtitles of four episodes and a film, about one word in six was wrong, missing or extra, and most of those were missing. In one drama episode, 557 words were dropped. Now the filter is used only to tell which language is spoken. The whole track is then transcribed in that language, skipping silences long enough for Whisper to invent words in. With large-v3-turbo as well, the gap fell from 16% to 12% on average, and from 22% to 8% on the drama, and transcribing is faster than with medium. Most of what's left isn't a mistake: "you've" against "you have", the spelling of a name, an "uh" the subtitles leave out. Pick **turbo** under Settings → Enhance → Chapters to switch an existing install. Subtitle files Curatarr made the old way are made again in the background, what's up next first. Chapters already made stay as they are.

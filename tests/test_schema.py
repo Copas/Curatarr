@@ -121,6 +121,32 @@ def test_find_favorites_switched_on_where_it_was_keeps_on_under_automatic(tmp_pa
         assert setting("curation") == {"seasonal": False}
 
 
+def test_the_old_default_whisper_model_gives_way_to_the_recommended_one(tmp_path):
+    from flask_migrate import upgrade
+
+    from curatarr import db
+    from curatarr.chapters import DEFAULTS
+    from curatarr.enrichment import config_for
+    from curatarr.services import set_setting, setting
+
+    for saved, device, kept in (
+        ("medium", "auto", None),  # the old default, saved with the form
+        ("medium", "cpu", "medium"),  # on the processor medium is quicker
+        ("small", "auto", "small"),  # chosen
+    ):
+        with _app(tmp_path, f"{saved}-{device}.db").app_context():
+            upgrade(revision="c4e7a9d2f618")
+            set_setting("chapter_settings", {"semantic": {"model": saved}})
+            set_setting("chapter_options", {"whisper_device": device})
+            db.session.commit()
+            upgrade()
+            db.session.expire_all()
+            assert setting("chapter_settings")["semantic"].get("model") == kept
+            assert config_for("lib")["semantic"]["model"] == (
+                kept or DEFAULTS["semantic"]["model"]
+            )
+
+
 def test_a_secret_key_that_doesnt_match_says_so(tmp_path):
     from flask_migrate import upgrade
 

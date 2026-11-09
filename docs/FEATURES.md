@@ -140,7 +140,7 @@ Optional, and off until you enable it per library in **Settings → Enhance**.
 After Sonarr or Radarr finish importing a movie or episode of at least 20 minutes that has no chapters, Curatarr adds them:
 
 - **Navigation Chapters** places one about every 7 minutes (4–10 minutes apart), moved to the nearest scene change.
-- **Smart Chapters** also transcribes the audio locally with faster-whisper (large-v3-turbo by default), asks an Ollama model where the story moves on and what to call each chapter, and falls back to Navigation Chapters if that fails.
+- **Smart Chapters** also transcribes the audio locally with faster-whisper (large-v3-turbo by default: *Recommended* in Settings follows the default as it improves), asks an Ollama model where the story moves on and what to call each chapter, and falls back to Navigation Chapters if that fails.
 
 Chapters are written into MKV files in place with `mkvpropedit`, which re-encodes nothing; other containers are reported as unsupported. Every file is verified afterwards, and only that item is refreshed in Jellyfin.
 

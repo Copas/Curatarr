@@ -7,7 +7,7 @@ import pytest
 from conftest import database_free
 
 from curatarr import db, enrichment
-from curatarr.chapters import Chapter
+from curatarr.chapters import DEFAULTS, Chapter
 from curatarr.integrations import IntegrationError
 from curatarr.mediafile import MediaInfo
 from curatarr.models import (
@@ -686,7 +686,7 @@ def test_pages_render_and_settings_save(app, client, media_env):
             "scene_detection": "true",
             "fixed_intervals": "true",
             "semantic_enabled": "true",
-            "whisper_model": "medium",
+            "whisper_model": "default",
             "llm_model": "qwen3:14b",
             "semantic_names": "true",
             "fallback_format": "Chapter {number}",
@@ -703,6 +703,10 @@ def test_pages_render_and_settings_save(app, client, media_env):
     config = enrichment.config_for(library.id)
     assert config["enabled"] and config["mode"] == "smart"
     assert config["processing"]["existing_library"] is False  # unchecked box
+    # "Recommended" isn't saved, so a better default reaches it later
+    assert "model" not in enrichment.global_layer()["semantic"]
+    assert config["semantic"]["model"] == DEFAULTS["semantic"]["model"]
+    assert enrichment.form_values()["whisper_model"] == "default"
     assert enrichment.options()["path_mappings"] == [
         {"arr": "/data", "local": "/mnt/data"}
     ]
