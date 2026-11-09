@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc111 (2026-11-09)
+
+- **Accounts hidden from Jellyfin's sign-in screen get no picks.** An admin account or a spare one isn't someone choosing a film to watch. Hidden accounts are no longer offered on the settings page, and any playlist made for one is removed.
+
 ## 0.2.0rc110 (2026-11-09)
 
 - **Picks for each person** (Settings → Household choices, off by default). Each Jellyfin account gets a private playlist, "Picks for" its name, of ten unwatched films matched to what it has favourited and finished. Playlists show on every Jellyfin app, Roku included. Only films that account can see are picked: its libraries, within its parental rating. A film leaves the list a few minutes after it's watched, and the list is made again weekly, with films passed over making way for others. Accounts need five favourited or finished films first. The settings page shows each account's picks and what each is like.

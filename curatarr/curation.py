@@ -98,10 +98,10 @@ def save_options(form):
     values["poster_language"] = form.get("poster_language") == "on"
     values["picks"] = form.get("picks") == "on"
     if "picks_accounts_shown" in form:
-        from .services import account_names
+        from .picks import offered_accounts
 
         chosen = set(form.getlist("picks_account"))
-        values["picks_skip"] = sorted(set(account_names()) - chosen)
+        values["picks_skip"] = sorted(set(offered_accounts()) - chosen)
     else:
         values["picks_skip"] = options()["picks_skip"]
     set_setting(SETTINGS_KEY, values)

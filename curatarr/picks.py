@@ -19,8 +19,9 @@ libraries, within their parental rating, not played and not already started
 few minutes. Once a week the list is made again; a film that stayed on it
 unplayed counts for less each week, so others get a turn.
 
-Accounts with fewer than MIN_LIKED films to go on get no playlist until
-they have them.
+Accounts hidden from Jellyfin's sign-in screen (an admin account, a spare
+one) never get a list. Accounts with fewer than MIN_LIKED films to go on get
+no playlist until they have them.
 """
 
 import json
@@ -55,6 +56,22 @@ def skipped_accounts() -> set[str]:
     from .curation import options
 
     return set(options().get("picks_skip") or [])
+
+
+def offered_accounts() -> dict[str, str]:
+    """{account id: name} that can have picks: those Curatarr's pages show,
+    less accounts hidden from Jellyfin's sign-in screen (admin and spare
+    accounts), whatever Curatarr shows."""
+    from .services import account_names, setting
+
+    hidden = {_norm(i) for i in setting("jellyfin_hidden_user_ids", []) or []}
+    return {i: n for i, n in account_names().items() if _norm(i) not in hidden}
+
+
+def eligible_accounts() -> set[str]:
+    """Accounts that get picks: offered and not unticked."""
+    skip = {_norm(i) for i in skipped_accounts()}
+    return {_norm(i) for i in offered_accounts()} - skip
 
 
 def _norm(item_id: str) -> str:
@@ -247,24 +264,17 @@ def sweep(now=None) -> int:
         db.session.commit()
         return 0
     set_setting("picks_checked_at", now.isoformat())
-    from .services import account_names
-
     try:
-        shown_accounts = {_norm(i) for i in account_names()}
-        users = [
-            u
-            for u in jellyfin.users()
-            if not (u.get("Policy") or {}).get("IsDisabled")
-            and _norm(u["Id"]) in shown_accounts
-        ]
+        users = jellyfin.users()
     except IntegrationError:
         return 0
-    skip = {_norm(i) for i in skipped_accounts()}
+    wanted = eligible_accounts()
     made = 0
     for user in users:
         user_id = _norm(user["Id"])
         entry = dict(stored.get(user_id) or {})
-        if user_id in skip:
+        if user_id not in wanted or (user.get("Policy") or {}).get("IsDisabled"):
+            # Left out, hidden or disabled: no list, and any made goes.
             if entry.get("playlist"):
                 try:
                     jellyfin.delete_item(entry["playlist"])

@@ -183,6 +183,16 @@ def test_picks_switched_off_or_an_account_left_out_removes_its_playlist(
     assert not jellyfin.playlists and setting("picks") == {}
 
 
+def test_accounts_hidden_from_the_sign_in_screen_get_no_picks(app, monkeypatch):
+    _library()
+    set_setting("jellyfin_hidden_user_ids", ["sam"])
+    db.session.commit()
+    jellyfin = FakeJellyfin([{"Id": "sam", "Name": "Sam"}], ["jf10", "jf11"])
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: jellyfin)
+    assert picks.sweep(utcnow()) == 0 and not jellyfin.playlists
+    assert "sam" not in picks.offered_accounts()
+
+
 def test_nothing_is_asked_of_jellyfin_while_picks_are_off(app, monkeypatch):
     def no_client(_kind):
         raise AssertionError("asked Jellyfin")
