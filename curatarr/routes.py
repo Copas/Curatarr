@@ -1359,7 +1359,12 @@ def review():
 @bp.get("/review/<candidate_id>/delete")
 def review_delete_confirm(candidate_id):
     candidate = db.session.get(PurgeCandidate, candidate_id)
-    if not candidate or candidate.state not in {"REVIEW", "LEAVING_SOON", "SNOOZED"}:
+    if not candidate or candidate.state not in {
+        "REVIEW",
+        "LAST_CALL",
+        "LEAVING_SOON",
+        "SNOOZED",
+    }:
         abort(404)
     return render_template("review_delete_confirm.html", candidate=candidate)
 
@@ -1991,7 +1996,7 @@ def _automatic_rules():
 
 def _household_rules():
     """Requests, rewatches, import lists and seasons (curation.py)."""
-    from . import curation
+    from . import curation, last_call
     from .picks import hidden_accounts as picks_hidden
     from .picks import offered_accounts as picks_accounts
     from .picks import summary as picks_summary
@@ -2019,6 +2024,8 @@ def _household_rules():
         accounts=picks_accounts(include_hidden=True),
         hidden_accounts=picks_hidden(),
         hidden_mode=hidden_mode(),
+        film_libraries=last_call.film_libraries(),
+        last_call=last_call.now_in(),
         picks=picks_summary(),
     )
 

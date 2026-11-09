@@ -30,6 +30,21 @@
 {% call card('rewatched', 'heart', 'Rewatched', 'Always on: rewatched titles go to the back of the line') %}
   <p class="text-secondary mb-0">A film played twice or more, or a show someone rewatches or two people follow, goes to the back of the line, like a favourite. Always on; it only changes the order.</p>
 {% endcall %}
+{% call card('last-call', 'gauge', 'Last call', ('Films unwatched for ' ~ options.last_call_days ~ ' days, ' ~ options.last_call_per_week ~ ' a week, ' ~ options.last_call_notice_days ~ ' days to keep them') if options.last_call else 'A warning on unwatched films before they go', options.last_call, toggles='last_call') %}
+  <p class="text-secondary">Films nobody has played for a while get a <strong>LAST CALL · ♥ TO KEEP</strong> banner on their poster and join a Jellyfin collection, "Last Call", a few each week, oldest first, so it stays short enough to browse on a TV. Pressing the heart in any Jellyfin app keeps a film for as long as it's favourited; so does playing it, or Keep or Never Purge on its page here. Otherwise it moves on to Leaving Soon, with the usual notice before it's deleted. Titles Leaving Soon are in the Last Call collection too.</p>
+  {{ switch('last_call', 'Give unwatched films a last call', options.last_call, 'Never picked: films someone favourited, films with Never Purge, films held for a request or a season, and films someone kept from Last call before (for the same number of days).') }}
+  <div class="setting-grid mt-2">
+    <div class="setting"><label class="form-label w-100">Unwatched for (days)<input class="form-control" type="number" min="7" max="3650" name="last_call_days" value="{{ options.last_call_days }}"></label><div class="form-text">Since it was added, or last played by anyone.</div></div>
+    <div class="setting"><label class="form-label w-100">Films added each week<input class="form-control" type="number" min="1" max="200" name="last_call_per_week" value="{{ options.last_call_per_week }}"></label><div class="form-text">Oldest first.</div></div>
+    <div class="setting"><label class="form-label w-100">Days in Last call<input class="form-control" type="number" min="1" max="90" name="last_call_notice_days" value="{{ options.last_call_notice_days }}"></label><div class="form-text">Then Leaving Soon, unless someone keeps it.</div></div>
+  </div>
+  {% if film_libraries %}<fieldset class="setting-group"><legend class="setting-group-label">Libraries</legend><input type="hidden" name="last_call_libraries_shown" value="1">
+    <div class="setting-grid setting-grid-compact">{% for library in film_libraries %}<label class="form-check"><input class="form-check-input" type="checkbox" name="last_call_library" value="{{ library.id }}"{% if options.last_call_libraries is none or library.id in options.last_call_libraries %} checked{% endif %}><span class="form-check-label">{{ library.name }}</span></label>{% endfor %}</div>
+  </fieldset>{% endif %}
+  {% if options.last_call and last_call %}<fieldset class="setting-group"><legend class="setting-group-label">In Last call now ({{ last_call|length }})</legend>
+    <ul class="small mb-0">{% for row in last_call %}<li><a href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a> <span class="text-secondary">Leaving Soon {{ row.until|when('date') }}</span></li>{% endfor %}</ul>
+  </fieldset>{% endif %}
+{% endcall %}
 {% call card('seasonal', 'calendar', 'Seasonal shelves', (seasons|map(attribute='name')|join(' and ') ~ ' titles kept through their season' if options.seasonal else 'Not kept for their season') ~ (' · brought back' if options.seasonal_return else ''), options.seasonal, toggles='seasonal') %}
   <p class="text-secondary">{% for season in seasons %}{{ season.name }} titles (by their TMDB keywords, or because they were watched mostly in {{ season.name }} season before){{ ' and ' if not loop.last }}{% endfor %} are kept through their season and the weeks before it.</p>
   <div class="setting-grid">

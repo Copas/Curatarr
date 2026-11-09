@@ -36,11 +36,20 @@ DEFAULTS = {
     "picks": False,  # picks.py: a playlist of films for each account
     "picks_skip": [],  # account ids left out of picks
     "picks_hidden": False,  # picks for accounts hidden from sign-in too
+    # last_call.py
+    "last_call": False,
+    "last_call_days": 90,
+    "last_call_per_week": 10,
+    "last_call_notice_days": 14,
+    "last_call_libraries": None,  # None: every film library
 }
 BOUNDS = {
     "request_hold_days": (0, 3650),
     "list_grace_days": (0, 3650),
     "season_lead_days": (0, 90),
+    "last_call_days": (7, 3650),
+    "last_call_per_week": (1, 200),
+    "last_call_notice_days": (1, 90),
 }
 REQUESTS_KEY = "seerr_requests"  # {media id: [{"user_id", "user", "at"}]}
 LISTS_KEY = "list_arrivals"  # [media id]
@@ -89,9 +98,12 @@ def save_options(form):
         try:
             number = int((form.get(key) or "").strip())
         except ValueError as exc:
-            raise ValueError("Enter whole numbers of days") from exc
+            if key.startswith("last_call") and not (form.get(key) or "").strip():
+                values[key] = options()[key]  # a page saved before Last call
+                continue
+            raise ValueError("Enter whole numbers") from exc
         if not low <= number <= high:
-            raise ValueError(f"Days must be between {low} and {high}")
+            raise ValueError(f"Enter a number between {low} and {high}")
         values[key] = number
     values["seasonal"] = form.get("seasonal") == "on"
     values["seasonal_return"] = form.get("seasonal_return") == "on"
@@ -99,6 +111,15 @@ def save_options(form):
     values["poster_language"] = form.get("poster_language") == "on"
     values["picks"] = form.get("picks") == "on"
     values["picks_hidden"] = form.get("picks_hidden") == "on"
+    values["last_call"] = form.get("last_call") == "on"
+    if "last_call_libraries_shown" in form:
+        from .last_call import film_libraries
+
+        films = {library.id for library in film_libraries()}
+        chosen = set(form.getlist("last_call_library")) & films
+        values["last_call_libraries"] = None if chosen == films else sorted(chosen)
+    else:
+        values["last_call_libraries"] = options()["last_call_libraries"]
     if "picks_accounts_shown" in form:
         from .picks import offered_accounts
 

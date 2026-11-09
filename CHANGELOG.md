@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc119 (2026-11-09)
+
+- **Last call** (Settings → Household choices, off by default). Films nobody has played for a while (90 days) get an amber "LAST CALL · ♥ TO KEEP" banner on their poster and join a Jellyfin collection, "Last Call", a few each week (10), oldest first. Pressing the heart in any Jellyfin app keeps a film, and so do playing it, Keep and Never Purge. Otherwise, after 14 days it moves on to Leaving Soon, which is in the Last Call collection too. Every number can be changed, and the film libraries it looks at can be chosen. Favourited films, films with Never Purge, and films held for a request or a season are never picked.
+
 ## 0.2.0rc118 (2026-11-09)
 
 - **Films already Leaving Soon get the import-list exclusion too.** rc117 added the Radarr exclusion only when it marked a film itself. A film with no English audio that was already Leaving Soon was skipped, so a list could add it back once it was deleted.

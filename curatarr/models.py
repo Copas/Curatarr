@@ -217,6 +217,7 @@ class AcquisitionState(db.Model, Timed):
 ACTIVE_CANDIDATE_STATES = (
     "ELIGIBLE",
     "REVIEW",
+    "LAST_CALL",  # last_call.py: a public warning before Leaving Soon
     "LEAVING_SOON",
     "SNOOZED",
     "APPROVED",

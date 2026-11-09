@@ -1353,7 +1353,7 @@ def leaving_label(media_id) -> str | None:
     """The Leaving Soon banner's words for a title ("7 DAYS LEFT"), or None
     when it isn't Leaving Soon: Jellyfin's own poster carries the banner, so
     an account's own poster must too."""
-    from .artwork import badge_label
+    from .artwork import BADGED_STATES, badge_label
     from .models import PurgeCandidate
 
     snapshot = (
@@ -1364,7 +1364,7 @@ def leaving_label(media_id) -> str | None:
     if not snapshot or not snapshot.candidate_id:
         return None
     candidate = db.session.get(PurgeCandidate, snapshot.candidate_id)
-    if not candidate or candidate.state not in {"REVIEW", "LEAVING_SOON"}:
+    if not candidate or candidate.state not in BADGED_STATES:
         return None
     return badge_label(candidate)
 

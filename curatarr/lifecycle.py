@@ -502,7 +502,14 @@ def reconcile_candidates():
         db.session.query(PurgeCandidate)
         .filter(
             PurgeCandidate.state.in_(
-                ["ELIGIBLE", "REVIEW", "LEAVING_SOON", "SNOOZED", "APPROVED"]
+                [
+                    "ELIGIBLE",
+                    "REVIEW",
+                    "LAST_CALL",
+                    "LEAVING_SOON",
+                    "SNOOZED",
+                    "APPROVED",
+                ]
             )
         )
         .all()
@@ -530,6 +537,10 @@ def reconcile_candidates():
                 > _aware(candidate.last_activity_snapshot)
             ):
                 reason = "Playback occurred after candidate creation."
+            elif candidate.state == "LAST_CALL":
+                from . import last_call
+
+                reason = last_call.rescue_reason(media, item)
             elif (
                 candidate.reason_code == "inactivity"
                 and not policy["inactivity_cleanup"]
@@ -723,6 +734,7 @@ def review_candidate(candidate_id, choice):
     if not candidate or candidate.state not in {
         "REVIEW",
         "ELIGIBLE",
+        "LAST_CALL",
         "LEAVING_SOON",
         "SNOOZED",
     }:

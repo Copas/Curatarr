@@ -72,6 +72,14 @@ Settings → Household choices. Each of these shows on a title's page, and in Re
 - **Favourites.** A title someone favourited in Jellyfin goes to the back of the line. A gold star with the names of everyone who favourited it shows on its page, in Review, Free up space, Browse titles and Shows by size.
 - **Seasonal shelves.** Halloween and Christmas titles, by their TMDB keywords or because they were watched mostly in that season in earlier years, are kept through their season and the two weeks before it. Optionally (off by default), a seasonal film Curatarr removed is added back to Radarr, with its old quality profile and folder, two weeks before its season.
 
+### Last call
+
+**Last call** (Settings → Household choices, off by default) warns the household weeks before an unwatched film is cleaned up, in a way that works on any TV. Films nobody has played for a while (90 days by default, counted from when the film was added or last played; an upgraded file doesn't make it new) get an amber **LAST CALL · ♥ TO KEEP** banner on their poster and join a Jellyfin collection, **Last Call**, a few each week (10 by default), oldest first, so it stays short enough to browse with a remote.
+
+- **Keeping one:** press the heart (favourite) in any Jellyfin app; the film is kept for as long as it's favourited. Playing it, or Keep or Never Purge on its page in Curatarr, keeps it too, and a film someone kept isn't picked again for the same number of days.
+- **Otherwise,** after its days in Last call (14 by default) it moves on to **Leaving Soon**, with the usual notice before it's deleted through Radarr. Titles Leaving Soon are in the Last Call collection too, so it's the one place to look.
+- **Never picked:** films someone favourited, films with Never Purge, and films held for a request or a season. Only films, and only in the libraries ticked (every film library to start).
+
 ### Leave after watched, and Never compress
 
 On a film's or show's page, under **Flags** (or through the [API](API.md#titles-and-flags)):

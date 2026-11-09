@@ -85,9 +85,12 @@ def sync() -> dict | None:
     return stored
 
 
-def poster(images: list[bytes]) -> bytes:
+def poster(
+    images: list[bytes], label="LEAVING SOON", colour=None, ink="#FFFFFF"
+) -> bytes:
     """The collection's poster: up to four of its titles' posters in a grid,
-    under a red LEAVING SOON band like the one on their own posters."""
+    under a red LEAVING SOON band like the one on their own posters (or
+    another label and colour, for Last Call)."""
     from io import BytesIO
 
     from PIL import Image, ImageDraw
@@ -109,15 +112,15 @@ def poster(images: list[bytes]) -> bytes:
     drawing = ImageDraw.Draw(canvas)
     band = round(height * 0.16)
     top = (height - band) // 2
-    drawing.rectangle((0, top, width, top + band), fill=BADGE_RED)
-    font, box = _fit(drawing, "LEAVING SOON", round(band * 0.5), width * 0.9)
+    drawing.rectangle((0, top, width, top + band), fill=colour or BADGE_RED)
+    font, box = _fit(drawing, label, round(band * 0.5), width * 0.9)
     drawing.text(
         (
             (width - (box[2] - box[0])) / 2 - box[0],
             top + (band - (box[3] - box[1])) / 2 - box[1],
         ),
-        "LEAVING SOON",
-        fill="#FFFFFF",
+        label,
+        fill=ink,
         font=font,
     )
     output = BytesIO()

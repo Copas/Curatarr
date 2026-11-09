@@ -15,10 +15,17 @@ from .integrations import IntegrationError
 from .models import MediaIdentity, PosterSnapshot, PurgeCandidate, utcnow
 from .services import audit, client
 
+LAST_CALL_LABEL = "LAST CALL · ♥ TO KEEP"
+LAST_CALL_AMBER = "#F5B301"
+BADGED_STATES = ("REVIEW", "LEAVING_SOON", "LAST_CALL")
+
 
 def badge_label(candidate, today=None) -> str:
     """The banner's words: days left when a deletion date is set (the poster
-    is redrawn as they count down), else Leaving Soon."""
+    is redrawn as they count down), else Leaving Soon; Last call's own words
+    while a film is in Last call (last_call.py)."""
+    if candidate.state == "LAST_CALL":
+        return LAST_CALL_LABEL
     when = candidate.scheduled_delete_at
     if not when:
         return "LEAVING SOON"
@@ -65,6 +72,8 @@ def badge_poster(
     Wide cards (Thumb) get a shaded red ribbon along the bottom, and
     backdrops, shown full screen behind a title's page, a smaller tag in the
     top-right corner, clear of the menus and text apps draw over them."""
+    if label == LAST_CALL_LABEL and colour == BADGE_RED:
+        colour, ink = LAST_CALL_AMBER, "#111111"  # a warning, not a countdown
     image = Image.open(BytesIO(source)).convert("RGB")
     width, height = image.size
     drawing = ImageDraw.Draw(image)
@@ -937,7 +946,7 @@ def reconcile_artwork():
     _tidy_existing_backdrops()
     active = (
         db.session.query(PurgeCandidate)
-        .filter(PurgeCandidate.state.in_(["REVIEW", "LEAVING_SOON"]))
+        .filter(PurgeCandidate.state.in_(BADGED_STATES))
         .all()
     )
     for candidate in active:
@@ -947,5 +956,5 @@ def reconcile_artwork():
     snapshots = db.session.query(PosterSnapshot).filter_by(active=True).all()
     for snapshot in snapshots:
         candidate = db.session.get(PurgeCandidate, snapshot.candidate_id)
-        if not candidate or candidate.state not in {"REVIEW", "LEAVING_SOON"}:
+        if not candidate or candidate.state not in BADGED_STATES:
             restore_badge(snapshot)

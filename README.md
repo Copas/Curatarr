@@ -138,6 +138,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Shrink instead of delete](docs/FEATURES.md#shrink-instead-of-delete) | Swaps a big copy of a film you keep for one half the size, only if one exists. | One click |
 | [Free up space](docs/FEATURES.md#tv-one-season-ahead) | Every film and show by what removing it would free, with who has watched it. | **On** |
 | [Disk forecast](docs/FEATURES.md#disk-forecast) | When each disk runs low at this week's pace, and what would go first. | **On** |
+| [Last call](docs/FEATURES.md#last-call) | Films nobody has watched in a while get a "Last call · ♥ to keep" banner and a Jellyfin collection, a few a week, before Leaving Soon; a heart in any app keeps one. | Off |
 | [Dry run](docs/FEATURES.md#before-anything-is-deleted) | Shows what would be removed, and why, without removing anything. | **On** for every library |
 | [Delete in any Jellyfin app](jellyfin-plugin/README.md) | Marks a film or show Leaving Soon instead of deleting its files behind Radarr's and Sonarr's backs. | With the plugin |
 
@@ -239,7 +240,7 @@ Quick start on Linux:
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc118
+git checkout v0.2.0rc119
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 

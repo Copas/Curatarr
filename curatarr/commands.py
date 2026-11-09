@@ -190,6 +190,14 @@ def _sync_leaving_collection():
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Updating the Leaving Soon collection failed")
+    try:
+        from . import last_call
+
+        last_call.sweep()
+        last_call.sync_collection()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Updating Last call failed")
 
 
 def _dispatch_chapters():
