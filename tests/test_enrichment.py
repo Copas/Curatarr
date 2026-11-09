@@ -707,6 +707,13 @@ def test_pages_render_and_settings_save(app, client, media_env):
     assert "model" not in enrichment.global_layer()["semantic"]
     assert config["semantic"]["model"] == DEFAULTS["semantic"]["model"]
     assert enrichment.form_values()["whisper_model"] == "default"
+    assert config["subtitles"]["reading"] == "standard"  # not on that form yet
+    client.post(
+        f"/chapters/settings?scope={library.id}",
+        data={"chapter_mode": "inherit", "subtitles_reading": "slow"},
+    )
+    assert enrichment.config_for(library.id)["subtitles"]["reading"] == "slow"
+    client.post(f"/chapters/settings?scope={library.id}", data={"chapter_mode": ""})
     assert enrichment.options()["path_mappings"] == [
         {"arr": "/data", "local": "/mnt/data"}
     ]

@@ -253,10 +253,16 @@ def _chunks(text: str) -> list[str]:
 # made before are made again (enrichment.retime_subtitles).
 TIMING = 2  # 2: from when each word is said
 PAUSE_SECONDS = 0.7  # a pause this long between words starts a new line
-LEAD_SECONDS = 0.1  # a line appears this much before its first word
-LINGER_SECONDS = 0.5  # …and stays this long after its last, when there's room
-MAX_LINGER_SECONDS = 2.0  # never longer than this after the last word…
-READING_CPS = 17  # …except to give time to read it, at this many characters a second
+# Per reading speed (a library setting): a line appears LEAD seconds before
+# its first word and stays LINGER after its last, when there's room; longer to
+# give time to read it at CPS characters a second, but at most MAX_LINGER after
+# the last word. A line never runs into the next one, whatever the speed.
+READING = {
+    #           LEAD LINGER MAX_LINGER CPS
+    "standard": (0.1, 0.5, 2.0, 17),
+    "relaxed": (0.3, 1.0, 3.0, 14),
+    "slow": (0.5, 1.5, 4.0, 11),
+}
 LONGEST_WORD = 1.5  # seconds: a word timed longer took in the silence beside it
 SENTENCE_CHARS = 8  # a sentence this long ends its line ("Aye, sir." is a line)
 
@@ -265,9 +271,10 @@ ENGINE = "faster-whisper"
 TRANSCRIPTION = 2  # transcribe.RULE (not imported: that needs the media tools)
 
 
-def made_with(details: dict, model: str) -> dict:
+def made_with(details: dict, model: str, reading="standard") -> dict:
     """What made a subtitle file, from the transcript's details."""
     return {
+        "reading": reading,
         "engine": ENGINE,
         "model": details.get("model") or model,
         "device": details.get("device"),
@@ -277,7 +284,7 @@ def made_with(details: dict, model: str) -> dict:
     }
 
 
-def outdated(record: dict | None, model: str) -> str | None:
+def outdated(record: dict | None, model: str, reading="standard") -> str | None:
     """Why a file made by ``record`` would be better made again, or None."""
     if not record:
         return "made before Curatarr kept track of how"
@@ -287,7 +294,17 @@ def outdated(record: dict | None, model: str) -> str | None:
         return "transcribed the old way"
     if record.get("engine") != ENGINE or record.get("model") != model:
         return f"made with {record.get('engine')} {record.get('model')}"
+    if (record.get("reading") or "standard") != reading:
+        return f"timed for {record.get('reading') or 'standard'} reading"
     return None
+
+
+def only_retimed(record: dict | None, model: str, reading="standard") -> bool:
+    """Whether the file needs only its lines timed again for another reading
+    speed: quick, from the saved transcript, no transcribing."""
+    if not record or (record.get("reading") or "standard") == reading:
+        return False
+    return outdated({**record, "reading": reading}, model, reading) is None
 
 
 def describe(record: dict | None) -> str:
@@ -296,7 +313,9 @@ def describe(record: dict | None) -> str:
         return "Made before Curatarr kept track of how"
     timing = "timed by word" if (record.get("timing") or 1) >= 2 else "timed by segment"
     engine = "Whisper" if record.get("engine") == ENGINE else record.get("engine")
-    return f"{engine} {record.get('model')}, {timing}"
+    reading = record.get("reading") or "standard"
+    pace = "" if reading == "standard" else f", {reading} reading"
+    return f"{engine} {record.get('model')}, {timing}{pace}"
 
 
 # Words ending in a full stop that don't end a sentence.
@@ -312,7 +331,7 @@ def _joined(words) -> str:
     return " ".join("".join(w for _s, _e, w in words).split())
 
 
-def _cues_from_words(segments: list[Segment]) -> list[Cue]:
+def _cues_from_words(segments: list[Segment], reading="standard") -> list[Cue]:
     """Each line from its first word to just after its last.
 
     A line ends at a pause, at the end of a sentence, when two lines are
@@ -347,6 +366,7 @@ def _cues_from_words(segments: list[Segment]) -> list[Cue]:
         current.append((start, end, word))
     if current:
         groups.append(current)
+    lead, linger, max_linger, cps = READING.get(reading, READING["standard"])
     cues = []
     for group in groups:
         first_start, first_end, _ = group[0]
@@ -354,22 +374,22 @@ def _cues_from_words(segments: list[Segment]) -> list[Cue]:
         spoken_from = max(first_start, first_end - LONGEST_WORD)
         spoken_to = min(last_end, last_start + LONGEST_WORD)
         text = _joined(group)
-        start = max(0.0, spoken_from - LEAD_SECONDS)
-        end = spoken_to + LINGER_SECONDS
-        reading = min(len(text) / READING_CPS, MAX_CUE_SECONDS)
-        end = max(end, min(start + reading, spoken_to + MAX_LINGER_SECONDS))
+        start = max(0.0, spoken_from - lead)
+        end = spoken_to + linger
+        needed = min(len(text) / cps, MAX_CUE_SECONDS)
+        end = max(end, min(start + needed, spoken_to + max_linger))
         end = max(end, start + MIN_CUE_SECONDS)
         cues.append(Cue(start, end, _balance(text)))
     return cues
 
 
-def cues_from(segments: list[Segment]) -> list[Cue]:
+def cues_from(segments: list[Segment], reading="standard") -> list[Cue]:
     """Readable cues: at most two lines of ~42 characters, at most 7 seconds.
 
     Timed from each word when the transcript has word times; otherwise
     spread over each segment by length (older transcripts)."""
     if any(segment.words for segment in segments):
-        return _tidy(_cues_from_words(segments))
+        return _tidy(_cues_from_words(segments, reading))
     cues: list[Cue] = []
     for segment in segments:
         text = " ".join(segment.text.split())

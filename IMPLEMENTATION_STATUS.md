@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc104 (2026-11-09): subtitles.reading (standard/relaxed/slow, subtitles.READING); made_with records it; remake_subtitles queues reading-only retimes RETIME_BATCH at a time first.
 - v0.2.0rc103 (2026-11-09): recap ends: stock phrases (3+ earlier eps) excluded, QUOTE_RUN_GAP 20, all earlier eps; settled_end to intro (30 s) or longest black (25 s); RECAP_RULE 2 + recap_rule column, rechecked by recheck_credits.
 - v0.2.0rc102 (2026-11-09): global whisper_model "default" (Recommended) is left unsaved; migration d5f1b3a8c2e4 drops a saved "medium" unless whisper_device is cpu.
 - v0.2.0rc101 (2026-11-09): transcription RULE 2 (language from VAD speech, then no VAD + hallucination_silence_threshold 2.0); default model turbo; subtitles made_with records it.

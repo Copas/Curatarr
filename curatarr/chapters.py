@@ -62,6 +62,8 @@ DEFAULTS: dict[str, Any] = {
         # Downloaded subtitles are often timed for another release: re-time
         # them to the speech, or make Curatarr's own when that can't work.
         "check_sync": True,
+        # How long lines stay up (subtitles.READING): standard, relaxed, slow.
+        "reading": "standard",
     },
 }
 
@@ -185,9 +187,14 @@ def validate_layer(layer: dict) -> dict:
     return layer
 
 
+READING_SPEEDS = ("standard", "relaxed", "slow")
+
+
 def validate_config(config: dict) -> dict:
     if config["mode"] not in MODES:
         raise ChapterConfigError("Mode must be navigation or smart")
+    if config["subtitles"].get("reading", "standard") not in READING_SPEEDS:
+        raise ChapterConfigError("Reading speed must be standard, relaxed or slow")
     for key, low, high in (
         ("minimum_duration_minutes", 1, 600),
         ("target_spacing_minutes", 1, 120),

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc104 (2026-11-09)
+
+- **A reading speed for Curatarr's subtitles** (Settings → Enhance → Subtitles, per library). **Standard** is as before. **Relaxed** brings each line in a little earlier and keeps it up longer, with time to read it at 14 characters a second. **Slow** goes further, at 11 characters a second. A line never runs into the next one, so fast talk changes little: on one episode, lines stayed up 2.6 seconds on average at Standard, 2.9 at Relaxed and 3.1 at Slow. Changing it re-times the files already made from their saved transcripts, ten at a time ahead of other subtitle work, without transcribing again.
+
 ## 0.2.0rc103 (2026-11-09)
 
 - **"Previously on" recaps end where they really do.** A recap's end was the last line quoted from an earlier episode. Recaps often run on with a few wordless clips, so the skip stopped short, and a stock phrase heard in several episodes ("get away from me") could carry it on into the new episode. Now a line counts as a quote only when it's particular to an earlier episode (any season, not just the last three). After the last quoted line, the recap runs up to the intro when it starts within half a minute, or else to the longest fade to black in the next 25 seconds. On 20 recaps labelled by eye, 15 ends are now within 3 seconds, against 4 before, and only one is late (3.4 seconds). Recaps found before are checked again in the background, what's up next first.

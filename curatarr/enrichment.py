@@ -80,6 +80,7 @@ from .subtitles import (
     srt_text,
 )
 from .subtitles import describe as describe_subtitles
+from .subtitles import only_retimed as subtitles_retimed
 from .subtitles import outdated as subtitles_outdated
 
 log = logging.getLogger("curatarr.chapters")
@@ -180,6 +181,7 @@ FIELD_PATHS = {
     "subtitles_enabled": ("subtitles", "enabled"),
     "subtitles_pictures": ("subtitles", "replace_pictures"),
     "subtitles_sync": ("subtitles", "check_sync"),
+    "subtitles_reading": ("subtitles", "reading"),
 }
 
 
@@ -227,7 +229,7 @@ def parse_layer(form, *, library: bool) -> dict:
         if field_name == "whisper_model" and raw == "default":
             continue  # follow the recommended model, even when it changes
         if raw in {"", "inherit"}:
-            if library or field_name == "llm_model":
+            if library or field_name in {"llm_model", "subtitles_reading"}:
                 continue
             raise ChapterConfigError(f"{field_name.replace('_', ' ')} is required")
         if isinstance(expected, int):
@@ -1628,6 +1630,7 @@ def _context(part, media):
 
 
 REMADE_KEY = "subtitles_remade"  # how they were made when none were left to remake
+RETIME_BATCH = 10  # files only timed for another reading speed, queued at once
 
 
 def remake_subtitles(now=None) -> int:
@@ -1637,20 +1640,32 @@ def remake_subtitles(now=None) -> int:
 
     Files someone is watching or will watch next go straight away. The rest
     go one at a time, only while nothing else is waiting: each needs its
-    audio transcribed again. Returns how many were queued.
+    audio transcribed again. Files only timed for another reading speed go
+    first, RETIME_BATCH at a time (no transcribing). Returns how many were
+    queued.
     """
     from . import up_next
 
     now = now or utcnow()
-    models: dict = {}
+    wanted: dict = {}
 
-    def model_for(library_id):
-        if library_id not in models:
+    def wants(library_id):
+        """(model, reading speed) for a library's subtitles, or None."""
+        if library_id not in wanted:
             try:
-                models[library_id] = config_for(library_id)["semantic"]["model"]
+                config = config_for(library_id)
+                wanted[library_id] = (
+                    config["semantic"]["model"],
+                    config["subtitles"].get("reading", "standard"),
+                )
             except ChapterConfigError:
-                models[library_id] = None
-        return models[library_id]
+                wanted[library_id] = None
+        return wanted[library_id]
+
+    def stale(row):
+        return wants(row.library_id) and subtitles_outdated(
+            row.subtitle_made_with, *wants(row.library_id)
+        )
 
     rows = (
         db.session.query(
@@ -1668,25 +1683,25 @@ def remake_subtitles(now=None) -> int:
     due = []
     if soon:
         due = [
-            r.id
-            for r in rows.filter(ChapterState.media_part_id.in_(soon))
-            if model_for(r.library_id)
-            and subtitles_outdated(r.subtitle_made_with, model_for(r.library_id))
+            r.id for r in rows.filter(ChapterState.media_part_id.in_(soon)) if stale(r)
         ]
     done = {
         "timing": SUBTITLE_TIMING,
         "transcription": SUBTITLE_TRANSCRIPTION,
-        "models": None,
+        "wanted": None,
     }
     if not due and not _work_waiting(now):
-        done["models"] = sorted({str(model_for(lib)) for (lib,) in _library_ids()})
+        done["wanted"] = sorted({str(wants(lib)) for (lib,) in _library_ids()})
         if setting(REMADE_KEY) != done:
-            due = [
+            old = [r for r in rows if stale(r)]
+            # Only timed for another reading speed: quick, from the saved
+            # transcript, so a batch at once and before files to transcribe.
+            quick = [
                 r.id
-                for r in rows
-                if model_for(r.library_id)
-                and subtitles_outdated(r.subtitle_made_with, model_for(r.library_id))
-            ][:1]
+                for r in old
+                if subtitles_retimed(r.subtitle_made_with, *wants(r.library_id))
+            ]
+            due = quick[:RETIME_BATCH] or [r.id for r in old][:1]
             if not due:
                 set_setting(REMADE_KEY, done)  # nothing left until something changes
     for state_id in due:
@@ -2153,7 +2168,8 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
             error=f"The audio is not English (detected: {language})",
             fields=fields,
         )
-    cues = cues_from(segments)
+    reading = config["subtitles"].get("reading", "standard")
+    cues = cues_from(segments, reading)
     if not cues:
         return _subtitles_done(state, "no_speech", fields=fields)
     text = srt_text(cues)
@@ -2166,7 +2182,7 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
         return _subtitles_done(state, "failed", error=str(exc), fields=fields)
     state.subtitle_fingerprint = digest(text)
     state.subtitle_path = str(target)
-    state.subtitle_made_with = made_with(details, config["semantic"]["model"])
+    state.subtitle_made_with = made_with(details, config["semantic"]["model"], reading)
     refresh_error = _refresh_jellyfin(part, media)
     audit(
         "subtitles_generated",

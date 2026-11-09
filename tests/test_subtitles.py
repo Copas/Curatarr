@@ -548,3 +548,58 @@ def test_the_whole_track_is_transcribed_in_the_language_spoken(monkeypatch):
             assert details["language"] == spoken
         else:  # nothing said: the filtered way finds nothing quickly
             assert options["vad_filter"] is True and "language" not in options
+
+
+def test_a_slower_reading_speed_shows_lines_earlier_and_longer():
+    from curatarr.subtitles import cues_from
+
+    said = [
+        Segment(10.0, 11.0, " Run.", ((10.0, 11.0, " Run."),)),
+        Segment(
+            20.0,
+            21.5,
+            " We have to leave before the storm.",
+            tuple(
+                (20.0 + 0.25 * i, 20.25 + 0.25 * i, f" {w}")
+                for i, w in enumerate(
+                    ["We", "have", "to", "leave", "before", "the", "storm."]
+                )
+            ),
+        ),
+        Segment(22.0, 23.0, " Now.", ((22.0, 23.0, " Now."),)),
+    ]
+    standard, slow = cues_from(said), cues_from(said, "slow")
+    assert slow[0].start < standard[0].start < 10.0
+    assert slow[0].end > standard[0].end
+    # never into the next line, whatever the speed
+    assert slow[1].end <= slow[2].start
+
+
+def test_another_reading_speed_only_retimes():
+    from curatarr import transcribe
+    from curatarr.subtitles import made_with, only_retimed, outdated
+
+    made = made_with({"model": "turbo", "rule": transcribe.RULE}, "turbo")
+    assert outdated(made, "turbo") is None
+    assert outdated(made, "turbo", "slow") == "timed for standard reading"
+    assert only_retimed(made, "turbo", "slow")
+    assert not only_retimed(made, "turbo")  # nothing to do
+    assert not only_retimed(made, "medium", "slow")  # needs transcribing too
+
+
+def test_a_new_reading_speed_retimes_files_in_a_batch(subtitle_env, monkeypatch):
+    from curatarr import up_next
+
+    _files, _arr, library, _media, part, _calls = subtitle_env
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
+    enrichment.request(part, "subtitles")
+    enrichment.dispatch(synchronous=True)
+    assert _state(part).subtitle_made_with["reading"] == "standard"
+    assert enrichment.remake_subtitles() == 0
+    layers = {library.id: {"subtitles": {"reading": "slow"}}}
+    set_setting("chapter_library_settings", layers)
+    db.session.commit()
+    assert enrichment.remake_subtitles() == 1  # quick: no waiting its turn
+    enrichment.dispatch(synchronous=True)
+    assert _state(part).subtitle_made_with["reading"] == "slow"
+    assert enrichment.remake_subtitles() == 0
