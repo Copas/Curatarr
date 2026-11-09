@@ -32,7 +32,8 @@ GAP = 6  # seconds without, inside the credits (logo cards, a last shot)
 MIN_RUN = 10  # seconds of lettering, at least
 END_SLACK = 40.0  # the lettering may stop this short of the end (logos)
 BACK = 8.0  # a start moves back to a break at most this far…
-AHEAD = 2.0  # …or forward this far
+AHEAD = 0.5  # …or forward this far (further, it can land on a fade between
+# credit cards: credits already showing)
 TEXT_W, TEXT_H = 480, 270
 BREAK_RATE = 10
 BREAK_W, BREAK_H = 64, 36

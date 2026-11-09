@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from curatarr import credits
-from curatarr.enrichment import _place_credits, undo_marker
+from curatarr.enrichment import CREDITS_RULE, _place_credits, undo_marker
 
 
 def test_lettering_is_thin_bright_strokes_in_lines():
@@ -70,10 +70,10 @@ class FakePlugin:
         self.restored.append(segment_id)
 
 
-def _ep(duration=2600.0):
+def _ep(duration=2600.0, rule=None):
     return SimpleNamespace(
         info=SimpleNamespace(duration=duration, path="file"),
-        state=SimpleNamespace(id="state"),
+        state=SimpleNamespace(id="state", credits_rule=rule),
     )
 
 
@@ -91,8 +91,15 @@ def test_intro_skippers_late_credits_are_replaced(monkeypatch):
     assert plugin.added == [("Credits", 2550.0, 2600.0)]
     assert plugin.hidden == ["theirs"]
     assert hidden[0]["replaced_by"] == "ours-1" and hidden[0]["new_start"] == 2550.0
-    # checked again: Curatarr's marker is already there, so nothing is added
-    assert _place_credits(_ep(), FakePlugin(), "item", [], hidden) is None
+    # checked again by the same rules: Curatarr's marker is already there
+    current = _ep(rule=CREDITS_RULE)
+    assert _place_credits(current, FakePlugin(), "item", [], hidden) is None
+    # by older rules: what was there is put back and placed again
+    again = FakePlugin()
+    assert _place_credits(_ep(rule=1), again, "item", [], hidden) == "credits moved"
+    assert again.hidden == ["ours-1", "theirs"] and again.restored == ["theirs"]
+    assert again.added == [("Credits", 2550.0, 2600.0)]
+    assert len(hidden) == 1 and hidden[0]["placed"]
 
 
 def test_credits_intro_skipper_missed_are_added_and_can_be_removed(app, monkeypatch):

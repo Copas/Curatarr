@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc99 (2026-11-08)
+
+- **A credits start is never moved more than half a second later.** rc98 could move Intro Skipper's start up to 2 seconds later, to a fade, and on one episode the fade was between two credit cards, so the credits were already showing. Starts now move back to the break before them, or forward at most half a second. That scores the same on the labelled episodes. Episodes rc98 already changed are put back and placed again.
+
 ## 0.2.0rc98 (2026-11-08)
 
 - **End credits start where the picture does.** Intro Skipper finds credits by their music, usually starting them a few seconds late, and misses credits whose music changes every week. Curatarr now reads the last six minutes of the picture for credit lettering and moves a start back to the fade to black or hard cut that leads into it. It uses the earlier of Intro Skipper's start and the lettering's, replacing Intro Skipper's marker or adding one where it had none. On episodes labelled by eye, 26 of 33 starts were within 3 seconds (Intro Skipper: 9), and 11 of 16 episodes the rules weren't tuned on (Intro Skipper: 4). None started early, which would skip the end of the show. Short end cards with no lettering are left as they were. Episodes checked before are checked again in the background, what's up next first, one at a time otherwise. Each change is listed on Enhance → Skip markers with Undo. numpy is now listed with the transcription extras (faster-whisper already needed it).

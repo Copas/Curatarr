@@ -3902,7 +3902,7 @@ def _check_markers(ep: _Episode) -> str:
     return f"markers: {', '.join(changed)}" if changed else "markers: ok"
 
 
-CREDITS_RULE = 1  # how credits starts are placed; raising it checks episodes again
+CREDITS_RULE = 2  # how credits starts are placed; raising it checks episodes again
 CREDITS_FROM = 0.6  # end credits start in the last 40% of the runtime
 CREDITS_MOVE = 1.0  # a start this close to Intro Skipper's is left alone
 CREDITS_MAX_MOVE = 180.0  # never moved earlier than this
@@ -3916,12 +3916,30 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
     from . import credits as credit_pictures
     from .markers import _clock
 
-    if any(
-        h.get("type") == "Credits" and h.get("replaced_by") or h.get("added")
-        for h in hidden
-    ):
-        # Curatarr's own credits marker is already there (placed or trimmed
-        # before): the plugin's list leaves it out, so this would add another.
+    credits = list(credits)
+    placed = [h for h in hidden if _placed_credits(h)]
+    if placed:
+        if ep.state.credits_rule == CREDITS_RULE:
+            return None  # placed by these rules already
+        # Placed by older rules: put back what was there, then place again.
+        try:
+            for h in placed:
+                if h.get("added"):
+                    plugin.hide(item_id, h["id"])
+                else:
+                    plugin.hide(item_id, h["replaced_by"])
+                    plugin.restore(item_id, h["id"])
+                    credits.append(
+                        {"Id": h["id"], "Start": h["start"], "End": h["end"]}
+                        | {"Source": h.get("source")}
+                    )
+                hidden.remove(h)
+        except IntegrationError as exc:
+            _log("credits_redo_failed", state_id=ep.state.id, error=str(exc))
+            return None
+    elif any(h.get("type") == "Credits" and h.get("replaced_by") for h in hidden):
+        # Trimmed by the talking check: Curatarr's own credits marker is
+        # there, and the plugin's list leaves it out, so this would add another.
         return None
     duration = ep.info.duration
     end_credits = [c for c in credits if c["Start"] >= duration * CREDITS_FROM]
@@ -3952,6 +3970,7 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
         return None
     record = {
         "type": "Credits",
+        "placed": True,
         "new_start": round(found.start, 1),
         "at": utcnow().isoformat(),
     }
@@ -3998,6 +4017,15 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 
 
 MIN_ADDED_CREDITS = 8.0
+
+
+def _placed_credits(h) -> bool:
+    """A credits change _place_credits made (0.2.0rc98's carry no flag)."""
+    return bool(
+        h.get("placed")
+        or h.get("added")
+        or str(h.get("reason", "")).startswith("Credits start at ")
+    )
 
 
 _summaries_cache: dict = {}
