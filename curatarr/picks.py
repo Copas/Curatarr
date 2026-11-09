@@ -58,16 +58,25 @@ def skipped_accounts() -> set[str]:
     return set(options().get("picks_skip") or [])
 
 
-def offered_accounts() -> dict[str, str]:
+def hidden_accounts() -> set[str]:
+    """Accounts hidden from Jellyfin's sign-in screen."""
+    from .services import setting
+
+    return {_norm(i) for i in setting("jellyfin_hidden_user_ids", []) or []}
+
+
+def offered_accounts(include_hidden=None) -> dict[str, str]:
     """{account id: name} that can have picks: those Curatarr's pages show,
     less accounts hidden from Jellyfin's sign-in screen (admin and spare
-    accounts) unless the setting includes them."""
+    accounts) unless the setting (or ``include_hidden``) includes them."""
     from .curation import options
-    from .services import account_names, setting
+    from .services import account_names
 
-    if options().get("picks_hidden"):
+    if include_hidden is None:
+        include_hidden = options().get("picks_hidden")
+    if include_hidden:
         return account_names()
-    hidden = {_norm(i) for i in setting("jellyfin_hidden_user_ids", []) or []}
+    hidden = hidden_accounts()
     return {i: n for i, n in account_names().items() if _norm(i) not in hidden}
 
 

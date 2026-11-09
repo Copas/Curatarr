@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc115 (2026-11-09)
+
+- **Hidden accounts appear as soon as their switch is on.** Sliding *Include accounts hidden from Jellyfin's sign-in screen* on now lists those accounts straight away, marked "(hidden)", to tick or untick in the same save. Before, they appeared only after saving.
+
 ## 0.2.0rc114 (2026-11-09)
 
 - **Household choices is laid out like Enhance.** Each choice is a card that opens, with a line saying what it's set to and an On/Off chip that follows its switch, under two headings: what cleanup keeps, and what Curatarr puts in Jellyfin. Picks for each person groups its switches, the accounts it covers and this week's picks, each under its own label. The save bar says when something isn't saved yet.

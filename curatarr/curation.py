@@ -105,7 +105,7 @@ def save_options(form):
         chosen = set(form.getlist("picks_account"))
         # Only accounts the form showed can be unticked; ones it didn't (hidden
         # ones, while they're left out) keep their choice.
-        shown = set(offered_accounts())
+        shown = set(offered_accounts(include_hidden=values["picks_hidden"]))
         kept = set(options()["picks_skip"]) - shown
         values["picks_skip"] = sorted(kept | (shown - chosen))
     else:

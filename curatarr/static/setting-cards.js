@@ -1,5 +1,6 @@
-// Settings cards (Enhance, Household choices): a card's On/Off follows its switches as they're changed,
-// and the save bar says when something isn't saved yet.
+// Settings cards (Enhance, Household choices): a card's On/Off follows its
+// switches as they're changed, and the save bar says when something isn't
+// saved yet.
 (function () {
   var form = document.querySelector(".sticky-actions") && document.querySelector(".sticky-actions").closest("form");
   if (!form) return;
@@ -14,8 +15,19 @@
       chip.classList.toggle("chip-on", on);
     });
   }
+  // Accounts hidden from Jellyfin's sign-in screen show (and count) only
+  // while their switch is on.
+  function hiddenAccounts() {
+    var box = form.querySelector('input[name="picks_hidden"]');
+    if (!box) return;
+    form.querySelectorAll("[data-hidden-account]").forEach(function (label) {
+      label.hidden = !box.checked;
+      label.querySelector("input").disabled = !box.checked;
+    });
+  }
   form.addEventListener("change", function () {
     sync();
+    hiddenAccounts();
     if (unsaved) unsaved.hidden = false;
   });
   form.addEventListener("input", function () { if (unsaved) unsaved.hidden = false; });

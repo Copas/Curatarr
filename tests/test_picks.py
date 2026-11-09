@@ -205,3 +205,31 @@ def test_nothing_is_asked_of_jellyfin_while_picks_are_off(app, monkeypatch):
 
     monkeypatch.setattr("curatarr.services.client", no_client)
     assert picks.sweep() == 0
+
+
+def test_hidden_accounts_are_on_the_page_ready_for_their_switch(app, client):
+    from werkzeug.datastructures import MultiDict
+
+    from curatarr import curation
+
+    set_setting("jellyfin_user_names", {"sam": "Sam", "admin": "Admin"})
+    set_setting("jellyfin_hidden_user_ids", ["admin"])
+    set_setting("curation", {"picks": True})
+    db.session.commit()
+    page = client.get("/rules/household").text
+    assert "data-hidden-account hidden" in page and "Admin" in page
+    # switched on and the hidden account unticked, in one save
+    form = MultiDict(
+        [
+            ("request_hold_days", "90"),
+            ("list_grace_days", "7"),
+            ("season_lead_days", "14"),
+            ("picks", "on"),
+            ("picks_hidden", "on"),
+            ("picks_accounts_shown", "1"),
+            ("picks_account", "sam"),
+        ]
+    )
+    curation.save_options(form)
+    assert curation.options()["picks_skip"] == ["admin"]
+    assert "admin" in picks.offered_accounts()
