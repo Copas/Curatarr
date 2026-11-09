@@ -435,6 +435,7 @@ class ChapterState(db.Model, Timed):
     markers_hidden = db.Column(db.JSON)
     # Which rules last placed the end credits' start (enrichment.CREDITS_RULE).
     credits_rule = db.Column(db.Integer)
+    intro_rule = db.Column(db.Integer)  # enrichment.INTRO_RULE it was checked by
     recap_rule = db.Column(db.Integer)  # enrichment.RECAP_RULE it was checked by
     # Whether the transcript fits this episode (see identity.py).
     identity_checked_at = db.Column(db.DateTime(timezone=True))

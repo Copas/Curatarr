@@ -195,6 +195,7 @@ def test_episodes_checked_under_older_rules_are_checked_again(app, monkeypatch):
     assert enrichment.recheck_credits() == 1  # about to be watched: straight away
     for state in states:
         state.job_state, state.credits_rule = "idle", enrichment.CREDITS_RULE
+        state.intro_rule = enrichment.INTRO_RULE
         state.markers_checked_at = state.recap_checked_at = utcnow()
     db.session.commit()
     assert enrichment.recheck_credits() == 0  # checked the current way

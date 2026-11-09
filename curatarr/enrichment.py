@@ -1714,8 +1714,8 @@ def remake_subtitles(now=None) -> int:
 
 
 def recheck_credits(now=None) -> int:
-    """Worker cycle: check again the credits and recaps of episodes checked
-    under older rules (CREDITS_RULE, RECAP_RULE). Episodes someone will watch next go straight away;
+    """Worker cycle: check again the credits, intros and recaps of episodes
+    checked under older rules (CREDITS_RULE, INTRO_RULE, RECAP_RULE). Episodes someone will watch next go straight away;
     the rest one at a time, only while nothing else is waiting (each reads
     the last minutes of the picture). Returns how many were queued."""
     from . import up_next
@@ -1723,6 +1723,9 @@ def recheck_credits(now=None) -> int:
     now = now or utcnow()
     credits_old = or_(
         ChapterState.credits_rule.is_(None), ChapterState.credits_rule < CREDITS_RULE
+    )
+    intro_old = or_(
+        ChapterState.intro_rule.is_(None), ChapterState.intro_rule < INTRO_RULE
     )
     recap_old = and_(
         or_(
@@ -1739,7 +1742,7 @@ def recheck_credits(now=None) -> int:
             MediaPart.has_file.is_(True),
             ChapterState.markers_checked_at.isnot(None),
             ChapterState.job_state == "idle",
-            or_(credits_old, recap_old),
+            or_(credits_old, intro_old, recap_old),
         )
     )
     soon = up_next.part_ids()
@@ -1747,7 +1750,9 @@ def recheck_credits(now=None) -> int:
     if not due and not _work_waiting(now):
         due = rows.order_by(ChapterState.markers_checked_at).limit(1).all()
     for state in due:
-        if state.credits_rule is None or state.credits_rule < CREDITS_RULE:
+        if (state.credits_rule or 0) < CREDITS_RULE or (
+            state.intro_rule or 0
+        ) < INTRO_RULE:
             state.markers_checked_at = None
         if (state.recap_rule or 1) < RECAP_RULE and (
             state.recap_source in RECAP_FOUND
@@ -3763,6 +3768,40 @@ class _Episode:
                 break
         return found
 
+    def intro_block(self):
+        """The intro the season's shared footage shows (footage.intro_block),
+        fingerprinting the nearest episodes of the season the first time."""
+        from . import footage
+
+        cache = cache_dir() / "fingerprints"
+        rows = (
+            db.session.query(MediaPart)
+            .filter(
+                MediaPart.media_identity_id == self.part.media_identity_id,
+                MediaPart.season_number == self.part.season_number,
+                MediaPart.kind == "episode",
+                MediaPart.has_file.is_(True),
+                MediaPart.id != self.part.id,
+            )
+            .all()
+        )
+        here = self.part.episode_number or 0
+        rows.sort(key=lambda p: abs((p.episode_number or 0) - here))
+        db.session.commit()  # fingerprinting takes a while: no write lock held
+        others = []
+        for sibling in rows[: footage.SIBLINGS]:
+            path = local_path(sibling.file_path, self.opts["path_mappings"])
+            if not path or not os.path.exists(path):
+                continue
+            try:
+                others.append(footage.fingerprint(path, probe(path).duration, cache))
+            except (MediaToolError, OSError, ValueError) as exc:
+                _log("fingerprint_failed", file=path, error=str(exc))
+        if len(others) < footage.MIN_SIBLINGS:
+            return None
+        mine = footage.fingerprint(self.info.path, self.info.duration, cache)
+        return footage.intro_block(mine, others)
+
     def others(self, limit=12):
         """Other episodes' saved transcripts (whole or openings), nearest first."""
         here = _episode_order(self.part)
@@ -3986,10 +4025,16 @@ def _check_markers(ep: _Episode) -> str:
     left = [c for c in credits if id(c) not in flagged and id(c) not in trimmed]
     moved = _place_credits(ep, plugin, item_id, left, hidden)
     state.credits_rule = CREDITS_RULE
+    bad_ids = {id(segment) for segment, _reason in bad}
+    widened = _place_intro(
+        ep, plugin, item_id, [i for i in intros if id(i) not in bad_ids], hidden
+    )
+    state.intro_rule = INTRO_RULE
     state.markers_hidden = hidden or None
     changed = [f"{len(bad)} hidden"] if bad else []
     changed += [f"{len(trims)} trimmed"] if trims else []
     changed += [moved] if moved else []
+    changed += [widened] if widened else []
     return f"markers: {', '.join(changed)}" if changed else "markers: ok"
 
 
@@ -4110,9 +4155,94 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
+INTRO_RULE = 1  # how intros are widened (footage.py); raising it checks again
+
+
+def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
+    """Widen Intro Skipper's intro to the footage the season shares
+    (footage.py): its marker is replaced by one from where the shared footage
+    starts to where it ends, each edge moved out by at most footage.WIDEN
+    seconds. Listed with the hidden markers, so it can be undone."""
+    from . import credits as pictures
+    from . import footage
+    from .markers import _clock
+
+    intros = list(intros)
+    placed = [h for h in hidden if h.get("type") == "Introduction" and h.get("placed")]
+    if placed:
+        if ep.state.intro_rule == INTRO_RULE:
+            return None  # widened by these rules already
+        try:
+            for h in placed:
+                plugin.hide(item_id, h["replaced_by"])
+                plugin.restore(item_id, h["id"])
+                intros.append(
+                    {"Id": h["id"], "Start": h["start"], "End": h["end"]}
+                    | {"Source": h.get("source")}
+                )
+                hidden.remove(h)
+        except IntegrationError as exc:
+            _log("intro_redo_failed", state_id=ep.state.id, error=str(exc))
+            return None
+    if len(intros) != 1:
+        return None  # none to widen, or two: left to Intro Skipper
+    current = intros[0]
+    try:
+        found = ep.intro_block()
+        if found is None:
+            return None
+        edges = []
+        for t in found:
+            start = max(t - footage.SNAP, 0.0)
+            pics = pictures.frames(
+                ep.info.path,
+                start,
+                2 * footage.SNAP,
+                pictures.BREAK_RATE,
+                pictures.BREAK_W,
+                pictures.BREAK_H,
+            )
+            edges.append(footage.snap(t, pictures.find_breaks(pics, start)))
+    except (ImportError, MediaToolError, RuntimeError, OSError) as exc:
+        _log("intro_unread", state_id=ep.state.id, error=str(exc))
+        return None
+    wider = footage.widened((current["Start"], current["End"]), tuple(edges))
+    if wider is None:
+        return None
+    try:
+        ours = plugin.add(item_id, "Introduction", *wider)
+    except IntegrationError as exc:
+        _log("intro_add_failed", state_id=ep.state.id, error=str(exc))
+        return None
+    try:
+        plugin.hide(item_id, current["Id"])
+    except IntegrationError as exc:
+        plugin.hide(item_id, ours)  # don't leave two intro markers
+        _log("marker_hide_failed", state_id=ep.state.id, error=str(exc))
+        return None
+    hidden.append(
+        {
+            "id": current["Id"],
+            "type": "Introduction",
+            "placed": True,
+            "replaced_by": ours,
+            "start": round(current["Start"], 1),
+            "end": round(current["End"], 1),
+            "new_start": round(wider[0], 1),
+            "new_end": round(wider[1], 1),
+            "source": current.get("Source"),
+            "reason": f"Intro widened to {_clock(wider[0])}–{_clock(wider[1])}, "
+            "where the footage the season shares starts and ends",
+            "at": utcnow().isoformat(),
+        }
+    )
+    _log("intro_widened", state_id=ep.state.id, start=wider[0], end=wider[1])
+    return "intro widened"
+
+
 def _placed_credits(h) -> bool:
     """A credits change _place_credits made (0.2.0rc98's carry no flag)."""
-    return bool(
+    return h.get("type", "Credits") == "Credits" and bool(
         h.get("placed")
         or h.get("added")
         or str(h.get("reason", "")).startswith("Credits start at ")
