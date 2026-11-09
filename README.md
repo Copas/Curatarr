@@ -150,6 +150,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [What's next is ready first](docs/FEATURES.md#continue-watching-and-whats-next) | The next episodes of shows people are watching get their chapters, subtitles and skip markers before the back catalogue. | **On** |
 | [Finished at the credits](docs/FEATURES.md#continue-watching-and-whats-next) | Something stopped in its end credits, or after its last line with only the ending left, is marked watched, so it leaves Continue Watching. | **On** |
 | [Collections and suggestions](docs/FEATURES.md#collections-and-suggestions) | The film series you have part of, and films ranked by how well they fit what the household favourites. | **On** |
+| [Picks for each person](docs/FEATURES.md#picks-for-each-person) | A private Jellyfin playlist for each account of ten unwatched films matched to what they've favourited and finished, on every Jellyfin app, Roku included. | Off |
 | [Find Favorites](docs/FEATURES.md#collections-and-suggestions) | Someone favourites a film in a series, and the rest of the series is added to Radarr and searched for. | Off |
 
 ### 🛠️ Bad downloads, caught and fixed
@@ -238,7 +239,7 @@ Quick start on Linux:
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc109
+git checkout v0.2.0rc110
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 

@@ -258,6 +258,16 @@ The row shows where the request is: "Looking for a better copy…" with **Cancel
 
 Below, **Suggested for you** takes Radarr's recommendations (films TMDB links to ones in the library), drops anything already there, unreleased or hidden, and ranks the rest by rating and by how well their genres match the films the household has favourited in Jellyfin. Tick and add, or hide a film with **Not for us**.
 
+### Picks for each person
+
+**Picks for each person** (Settings → Household choices, off by default): every account gets a private Jellyfin playlist, "Picks for" its name, of ten unwatched films it's likely to enjoy. Playlists show on every Jellyfin app, the Roku app included, so nobody needs Curatarr's pages to see them.
+
+- **What they're matched to.** The films that account favourited (counting most) and finished (rewatched counts a little more), described by their genres and TMDB keywords. A keyword most of the library carries says nothing, so rarer ones count for more. A film scores by how close it is to its nearest few liked films, so it takes several to agree; a good rating adds a little.
+- **Some range.** No liked film explains more than two picks, and no genre takes more than four places, unless nothing else fits.
+- **Only what that account can watch.** Candidates come from Jellyfin, asked as that account: its libraries, within its parental rating, not played and not already started.
+- **Kept up to date.** A film comes off the list a few minutes after it's watched. Once a week the list is made again; a film that stayed on it unplayed counts for less each week, so others get a turn.
+- An account needs five favourited or finished films before it gets a list. Untick an account to leave it out (its playlist is removed); switching picks off removes them all. The settings page shows each account's picks and the liked film each one is like.
+
 **Posters in your language** (Settings → Household choices, on by default): Jellyfin takes a title's poster when it arrives, and a new release often has only foreign posters on TMDB at first, so it keeps a Chinese or Persian one even after an English one appears. Once a day Curatarr compares the poster of each film and show released in the last year with the ones TMDB offers. When it's one in another language and there's one in Jellyfin's metadata language now, Jellyfin is told to use that one. Posters that match none of TMDB's (chosen by hand, or from another source) and Leaving Soon posters are left alone; a title with no poster in the metadata language yet is looked at again every few days. A plugin that rotates posters will undo this.
 
 ---

@@ -433,6 +433,69 @@ class JellyfinClient(Client):
             or {}
         )
 
+    def unplayed_movies(self, user_id):
+        """Films this user can see (their libraries and parental rating) and
+        hasn't played, with genres, rating and resume position."""
+        found, start = [], 0
+        while True:
+            page = self.request(
+                "GET",
+                f"/Users/{user_id}/Items",
+                params={
+                    "IncludeItemTypes": "Movie",
+                    "Recursive": "true",
+                    "IsPlayed": "false",
+                    "Fields": "Genres,CommunityRating",
+                    "EnableUserData": "true",
+                    "StartIndex": start,
+                    "Limit": 500,
+                },
+            )
+            items = (page or {}).get("Items") or []
+            found += items
+            if len(items) < 500:
+                return found
+            start += 500
+
+    def create_playlist(self, name, user_id, item_ids):
+        """A private playlist of these items owned by the user; returns its id."""
+        data = self.request(
+            "POST",
+            "/Playlists",
+            json={
+                "Name": name,
+                "Ids": list(item_ids),
+                "UserId": user_id,
+                "MediaType": "Video",
+                "IsPublic": False,
+            },
+        )
+        return (data or {}).get("Id")
+
+    def playlist_items(self, playlist_id, user_id):
+        """The playlist's items with this user's play state, or None when the
+        playlist no longer exists."""
+        try:
+            data = self.request(
+                "GET",
+                f"/Playlists/{playlist_id}/Items",
+                params={"userId": user_id, "EnableUserData": "true"},
+            )
+        except IntegrationError as exc:
+            if getattr(exc, "status_code", None) == 404:
+                return None
+            raise
+        return (data or {}).get("Items") or []
+
+    def set_playlist(self, playlist_id, item_ids):
+        """Replace what a playlist holds."""
+        return self.request(
+            "POST", f"/Playlists/{playlist_id}", json={"Ids": list(item_ids)}
+        )
+
+    def delete_item(self, item_id):
+        return self.request("DELETE", f"/Items/{item_id}", destructive=True)
+
     def create_collection(self, name, item_ids):
         """A new collection holding these items; returns its id."""
         data = self.request(

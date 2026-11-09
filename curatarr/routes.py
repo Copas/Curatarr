@@ -1992,7 +1992,8 @@ def _automatic_rules():
 def _household_rules():
     """Requests, rewatches, import lists and seasons (curation.py)."""
     from . import curation
-    from .services import configured
+    from .picks import summary as picks_summary
+    from .services import account_names, configured
 
     if request.method == "POST":
         try:
@@ -2012,6 +2013,8 @@ def _household_rules():
         requests=len(setting(curation.REQUESTS_KEY, {}) or {}),
         listed=len(setting(curation.LISTS_KEY, []) or []),
         returning=setting(curation.RETURNS_KEY, {}) or {},
+        accounts=account_names(),
+        picks=picks_summary(),
     )
 
 

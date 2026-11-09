@@ -33,6 +33,8 @@ DEFAULTS = {
     "season_lead_days": 14,
     "leaving_collection": True,
     "poster_language": True,
+    "picks": False,  # picks.py: a playlist of films for each account
+    "picks_skip": [],  # account ids left out of picks
 }
 BOUNDS = {
     "request_hold_days": (0, 3650),
@@ -94,6 +96,14 @@ def save_options(form):
     values["seasonal_return"] = form.get("seasonal_return") == "on"
     values["leaving_collection"] = form.get("leaving_collection") == "on"
     values["poster_language"] = form.get("poster_language") == "on"
+    values["picks"] = form.get("picks") == "on"
+    if "picks_accounts_shown" in form:
+        from .services import account_names
+
+        chosen = set(form.getlist("picks_account"))
+        values["picks_skip"] = sorted(set(account_names()) - chosen)
+    else:
+        values["picks_skip"] = options()["picks_skip"]
     set_setting(SETTINGS_KEY, values)
     db.session.commit()
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc110 (2026-11-09)
+
+- **Picks for each person** (Settings → Household choices, off by default). Each Jellyfin account gets a private playlist, "Picks for" its name, of ten unwatched films matched to what it has favourited and finished. Playlists show on every Jellyfin app, Roku included. Only films that account can see are picked: its libraries, within its parental rating. A film leaves the list a few minutes after it's watched, and the list is made again weekly, with films passed over making way for others. Accounts need five favourited or finished films first. The settings page shows each account's picks and what each is like.
+
 ## 0.2.0rc109 (2026-11-09)
 
 - **The time left for chapter quality checks is honest.** It assumed a hundred files an hour for each library, the size of the batches queued. Most of those files need new chapters, a few minutes each, so the real pace was nearer forty an hour in all. The ones already queued were also counted twice, as chapter jobs and as quality checks. The estimate now follows how many were judged over the last day, and counts each file once. On one library it went from "11 h" to "2 days 8 h".

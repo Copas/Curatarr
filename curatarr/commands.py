@@ -367,6 +367,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Checking unclear recaps again failed")
     try:
+        from . import picks
+
+        picks.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Updating picks playlists failed")
+    try:
         from . import poster_language
 
         poster_language.sweep()
