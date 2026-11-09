@@ -465,9 +465,10 @@ GENERIC_NAME = re.compile(
 )
 # Raised when what counts as no use changes: files kept with their own
 # chapters are looked at once more (enrichment._judge_kept_chapters_again).
-POOR_RULE = 3
+POOR_RULE = 4
 POOR_SPACING = 120  # seconds: chapters closer than this on average aren't scenes
 EVEN_SLACK = 2.0  # seconds: gaps this alike come from a timer, not the story
+ONE_CHAPTER = 0.9  # one chapter this share of the file is all there is
 
 
 def numbered_only(chapters: list[dict]) -> bool:
@@ -479,14 +480,20 @@ def numbered_only(chapters: list[dict]) -> bool:
 def poor_chapters(chapters: list[dict], duration: float) -> str | None:
     """Why a file's own chapters are no use for finding your place, or None.
 
-    Only chapters that are all generically named are judged (a chapter list
-    with real names was made by someone). They're no use when they come
-    every minute or so, when a timer placed them (all the same length,
-    whatever happens), or when there's only one.
+    One chapter running nearly the whole file is no use, whatever the names
+    ("Chapter 01" then a second of "Credits"). Otherwise only chapters that
+    are all generically named are judged (a chapter list with real names was
+    made by someone). They're no use when they come every minute or so, when
+    a timer placed them (all the same length, whatever happens), or when
+    there's only one.
     """
+    starts = sorted(float(c.get("start") or 0) for c in chapters)
+    if duration and len(starts) > 1:
+        spans = [b - a for a, b in pairwise([*starts, duration])]
+        if max(spans) >= duration * ONE_CHAPTER:
+            return f"one chapter for {max(spans) / duration:.0%} of the file"
     if not numbered_only(chapters):
         return None
-    starts = sorted(float(c.get("start") or 0) for c in chapters)
     if len(starts) == 1:
         return "one chapter for the whole file"
     gaps = [b - a for a, b in pairwise(starts)]

@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc100 (2026-11-08): a chapter spanning 90%+ of the file makes the list poor whatever the names (POOR_RULE 4).
 - v0.2.0rc99 (2026-11-08): credits snap forward at most 0.5 s; CREDITS_RULE 2 redoes rc98 placements.
 - v0.2.0rc98 (2026-11-08): end credits start from credit lettering and the break before (credits.py); Intro Skipper credits replaced or added, older episodes rechecked (credits_rule).
 - v0.2.0rc97 (2026-11-08): Review page splits what needs a decision from Leaving Soon (decided, nothing to do).

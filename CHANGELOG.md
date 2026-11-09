@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc100 (2026-11-08)
+
+- **One chapter for nearly the whole file is replaced, whatever it's called.** Some downloads have "Chapter 01" for the whole episode and a one-second "Credits" at the end. Because "Credits" is a real name, the list was taken as one someone made, and kept. A file whose longest chapter runs nine-tenths of it or more now counts as having chapters that are no use. Files kept with their own chapters are looked at again, a few at a time.
+
 ## 0.2.0rc99 (2026-11-08)
 
 - **A credits start is never moved more than half a second later.** rc98 could move Intro Skipper's start up to 2 seconds later, to a fade, and on one episode the fade was between two credit cards, so the credits were already showing. Starts now move back to the break before them, or forward at most half a second. That scores the same on the labelled episodes. Episodes rc98 already changed are put back and placed again.

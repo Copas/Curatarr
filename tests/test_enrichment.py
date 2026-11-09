@@ -434,6 +434,11 @@ def test_what_makes_chapters_no_use():
     for name in ("part 01 (00:07)", "Chapter 3 - 0:21", "Chapter 12 [01:02:03]"):
         assert GENERIC_NAME.match(name), name
     assert not GENERIC_NAME.match("Part 1 (The Arrival)")
+    # One chapter for nearly all of it, with a second of named credits.
+    assert "one chapter for 100% of the file" in poor_chapters(
+        [{"start": 0.0, "name": "Chapter 01"}, {"start": 2680.0, "name": "Credits"}],
+        2681.4,
+    )
     # Named by someone: kept, however close together.
     named = [{"start": 50.0 * n, "name": f"Scene of the crime {n}"} for n in range(60)]
     assert poor_chapters(named, hour) is None
@@ -2719,6 +2724,7 @@ def test_an_unexpected_error_says_what_it_was(app, client, media_env, monkeypatc
 
 
 def test_kept_chapters_are_judged_again_when_the_rule_changes(media_env):
+    from curatarr.chapters import POOR_RULE
     from curatarr.services import setting
 
     _library, _media, part = _movie()
@@ -2726,7 +2732,8 @@ def test_kept_chapters_are_judged_again_when_the_rule_changes(media_env):
     state.chapter_status, state.chapter_source = "existing", "embedded_ok"
     db.session.commit()
     enrichment._judge_kept_chapters_again()
-    assert state.chapter_source == "embedded" and setting("chapter_poor_rule") == 3
+    assert state.chapter_source == "embedded"
+    assert setting("chapter_poor_rule") == POOR_RULE
     state.chapter_source = "embedded_ok"
     db.session.commit()
     enrichment._judge_kept_chapters_again()  # once only
