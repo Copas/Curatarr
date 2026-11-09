@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc117 (2026-11-09)
+
+- **Films with no English audio that can't be put right go Leaving Soon** (Settings → Automatic, off by default). Radarr's import lists add films whatever their language, and a quality profile's "not English" rule only judges release names: one that doesn't name its language counts as English. A Spanish film came in that way. Once Curatarr has heard a film has no English audio and found no English copy, it's marked Leaving Soon and gets a Radarr import-list exclusion, so the list doesn't add it again. Films on a quality profile that allows other languages, and films someone watched or favourited, are left alone.
+
 ## 0.2.0rc116 (2026-11-09)
 
 - **The hidden-accounts switch for picks says when it can't work.** With Curatarr set to leave hidden Jellyfin accounts out of its pages, or to ignore them completely (Settings → Integrations → Hidden Jellyfin accounts), they can't be listed or picked for. Ignored, Curatarr doesn't read what they watch either. The switch slid on and nothing happened. It's now greyed out with the reason and a link to that setting.

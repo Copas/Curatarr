@@ -201,6 +201,10 @@ For Radarr to grab dubs in the first place, its quality profile's language must 
 
 ---
 
+### Films with no English audio that can't be put right
+
+Radarr's import lists add films by what's popular or acclaimed, whatever their language, and a quality profile's "not English" rule judges only release names: a release that doesn't name its language counts as English. So a film in another language can arrive with no English audio. With **Mark Leaving Soon films with no English audio when no English copy can be found** on (Settings → Automatic, off by default), once *Replace films with no English audio* has looked and found nothing, the film gets the usual Leaving Soon notice and a Radarr import-list exclusion, so no list adds it again. Films on a quality profile that doesn't score other languages down (one kept for foreign films on purpose), films someone has watched or favourited, and films whose Replace was chosen by hand are left alone. Each is looked at once.
+
 ## Continue Watching and what's next
 
 - **What's playing, and what people watch next, is ready first.** Pressing play moves that file to the front of every queue within seconds (Curatarr looks at what's playing every worker cycle), and every ten minutes it asks Jellyfin what each person is in the middle of: the next episode of each show and films and episodes they stopped partway. Each episode brings the five after it, into the next season too. Their jobs (chapters, subtitles, skip markers, TV-friendly audio and the Roku seek index repair) go to the front of the line in watching order, the one playing first, ahead of the back catalogue. A file is never rebuilt while it's playing, so the ones after it are ready by the time they come on.

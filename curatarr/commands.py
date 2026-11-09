@@ -388,6 +388,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Starting automatic fixes failed")
     try:
+        from . import english_only
+
+        english_only.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Marking films with no English audio failed")
+    try:
         from . import failed_downloads
 
         failed_downloads.sweep()

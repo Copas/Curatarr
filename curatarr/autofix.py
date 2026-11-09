@@ -36,6 +36,10 @@ ON_BY_DEFAULT = False
 KINDS = {
     "files": "Replace problem files (cut short, broken, burned-in subtitles)",
     "dubs": "Replace films with no English audio",
+    "no_english": "Mark Leaving Soon films with no English audio when no English "
+    "copy can be found, and keep Radarr's import lists from adding them again "
+    "(not on quality profiles that allow other languages, nor once someone has "
+    "watched or favourited them)",
     "wrong_show": "Replace files that are another show with the same name",
     "missing": "Search once for always-keep episodes that never arrived",
     "misfiled": "Move episodes Sonarr filed under the wrong episode, when what's "

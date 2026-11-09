@@ -1069,6 +1069,17 @@ class RadarrClient(Client):
     def quality_profile(self, profile_id):
         return self.request("GET", f"/api/v3/qualityprofile/{profile_id}")
 
+    def custom_formats(self):
+        return self.request("GET", "/api/v3/customformat")
+
+    def add_exclusion(self, tmdb_id, title, year):
+        """Keep Radarr's import lists from adding this film again."""
+        return self.request(
+            "POST",
+            "/api/v3/exclusions",
+            json={"tmdbId": int(tmdb_id), "movieTitle": title, "movieYear": year or 0},
+        )
+
     def set_monitored(self, movie_id, monitored):
         return self.request(
             "PUT",

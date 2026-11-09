@@ -29,6 +29,7 @@ def test_each_can_be_switched_off(app, client):
     assert autofix.enabled() == {
         "files": True,
         "dubs": False,
+        "no_english": False,
         "wrong_show": False,
         "missing": True,
         "misfiled": False,
