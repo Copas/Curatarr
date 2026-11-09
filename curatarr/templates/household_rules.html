@@ -1,36 +1,72 @@
 {% extends 'base.html' %}
+{% macro card(id, icon_name, title, summary, state=None, open=False, toggles=None) %}
+<details class="setting-card" id="{{ id }}"{% if open %} open{% endif %}>
+  <summary>{{ icon(icon_name) }}<span class="setting-card-title"><strong>{{ title }}</strong><small>{{ summary }}</small></span>{% if state is not none %}<span class="chip{{ ' chip-on' if state else '' }}"{% if toggles %} data-toggles="{{ toggles }}"{% endif %}>{{ 'On' if state else 'Off' }}</span>{% endif %}{{ icon('chevron', 18) }}</summary>
+  <div class="setting-card-body">{{ caller() }}</div>
+</details>
+{% endmacro %}
+{% macro switch(name, label, on, help=none) %}
+  <div class="setting"><label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="{{ name }}"{% if on %} checked{% endif %}><span class="form-check-label">{{ label }}</span></label>{% if help %}<div class="form-text">{{ help }}</div>{% endif %}</div>
+{% endmacro %}
 {% block content %}
-<div class="eyebrow">Manage · Global defaults</div><h1>Household choices</h1>
-<p class="text-secondary">What people ask for, rewatch and save for a time of year changes what cleanup picks. These apply to every library.</p>
-<form method="post" class="card p-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="row g-3">
-  <div class="col-12"><h2 class="h5 mb-1">Requests</h2>
-    <p class="text-secondary mb-0">A title someone asked for in Seerr isn't cleaned up until they've played it.{% if seerr %} {{ requests }} title{{ 's' if requests != 1 }} in the library {{ 'were' if requests != 1 else 'was' }} requested.{% else %} <a href="{{ url_for('main.settings') }}#seerr">Connect Seerr</a> to use this.{% endif %}</p></div>
-  <div class="col-md-6"><label class="form-label w-100">Hold an unwatched request for up to (days)<input class="form-control" type="number" min="0" max="3650" name="request_hold_days" value="{{ options.request_hold_days }}"></label><div class="form-text">After this, an unwatched request is treated like anything else. 0 turns this off.</div></div>
+<header class="page-heading"><div><div class="eyebrow">Manage · Global defaults</div><h1>Household choices</h1>
+<p class="text-secondary mb-0">What people ask for, rewatch and save for a time of year changes what cleanup picks, and what Curatarr puts in Jellyfin for everyone. These apply to every library.</p></div></header>
+<form method="post" class="settings-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-  <div class="col-12 mt-4"><h2 class="h5 mb-1">Added by an import list</h2>
-    <p class="text-secondary mb-0">Titles Sonarr or Radarr added from a list, rather than a person, get a shorter grace period and go first, until someone plays one. Radarr's lists are recognised by themselves; for Sonarr's, give the list a tag in Sonarr (its titles get the tag). {{ listed }} title{{ 's are' if listed != 1 else ' is' }} from a list now.</p></div>
-  <div class="col-md-6"><label class="form-label w-100">Grace period for list arrivals (days)<input class="form-control" type="number" min="0" max="3650" name="list_grace_days" value="{{ options.list_grace_days }}"></label><div class="form-text">Never longer than the library's own grace period.</div></div>
+<h2 class="section-label">What cleanup keeps</h2>
+<div class="setting-cards mb-4">
+{% call card('requests', 'user', 'Requests', ('Held up to ' ~ options.request_hold_days ~ ' days until watched' if options.request_hold_days else 'Not held') ~ (' · Seerr not connected' if not seerr else ''), options.request_hold_days > 0 and seerr) %}
+  <p class="text-secondary">A title someone asked for in Seerr isn't cleaned up until they've played it.{% if seerr %} {{ requests }} title{{ 's' if requests != 1 }} in the library {{ 'were' if requests != 1 else 'was' }} requested.{% else %} <a href="{{ url_for('main.settings') }}#seerr">Connect Seerr</a> to use this.{% endif %}</p>
+  <div class="setting-grid">
+    <div class="setting"><label class="form-label w-100">Hold an unwatched request for up to (days)<input class="form-control" type="number" min="0" max="3650" name="request_hold_days" value="{{ options.request_hold_days }}"></label><div class="form-text">After this, an unwatched request is treated like anything else. 0 turns this off.</div></div>
+  </div>
+{% endcall %}
+{% call card('lists', 'list', 'Added by an import list', options.list_grace_days ~ '-day grace period · ' ~ listed ~ ' title' ~ ('s' if listed != 1 else '') ~ ' from a list now') %}
+  <p class="text-secondary">Titles Sonarr or Radarr added from a list, rather than a person, get a shorter grace period and go first, until someone plays one. Radarr's lists are recognised by themselves; for Sonarr's, give the list a tag in Sonarr (its titles get the tag).</p>
+  <div class="setting-grid">
+    <div class="setting"><label class="form-label w-100">Grace period for list arrivals (days)<input class="form-control" type="number" min="0" max="3650" name="list_grace_days" value="{{ options.list_grace_days }}"></label><div class="form-text">Never longer than the library's own grace period.</div></div>
+  </div>
+{% endcall %}
+{% call card('rewatched', 'heart', 'Rewatched', 'Always on: rewatched titles go to the back of the line') %}
+  <p class="text-secondary mb-0">A film played twice or more, or a show someone rewatches or two people follow, goes to the back of the line, like a favourite. Always on; it only changes the order.</p>
+{% endcall %}
+{% call card('seasonal', 'calendar', 'Seasonal shelves', (seasons|map(attribute='name')|join(' and ') ~ ' titles kept through their season' if options.seasonal else 'Not kept for their season') ~ (' · brought back' if options.seasonal_return else ''), options.seasonal, toggles='seasonal') %}
+  <p class="text-secondary">{% for season in seasons %}{{ season.name }} titles (by their TMDB keywords, or because they were watched mostly in {{ season.name }} season before){{ ' and ' if not loop.last }}{% endfor %} are kept through their season and the weeks before it.</p>
+  <div class="setting-grid">
+    {{ switch('seasonal', 'Keep seasonal titles through their season', options.seasonal) }}
+    <div class="setting"><label class="form-label w-100">Start this many days before (days)<input class="form-control" type="number" min="0" max="90" name="season_lead_days" value="{{ options.season_lead_days }}"></label></div>
+  </div>
+  <div class="setting-group">
+    {{ switch('seasonal_return', 'Bring seasonal films back', options.seasonal_return, 'When Curatarr removed one, it is added to Radarr again before its season.') }}
+    {% if returning %}<div class="form-text">Waiting for their season: {% for entry in returning.values() %}{{ entry.title }}{{ ', ' if not loop.last }}{% endfor %}.</div>{% endif %}
+  </div>
+{% endcall %}
+</div>
 
-  <div class="col-12 mt-4"><h2 class="h5 mb-1">Rewatched</h2>
-    <p class="text-secondary mb-0">A film played twice or more, or a show someone rewatches or two people follow, goes to the back of the line, like a favourite. Always on; it only changes the order.</p></div>
-
-  <div class="col-12 mt-4"><h2 class="h5 mb-1">Seasonal shelves</h2>
-    <p class="text-secondary mb-0">{% for season in seasons %}{{ season.name }} titles (by their TMDB keywords, or because they were watched mostly in {{ season.name }} season before){{ ' and ' if not loop.last }}{% endfor %} are kept through their season and the weeks before it.</p></div>
-  <div class="col-md-6"><label class="form-check"><input class="form-check-input" type="checkbox" name="seasonal"{% if options.seasonal %} checked{% endif %}><span class="form-check-label">Keep seasonal titles through their season</span></label></div>
-  <div class="col-md-6"><label class="form-label w-100">Start this many days before (days)<input class="form-control" type="number" min="0" max="90" name="season_lead_days" value="{{ options.season_lead_days }}"></label></div>
-  <div class="col-12"><label class="form-check"><input class="form-check-input" type="checkbox" name="seasonal_return"{% if options.seasonal_return %} checked{% endif %}><span class="form-check-label">Bring seasonal films back: when Curatarr removed one, add it to Radarr again before its season</span></label>
-    {% if returning %}<div class="form-text">Waiting for their season: {% for entry in returning.values() %}{{ entry.title }}{{ ', ' if not loop.last }}{% endfor %}.</div>{% endif %}</div>
-  <div class="col-12 mt-4"><h2 class="h5 mb-1">Leaving Soon in Jellyfin</h2>
-    <p class="text-secondary mb-0">Besides the countdown on their pictures, titles Leaving Soon can be gathered in a Jellyfin collection everyone sees (it's created as "Leaving Soon"; rename it in Jellyfin if you like).</p></div>
-  <div class="col-12"><label class="form-check"><input class="form-check-input" type="checkbox" name="leaving_collection"{% if options.leaving_collection %} checked{% endif %}><span class="form-check-label">Keep a Leaving Soon collection in Jellyfin</span></label></div>
-  <div class="col-12 mt-4"><h2 class="h5 mb-1">Posters</h2>
-    <p class="text-secondary mb-0">A new release often has only foreign posters at first, and Jellyfin keeps the one it took. Once a day, titles released in the last year whose poster is in another language get one in Jellyfin's metadata language when TMDB has one. Posters chosen by hand are left alone.</p></div>
-  <div class="col-12"><label class="form-check"><input class="form-check-input" type="checkbox" name="poster_language"{% if options.poster_language %} checked{% endif %}><span class="form-check-label">Swap posters in another language</span></label></div>
-  <div class="col-12 mt-4"><h2 class="h5 mb-1">Picks for each person</h2>
-    <p class="text-secondary mb-0">A private Jellyfin playlist for each account, "Picks for" their name, of ten unwatched films matched to what they've favourited and finished. It shows on every Jellyfin app, Roku included, under Playlists. Only films that account can see (its libraries and parental rating) are picked. A film comes off the list a few minutes after it's watched, and the list is made again each week. An account needs five favourited or finished films first.</p></div>
-  <div class="col-12"><label class="form-check"><input class="form-check-input" type="checkbox" name="picks"{% if options.picks %} checked{% endif %}><span class="form-check-label">Make picks for each person</span></label><div class="form-text">How films are chosen: each film is described by its genres and TMDB keywords, rarer ones counting for more. A film is picked when it's close to several films that person favourited or finished (a favourite counts three times as much; a rewatch a little more), with a good rating helping a little. No single liked film explains more than two picks and no genre takes more than four places, so one much-loved film can't fill the list. A pick left unwatched counts for less each week, so others get a turn. Picks never include films that person has watched or started.</div></div>
-  <div class="col-12"><label class="form-check"><input class="form-check-input" type="checkbox" name="picks_hidden"{% if options.picks_hidden %} checked{% endif %}><span class="form-check-label">Include accounts hidden from Jellyfin's sign-in screen</span></label><div class="form-text">Off, admin and spare accounts get no picks. Save to see them listed below.</div></div>
-  {% if accounts %}<div class="col-12"><input type="hidden" name="picks_accounts_shown" value="1"><div class="form-text mb-1">For these accounts:</div>{% for id, name in accounts|dictsort(by='value') %}<label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="picks_account" value="{{ id }}"{% if id not in options.picks_skip %} checked{% endif %}><span class="form-check-label">{{ name }}</span></label>{% endfor %}</div>{% endif %}
-  {% if options.picks and picks %}<div class="col-12">{% for row in picks %}<details class="mb-2"><summary>{{ accounts.get(row.user_id) or accounts.get(row.user_id|replace('-', '')) or 'An account' }}: {% if row.picks %}{{ row.picks|length }} picks{% elif row.liked is not none and row.liked < 5 %}{{ row.liked }} film{{ 's' if row.liked != 1 }} to go on so far, no picks yet{% else %}no picks{% endif %}</summary><ul class="small mb-0">{% for p in row.picks %}<li><a href="{{ url_for('main.title', media_id=p.media.id) }}">{{ p.media.title }}</a>{% if p.because %} <span class="text-secondary">like {{ p.because.title }}</span>{% endif %}</li>{% endfor %}</ul></details>{% endfor %}</div>{% endif %}
-</div><div class="border-top border-secondary-subtle mt-4 pt-3"><button class="btn btn-primary">Save</button></div></form>
+<h2 class="section-label">What Curatarr puts in Jellyfin</h2>
+<div class="setting-cards mb-4">
+{% call card('picks', 'star', 'Picks for each person', ((picks|selectattr('picks')|list|length) ~ ' playlist' ~ ('s' if (picks|selectattr('picks')|list|length) != 1 else '') ~ ' of ten films, made again weekly') if options.picks else 'A playlist of films for each account', options.picks, open=options.picks, toggles='picks') %}
+  <p class="text-secondary">A private Jellyfin playlist for each account, "Picks for" their name, of ten unwatched films matched to what they've favourited and finished. It shows on every Jellyfin app, Roku included, under Playlists. Only films that account can see (its libraries and parental rating) are picked. A film comes off the list a few minutes after it's watched, and the list is made again each week. An account needs five favourited or finished films first.</p>
+  {{ switch('picks', 'Make picks for each person', options.picks, "How films are chosen: each film is described by its genres and TMDB keywords, rarer ones counting for more. A film is picked when it's close to several films that person favourited or finished (a favourite counts three times as much; a rewatch a little more), with a good rating helping a little. No single liked film explains more than two picks and no genre takes more than four places, so one much-loved film can't fill the list. A pick left unwatched counts for less each week, so others get a turn. Picks never include films that person has watched or started.") }}
+  <fieldset class="setting-group"><legend class="setting-group-label">Who gets picks</legend>
+    {{ switch('picks_hidden', "Include accounts hidden from Jellyfin's sign-in screen", options.picks_hidden, 'Off, admin and spare accounts get no picks. Save to see them listed here.') }}
+    {% if accounts %}<input type="hidden" name="picks_accounts_shown" value="1">
+    <div class="setting-grid setting-grid-compact mt-2">{% for id, name in accounts|dictsort(by='value') %}<label class="form-check"><input class="form-check-input" type="checkbox" name="picks_account" value="{{ id }}"{% if id not in options.picks_skip %} checked{% endif %}><span class="form-check-label">{{ name }}</span></label>{% endfor %}</div>{% endif %}
+  </fieldset>
+  {% if options.picks and picks %}<fieldset class="setting-group"><legend class="setting-group-label">This week's picks</legend>
+    {% for row in picks %}<details class="mb-2"><summary>{{ accounts.get(row.user_id) or accounts.get(row.user_id|replace('-', '')) or 'An account' }}: {% if row.picks %}{{ row.picks|length }} picks{% elif row.liked is not none and row.liked < 5 %}{{ row.liked }} film{{ 's' if row.liked != 1 }} to go on so far, no picks yet{% else %}no picks{% endif %}</summary><ul class="small mb-0">{% for p in row.picks %}<li><a href="{{ url_for('main.title', media_id=p.media.id) }}">{{ p.media.title }}</a>{% if p.because %} <span class="text-secondary">like {{ p.because.title }}</span>{% endif %}</li>{% endfor %}</ul></details>{% endfor %}
+  </fieldset>{% endif %}
+{% endcall %}
+{% call card('leaving', 'files', 'Leaving Soon collection', 'A Jellyfin collection of what is Leaving Soon' if options.leaving_collection else 'Countdown on pictures only', options.leaving_collection, toggles='leaving_collection') %}
+  <p class="text-secondary">Besides the countdown on their pictures, titles Leaving Soon can be gathered in a Jellyfin collection everyone sees (it's created as "Leaving Soon"; rename it in Jellyfin if you like).</p>
+  {{ switch('leaving_collection', 'Keep a Leaving Soon collection in Jellyfin', options.leaving_collection) }}
+{% endcall %}
+{% call card('posters', 'library', 'Posters in your language', 'Foreign posters swapped once a day' if options.poster_language else 'Posters left as Jellyfin chose them', options.poster_language, toggles='poster_language') %}
+  <p class="text-secondary">A new release often has only foreign posters at first, and Jellyfin keeps the one it took. Once a day, titles released in the last year whose poster is in another language get one in Jellyfin's metadata language when TMDB has one. Posters chosen by hand are left alone.</p>
+  {{ switch('poster_language', 'Swap posters in another language', options.poster_language) }}
+{% endcall %}
+</div>
+<div class="sticky-actions"><span class="small text-secondary" data-unsaved hidden>Not saved yet · </span><span class="small text-secondary">Household choices</span><button class="btn btn-primary">Save</button></div>
+</form>
+<script src="{{ url_for('static', filename='setting-cards.js', v='1') }}"></script>
 {% endblock %}

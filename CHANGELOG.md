@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc114 (2026-11-09)
+
+- **Household choices is laid out like Enhance.** Each choice is a card that opens, with a line saying what it's set to and an On/Off chip that follows its switch, under two headings: what cleanup keeps, and what Curatarr puts in Jellyfin. Picks for each person groups its switches, the accounts it covers and this week's picks, each under its own label. The save bar says when something isn't saved yet.
+
 ## 0.2.0rc113 (2026-11-09)
 
 - **Picks explain how they're chosen** under *Make picks for each person*, like the other settings: what a film is matched on, what counts for more, and how the list keeps some range and changes week to week.

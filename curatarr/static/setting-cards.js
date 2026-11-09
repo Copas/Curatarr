@@ -1,4 +1,4 @@
-// Enhance settings: a card's On/Off follows its switches as they're changed,
+// Settings cards (Enhance, Household choices): a card's On/Off follows its switches as they're changed,
 // and the save bar says when something isn't saved yet.
 (function () {
   var form = document.querySelector(".sticky-actions") && document.querySelector(".sticky-actions").closest("form");
