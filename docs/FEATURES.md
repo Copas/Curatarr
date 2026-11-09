@@ -74,7 +74,7 @@ Settings → Household choices. Each of these shows on a title's page, and in Re
 
 ### Last call
 
-**Last call** (Settings → Household choices, off by default) warns the household weeks before an unwatched film is cleaned up, in a way that works on any TV. Films nobody has played for a while (90 days by default, counted from when the film was added or last played; an upgraded file doesn't make it new) get an amber **LAST CALL · ♥ TO KEEP** banner on their poster and join a Jellyfin collection, **Last Call**, a few each week (10 by default), oldest first, so it stays short enough to browse with a remote.
+**Last call** (Settings → Household choices, off by default) warns the household weeks before an unwatched film is cleaned up, in a way that works on any TV. Films nobody has played for a year (365 days by default, counted from when the film was added or last played; an upgraded file doesn't make it new) get an amber **LAST CALL · ♥ TO KEEP** banner on their poster and join a Jellyfin collection, **Last Call**, a few each week (10 by default), oldest first, so it stays short enough to browse with a remote.
 
 - **Keeping one:** press the heart (favourite) in any Jellyfin app; the film is kept for as long as it's favourited. Playing it, or Keep or Never Purge on its page in Curatarr, keeps it too, and a film someone kept isn't picked again for the same number of days.
 - **Otherwise,** after its days in Last call (14 by default) it moves on to **Leaving Soon**, with the usual notice before it's deleted through Radarr. Titles Leaving Soon are in the Last Call collection too, so it's the one place to look.

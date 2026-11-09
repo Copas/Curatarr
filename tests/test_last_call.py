@@ -14,7 +14,7 @@ from curatarr.models import (
 from curatarr.services import set_setting
 
 
-def _films(count=5, *, library_type="movies", days_old=200):
+def _films(count=5, *, library_type="movies", days_old=400):
     library = Library(
         jellyfin_library_id=library_type, name="Films", media_type=library_type
     )

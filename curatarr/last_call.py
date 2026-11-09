@@ -1,6 +1,6 @@
 """Last call: a public warning, weeks before a film nobody watches is cleaned up.
 
-Films nobody has played for a while (LAST_CALL_DAYS, 90 by default) get a
+Films nobody has played for a year (LAST_CALL_DAYS, 365 by default) get a
 "LAST CALL · ♥ TO KEEP" banner on their poster and join a Jellyfin collection,
 "Last Call", a few each week (PER_WEEK, oldest first), so the collection stays
 short enough to browse on a TV. Pressing the heart (favourite) in any Jellyfin
@@ -29,7 +29,7 @@ COLLECTION_KEY = "last_call_collection"
 COLLECTION_NAME = "Last Call"
 DEFAULTS = {
     "last_call": False,
-    "last_call_days": 90,
+    "last_call_days": 365,
     "last_call_per_week": 10,
     "last_call_notice_days": 14,
     "last_call_libraries": None,  # None: every film library

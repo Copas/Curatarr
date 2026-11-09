@@ -38,7 +38,7 @@ DEFAULTS = {
     "picks_hidden": False,  # picks for accounts hidden from sign-in too
     # last_call.py
     "last_call": False,
-    "last_call_days": 90,
+    "last_call_days": 365,
     "last_call_per_week": 10,
     "last_call_notice_days": 14,
     "last_call_libraries": None,  # None: every film library
