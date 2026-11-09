@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc103 (2026-11-09)
+
+- **"Previously on" recaps end where they really do.** A recap's end was the last line quoted from an earlier episode. Recaps often run on with a few wordless clips, so the skip stopped short, and a stock phrase heard in several episodes ("get away from me") could carry it on into the new episode. Now a line counts as a quote only when it's particular to an earlier episode (any season, not just the last three). After the last quoted line, the recap runs up to the intro when it starts within half a minute, or else to the longest fade to black in the next 25 seconds. On 20 recaps labelled by eye, 15 ends are now within 3 seconds, against 4 before, and only one is late (3.4 seconds). Recaps found before are checked again in the background, what's up next first.
+
 ## 0.2.0rc102 (2026-11-09)
 
 - **The transcription model can follow the recommended one.** The settings page saved the model with everything else, so installs that never chose one were stuck on medium after rc101 made large-v3-turbo the default. The list now starts with **Recommended (turbo)**, which isn't saved as a fixed choice, so a better default reaches it later. An install whose saved model was medium switches to Recommended on upgrade, unless transcription is set to run on the processor, where medium is quicker.

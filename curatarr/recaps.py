@@ -13,8 +13,13 @@ order of confidence, by:
 2. Lines quoted from earlier episodes. Recaps are cut from earlier episodes;
    the recap ends with the last clip of the run of quoted clips it opens with.
    (Curatarr doesn't let the local model move that end: on The Last Man on
-   Earth it pushed every montage recap about 30 seconds into the new episode.
-   Ending at the last clip is sometimes a few seconds early, never late.)
+   Earth it pushed every montage recap about 30 seconds into the new episode.)
+   Lines said in several earlier episodes ("get away from me") don't count:
+   they match by chance and would carry a recap on into the new episode.
+
+Recaps often run on past their last line with wordless clips. When the intro
+starts soon after, the recap runs up to it; otherwise it ends on the longest
+fade to black in the half minute after (settled_end).
 
 Nothing is marked when neither applies: a wrong recap skips part of the
 episode, which is worse than having no skip button.
@@ -36,10 +41,18 @@ GRAM = 4
 QUOTED = 0.5  # share of a line's 4-word runs found in earlier episodes
 EARLIER_TAIL_SKIPPED = 150.0  # "next time on…" previews quote the new episode
 AFTER_ANCHOR = 30.0  # the closing narration follows the last quoted clip
-QUOTE_RUN_GAP = 30.0  # a recap's clips come one after another; a longer gap ends it
+QUOTE_RUN_GAP = 20.0  # a recap's clips come one after another; a longer gap ends it
+COMMON = 3  # a line said in this many earlier episodes is a stock phrase
 MIN_QUOTE_WORDS = 5  # shorter lines ("So, what do we have?") match by chance
 SNAP_BEFORE, SNAP_AFTER = 1.5, 4.0
 FUZZY_GRAM, FUZZY_QUOTED = 3, 0.6
+# After the last line: the intro starting from SETTLE_BEFORE before it to
+# SETTLE_AFTER after it ends the recap; otherwise the longest black of
+# MIN_BLACK seconds or more up to BLACK_AFTER after it (a frame whose brightest
+# pixels are at most BLACK of 255: night scenes aren't; flashes inside a
+# montage are shorter). Further, a black was a scene's end in the new episode.
+SETTLE_BEFORE, SETTLE_AFTER, BLACK_AFTER = 3.0, 30.0, 25.0
+BLACK, MIN_BLACK = 20, 1.0
 CLOSER_WITHIN = 180.0  # seconds after the opener's next line
 CLOSER_SPREAD = 120.0  # a closing line lands at about the same point each week
 CLOSER_MIN_RUNS = 3  # shared 4-word runs in one line: a 6+ word shared sentence
@@ -132,17 +145,22 @@ def closing_phrases(openings: list[list]) -> set[tuple]:
     return closers
 
 
-def earlier_grams(transcripts: list[list]) -> set[tuple]:
-    """What was said in earlier episodes, minus their "next time on" previews."""
-    found: set[tuple] = set()
+def earlier_grams(transcripts: list[list], common: int = COMMON) -> set[tuple]:
+    """What was said in earlier episodes, minus their "next time on" previews
+    and minus stock phrases (said in ``common`` or more of them)."""
+    from collections import Counter
+
+    seen: Counter = Counter()
     for segments in transcripts:
         if not segments:
             continue
         cutoff = segments[-1].end - EARLIER_TAIL_SKIPPED
+        here: set[tuple] = set()
         for s in segments:
             if s.start < cutoff:
-                found |= grams(s.text) | grams(s.text, FUZZY_GRAM)
-    return found
+                here |= grams(s.text) | grams(s.text, FUZZY_GRAM)
+        seen.update(here)
+    return {g for g, n in seen.items() if n < common}
 
 
 def said_in(transcripts: list[list]) -> set[tuple]:
@@ -181,6 +199,7 @@ def find_recap(
     choose_last_line=None,
     confirm=None,
     scenes=(),
+    settle=None,
 ) -> Recap | None:
     """The recap's span, or None when the episode has none or it's unclear.
 
@@ -188,14 +207,17 @@ def find_recap(
     ``earlier_grams`` of the episodes before this one; ``choose_last_line(lines)``
     asks the model for the index of the recap's last line, or None;
     ``confirm(lines)`` asks it whether lines are a recap (True/False, or None
-    when it can't say).
+    when it can't say). ``settle(end)`` moves the end past the clips after the
+    last line (settled_end), or returns None to snap it to a scene change.
     """
     lines = opening_lines(segments)
     if not lines:
         return None
     first = opener(segments)
     start = 0.0 if first.start <= 10 else max(first.start - 0.5, 0.0)
-    found = _find_end(start, lines, series_openings, earlier, choose_last_line, scenes)
+    found = _find_end(
+        start, lines, series_openings, earlier, choose_last_line, scenes, settle
+    )
     if found is None or found.source != "model":
         return found
     # The model chose the end: only keep it if the model also agrees it's a recap.
@@ -205,11 +227,15 @@ def find_recap(
     return found if confirm(span) is True else None
 
 
-def _find_end(start, lines, series_openings, earlier, choose_last_line, scenes):
+def _find_end(
+    start, lines, series_openings, earlier, choose_last_line, scenes, settle=None
+):
     closers = closing_phrases(list(series_openings))
     closing = next((s for s in lines if grams(s.text) & closers), None)
     if closing is not None:
-        return _bounded(start, _closing_end(closing, closers), "closing line", scenes)
+        return _bounded(
+            start, _closing_end(closing, closers), "closing line", scenes, settle
+        )
 
     anchor = last_of_run(lines, earlier)
     if anchor is None:
@@ -225,7 +251,7 @@ def _find_end(start, lines, series_openings, earlier, choose_last_line, scenes):
             index = None
         if isinstance(index, int) and 0 <= index < len(after):
             end, source = spoken_end(after[index]), "model"
-    return _bounded(start, end, source, scenes)
+    return _bounded(start, end, source, scenes, settle)
 
 
 def spoken_end(line) -> float:
@@ -276,10 +302,28 @@ def _closing_end(line, closers) -> float:
     return line.start + (line.end - line.start) * last / len(w) + 1.0
 
 
-def _bounded(start, end, source, scenes) -> Recap | None:
-    near = [t for t in scenes if end - SNAP_BEFORE <= t <= end + SNAP_AFTER]
-    if near:
-        end = min(near, key=lambda t: abs(t - end))
+def settled_end(end, intro=None, blacks=()) -> float | None:
+    """Where a recap whose last line ends at ``end`` really ends: at the intro
+    when it starts within the stretch after, else at the longest black in it
+    (``blacks`` are (start, seconds)), else None."""
+    if intro is not None and end - SETTLE_BEFORE <= intro <= end + SETTLE_AFTER:
+        return intro
+    near = [
+        b
+        for b in blacks
+        if b[1] >= MIN_BLACK and end - SETTLE_BEFORE <= b[0] <= end + BLACK_AFTER
+    ]
+    return max(near, key=lambda b: b[1])[0] if near else None
+
+
+def _bounded(start, end, source, scenes, settle=None) -> Recap | None:
+    settled = settle(end) if settle else None
+    if settled is not None:
+        end = settled
+    else:
+        near = [t for t in scenes if end - SNAP_BEFORE <= t <= end + SNAP_AFTER]
+        if near:
+            end = min(near, key=lambda t: abs(t - end))
     if not MIN_RECAP <= end - start <= MAX_RECAP:
         return None
     return Recap(round(start, 3), round(end, 3), source)

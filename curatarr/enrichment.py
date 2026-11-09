@@ -1333,7 +1333,7 @@ def run_job(state_id: str, *, llm=None) -> str:
         llm=llm,
         context=_context(part, media),
         find_recap=(
-            _recap_finder(state, part)
+            _recap_finder(state, part, media, info.path)
             if part.kind == "episode" and not rename
             else None
         ),
@@ -1699,13 +1699,23 @@ def remake_subtitles(now=None) -> int:
 
 
 def recheck_credits(now=None) -> int:
-    """Worker cycle: check again the credits of episodes checked under older
-    rules (CREDITS_RULE). Episodes someone will watch next go straight away;
+    """Worker cycle: check again the credits and recaps of episodes checked
+    under older rules (CREDITS_RULE, RECAP_RULE). Episodes someone will watch next go straight away;
     the rest one at a time, only while nothing else is waiting (each reads
     the last minutes of the picture). Returns how many were queued."""
     from . import up_next
 
     now = now or utcnow()
+    credits_old = or_(
+        ChapterState.credits_rule.is_(None), ChapterState.credits_rule < CREDITS_RULE
+    )
+    recap_old = and_(
+        or_(
+            ChapterState.recap_source.in_(RECAP_FOUND),
+            ChapterState.recap_source.like("unclear:%"),
+        ),
+        or_(ChapterState.recap_rule.is_(None), ChapterState.recap_rule < RECAP_RULE),
+    )
     rows = (
         db.session.query(ChapterState)
         .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
@@ -1714,10 +1724,7 @@ def recheck_credits(now=None) -> int:
             MediaPart.has_file.is_(True),
             ChapterState.markers_checked_at.isnot(None),
             ChapterState.job_state == "idle",
-            or_(
-                ChapterState.credits_rule.is_(None),
-                ChapterState.credits_rule < CREDITS_RULE,
-            ),
+            or_(credits_old, recap_old),
         )
     )
     soon = up_next.part_ids()
@@ -1725,7 +1732,13 @@ def recheck_credits(now=None) -> int:
     if not due and not _work_waiting(now):
         due = rows.order_by(ChapterState.markers_checked_at).limit(1).all()
     for state in due:
-        state.markers_checked_at = None
+        if state.credits_rule is None or state.credits_rule < CREDITS_RULE:
+            state.markers_checked_at = None
+        if (state.recap_rule or 1) < RECAP_RULE and (
+            state.recap_source in RECAP_FOUND
+            or (state.recap_source or "").startswith("unclear:")
+        ):
+            state.recap_checked_at = None
         state.job_state = "queued"
         state.requested_action = "recap"
         state.requested_at = now
@@ -3375,7 +3388,12 @@ def environment_status() -> dict:
 # --- Recaps ------------------------------------------------------------------
 
 RECAP_SIBLINGS = 60  # other episodes read for the series' closing line
-RECAP_EARLIER = 3  # earlier episodes whose clips a recap may quote
+RECAP_EARLIER = 60  # earlier episodes whose clips a recap may quote (any season)
+# How recaps are found. Raised when that changes, so episodes checked before
+# are checked again (recheck_credits).
+#   2: stock phrases don't count as quotes; the end moves past wordless clips
+#      to the intro or a fade to black (recaps.settled_end)
+RECAP_RULE = 2
 RECAP_SKIP_AFTER = 4  # a series whose first episodes never say "previously on"
 
 
@@ -3431,7 +3449,49 @@ def _sibling_transcripts(state, part):
     return openings, earlier
 
 
-def _recap_finder(state, part):
+def _intro_start(part, media) -> float | None:
+    """Where Intro Skipper's intro starts, or None (best effort)."""
+    from .integrations import IntroSkipper
+
+    db.session.commit()  # never ask Jellyfin holding SQLite's write lock
+    try:
+        item_id = jellyfin_item_id(part, media)
+        segments = (
+            IntroSkipper(client("jellyfin")).segments(item_id) if item_id else None
+        )
+    except IntegrationError:
+        return None
+    starts = [
+        float(s.get("Start") or 0)
+        for s in segments or ()
+        if s.get("Type") == "Introduction" and not s.get("Suppressed")
+    ]
+    return min(starts, default=None)
+
+
+def _recap_settle(part, media, path):
+    """settle(end) for recaps.find_recap: the end moved past the clips after
+    the recap's last line (recaps.settled_end), or None."""
+    from . import credits, recaps
+
+    def settle(end):
+        intro = _intro_start(part, media)
+        start = max(end - recaps.SETTLE_BEFORE, 0.0)
+        try:
+            blacks = credits.blacks_near(
+                path,
+                start,
+                recaps.SETTLE_BEFORE + recaps.BLACK_AFTER + 1,
+                recaps.BLACK,
+            )
+        except (MediaToolError, RuntimeError, ValueError):
+            blacks = []
+        return recaps.settled_end(end, intro, blacks)
+
+    return settle
+
+
+def _recap_finder(state, part, media=None, path=None):
     """A find_recap callable for analyse(), reading the rest of the series."""
     from . import recaps
 
@@ -3445,6 +3505,7 @@ def _recap_finder(state, part):
             series_openings=openings,
             earlier=recaps.earlier_grams(earlier),
             scenes=scenes,
+            settle=_recap_settle(part, media, path) if path else None,
         )
 
     return find
@@ -3466,6 +3527,7 @@ def _record_recap(state, part, media, recap: dict | None):
 
 
 SEGMENT_FIELDS = {"Recap": "recap", "Preview": "preview"}
+RECAP_FOUND = ("closing line", "earlier episodes", "model")
 
 
 def _mark_segment(state, part, media, kind, *, clear_guesses=False):
@@ -3730,12 +3792,16 @@ def _check_recap(ep: _Episode, fields) -> str:
         state.recap_checked_at = utcnow()
         state.recap_start = state.recap_end = None
         state.recap_source = "no opener"
+        state.recap_rule = RECAP_RULE
         try:
             _mark_segment(state, ep.part, ep.media, "Recap", clear_guesses=True)
         except IntegrationError:
             pass
         return "recap: none"
-    found = _recap_finder(state, ep.part)(segments, ep.scenes(), ep.model())
+    found = _recap_finder(state, ep.part, ep.media, ep.info.path)(
+        segments, ep.scenes(), ep.model()
+    )
+    state.recap_rule = RECAP_RULE
     previously = state.recap_source
     _record_recap(state, ep.part, ep.media, found.as_dict() if found else None)
     if not found:

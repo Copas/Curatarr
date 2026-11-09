@@ -153,6 +153,34 @@ def find_breaks(pics, start) -> list[tuple[float, str]]:
     return found
 
 
+def blacks(pics, start, level=DARK) -> list[tuple[float, float]]:
+    """(start, seconds) of each run of black frames at BREAK_RATE from start:
+    frames whose brightest pixels (98th percentile) are at most ``level``."""
+    import numpy as np
+
+    if not len(pics):
+        return []
+    dark = np.percentile(pics.reshape(len(pics), -1), 98, axis=1) <= level
+    found, n = [], 0
+    while n < len(dark):
+        if dark[n]:
+            m = n
+            while m < len(dark) and dark[m]:
+                m += 1
+            found.append((start + n / BREAK_RATE, (m - n) / BREAK_RATE))
+            n = m
+        else:
+            n += 1
+    return found
+
+
+def blacks_near(path, start, seconds, level=DARK) -> list[tuple[float, float]]:
+    """The runs of black frames in a stretch of the file."""
+    return blacks(
+        frames(path, start, seconds, BREAK_RATE, BREAK_W, BREAK_H), start, level
+    )
+
+
 def snap(t, found) -> tuple[float, str]:
     """The break leading into ``t``: the nearest fade to black, else white
     flash, else hard cut; ``t`` itself when there's none."""

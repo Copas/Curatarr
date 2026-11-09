@@ -206,3 +206,44 @@ def test_a_stray_match_after_the_recap_does_not_stretch_it():
 def test_a_line_stretched_over_music_ends_when_its_words_do():
     stretched = Segment(67.2, 186.1, "I'm fine. I'm just...")
     assert recaps.spoken_end(stretched) < 72
+
+
+def test_stock_phrases_said_in_several_episodes_dont_count_as_quotes():
+    stock = "get away from me right now"
+    episodes = [
+        lines(
+            (100, 105, stock),
+            (200, 205, f"Only episode {n} has this whole line."),
+            (1200, 1205, "The end."),
+        )
+        for n in range(3)
+    ]
+    found = recaps.earlier_grams(episodes)
+    assert ("get", "away", "from", "me") not in found  # said in all three
+    assert ("only", "episode", "1", "has") in found
+    assert ("get", "away", "from", "me") in recaps.earlier_grams(episodes[:2])
+
+
+def test_a_recap_runs_on_to_the_intro_or_a_fade():
+    # the intro starting soon after the last line ends the recap there
+    assert recaps.settled_end(60.0, intro=75.0) == 75.0
+    assert recaps.settled_end(60.0, intro=58.0) == 58.0
+    # otherwise the longest black of a second or more, not too far on
+    blacks = [(62.0, 0.4), (66.0, 1.2), (70.0, 2.5), (90.0, 5.0)]
+    assert recaps.settled_end(60.0, intro=400.0, blacks=blacks) == 70.0
+    assert recaps.settled_end(60.0, blacks=[(62.0, 0.4), (90.0, 5.0)]) is None
+    # settled, the scene snap isn't used
+    found = recaps.find_recap(
+        narrated(12, 95),
+        series_openings=[recaps.opening_lines(e) for e in SERIES],
+        scenes=[97.5],
+        settle=lambda end: end + 12.0,
+    )
+    assert 100 < found.end < 108
+    found = recaps.find_recap(
+        narrated(12, 95),
+        series_openings=[recaps.opening_lines(e) for e in SERIES],
+        scenes=[97.5],
+        settle=lambda end: None,
+    )
+    assert found.end == 97.5

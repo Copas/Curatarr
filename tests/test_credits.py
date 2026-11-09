@@ -46,6 +46,14 @@ def test_breaks_are_found_in_the_picture():
     ]
 
 
+def test_runs_of_black_are_measured():
+    pics = np.full((40, credits.BREAK_H, credits.BREAK_W), 90, np.uint8)
+    pics[5:8] = 4  # a short flash of black
+    pics[20:35] = 15  # a dim fade: black at a looser level only
+    assert credits.blacks(pics, 10.0) == [(10.5, 0.3)]
+    assert credits.blacks(pics, 10.0, level=20) == [(10.5, 0.3), (12.0, 1.5)]
+
+
 def test_the_earlier_start_wins(monkeypatch):
     monkeypatch.setattr(credits, "snapped", lambda _path, t: (t - 2, "black"))
     monkeypatch.setattr(credits, "lettering_start", lambda _path, _d: 2400.0)
@@ -187,5 +195,16 @@ def test_episodes_checked_under_older_rules_are_checked_again(app, monkeypatch):
     assert enrichment.recheck_credits() == 1  # about to be watched: straight away
     for state in states:
         state.job_state, state.credits_rule = "idle", enrichment.CREDITS_RULE
+        state.markers_checked_at = state.recap_checked_at = utcnow()
     db.session.commit()
     assert enrichment.recheck_credits() == 0  # checked the current way
+    # a recap found by older rules: only the recap is checked again
+    states[0].recap_source, states[0].recap_rule = "earlier episodes", 1
+    states[1].recap_source = "no opener"  # nothing to find: left alone
+    db.session.commit()
+    assert enrichment.recheck_credits() == 1
+    assert states[0].recap_checked_at is None
+    assert states[0].markers_checked_at is not None
+    states[0].job_state, states[0].recap_rule = "idle", enrichment.RECAP_RULE
+    db.session.commit()
+    assert enrichment.recheck_credits() == 0
