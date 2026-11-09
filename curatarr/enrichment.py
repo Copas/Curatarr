@@ -1689,6 +1689,41 @@ def remake_subtitles(now=None) -> int:
     return len(due)
 
 
+def recheck_credits(now=None) -> int:
+    """Worker cycle: check again the credits of episodes checked under older
+    rules (CREDITS_RULE). Episodes someone will watch next go straight away;
+    the rest one at a time, only while nothing else is waiting (each reads
+    the last minutes of the picture). Returns how many were queued."""
+    from . import up_next
+
+    now = now or utcnow()
+    rows = (
+        db.session.query(ChapterState)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .filter(
+            MediaPart.kind == "episode",
+            MediaPart.has_file.is_(True),
+            ChapterState.markers_checked_at.isnot(None),
+            ChapterState.job_state == "idle",
+            or_(
+                ChapterState.credits_rule.is_(None),
+                ChapterState.credits_rule < CREDITS_RULE,
+            ),
+        )
+    )
+    soon = up_next.part_ids()
+    due = rows.filter(ChapterState.media_part_id.in_(soon)).all() if soon else []
+    if not due and not _work_waiting(now):
+        due = rows.order_by(ChapterState.markers_checked_at).limit(1).all()
+    for state in due:
+        state.markers_checked_at = None
+        state.job_state = "queued"
+        state.requested_action = "recap"
+        state.requested_at = now
+    db.session.commit()
+    return len(due)
+
+
 def _library_ids():
     return db.session.query(MediaIdentity.library_id).distinct().all()
 
@@ -3856,10 +3891,113 @@ def _check_markers(ep: _Episode) -> str:
             }
         )
         _log("marker_trimmed", state_id=state.id, segment=segment["Id"])
+    trimmed = {id(segment) for segment, _start, _reason in trims}
+    left = [c for c in credits if id(c) not in flagged and id(c) not in trimmed]
+    moved = _place_credits(ep, plugin, item_id, left, hidden)
+    state.credits_rule = CREDITS_RULE
     state.markers_hidden = hidden or None
     changed = [f"{len(bad)} hidden"] if bad else []
     changed += [f"{len(trims)} trimmed"] if trims else []
+    changed += [moved] if moved else []
     return f"markers: {', '.join(changed)}" if changed else "markers: ok"
+
+
+CREDITS_RULE = 1  # how credits starts are placed; raising it checks episodes again
+CREDITS_FROM = 0.6  # end credits start in the last 40% of the runtime
+CREDITS_MOVE = 1.0  # a start this close to Intro Skipper's is left alone
+CREDITS_MAX_MOVE = 180.0  # never moved earlier than this
+
+
+def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
+    """Start the end credits where the picture says (credits.py): replace
+    Intro Skipper's credits marker with one starting there, or add one where
+    it found none. Each change is listed with the hidden markers, so it can
+    be undone from the episode's page."""
+    from . import credits as credit_pictures
+    from .markers import _clock
+
+    if any(
+        h.get("type") == "Credits" and h.get("replaced_by") or h.get("added")
+        for h in hidden
+    ):
+        # Curatarr's own credits marker is already there (placed or trimmed
+        # before): the plugin's list leaves it out, so this would add another.
+        return None
+    duration = ep.info.duration
+    end_credits = [c for c in credits if c["Start"] >= duration * CREDITS_FROM]
+    if len(end_credits) > 1:
+        return None  # two candidates: the checks above left it to Intro Skipper
+    current = end_credits[0] if end_credits else None
+    try:
+        found = credit_pictures.credits_start(
+            ep.info.path, duration, current["Start"] if current else None
+        )
+    except (ImportError, MediaToolError) as exc:
+        _log("credits_unread", state_id=ep.state.id, error=str(exc))
+        return None
+    if found is None or found.start < duration * CREDITS_FROM:
+        return None
+    end = current["End"] if current else duration
+    if current is not None and (
+        abs(found.start - current["Start"]) < CREDITS_MOVE
+        or current["Start"] - found.start > CREDITS_MAX_MOVE
+    ):
+        return None
+    if end - found.start < MIN_ADDED_CREDITS:
+        return None
+    try:
+        ours = plugin.add(item_id, "Credits", found.start, end)
+    except IntegrationError as exc:
+        _log("credits_add_failed", state_id=ep.state.id, error=str(exc))
+        return None
+    record = {
+        "type": "Credits",
+        "new_start": round(found.start, 1),
+        "at": utcnow().isoformat(),
+    }
+    if current is None:
+        hidden.append(
+            record
+            | {
+                "id": ours,
+                "added": True,
+                "start": round(found.start, 1),
+                "end": round(end, 1),
+                "source": "Curatarr",
+                "reason": f"Added credits from {_clock(found.start)} ({found.how})",
+            }
+        )
+        _log("credits_added", state_id=ep.state.id, start=found.start, how=found.how)
+        return "credits added"
+    try:
+        plugin.hide(item_id, current["Id"])
+    except IntegrationError as exc:
+        plugin.hide(item_id, ours)  # don't leave two credits markers
+        _log("marker_hide_failed", state_id=ep.state.id, error=str(exc))
+        return None
+    hidden.append(
+        record
+        | {
+            "id": current["Id"],
+            "replaced_by": ours,
+            "start": round(current["Start"], 1),
+            "end": round(current["End"], 1),
+            "source": current.get("Source"),
+            "reason": f"Credits start at {_clock(found.start)}, "
+            f"not {_clock(current['Start'])} ({found.how})",
+        }
+    )
+    _log(
+        "credits_moved",
+        state_id=ep.state.id,
+        start=current["Start"],
+        new_start=found.start,
+        how=found.how,
+    )
+    return "credits moved"
+
+
+MIN_ADDED_CREDITS = 8.0
 
 
 _summaries_cache: dict = {}
@@ -4165,6 +4303,7 @@ def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
                 results.append(f"failed: {exc}")
                 state.chapter_error = f"Skip-marker check failed: {exc}"
         state.markers_checked_at = utcnow()
+    state.credits_rule = CREDITS_RULE  # checked, or nothing to check: not again
     state.job_state, state.requested_action = "idle", None
     state.next_attempt_at = None
     db.session.commit()
@@ -4429,13 +4568,20 @@ def undo_marker(state: ChapterState, kind: str, segment_id: str | None = None) -
         if not hidden:
             raise ValueError("That marker isn't one Curatarr hid")
         if item_id:
-            if hidden[0].get("replaced_by"):
-                plugin.hide(item_id, hidden[0]["replaced_by"])  # the trimmed copy
-            plugin.restore(item_id, segment_id)
+            if hidden[0].get("added"):
+                plugin.hide(item_id, segment_id)  # one Curatarr added
+            else:
+                if hidden[0].get("replaced_by"):
+                    plugin.hide(item_id, hidden[0]["replaced_by"])  # our copy
+                plugin.restore(item_id, segment_id)
         state.markers_hidden = [
             h for h in state.markers_hidden if h["id"] != segment_id
         ] or None
-        message = f"Restored Intro Skipper's {hidden[0]['type'].lower()} marker."
+        message = (
+            "Removed the credits marker Curatarr added."
+            if hidden[0].get("added")
+            else f"Restored Intro Skipper's {hidden[0]['type'].lower()} marker."
+        )
     elif kind in ("recap", "preview"):
         field = kind
         ours = getattr(state, f"{field}_segment_id")

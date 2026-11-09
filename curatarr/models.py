@@ -433,6 +433,8 @@ class ChapterState(db.Model, Timed):
     # Intro Skipper markers Curatarr hid as plainly wrong, with the reasons.
     markers_checked_at = db.Column(db.DateTime(timezone=True))
     markers_hidden = db.Column(db.JSON)
+    # Which rules last placed the end credits' start (enrichment.CREDITS_RULE).
+    credits_rule = db.Column(db.Integer)
     # Whether the transcript fits this episode (see identity.py).
     identity_checked_at = db.Column(db.DateTime(timezone=True))
     identity_issue = db.Column(db.JSON)

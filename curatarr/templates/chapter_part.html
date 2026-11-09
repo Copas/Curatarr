@@ -29,7 +29,7 @@
   {% else %}not checked yet{% endif %}</span>
   <form method="post" action="{{ url_for('main.chapter_part_action', part_id=part.id, action='recap') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-light"{% if info.queued %} disabled{% endif %} data-tip="Moves this episode to the front of the queue to look for a recap and a preview and fix Intro Skipper's markers.">{{ 'Check skip markers again' if state and state.markers_checked_at else 'Check skip markers' }}</button></form>
 </div>
-{% if state and state.markers_hidden %}<ul class="small text-secondary mt-2 mb-0">{% for h in state.markers_hidden %}<li>Hid Intro Skipper's {{ 'credits' if h.type == 'Credits' else h.type|lower }} {{ h.start|chapter_time }}–{{ h.end|chapter_time }} ({{ h.source }}): {{ h.reason }}</li>{% endfor %}</ul>{% endif %}{% endif %}
+{% if state and state.markers_hidden %}<ul class="small text-secondary mt-2 mb-0">{% for h in state.markers_hidden %}<li>{% if h.added %}{{ h.reason }}.{% else %}Hid Intro Skipper's {{ 'credits' if h.type == 'Credits' else h.type|lower }} {{ h.start|chapter_time }}–{{ h.end|chapter_time }} ({{ h.source }}): {{ h.reason }}{% endif %}</li>{% endfor %}</ul>{% endif %}{% endif %}
 {% if not info.can_remove %}<p class="small text-secondary mt-2 mb-0">Regenerate and remove appear only for chapters Curatarr wrote itself and that are still unchanged in the file.</p>{% endif %}
 </div>
 {% if state and state.written_chapters_json %}<h2 class="h4">Chapters in the file</h2><ol class="mb-4">{% for c in state.written_chapters_json %}<li><code>{{ c.start|chapter_time }}</code> {{ c.name }}</li>{% endfor %}</ol>{% endif %}

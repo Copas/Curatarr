@@ -310,6 +310,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Remaking subtitles made the old way failed")
     try:
+        from .enrichment import recheck_credits
+
+        recheck_credits()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Queueing credits checks failed")
+    try:
         from . import custom_posters
 
         custom_posters.sweep()
