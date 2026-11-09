@@ -105,6 +105,16 @@ def test_films_with_no_english_copy_go_leaving_soon_and_stay_off_the_lists(
     assert marked == [("Leaving", "no English audio, and no English copy")]
     assert radarr.excluded == [1]
     assert english_only.sweep() == 0  # each looked at once
+    # already Leaving Soon: still kept off the lists
+    already = _film(library, "Already leaving", 4)
+    db.session.commit()
+
+    def refuse(media, where):
+        raise ValueError(f"{media.title} is already on its way out.")
+
+    monkeypatch.setattr("curatarr.lifecycle.request_removal", refuse)
+    assert english_only.sweep() == 0
+    assert radarr.excluded == [1, 4] and already.id
     state = db.session.query(ChapterState).filter_by(media_identity_id=leaving.id).one()
     assert state.dub_result["english_only"]["outcome"] == "leaving"
     assert setting("auto_fixes")["no_english"]

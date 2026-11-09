@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc118 (2026-11-09)
+
+- **Films already Leaving Soon get the import-list exclusion too.** rc117 added the Radarr exclusion only when it marked a film itself. A film with no English audio that was already Leaving Soon was skipped, so a list could add it back once it was deleted.
+
 ## 0.2.0rc117 (2026-11-09)
 
 - **Films with no English audio that can't be put right go Leaving Soon** (Settings → Automatic, off by default). Radarr's import lists add films whatever their language, and a quality profile's "not English" rule only judges release names: one that doesn't name its language counts as English. A Spanish film came in that way. Once Curatarr has heard a film has no English audio and found no English copy, it's marked Leaving Soon and gets a Radarr import-list exclusion, so the list doesn't add it again. Films on a quality profile that allows other languages, and films someone watched or favourited, are left alone.

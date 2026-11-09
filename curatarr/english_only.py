@@ -113,7 +113,8 @@ def sweep() -> int:
             elif _watched(media):
                 outcome = "watched or favourited"
             else:
-                request_removal(media, where="no English audio, and no English copy")
+                # Excluded first: a film already Leaving Soon (or Never Purge,
+                # which keeps it) still shouldn't come back from a list.
                 if media.tmdb_id:
                     try:
                         radarr.add_exclusion(
@@ -121,6 +122,7 @@ def sweep() -> int:
                         )
                     except IntegrationError:
                         pass  # already excluded, or Radarr refused: still leaving
+                request_removal(media, where="no English audio, and no English copy")
                 audit(
                     "no_english_leaving",
                     media.id,
