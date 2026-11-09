@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc97 (2026-11-08)
+
+- **Review keeps Leaving Soon titles apart from what needs a decision.** They were listed with everything else and counted as candidates, so the page looked like a to-do list while Overview said nothing needed you. They're already decided, going on their date unless someone plays them, so they now sit under their own heading below. The count at the top is only what's left to decide.
+
 ## 0.2.0rc96 (2026-11-08)
 
 - **A deletion is no longer stuck when the show has since left Sonarr.** When Sonarr answered a deletion too slowly to be sure it worked, Curatarr checked again each cycle by asking Sonarr for the show's files. If the show had been removed from Sonarr in the meantime, it kept asking about a show Sonarr no longer had, a bad request every 20 seconds, and the deletion never finished. A show or film no longer in Sonarr or Radarr now counts as deleted.

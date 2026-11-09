@@ -357,3 +357,24 @@ def test_a_film_watched_all_year_is_not_seasonal(app):
     db.session.commit()
     curation.forget()
     assert curation.seasons_for(media) == []
+
+
+def test_leaving_soon_is_kept_apart_from_what_needs_a_decision(app, client):
+    from curatarr.models import PurgeCandidate
+
+    for title, state in (("Undecided", "REVIEW"), ("Going", "LEAVING_SOON")):
+        db.session.add(
+            PurgeCandidate(
+                media_identity_id=_film(title).id,
+                state=state,
+                reason_code="inactivity",
+                reason_text="Old.",
+                reclaimable_bytes=1,
+            )
+        )
+    db.session.commit()
+    page = client.get("/review").text
+    assert "1 to decide" in page
+    decide, leaving = page.split('id="leaving-heading"')
+    assert "Undecided" in decide and "Going" not in decide
+    assert "Going" in leaving and "nothing to do" in leaving

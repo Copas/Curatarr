@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc97 (2026-11-08): Review page splits what needs a decision from Leaving Soon (decided, nothing to do).
 - v0.2.0rc96 (2026-11-08): uncertain deletions of a title since removed from Sonarr/Radarr are reconciled as done instead of a 400 every cycle.
 - v0.2.0rc95 (2026-11-08): subtitles timed from word times; each file records how it was made (subtitle_made_with) and older ones are remade, up-next first.
 - v0.2.0rc94 (2026-11-08): numbered-only chapters at real breaks keep their breaks and are named from the transcript; kept files judged again once.
