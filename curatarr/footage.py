@@ -43,7 +43,8 @@ BRIDGE = 4  # seconds not shared allowed inside a stretch
 MIN_LEN, MAX_LEN = 5, 150  # seconds
 EARLY = 0.4  # the intro starts in this first part of the episode
 SNAP = 3.0  # an edge moves to the nearest cut this close
-WIDEN = 10.0  # Intro Skipper's edges move out at most this far
+WIDEN = 10.0  # Intro Skipper's edges move out at most this far…
+MIN_MOVE = 1.0  # …and at least this far, or they're left as they are
 SIBLINGS = 10  # other episodes of the season compared (the nearest)
 MIN_SIBLINGS = 3
 
@@ -224,11 +225,14 @@ def snap(t: float, breaks) -> float:
 
 def widened(theirs, ours) -> tuple[float, float] | None:
     """Intro Skipper's intro (start, end) with each edge moved out to ours,
-    by at most WIDEN seconds; None when neither moves (or they don't overlap)."""
+    by MIN_MOVE to WIDEN seconds; None when neither moves (or they don't
+    overlap)."""
     if ours[1] <= theirs[0] or ours[0] >= theirs[1]:
         return None
-    start = ours[0] if theirs[0] - WIDEN <= ours[0] < theirs[0] - 0.5 else theirs[0]
-    end = ours[1] if theirs[1] + 0.5 < ours[1] <= theirs[1] + WIDEN else theirs[1]
+    start = (
+        ours[0] if theirs[0] - WIDEN <= ours[0] <= theirs[0] - MIN_MOVE else theirs[0]
+    )
+    end = ours[1] if theirs[1] + MIN_MOVE <= ours[1] <= theirs[1] + WIDEN else theirs[1]
     if (start, end) == (theirs[0], theirs[1]):
         return None
     return start, end

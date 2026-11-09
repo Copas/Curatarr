@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc106 (2026-11-09): footage.MIN_MOVE 1.0 s; INTRO_RULE 2 redoes rc105 widenings.
 - v0.2.0rc105 (2026-11-09): footage.py (season fingerprints, cached in cache_dir/fingerprints); _place_intro widens Intro Skipper intros ≤10 s per edge; INTRO_RULE 1 + intro_rule column in recheck_credits.
 - v0.2.0rc104 (2026-11-09): subtitles.reading (standard/relaxed/slow, subtitles.READING); made_with records it; remake_subtitles queues reading-only retimes RETIME_BATCH at a time first.
 - v0.2.0rc103 (2026-11-09): recap ends: stock phrases (3+ earlier eps) excluded, QUOTE_RUN_GAP 20, all earlier eps; settled_end to intro (30 s) or longest black (25 s); RECAP_RULE 2 + recap_rule column, rechecked by recheck_credits.

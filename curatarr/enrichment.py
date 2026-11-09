@@ -4155,7 +4155,8 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
-INTRO_RULE = 1  # how intros are widened (footage.py); raising it checks again
+INTRO_RULE = 2  # how intros are widened (footage.py); raising it checks again
+# 2: an edge moves only when it moves a second or more (footage.MIN_MOVE)
 
 
 def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:

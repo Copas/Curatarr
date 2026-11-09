@@ -41,6 +41,9 @@ def test_intro_skippers_intro_only_ever_widens():
     assert footage.widened((213.0, 276.0), (211.0, 287.0)) == (211.0, 276.0)
     assert footage.widened((0.0, 24.0), (3.0, 28.0)) == (0.0, 28.0)
     assert footage.widened((0.0, 30.0), (2.0, 30.0)) is None
+    # under a second further out isn't worth a change
+    assert footage.widened((78.7, 108.1), (78.0, 108.1)) is None
+    assert footage.widened((78.7, 108.1), (77.7, 108.5)) == (77.7, 108.1)
     assert footage.widened((0.0, 30.0), (300.0, 330.0)) is None  # elsewhere
     assert footage.snap(100.0, [(97.4, "cut"), (101.0, "black")]) == 101.0
     assert footage.snap(100.0, [(90.0, "cut")]) == 100.0

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc106 (2026-11-09)
+
+- **An intro edge moves only when it moves a second or more.** rc105 widened Intro Skipper's intros by as little as half a second, which nobody notices when watching. It now leaves an edge alone unless it moves at least a second, as credits starts already do. Intros rc105 widened are put back and checked again.
+
 ## 0.2.0rc105 (2026-11-09)
 
 - **Intro skips cover the whole intro.** Intro Skipper's intros usually start a few seconds late and end a few seconds early, so the opening titles' first and last moments still played. Curatarr now fingerprints each episode (one tiny picture a second and the sound, about 40 seconds an episode, made once) and finds the footage the season's episodes share. Each edge of Intro Skipper's intro moves out to where that footage starts or ends, snapped to the cut, by at most 10 seconds. On 28 episodes labelled by eye, Intro Skipper's intro was right at both ends on 1 of the 17 it found; widened, on 11. None now skips into the show. Episodes where Intro Skipper found no intro are left alone: there, shared footage alone was too often something else, such as a dark scene after the titles. Each change is listed on Enhance → Skip markers with Undo. Episodes checked before are checked again in the background, what's up next first.
