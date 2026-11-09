@@ -35,6 +35,7 @@ DEFAULTS = {
     "poster_language": True,
     "picks": False,  # picks.py: a playlist of films for each account
     "picks_skip": [],  # account ids left out of picks
+    "picks_hidden": False,  # picks for accounts hidden from sign-in too
 }
 BOUNDS = {
     "request_hold_days": (0, 3650),
@@ -97,11 +98,16 @@ def save_options(form):
     values["leaving_collection"] = form.get("leaving_collection") == "on"
     values["poster_language"] = form.get("poster_language") == "on"
     values["picks"] = form.get("picks") == "on"
+    values["picks_hidden"] = form.get("picks_hidden") == "on"
     if "picks_accounts_shown" in form:
         from .picks import offered_accounts
 
         chosen = set(form.getlist("picks_account"))
-        values["picks_skip"] = sorted(set(offered_accounts()) - chosen)
+        # Only accounts the form showed can be unticked; ones it didn't (hidden
+        # ones, while they're left out) keep their choice.
+        shown = set(offered_accounts())
+        kept = set(options()["picks_skip"]) - shown
+        values["picks_skip"] = sorted(kept | (shown - chosen))
     else:
         values["picks_skip"] = options()["picks_skip"]
     set_setting(SETTINGS_KEY, values)

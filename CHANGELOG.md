@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc112 (2026-11-09)
+
+- **Picks for hidden accounts are a choice.** rc111 always left out accounts hidden from Jellyfin's sign-in screen. *Include accounts hidden from Jellyfin's sign-in screen* (Settings → Household choices, off by default) lists them with the rest, each to tick or not.
+
 ## 0.2.0rc111 (2026-11-09)
 
 - **Accounts hidden from Jellyfin's sign-in screen get no picks.** An admin account or a spare one isn't someone choosing a film to watch. Hidden accounts are no longer offered on the settings page, and any playlist made for one is removed.

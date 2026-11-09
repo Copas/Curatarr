@@ -20,7 +20,7 @@ few minutes. Once a week the list is made again; a film that stayed on it
 unplayed counts for less each week, so others get a turn.
 
 Accounts hidden from Jellyfin's sign-in screen (an admin account, a spare
-one) never get a list. Accounts with fewer than MIN_LIKED films to go on get
+one) get a list only when the setting includes them. Accounts with fewer than MIN_LIKED films to go on get
 no playlist until they have them.
 """
 
@@ -61,9 +61,12 @@ def skipped_accounts() -> set[str]:
 def offered_accounts() -> dict[str, str]:
     """{account id: name} that can have picks: those Curatarr's pages show,
     less accounts hidden from Jellyfin's sign-in screen (admin and spare
-    accounts), whatever Curatarr shows."""
+    accounts) unless the setting includes them."""
+    from .curation import options
     from .services import account_names, setting
 
+    if options().get("picks_hidden"):
+        return account_names()
     hidden = {_norm(i) for i in setting("jellyfin_hidden_user_ids", []) or []}
     return {i: n for i, n in account_names().items() if _norm(i) not in hidden}
 

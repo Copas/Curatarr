@@ -189,8 +189,14 @@ def test_accounts_hidden_from_the_sign_in_screen_get_no_picks(app, monkeypatch):
     db.session.commit()
     jellyfin = FakeJellyfin([{"Id": "sam", "Name": "Sam"}], ["jf10", "jf11"])
     monkeypatch.setattr("curatarr.services.client", lambda _kind: jellyfin)
-    assert picks.sweep(utcnow()) == 0 and not jellyfin.playlists
+    now = utcnow()
+    assert picks.sweep(now) == 0 and not jellyfin.playlists
     assert "sam" not in picks.offered_accounts()
+    # unless the setting includes them
+    set_setting("curation", {"picks": True, "picks_hidden": True})
+    db.session.commit()
+    assert "sam" in picks.offered_accounts()
+    assert picks.sweep(now + picks.CHECK_PLAYED) == 1
 
 
 def test_nothing_is_asked_of_jellyfin_while_picks_are_off(app, monkeypatch):
