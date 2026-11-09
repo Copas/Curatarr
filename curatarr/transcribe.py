@@ -68,6 +68,19 @@ def recommended_extras() -> str:
 
 OPENING_SECONDS = 300  # enough to find a "previously on" recap
 
+# How the audio is transcribed. Raised when that changes, so transcripts and
+# subtitles made the old way can be made again (``current``).
+#   1: speech filter on (lines over music or said quietly were dropped)
+#   2: language found from the speech, then the whole track transcribed in it,
+#      skipping silences where Whisper starts inventing words
+RULE = 2
+HALLUCINATION_SILENCE = 2.0  # seconds
+
+
+def current(details: dict) -> bool:
+    """Whether a transcript was made the current way."""
+    return (details.get("rule") or 1) >= RULE
+
 
 def cache_key(info: MediaInfo, model: str, opening=False, window=None) -> str:
     """Identifies the audio, not the file bytes.
@@ -180,12 +193,13 @@ def transcribe(
     free GPU memory, typically by unloading Ollama's model. With ``opening``
     only the first five minutes are transcribed (for finding a recap); with a
     ``window`` (start, end seconds) only that part, timed from the file's start.
-    With ``words``, a saved transcript made before words were timed doesn't
-    count: it's made again (and saved, with them, for everything else).
+    With ``words``, a saved transcript made before words were timed, or made an
+    older way (RULE), doesn't count: it's made again (and saved, for everything
+    else).
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
     hit = cached(info, model, cache_dir, opening, window)
-    if hit is not None and words and not has_words(hit[0]):
+    if hit is not None and words and not (has_words(hit[0]) and current(hit[1])):
         hit = None
     if hit is not None:
         segments, details = hit
@@ -249,25 +263,49 @@ def _run_transcriber(audio, partial, model, device, env, info, offset=0):
     )
 
 
+def _spoken_language(model, audio) -> str | None:
+    """The language of what's said, found from the speech alone (music and
+    silence left out), or None when nothing is said."""
+    try:
+        language, _probability, _all = model.detect_language(audio, vad_filter=True)
+    except ValueError:  # no speech to look at
+        return None
+    return language
+
+
 def _run_model(audio, model_name, device):
-    from faster_whisper import WhisperModel
+    """Transcribe in two steps. The speech filter decides the language, where
+    leaving out music and silence helps; it would also drop lines said quietly
+    or over music, so the transcription itself runs on the whole track, in that
+    language, skipping silences long enough for Whisper to invent words in."""
+    from faster_whisper import WhisperModel, decode_audio
 
     attempts = (
         [("cuda", "float16"), ("cpu", "int8")]
         if device == "auto"
         else [(device, "float16" if device == "cuda" else "int8")]
     )
+    sound = decode_audio(audio)
+    common = {
+        "beam_size": 5,
+        "condition_on_previous_text": False,
+        "word_timestamps": True,
+    }
     last_error = None
     for name, compute in attempts:
         try:
             model = WhisperModel(model_name, device=name, compute_type=compute)
-            segments, info = model.transcribe(
-                audio,
-                vad_filter=True,
-                beam_size=5,
-                condition_on_previous_text=False,
-                word_timestamps=True,
-            )
+            language = _spoken_language(model, sound)
+            if language is None:
+                segments, info = model.transcribe(sound, vad_filter=True, **common)
+            else:
+                segments, info = model.transcribe(
+                    sound,
+                    language=language,
+                    vad_filter=False,
+                    hallucination_silence_threshold=HALLUCINATION_SILENCE,
+                    **common,
+                )
             rows = [
                 {
                     "start": round(s.start, 2),
@@ -283,8 +321,9 @@ def _run_model(audio, model_name, device):
             return rows, {
                 "device": name,
                 "compute_type": compute,
-                "language": info.language,
+                "language": language or info.language,
                 "model": model_name,
+                "rule": RULE,
             }
         except (RuntimeError, ValueError, OSError) as exc:
             # A missing CUDA library or an unusable GPU surfaces here.
@@ -296,7 +335,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--audio", required=True)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--model", default="medium")
+    parser.add_argument("--model", default="turbo")
     parser.add_argument("--device", default="auto", choices=("auto", "cuda", "cpu"))
     parser.add_argument(
         "--offset",

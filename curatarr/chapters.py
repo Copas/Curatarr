@@ -35,7 +35,8 @@ DEFAULTS: dict[str, Any] = {
     "semantic": {
         "enabled": True,
         "transcription": "faster-whisper",
-        "model": "medium",
+        # large-v3-turbo: fewer mistakes than medium, and faster on a GPU
+        "model": "turbo",
         "llm": "ollama",
         "llm_model": "",
     },

@@ -19,6 +19,7 @@ from curatarr.subtitles import (
     sidecar_english,
     srt_text,
 )
+from curatarr.transcribe import RULE
 
 
 def test_cues_are_readable_and_never_overlap():
@@ -93,6 +94,7 @@ def subtitle_env(media_env, tmp_path, monkeypatch):  # noqa: F811
         calls.append(info.path if window is None else window)
         return [Segment(1, 3, "Hello."), Segment(4, 6, "Goodbye.")], {
             "language": "en",
+            "rule": RULE,
             "cached": len(calls) > 1,
         }
 
@@ -443,10 +445,106 @@ def test_how_subtitles_were_made_is_kept_and_old_ones_are_remade(
 
 
 def test_a_new_whisper_model_remakes_them():
-    from curatarr.subtitles import TIMING, outdated
+    from curatarr.subtitles import TIMING, TRANSCRIPTION, outdated
 
-    now = {"engine": "faster-whisper", "model": "medium", "timing": TIMING}
+    now = {
+        "engine": "faster-whisper",
+        "model": "medium",
+        "timing": TIMING,
+        "transcription": TRANSCRIPTION,
+    }
     assert outdated(now, "medium") is None
     assert outdated(now, "large-v3") == "made with faster-whisper medium"
     assert outdated({**now, "timing": 1}, "medium") == "timed the old way"
     assert outdated(None, "medium")
+
+
+def test_subtitles_transcribed_the_old_way_are_remade():
+    from curatarr import subtitles, transcribe
+
+    assert subtitles.TRANSCRIPTION == transcribe.RULE
+    made = subtitles.made_with({"model": "turbo", "rule": transcribe.RULE}, "turbo")
+    assert subtitles.outdated(made, "turbo") is None
+    old = {**made, "transcription": None}  # made before this was kept
+    assert subtitles.outdated(old, "turbo") == "transcribed the old way"
+
+
+def test_a_transcript_made_the_old_way_is_made_again_for_subtitles(
+    tmp_path, monkeypatch
+):
+    import json
+    from types import SimpleNamespace
+
+    from curatarr import transcribe
+
+    info = SimpleNamespace(
+        path="/tv/Show/S01E01.mkv",
+        duration=1500.0,
+        streams=[{"index": 1, "codec_type": "audio", "codec_name": "aac"}],
+    )
+    row = {"start": 1, "end": 2, "text": " Hi.", "words": [[1.1, 1.5, " Hi."]]}
+    path = tmp_path / f"{transcribe.cache_key(info, 'turbo')}.json"
+    path.write_text(json.dumps({"segments": [row], "details": {"language": "en"}}))
+    monkeypatch.setattr(transcribe, "available", lambda: False)
+    # good enough for chapters and search…
+    _segments, details = transcribe.transcribe(info, "turbo", "cpu", tmp_path)
+    assert details["cached"]
+    # …but subtitles want it made the current way
+    try:
+        transcribe.transcribe(info, "turbo", "cpu", tmp_path, words=True)
+        raise AssertionError("served the old transcript")
+    except transcribe.TranscriptionUnavailable:
+        pass
+    details = {"language": "en", "rule": transcribe.RULE}
+    path.write_text(json.dumps({"segments": [row], "details": details}))
+    assert transcribe.transcribe(info, "turbo", "cpu", tmp_path, words=True)[1][
+        "cached"
+    ]
+
+
+class FakeWhisper:
+    def __init__(self, spoken, *_args, **_kwargs):
+        self.spoken, self.calls = spoken, []
+
+    def detect_language(self, _audio, vad_filter):
+        assert vad_filter  # decided from the speech alone
+        if self.spoken is None:
+            raise ValueError("need at least one array to concatenate")
+        return self.spoken, 0.9, []
+
+    def transcribe(self, _audio, **options):
+        from types import SimpleNamespace
+
+        self.calls.append(options)
+        word = SimpleNamespace(start=1.0, end=1.4, word=" Hi.")
+        segment = SimpleNamespace(start=1.0, end=1.4, text=" Hi.", words=[word])
+        return [segment], SimpleNamespace(language="en")
+
+
+def test_the_whole_track_is_transcribed_in_the_language_spoken(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    from curatarr import transcribe
+
+    for spoken in ("en", "it", None):
+        made = []
+
+        def model(*_args, spoken=spoken, made=made, **_kwargs):
+            made.append(FakeWhisper(spoken))
+            return made[-1]
+
+        fake = SimpleNamespace(WhisperModel=model, decode_audio=lambda _path: "pcm")
+        monkeypatch.setitem(sys.modules, "faster_whisper", fake)
+        rows, details = transcribe._run_model("audio.wav", "turbo", "cpu")
+        options = made[0].calls[0]
+        assert rows[0]["words"] == [[1.0, 1.4, " Hi."]]
+        assert details["rule"] == transcribe.RULE
+        if spoken:
+            # nothing filtered out, in the language found, without inventing
+            # words in long silences
+            assert options["vad_filter"] is False and options["language"] == spoken
+            assert options["hallucination_silence_threshold"]
+            assert details["language"] == spoken
+        else:  # nothing said: the filtered way finds nothing quickly
+            assert options["vad_filter"] is True and "language" not in options

@@ -142,7 +142,7 @@ def print_report(info, analysis, config):
 @click.option("--library", "library_name", help="Use this library's chapter settings")
 @click.option("--mode", type=click.Choice(["smart", "navigation"]))
 @click.option("--llm-model", help="Ollama model for Smart Chapters")
-@click.option("--whisper-model", help="faster-whisper model (default: medium)")
+@click.option("--whisper-model", help="faster-whisper model (default: turbo)")
 @click.option("--json", "as_json", is_flag=True, help="Print the raw analysis as JSON")
 def preview_command(target, library_name, mode, llm_model, whisper_model, as_json):
     """Show what chapters would be generated for a file. Never modifies it.

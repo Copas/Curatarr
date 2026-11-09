@@ -262,6 +262,7 @@ SENTENCE_CHARS = 8  # a sentence this long ends its line ("Aye, sir." is a line)
 
 
 ENGINE = "faster-whisper"
+TRANSCRIPTION = 2  # transcribe.RULE (not imported: that needs the media tools)
 
 
 def made_with(details: dict, model: str) -> dict:
@@ -271,6 +272,7 @@ def made_with(details: dict, model: str) -> dict:
         "model": details.get("model") or model,
         "device": details.get("device"),
         "timing": TIMING,
+        "transcription": details.get("rule") or 1,
         "made": utcnow().date().isoformat(),
     }
 
@@ -281,6 +283,8 @@ def outdated(record: dict | None, model: str) -> str | None:
         return "made before Curatarr kept track of how"
     if (record.get("timing") or 1) < TIMING:
         return "timed the old way"
+    if (record.get("transcription") or 1) < TRANSCRIPTION:
+        return "transcribed the old way"
     if record.get("engine") != ENGINE or record.get("model") != model:
         return f"made with {record.get('engine')} {record.get('model')}"
     return None

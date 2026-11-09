@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc101 (2026-11-09)
+
+- **Transcripts no longer drop lines, and the default model is large-v3-turbo.** Whisper ran behind a speech filter that drops anything it doesn't take for speech, and it also dropped lines said quietly or over music. Against the official subtitles of four episodes and a film, about one word in six was wrong, missing or extra, and most of those were missing. In one drama episode, 557 words were dropped. Now the filter is used only to tell which language is spoken. The whole track is then transcribed in that language, skipping silences long enough for Whisper to invent words in. With large-v3-turbo as well, the gap fell from 16% to 12% on average, and from 22% to 8% on the drama, and transcribing is faster than with medium. Most of what's left isn't a mistake: "you've" against "you have", the spelling of a name, an "uh" the subtitles leave out. Pick **turbo** under Settings → Enhance → Chapters to switch an existing install. Subtitle files Curatarr made the old way are made again in the background, what's up next first. Chapters already made stay as they are.
+
 ## 0.2.0rc100 (2026-11-08)
 
 - **One chapter for nearly the whole file is replaced, whatever it's called.** Some downloads have "Chapter 01" for the whole episode and a one-second "Credits" at the end. Because "Credits" is a real name, the list was taken as one someone made, and kept. A file whose longest chapter runs nine-tenths of it or more now counts as having chapters that are no use. Files kept with their own chapters are looked at again, a few at a time.

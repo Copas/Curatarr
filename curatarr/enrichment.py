@@ -67,9 +67,8 @@ from .mediafile import (
 from .models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
 from .semantic import LanguageModelUnavailable
 from .services import _as_datetime, audit, client, set_setting, setting
-from .subtitles import (
-    TIMING as SUBTITLE_TIMING,
-)
+from .subtitles import TIMING as SUBTITLE_TIMING
+from .subtitles import TRANSCRIPTION as SUBTITLE_TRANSCRIPTION
 from .subtitles import (
     cues_from,
     digest,
@@ -1628,7 +1627,8 @@ REMADE_KEY = "subtitles_remade"  # how they were made when none were left to rem
 
 def remake_subtitles(now=None) -> int:
     """Worker cycle: make again the subtitle files Curatarr made an older way
-    (before word timing, or with another Whisper model than the one set now).
+    (before word timing or the current transcription, or with another Whisper
+    model than the one set now).
 
     Files someone is watching or will watch next go straight away. The rest
     go one at a time, only while nothing else is waiting: each needs its
@@ -1668,7 +1668,11 @@ def remake_subtitles(now=None) -> int:
             if model_for(r.library_id)
             and subtitles_outdated(r.subtitle_made_with, model_for(r.library_id))
         ]
-    done = {"timing": SUBTITLE_TIMING, "models": None}
+    done = {
+        "timing": SUBTITLE_TIMING,
+        "transcription": SUBTITLE_TRANSCRIPTION,
+        "models": None,
+    }
     if not due and not _work_waiting(now):
         done["models"] = sorted({str(model_for(lib)) for (lib,) in _library_ids()})
         if setting(REMADE_KEY) != done:

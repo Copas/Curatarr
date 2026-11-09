@@ -47,7 +47,7 @@ def test_defaults_match_the_specification():
         "dry_run": False,
     }
     assert CONFIG["semantic"]["transcription"] == "faster-whisper"
-    assert CONFIG["semantic"]["model"] == "medium"
+    assert CONFIG["semantic"]["model"] == "turbo"
     assert CONFIG["naming"]["fallback_format"] == "Chapter {number}"
 
 
