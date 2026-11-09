@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc113 (2026-11-09): help text under the picks setting.
 - v0.2.0rc112 (2026-11-09): curation option picks_hidden; picks_skip keeps choices for accounts the form didn't show.
 - v0.2.0rc111 (2026-11-09): picks.offered_accounts drops jellyfin_hidden_user_ids; sweep removes playlists of accounts no longer eligible.
 - v0.2.0rc110 (2026-11-09): picks.py (per-account Jellyfin playlists, tf-idf genres+keywords, kNN of liked films, caps per liked/genre, weekly rebuild, played removed every 10 min); curation options picks/picks_skip.

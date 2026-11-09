@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc113 (2026-11-09)
+
+- **Picks explain how they're chosen** under *Make picks for each person*, like the other settings: what a film is matched on, what counts for more, and how the list keeps some range and changes week to week.
+
 ## 0.2.0rc112 (2026-11-09)
 
 - **Picks for hidden accounts are a choice.** rc111 always left out accounts hidden from Jellyfin's sign-in screen. *Include accounts hidden from Jellyfin's sign-in screen* (Settings → Household choices, off by default) lists them with the rest, each to tick or not.
