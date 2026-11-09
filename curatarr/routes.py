@@ -1996,6 +1996,7 @@ def _household_rules():
     from .picks import offered_accounts as picks_accounts
     from .picks import summary as picks_summary
     from .services import configured
+    from .services import hidden_accounts as hidden_mode
 
     if request.method == "POST":
         try:
@@ -2017,6 +2018,7 @@ def _household_rules():
         returning=setting(curation.RETURNS_KEY, {}) or {},
         accounts=picks_accounts(include_hidden=True),
         hidden_accounts=picks_hidden(),
+        hidden_mode=hidden_mode(),
         picks=picks_summary(),
     )
 

@@ -75,6 +75,8 @@ def offered_accounts(include_hidden=None) -> dict[str, str]:
     if include_hidden is None:
         include_hidden = options().get("picks_hidden")
     if include_hidden:
+        # account_names already leaves them out when Curatarr is set to
+        # leave hidden accounts out of its pages or ignore them.
         return account_names()
     hidden = hidden_accounts()
     return {i: n for i, n in account_names().items() if _norm(i) not in hidden}

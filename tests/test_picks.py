@@ -233,3 +233,10 @@ def test_hidden_accounts_are_on_the_page_ready_for_their_switch(app, client):
     curation.save_options(form)
     assert curation.options()["picks_skip"] == ["admin"]
     assert "admin" in picks.offered_accounts()
+    # Curatarr set to ignore hidden accounts: the switch says why it can't
+    from curatarr.services import save_hidden_accounts
+
+    save_hidden_accounts("ignore")
+    db.session.commit()
+    page = client.get("/rules/household").text
+    assert "Not available" in page and "Admin" not in page

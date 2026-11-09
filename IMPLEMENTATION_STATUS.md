@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc116 (2026-11-09): picks_hidden switch disabled with a reason unless hidden_accounts mode is show.
 - v0.2.0rc115 (2026-11-09): hidden accounts rendered with data-hidden-account, shown/enabled by setting-cards.js; save uses the posted picks_hidden.
 - v0.2.0rc114 (2026-11-09): household_rules.html in setting cards (setting-group fieldsets, sticky save bar, setting-cards.js).
 - v0.2.0rc113 (2026-11-09): help text under the picks setting.

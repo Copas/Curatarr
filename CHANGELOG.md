@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc116 (2026-11-09)
+
+- **The hidden-accounts switch for picks says when it can't work.** With Curatarr set to leave hidden Jellyfin accounts out of its pages, or to ignore them completely (Settings → Integrations → Hidden Jellyfin accounts), they can't be listed or picked for. Ignored, Curatarr doesn't read what they watch either. The switch slid on and nothing happened. It's now greyed out with the reason and a link to that setting.
+
 ## 0.2.0rc115 (2026-11-09)
 
 - **Hidden accounts appear as soon as their switch is on.** Sliding *Include accounts hidden from Jellyfin's sign-in screen* on now lists those accounts straight away, marked "(hidden)", to tick or untick in the same save. Before, they appeared only after saving.
