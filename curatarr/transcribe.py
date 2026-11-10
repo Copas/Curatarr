@@ -270,6 +270,10 @@ def _spoken_language(model, audio) -> str | None:
         language, _probability, _all = model.detect_language(audio, vad_filter=True)
     except ValueError:  # no speech to look at
         return None
+    except IndexError:
+        # faster-whisper trips over some speech filters' output (an empty
+        # window, seen once on a full-length episode); the whole track will do.
+        language, _probability, _all = model.detect_language(audio)
     return language
 
 

@@ -1,11 +1,11 @@
 """Deletes made in Jellyfin, sent here by the Curatarr plugin for Jellyfin.
 
 With the plugin installed, Delete in any Jellyfin app asks Curatarr first.
-A film or show Curatarr looks after is marked Leaving Soon instead of
-deleted, the same as Remove on its title page: its poster says so, playing it
-or Keep cancels it, and at the end of the notice period it goes through
-Radarr or Sonarr, which a delete in Jellyfin never told. Deleting a title
-that is already Leaving Soon deletes it now, through Radarr or Sonarr, so
+A film Curatarr looks after is marked Leaving Soon instead of deleted, the
+same as Remove on its title page: its poster says so, playing it or Keep
+cancels it, and at the end of the notice period it goes through Radarr,
+which a delete in Jellyfin never told. Deleting a film that is already
+Leaving Soon deletes it now, through Radarr, so
 every app can do both. Jellyfin's web app has a Leaving Soon menu item of its
 own, so Delete there deletes straight away. Anything else (an episode, a
 season, a title Curatarr doesn't know) is left to Jellyfin.
@@ -138,9 +138,7 @@ def _delete_now(media, candidate, who) -> tuple[int, dict]:
     policy, _ = resolved_policy(media)
     if policy["dry_run"]:
         message = f"Dry run: {media.title} isn't deleted; History says what would be."
-    elif media.media_type == "series":
-        message = f"{media.title} is being trimmed to its always-keep episodes."
-    else:
+    else:  # films only: a show's Delete is _show
         message = f"{media.title} is being deleted."
     return 200, {"handled": True, "result": "deleting", "message": message}
 

@@ -52,6 +52,9 @@ def create_app(test_config=None):
             # app, the worker, and its chapter jobs). The mode is stored in
             # the database file, so this only changes it once.
             event.listen(db.engine, "connect", _sqlite_wal)
+            from .write_watch import watch
+
+            watch(db.engine)
     # Migrations ship inside the package so installed copies can upgrade
     # without a source checkout.
     migrate.init_app(app, db, directory=str(MIGRATIONS_DIR))

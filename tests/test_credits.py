@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from curatarr import credits
 from curatarr.enrichment import CREDITS_RULE, _place_credits, undo_marker
@@ -216,3 +217,20 @@ def test_episodes_checked_under_older_rules_are_checked_again(app, monkeypatch):
     states[0].job_state, states[0].recap_rule = "idle", enrichment.RECAP_RULE
     db.session.commit()
     assert enrichment.recheck_credits() == 0
+
+
+def test_a_marker_already_gone_counts_as_hidden():
+    from curatarr.integrations import IntegrationError, IntroSkipper
+
+    class Jellyfin:
+        def request(self, method, path, **_kwargs):
+            raise IntegrationError("not found", status_code=404)
+
+    IntroSkipper(Jellyfin()).hide("item", "segment")  # no error: nothing to undo
+
+    class Down:
+        def request(self, method, path, **_kwargs):
+            raise IntegrationError("unavailable", status_code=503)
+
+    with pytest.raises(IntegrationError):
+        IntroSkipper(Down()).hide("item", "segment")

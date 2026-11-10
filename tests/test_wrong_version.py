@@ -71,6 +71,9 @@ class FakeSonarr:
     def __init__(self, files):
         self.files, self.calls = files, []
 
+    def queue_records(self, quick=False):
+        return []  # the Problems page also looks for failed downloads
+
     def series(self):
         return [{**SITCOM, "id": 77}]
 

@@ -138,6 +138,9 @@ def test_the_sweep_rebuilds_hidden_files_once_and_checks_the_rest(app, monkeypat
         def rescan_movie(self, movie_id):
             pass
 
+        def queue_records(self, quick=False):
+            return []  # the Problems page also looks for failed downloads
+
     monkeypatch.setattr("curatarr.services.client", lambda kind: Radarr())
     hidden = {"yes": True}
     monkeypatch.setattr(seek_repair, "seek_index_hidden", lambda p: hidden["yes"])
@@ -238,3 +241,38 @@ def test_an_mp4_takes_chapters_and_gives_them_back(tmp_path):
     mediafile.restore_chapters_xml(path, saved)
     assert fingerprint(mediafile.probe(path).chapters) == fingerprint(after.chapters)
     assert sorted(p.name for p in tmp_path.iterdir()) == ["film.mp4"]  # no leftovers
+
+
+def test_one_change_to_a_file_at_a_time(tmp_path):
+    import threading
+    import time
+
+    path = tmp_path / "film.mkv"
+    path.write_bytes(b"x" * 10)
+    order = []
+
+    def change(name, pause):
+        with mediafile.editing(str(path)):
+            order.append(f"{name} starts")
+            time.sleep(pause)
+            order.append(f"{name} ends")
+
+    first = threading.Thread(target=change, args=("first", 0.3))
+    first.start()
+    time.sleep(0.05)
+    change("second", 0)
+    first.join()
+    assert order == ["first starts", "first ends", "second starts", "second ends"]
+    # held already (an edit, then a seek repair): no deadlock
+    with mediafile.editing(str(path)), mediafile.editing(str(path)):
+        pass
+
+
+def test_a_change_planned_before_another_is_refused(tmp_path):
+    path = tmp_path / "film.mkv"
+    path.write_bytes(b"x" * 10)
+    stat = path.stat()
+    seen = mediafile.MediaInfo(str(path), stat.st_size, stat.st_mtime, 60.0, "matroska")
+    path.write_bytes(b"y" * 12)  # someone else's change got there first
+    with pytest.raises(mediafile.FileChanged), mediafile.editing(str(path), seen):
+        pass

@@ -5,7 +5,7 @@
 0.1.0 was the cleanup engine on its own. 0.2.0 turns Curatarr into the household's librarian: it decides what goes when space runs short, with everyone's say, and makes every file nicer to watch on every device. The release candidates below say what changed, week by week; this is the whole of it.
 
 **Keeping the right things on disk**
-- **Leaving Soon**, everywhere people look: a countdown on the poster, the home-screen card and the background, a Jellyfin collection, and Delete in any Jellyfin app marks a title Leaving Soon instead of deleting it behind Radarr's and Sonarr's backs (with the Curatarr plugin for Jellyfin). Playing a title or Keep saves it.
+- **Leaving Soon**, everywhere people look: a countdown on the poster, the home-screen card and the background, a Jellyfin collection, and Delete in any Jellyfin app goes through Radarr and Sonarr (a film is marked Leaving Soon first, a show is removed) instead of deleting it behind their backs (with the Curatarr plugin for Jellyfin). Playing a title or Keep saves it.
 - **Cleanup driven by free space**, with **Compression first** (waits for Tdarr or another transcoder), **Shrink instead of delete**, a **disk forecast**, and **dry run** on by default.
 - **The household's choices count:** Seerr requests stay until watched, favourites and rewatches go to the back of the line, import-list arrivals go first, **seasonal shelves** keep Halloween and Christmas films through their season, **Leave after watched** for one last watch.
 - **Last call:** films nobody has watched in a year get a "Last call · ♥ to keep" banner and a collection, a few a week, before Leaving Soon; a heart in any app keeps one.
@@ -37,6 +37,17 @@
 
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
+
+## 0.2.0rc134 (2026-11-10)
+
+A bug sweep of the logs and the database.
+
+- **One change to a file at a time.** TV-friendly audio, subtitle tracks, default audio, seek repair and chapters each work in their own thread, and two sometimes rewrote the same file at once: both copies failed their checks (the file was left as it was, and the change was never tried again), or one replaced the file with a copy made before the other's change, undoing it (two episodes lost the browser AAC track that way; they get it again). Every change now holds the file's lock, and one planned before another change landed waits for next time. Changes that failed this way are tried again.
+- **Watching a film and then deleting it in Jellyfin deletes it.** The report of the viewing that had just ended arrived a moment after the Delete and was taken as someone watching it again, so the delete was called off. Only playing it after it was marked counts now.
+- **Credits markers aren't lost when one is corrected twice.** Jellyfin can go on listing a credits marker Curatarr has hidden; corrected again, hiding it a second time came back "not found", which was taken as a failure, and Curatarr removed its own new marker too, leaving some episodes with none. A marker that's already gone counts as hidden, hidden ones aren't corrected again, and episodes whose credits Curatarr corrected are checked again so any left without one get it back.
+- **Spoken language found when the speech filter trips.** One episode's transcription failed in faster-whisper's language detection; it now falls back to the whole track.
+- **Long database waits are logged with their cause.** "Database is locked" stopped a few background checks; a write held more than 10 seconds is now logged with where it started, to find the cause.
+- Docs: Delete in Jellyfin is described as it works (a film Leaving Soon first, a show removed); tests no longer depend on the order they run in.
 
 ## 0.2.0rc133 (2026-11-10)
 

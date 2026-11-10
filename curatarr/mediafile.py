@@ -5,12 +5,17 @@ container's header elements and never touches the audio/video data. Other
 containers would need a full remux, so they are reported as unsupported.
 """
 
+import contextlib
+import fcntl
+import functools
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,6 +32,10 @@ MP4_SUFFIXES = {".mp4", ".m4v", ".mov"}
 
 class MediaToolError(RuntimeError):
     pass
+
+
+class FileChanged(MediaToolError):
+    """Another change got to the file first: plan again from a fresh look."""
 
 
 def tool(name: str) -> str | None:
@@ -286,6 +295,72 @@ def can_write(info: MediaInfo) -> tuple[bool, str | None]:
     return True, None
 
 
+# --- One change to a file at a time -------------------------------------------
+# Chapters, TV-friendly audio, subtitle tracks, default audio, dubs and seek
+# repair each run in their own thread (and some in the web process). Two
+# rewriting one file at once wrote the same partial copy, or the second
+# replaced the file with a copy made before the first's change, undoing it.
+# Every change to a file holds that file's lock (across processes), and a
+# change planned from an earlier look at the file is refused if the file has
+# changed since.
+
+_held = threading.local()
+
+
+def _lock_folder() -> Path:
+    try:
+        from flask import current_app
+
+        folder = Path(current_app.instance_path) / "locks"
+    except RuntimeError:  # outside the app (tools, tests)
+        folder = Path(tempfile.gettempdir()) / "curatarr-locks"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+@contextlib.contextmanager
+def editing(path: str, info: "MediaInfo | None" = None):
+    """Hold ``path``'s lock while changing it (waits for another change to
+    finish). With ``info``, the file must still be the one it describes."""
+    held = getattr(_held, "paths", None)
+    if held is None:
+        held = _held.paths = set()
+    key = os.path.realpath(path)
+    if key in held:  # already ours (an edit followed by a seek repair)
+        yield
+        return
+    name = hashlib.sha256(key.encode()).hexdigest()[:32] + ".lock"
+    with open(_lock_folder() / name, "w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        held.add(key)
+        try:
+            try:
+                now = file_identity_of(path) if info is not None else None
+            except OSError:
+                now = None  # gone: the change itself reports that
+            if now is not None and now != (info.size, info.mtime):
+                raise FileChanged(
+                    "The file changed since it was looked at; left for next time"
+                )
+            yield
+        finally:
+            held.discard(key)
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _exclusive(function):
+    """Run a file change under ``editing``; a MediaInfo second argument is
+    the look at the file the change was planned from."""
+
+    @functools.wraps(function)
+    def wrapper(path, *args, **kwargs):
+        info = args[0] if args and isinstance(args[0], MediaInfo) else None
+        with editing(path, info):
+            return function(path, *args, **kwargs)
+
+    return wrapper
+
+
 def _mkvpropedit(args):
     result = _run(args, timeout=600)
     # mkvpropedit exits 1 for warnings with a successful edit, 2 for errors.
@@ -410,6 +485,7 @@ def _keep_track_order(path: str) -> list[str]:
     return ["--track-order", ",".join(f"0:{t['id']}" for t in tracks)]
 
 
+@_exclusive
 def rebuild_layout(path: str) -> MediaInfo:
     """Rewrite a Matroska file with mkvmerge so its seek head is whole again.
 
@@ -488,6 +564,7 @@ def ffmetadata(chapters, duration: float) -> str:
     return "\n".join(lines) + "\n"
 
 
+@_exclusive
 def rewrite_mp4(path: str, metadata: str | None) -> MediaInfo:
     """Rewrite an MP4 with these chapters (an ffmetadata text) or none, every
     track copied as it is, nothing re-encoded. The copy is checked (same
@@ -544,6 +621,7 @@ def rewrite_mp4(path: str, metadata: str | None) -> MediaInfo:
     return probe(path)
 
 
+@_exclusive
 def write_chapters(path: str, chapters: list[Chapter]) -> None:
     info = probe(path)
     if info.mp4:
@@ -576,6 +654,7 @@ def english_audio(info: MediaInfo) -> int | None:
     )
 
 
+@_exclusive
 def set_default_audio(path: str, info: MediaInfo, stream_index: int) -> None:
     """Make one audio track the default (and no other), in place, no re-encode."""
     audio = [s for s in info.streams if s.get("codec_type") == "audio"]
@@ -588,6 +667,7 @@ def set_default_audio(path: str, info: MediaInfo, stream_index: int) -> None:
     _mkvpropedit(args)
 
 
+@_exclusive
 def set_audio_language(
     path: str, info: MediaInfo, stream_index: int, language: str, ietf: str
 ) -> None:
@@ -610,6 +690,7 @@ def set_audio_language(
     )
 
 
+@_exclusive
 def remove_tracks(
     path: str, info: MediaInfo, drop: list[int], default_audio: int, *, first=False
 ) -> MediaInfo:
@@ -747,6 +828,7 @@ def browser_audio_source(info: MediaInfo) -> int | None:
     return main["index"]
 
 
+@_exclusive
 def add_compatible_audio(
     path: str, info: MediaInfo, source: int, *, for_browsers=False
 ) -> MediaInfo:
@@ -819,6 +901,7 @@ def add_compatible_audio(
     return probe(path)
 
 
+@_exclusive
 def remove_chapters(path: str) -> None:
     info = probe(path)
     if info.mp4:
@@ -844,6 +927,7 @@ def export_chapters_xml(path: str) -> str | None:
         return target.read_text(encoding="utf-8")
 
 
+@_exclusive
 def restore_chapters_xml(path: str, xml: str) -> None:
     if xml.startswith(FFMETADATA):
         rewrite_mp4(path, xml)

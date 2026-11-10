@@ -170,3 +170,20 @@ def test_household_page_saves_last_call(app, client):
     assert saved["last_call"] and saved["last_call_days"] == 120
     assert saved["last_call_libraries"] is None  # every film library ticked
     assert "Last call" in client.get("/rules/household").text
+
+
+def test_watching_then_deleting_isnt_taken_for_watching_after(app):
+    from types import SimpleNamespace
+
+    from curatarr.lifecycle import _played_since
+
+    marked = utcnow()
+    candidate = SimpleNamespace(
+        last_activity_snapshot=marked - timedelta(minutes=40), created_at=marked
+    )
+    # The report of the viewing that ended just before Delete, arriving after.
+    assert not _played_since(marked - timedelta(seconds=4), candidate)
+    assert _played_since(marked + timedelta(minutes=5), candidate)  # watched again
+    assert not _played_since(None, candidate)
+    never = SimpleNamespace(last_activity_snapshot=None, created_at=None)
+    assert _played_since(marked, never)

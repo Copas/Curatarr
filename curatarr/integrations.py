@@ -625,8 +625,12 @@ class IntroSkipper:
         )
 
     def hide(self, item_id, segment_id):
-        self.jellyfin.request(
-            "DELETE", f"/Episode/{item_id}/Segments/{segment_id}", destructive=True
+        """Hide a segment; one the plugin no longer has counts as hidden (it
+        hid it already, or its own analysis replaced it)."""
+        _gone_is_fine(
+            lambda: self.jellyfin.request(
+                "DELETE", f"/Episode/{item_id}/Segments/{segment_id}", destructive=True
+            )
         )
 
 

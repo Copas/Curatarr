@@ -532,11 +532,7 @@ def reconcile_candidates():
                 reason = _held_reason(media)
             elif not item.mapped or item.size_bytes <= 0:
                 reason = "Media mapping or reclaimable content changed."
-            elif item.last_played_at and (
-                candidate.last_activity_snapshot is None
-                or _aware(item.last_played_at)
-                > _aware(candidate.last_activity_snapshot)
-            ):
+            elif _played_since(item.last_played_at, candidate):
                 reason = "Playback occurred after candidate creation."
             elif candidate.state == "LAST_CALL":
                 from . import last_call
@@ -813,8 +809,7 @@ def _validate_deletion(candidate, *, states=("APPROVED",)):
         last = _last_target_play(candidate)
     else:
         last = item.last_played_at
-    snapshot = candidate.last_activity_snapshot
-    if last and (snapshot is None or _aware(last) > _aware(snapshot)):
+    if _played_since(last, candidate):
         return "Playback occurred after candidate creation"
     if candidate.reason_code == "inactivity" and not policy["inactivity_cleanup"]:
         return "Inactivity cleanup is turned off"
@@ -954,6 +949,20 @@ REQUESTED_REMOVAL = "requested"
 WATCHED_EPISODES = "watched_episodes"  # Leave after watched, episode by episode
 
 
+def _played_since(last, candidate) -> bool:
+    """Whether a play came after the candidate was made. A play that ended
+    before it (watched, then deleted in Jellyfin moments later, the report of
+    that viewing arriving after the delete) doesn't count."""
+    if not last:
+        return False
+    since = [
+        _aware(when)
+        for when in (candidate.last_activity_snapshot, candidate.created_at)
+        if when
+    ]
+    return not since or _aware(last) > max(since)
+
+
 def _last_target_play(candidate):
     """The latest play, by anyone, of the episodes a candidate is for."""
     from .models import EpisodeUserState
@@ -978,8 +987,7 @@ def _targeted_rescue_reason(candidate, media):
         p.has_file for p in media.parts if p.id in set(candidate.target_part_ids)
     ):
         return "Its episodes are no longer on disk."
-    last, snapshot = _last_target_play(candidate), candidate.last_activity_snapshot
-    if last and (snapshot is None or last > _aware(snapshot)):
+    if _played_since(_last_target_play(candidate), candidate):
         return "One of its episodes was played again."
     return None
 

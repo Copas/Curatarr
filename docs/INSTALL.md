@@ -44,7 +44,7 @@ Requirements: a systemd-based distribution, **Python 3.12 or newer** with the `v
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc133
+git checkout v0.2.0rc134
 sudo ./scripts/install.sh
 ```
 
@@ -123,7 +123,7 @@ sudo systemctl restart curatarr-web curatarr-worker
 ```bash
 cd curatarr-release
 git fetch --tags
-git checkout v0.2.0rc133                 # the new release
+git checkout v0.2.0rc134                 # the new release
 git status --short                     # must print nothing
 sudo ./scripts/install.sh              # remembers your EXTRAS; pass EXTRAS=… to change them
 sudo systemctl is-active curatarr-web curatarr-worker
@@ -162,7 +162,7 @@ Requirements: Docker Engine with the Compose plugin, and Git.
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 cd curatarr-deploy
-git checkout v0.2.0rc133
+git checkout v0.2.0rc134
 cp .env.example .env
 ```
 
@@ -229,7 +229,7 @@ Open **PowerShell** in a folder where you keep apps (for example `C:\Apps`) and 
 ```powershell
 git clone https://github.com/Copas/Curatarr.git curatarr-deploy
 Set-Location curatarr-deploy
-git checkout v0.2.0rc133
+git checkout v0.2.0rc134
 Copy-Item .env.example .env
 notepad .env
 ```
@@ -318,7 +318,7 @@ Logs: `docker compose logs --tail=100 web worker`. Don't use `docker compose dow
 
    Without the webhook, the hourly reconciliation still picks up playback, just later.
 
-   **Optional: the Curatarr plugin for Jellyfin.** With it, Delete in any Jellyfin app marks a film or show Leaving Soon instead of deleting its files behind Radarr's and Sonarr's backs. In Settings → Integrations, under *Curatarr plugin for Jellyfin*, click **Install in Jellyfin**. Curatarr installs it, restarts Jellyfin and sets it up when Jellyfin is back, so there's nothing to type or copy. See [jellyfin-plugin](../jellyfin-plugin/README.md).
+   **Optional: the Curatarr plugin for Jellyfin.** With it, Delete in any Jellyfin app goes through Radarr and Sonarr instead of deleting files behind their backs: a film is marked Leaving Soon (deleting it again deletes it now), a show is removed through Sonarr. In Settings → Integrations, under *Curatarr plugin for Jellyfin*, click **Install in Jellyfin**. Curatarr installs it, restarts Jellyfin and sets it up when Jellyfin is back, so there's nothing to type or copy. See [jellyfin-plugin](../jellyfin-plugin/README.md).
 4. **Discover.** Click **Discover** on Overview. It runs in the background; a large library takes about a minute. Settings → Operations shows when it's done.
 5. **Review the rules.** Look over Settings → Acquisition and Settings → Retention. Every library starts in **dry run**: Curatarr goes through the whole process and records what it *would* remove in History, but deletes nothing. Turn dry run off globally or per library when you're happy.
 6. **Look at what it finds.** The checks (problem files, wrong dubs, the wrong show, files Roku can't seek in, …) start straight away, and what they find waits on **Enhance → Problems** with a button to fix each one. Once you trust a kind of fix, switch it on in **Settings → Automatic** and Curatarr does it by itself from then on. Find Favorites, which adds the rest of a favourite film's series to Radarr, is there too.

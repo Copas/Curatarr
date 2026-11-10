@@ -4020,8 +4020,15 @@ def _check_markers(ep: _Episode) -> str:
         return f"markers: {exc}"
     if segments is None:
         return "markers: Intro Skipper not installed"
+    # Jellyfin can go on listing a segment Curatarr hid until the episode is
+    # next refreshed; checked again, it was "replaced" a second time.
+    gone = {h.get("id") for h in state.markers_hidden or [] if not h.get("added")}
     live = [
-        s for s in segments if not s.get("Suppressed") and s.get("Source") != "User"
+        s
+        for s in segments
+        if not s.get("Suppressed")
+        and s.get("Source") != "User"
+        and s.get("Id") not in gone
     ]
     credits = [s for s in live if s.get("Type") == "Credits"]
     intros = [s for s in live if s.get("Type") == "Introduction"]

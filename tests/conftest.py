@@ -1,8 +1,19 @@
+import importlib
+import pkgutil
+
 import pytest
 
+import curatarr
 from curatarr import create_app, db
 from curatarr.auth import reset_rate_limits
 from curatarr.observability import reset
+
+# Every module loaded up front, so a test sees the same names whether it runs
+# alone or after others (a module first imported inside a test used to pick
+# up that test's fakes, and pass or fail depending on the order).
+for _module in pkgutil.iter_modules(curatarr.__path__):
+    if _module.name not in {"__main__", "migrations"}:
+        importlib.import_module(f"curatarr.{_module.name}")
 
 
 @pytest.fixture

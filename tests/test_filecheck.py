@@ -100,6 +100,9 @@ class FakeArr:
     def __init__(self):
         self.calls = []
 
+    def queue_records(self, quick=False):
+        return []  # the Problems page also looks for failed downloads
+
     def movies(self):
         return [{"id": 7, "runtime": 100}]
 
