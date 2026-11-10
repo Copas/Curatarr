@@ -2620,6 +2620,38 @@ def test_skip_marker_checks_use_every_free_slot(app, media_env, monkeypatch):
     assert len(flat) == len(set(flat))  # no episode in two batches
 
 
+def test_skip_marker_checks_start_even_when_chapter_jobs_fill_the_limit(
+    app, media_env, monkeypatch
+):
+    """The limit drops while the machine is busy, below the chapter jobs
+    already running; the skip-marker slot must still start, or episodes being
+    watched wait on a backlog of chapter jobs."""
+    from curatarr import adaptive
+
+    files, _arr = media_env
+    parts, _rows = _series_with_recaps(files)
+    enrichment.request(parts[0], "recap")
+    monkeypatch.setattr(
+        adaptive.controller,
+        "decide",
+        lambda *a, **k: adaptive.Decision(2, False, 0.85, "test"),
+    )
+    monkeypatch.setattr(enrichment, "playback_sessions", list)
+    started = {}
+    monkeypatch.setattr(
+        enrichment, "_start", lambda key, app, ids, llm: started.update({key: ids})
+    )
+    enrichment._threads.clear()
+    monkeypatch.setattr(
+        enrichment,
+        "_alive",
+        lambda: {"chapter-a": None, "chapter-b": None, "chapter-c": None},
+    )
+    enrichment.dispatch()
+    assert [key for key in started if key.startswith("recap")] == ["recap-1"]
+    assert not [key for key in started if not key.startswith("recap")]
+
+
 def test_a_film_radarr_no_longer_has_closes_instead_of_waiting(media_env, monkeypatch):
     """Radarr answering 404 means the film was removed, not that the share is
     offline: the job closes rather than waiting a day."""

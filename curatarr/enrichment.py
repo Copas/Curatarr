@@ -102,7 +102,10 @@ MAX_ATTEMPTS = 3
 RETRY_MINUTES = 30
 DEFER_MINUTES = 15
 LEASE_SECONDS = 600
-RECAP_BATCH = 100  # recap checks run back to back in a slot, a batch per slot
+# Skip-marker checks run back to back in a slot, a batch per slot. Small, so
+# an episode someone starts watching is picked up within minutes, not after
+# a long batch.
+RECAP_BATCH = 10
 RECHECK_QUEUED = 5  # re-checks kept queued for the skip-marker slot
 SCAN_BATCH = 200
 IMPORT_COMMANDS = {
@@ -2632,8 +2635,6 @@ def dispatch(*, synchronous=False, llm=None) -> int:
     # Counted in the database, so the limit holds across worker processes.
     busy = max(busy, len([k for k in running if k != "scan"]))
     free = decision.limit - busy
-    if free <= 0:
-        return started
     recap_slots = [key for key in running if key.startswith("recap")]
     taken = set().union(*(_batches.get(key, set()) for key in recap_slots))
 
@@ -2666,7 +2667,9 @@ def dispatch(*, synchronous=False, llm=None) -> int:
 
     if not recap_slots:
         # Always one slot for skip-marker checks, so they never stall behind
-        # a long run of chapter jobs.
+        # a long run of chapter jobs: even when chapter jobs already fill the
+        # limit (it drops while the machine is busy), this one starts, and
+        # the next chapter job waits for the room.
         free -= start_recaps(1)
     if free <= 0:
         return started

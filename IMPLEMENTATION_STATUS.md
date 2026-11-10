@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc122 (2026-11-09): dispatch starts the reserved recap slot before the free-slot check; RECAP_BATCH 10.
 - v0.2.0rc121 (2026-11-09): picks card no longer open by default.
 - v0.2.0rc120 (2026-11-09): last_call_days default 365.
 - v0.2.0rc119 (2026-11-09): last_call.py (candidate state LAST_CALL, migration a8c3e5f7b219 for uq_active_candidate), amber badge, Last Call collection (LAST_CALL + LEAVING_SOON), household settings.

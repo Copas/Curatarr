@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0rc122 (2026-11-09)
+
+- **Fixed: skip-marker checks stopped whenever chapter jobs filled the job limit.** One slot is meant to be kept for them, but when the machine got busy the limit dropped below the chapter jobs already running, and the slot was never started. Episodes waited hours for their intro, recap and credits markers, including ones being watched: an intro widened on one episode of a season was still Intro Skipper's on the next. The slot now starts regardless, and the next chapter job waits for the room.
+- **An episode someone starts watching gets its skip markers checked within minutes.** Checks ran in batches of a hundred, so an episode that came up next waited for the whole batch. Batches are now ten.
+
 ## 0.2.0rc121 (2026-11-09)
 
 - **Every card on Household choices starts closed.** Picks for each person opened by itself whenever picks were on.
