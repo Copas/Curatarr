@@ -700,6 +700,16 @@ class SonarrClient(Client):
             raise IntegrationError("Sonarr queue is too large to review safely")
         return page.get("records", [])
 
+    def delete_series(self, series_id):
+        """Remove a show and its files; an import-list exclusion keeps lists
+        from adding it back."""
+        return self.request(
+            "DELETE",
+            f"/api/v3/series/{series_id}",
+            params={"deleteFiles": "true", "addImportListExclusion": "true"},
+            destructive=True,
+        )
+
     def remove_failed_download(self, queue_id):
         """Remove and blocklist one download without Sonarr auto-redownloading."""
         return self.request(

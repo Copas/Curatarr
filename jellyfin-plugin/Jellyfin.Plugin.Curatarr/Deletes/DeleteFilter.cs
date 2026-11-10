@@ -151,6 +151,9 @@ public sealed class DeleteFilter : IAsyncActionFilter
 
         if (refused is not null)
         {
+            // The web app shows its own "check write access" error; the menu
+            // script shows this instead.
+            context.HttpContext.Response.Headers[MessageHeader] = Uri.EscapeDataString(refused);
             context.Result = new ObjectResult(new ProblemDetails { Title = "Kept by Curatarr", Detail = refused, Status = 409 })
             {
                 StatusCode = 409,

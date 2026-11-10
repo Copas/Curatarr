@@ -1179,6 +1179,73 @@ def reset_series(media, *, run=True):
     return candidate, execute_approved(candidate.id)
 
 
+def remove_show(media, *, who="someone"):
+    """Delete in Jellyfin on a show: the whole show goes, now, through Sonarr
+    (files deleted, kept off its import lists). Leaving Soon is for films;
+    trimming a show is Reset to minimum. Never Purge and dry run hold it back.
+    Returns a sentence saying what happened."""
+    if media.media_type != "series" or media.sonarr_id is None:
+        raise ValueError(f"{media.title} isn't a TV show matched to Sonarr.")
+    policy, _ = resolved_policy(media)
+    if policy["never_purge"]:
+        raise ValueError(f"Never Purge is on for {media.title}.")
+    if policy["dry_run"]:
+        audit(
+            "would_remove_show",
+            media.id,
+            f"Dry run: {who} deleted {media.title} in Jellyfin; it would be removed "
+            "from Sonarr with its files.",
+            f"would-remove-show:{media.id}:{utcnow().date().isoformat()}",
+        )
+        db.session.commit()
+        return f"Dry run: {media.title} isn't deleted; History says what would be."
+    _tell = tell_jellyfin_deleted
+    folder = None
+    try:
+        found = (
+            client("jellyfin").paths([media.jellyfin_id]) if media.jellyfin_id else {}
+        )
+        folder = next(iter(found.values()), None)
+    except (IntegrationError, AttributeError, TypeError):
+        folder = None
+    client("sonarr").delete_series(media.sonarr_id)
+    now = utcnow()
+    for candidate in db.session.query(PurgeCandidate).filter(
+        PurgeCandidate.media_identity_id == media.id,
+        PurgeCandidate.state.in_(ACTIVE_STATES_FOR_REMOVAL),
+    ):
+        candidate.state = "SUPERSEDED"
+        candidate.scheduled_delete_at = None
+    for part in media.parts:
+        part.has_file = False
+    media.missing_since = now
+    audit(
+        "show_removed",
+        media.id,
+        f"{who} deleted {media.title} in Jellyfin: removed from Sonarr with its "
+        "files, and kept off its lists.",
+        f"show-removed:{media.id}:{now.isoformat()}",
+    )
+    db.session.commit()
+    if folder:
+        try:
+            client("jellyfin").files_deleted([folder])
+        except (IntegrationError, AttributeError):
+            pass  # Jellyfin's next scan catches it
+    else:
+        _tell(media)
+    return f"{media.title} has been deleted."
+
+
+ACTIVE_STATES_FOR_REMOVAL = (
+    "ELIGIBLE",
+    "REVIEW",
+    "LAST_CALL",
+    "LEAVING_SOON",
+    "SNOOZED",
+)
+
+
 def reset_many(shows):
     """Queue Reset to minimum for each show (the worker runs them one at a time).
     Returns (queued, [(media, reason)] for shows that could not be queued)."""

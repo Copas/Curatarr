@@ -38,6 +38,10 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc128 (2026-11-10)
+
+- **Delete on a show in Jellyfin removes the show.** It used to mark the show Leaving Soon and only trim it to its first episodes, and refused outright when it was already that small, with Jellyfin's misleading "check write access" error. Leaving Soon means nothing for a show, so Delete now removes the whole series through Sonarr, files and all, and keeps it off Sonarr's lists. Never Purge and dry run still hold it back. Trimming a show is **Reset to minimum**, which is what the web menu's item says on a show (with plugin 0.10.0.0). Films are unchanged: Delete marks them Leaving Soon, and deleting again deletes now.
+
 ## 0.2.0rc127 (2026-11-10)
 
 - **The Leaving Soon collection's picture shows the four titles leaving soonest**, redrawn as that changes. It was four titles in no particular order. The Last Call collection's picture does the same: Leaving Soon titles by their date first, then films in Last call by when they move on.
@@ -704,6 +708,11 @@ Found by end-to-end testing: every page and form, odd input to every route, a co
 ## Jellyfin plugin
 
 The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed and updated from Jellyfin's plugin catalogue once Curatarr adds its repository. Each version's notes below are what Jellyfin shows as its changelog, and the release page's notes.
+
+### 0.10.0.0 (2026-11-10)
+
+- On a show, the web menu's item is **Reset to minimum** (trim it to its first episodes) instead of Leaving Soon, since Delete removes a show (with Curatarr 0.2.0rc128).
+- When Curatarr keeps a title (Never Purge, or a reason of its own), the web app shows Curatarr's reason, not only its own "check write access" error.
 
 ### 0.9.0.0 (2026-11-09)
 

@@ -16,6 +16,7 @@ namespace Jellyfin.Plugin.Curatarr.Deletes;
 /// <param name="Deleting">For a status: whether it's being deleted.</param>
 /// <param name="CanLeaveAfterWatched">For a status: whether Leave after watched can be set on it.</param>
 /// <param name="LeavesAfterWatched">For a status: whether it's set.</param>
+/// <param name="Kind">For a status: "movie" or "series" (a show's menu item is Reset to minimum).</param>
 public sealed record DeleteAnswer(
     bool Handled,
     string? Refused,
@@ -24,7 +25,8 @@ public sealed record DeleteAnswer(
     bool LeavingSoon = false,
     bool Deleting = false,
     bool CanLeaveAfterWatched = false,
-    bool LeavesAfterWatched = false);
+    bool LeavesAfterWatched = false,
+    string? Kind = null);
 
 /// <summary>
 /// What Curatarr is asked to do with an item.

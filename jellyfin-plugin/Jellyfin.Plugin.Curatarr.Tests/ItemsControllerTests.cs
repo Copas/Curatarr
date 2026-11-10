@@ -47,6 +47,14 @@ public class ItemsControllerTests
     }
 
     [Fact]
+    public async Task A_show_says_so_for_its_reset_to_minimum_item()
+    {
+        _answer = new DeleteAnswer(true, null, null, null, Kind: "series");
+        var status = (await Controller().Status(EpisodeId, CancellationToken.None)).Value!;
+        Assert.True(status.CanLeave && status.IsShow);
+    }
+
+    [Fact]
     public async Task An_api_key_with_no_user_gets_no_menu_rather_than_an_error()
     {
         _answer = new DeleteAnswer(true, null, null, null);

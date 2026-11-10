@@ -127,6 +127,8 @@ public class DeleteFilterTests
         Assert.False(await Run(Filter(), context));
         var result = Assert.IsType<ObjectResult>(context.Result);
         Assert.Equal(409, result.StatusCode);
+        // the reason, for the web app to show instead of its own error
+        Assert.Equal("Never Purge is on for it.", Uri.UnescapeDataString(context.HttpContext.Response.Headers[DeleteFilter.MessageHeader].ToString()));
     }
 
     [Fact]

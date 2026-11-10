@@ -10,6 +10,10 @@ every app can do both. Jellyfin's web app has a Leaving Soon menu item of its
 own, so Delete there deletes straight away. Anything else (an episode, a
 season, a title Curatarr doesn't know) is left to Jellyfin.
 
+A show is different: Delete removes the whole show, now, through Sonarr
+(files and all, kept off its lists), since Leaving Soon means nothing for a
+show; the web app's menu item for a show is Reset to minimum instead.
+
 Modes, from the plugin:
 - ``delete`` (Delete in an app): Leaving Soon, or now if it already is;
 - ``now`` (Delete in the web app): now;
@@ -22,6 +26,7 @@ Modes, from the plugin:
 """
 
 from . import db
+from .integrations import IntegrationError
 from .models import MediaIdentity, utcnow
 
 MODES = {
@@ -78,6 +83,38 @@ def _start_now(candidate_id) -> None:
                 app.logger.exception("Deleting %s straight away failed", candidate_id)
 
     threading.Thread(target=run, name="curatarr-delete-now", daemon=True).start()
+
+
+def _show(media, who, mode) -> tuple[int, dict]:
+    """A show: Delete removes it (Leaving Soon means nothing for a show), and
+    the web menu's item is Reset to minimum (trimmed to its always-keep
+    episodes)."""
+    from .lifecycle import remove_show, reset_series
+    from .services import audit
+
+    try:
+        if mode == "leaving_soon":
+            reset_series(media, run=False)
+            audit(
+                "jellyfin_reset",
+                media.id,
+                f"{who} chose Reset to minimum for {media.title} in Jellyfin.",
+                f"jellyfin-reset:{media.id}:{utcnow().isoformat()}",
+            )
+            db.session.commit()
+            return 200, {
+                "handled": True,
+                "result": "resetting",
+                "message": f"{media.title} is being trimmed to its first episodes.",
+            }
+        message = remove_show(media, who=who)
+    except ValueError as exc:
+        db.session.rollback()
+        return _refused(media, who, str(exc))
+    except IntegrationError as exc:  # Sonarr unreachable: say so, keep it
+        db.session.rollback()
+        return _refused(media, who, f"Sonarr couldn't be reached: {exc}")
+    return 200, {"handled": True, "result": "deleting", "message": message}
 
 
 def _delete_now(media, candidate, who) -> tuple[int, dict]:
@@ -140,10 +177,13 @@ def handle(item_id, user_name=None, mode=None) -> tuple[int, dict]:
         return 200, {
             "handled": True,
             "title": media.title,
+            "kind": media.media_type,  # a show's menu item is Reset to minimum
             "leavingSoon": state == "LEAVING_SOON",
             "deleting": state in GOING,
         } | leave
     who = (user_name or "").strip()[:100] or "someone"
+    if media.media_type == "series":
+        return _show(media, who, mode)
     if state in GOING:
         return 200, {
             "handled": True,

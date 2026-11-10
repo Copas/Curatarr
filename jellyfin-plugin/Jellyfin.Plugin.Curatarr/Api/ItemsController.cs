@@ -60,7 +60,8 @@ public class ItemsController : ControllerBase
             handled && !answer!.LeavingSoon,
             handled && answer!.LeavingSoon,
             answer?.CanLeaveAfterWatched ?? false,
-            answer?.LeavesAfterWatched ?? false);
+            answer?.LeavesAfterWatched ?? false,
+            answer?.Kind == "series");
     }
 
     /// <summary>
@@ -145,7 +146,8 @@ public class ItemsController : ControllerBase
 /// <param name="LeavingSoon">It's Leaving Soon already.</param>
 /// <param name="CanLeaveAfterWatched">Leave after I watch can be set on it.</param>
 /// <param name="LeavesAfterWatched">It's set.</param>
-public sealed record ItemStatus(bool CanLeave, bool LeavingSoon, bool CanLeaveAfterWatched = false, bool LeavesAfterWatched = false);
+/// <param name="IsShow">A show: the menu item is Reset to minimum (trim it), since Delete removes a show.</param>
+public sealed record ItemStatus(bool CanLeave, bool LeavingSoon, bool CanLeaveAfterWatched = false, bool LeavesAfterWatched = false, bool IsShow = false);
 
 /// <summary>
 /// The answer to Leaving Soon.

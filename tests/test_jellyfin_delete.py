@@ -180,3 +180,97 @@ def test_a_deletion_is_carried_out_once_however_many_try(app):
     assert owner
     assert execute_approved("some-candidate") == "busy"
     leases.release("execute:some-candidate", owner)
+
+
+class _ShowSonarr:
+    def __init__(self):
+        self.deleted = []
+
+    def delete_series(self, series_id):
+        self.deleted.append(series_id)
+
+
+class _ShowJellyfin:
+    def __init__(self):
+        self.gone = []
+
+    def paths(self, ids):
+        return {ids[0]: "/tv/Reset Show"}
+
+    def files_deleted(self, paths):
+        self.gone += paths
+
+
+def test_delete_on_a_show_removes_the_whole_show(app, client, monkeypatch):
+    from test_reset import _show
+
+    from curatarr.models import LifecycleAction, MediaIdentity
+
+    with app.app_context():
+        set_setting("webhook_token", "plugin-token")
+        media, _parts = _show()
+        media.jellyfin_id = ITEM
+        db.session.query(LibraryPolicy).filter_by(
+            library_id=media.library_id
+        ).one().policy_json = {"dry_run": False}
+        db.session.commit()
+        media_id = media.id
+    sonarr, jellyfin = _ShowSonarr(), _ShowJellyfin()
+    monkeypatch.setattr(
+        "curatarr.lifecycle.client",
+        lambda kind: sonarr if kind == "sonarr" else jellyfin,
+    )
+    status = _post(client, {"itemId": ITEM, "mode": "status"}).get_json()
+    assert status["kind"] == "series"
+    body = _post(client, {"itemId": ITEM, "userName": "Sam"}).get_json()
+    assert body["result"] == "deleting" and "has been deleted" in body["message"]
+    assert sonarr.deleted == [77] and jellyfin.gone == ["/tv/Reset Show"]
+    with app.app_context():
+        media = db.session.get(MediaIdentity, media_id)
+        assert media.missing_since and not any(p.has_file for p in media.parts)
+        assert (
+            db.session.query(LifecycleAction)
+            .filter_by(action_type="show_removed")
+            .count()
+        )
+
+
+def test_a_shows_menu_item_resets_it_to_minimum(app, client, monkeypatch):
+    from test_reset import _show
+
+    with app.app_context():
+        set_setting("webhook_token", "plugin-token")
+        media, _parts = _show()
+        media.jellyfin_id = ITEM
+        db.session.commit()
+        media_id = media.id
+    body = _post(
+        client, {"itemId": ITEM, "userName": "Sam", "mode": "leaving_soon"}
+    ).get_json()
+    assert body["result"] == "resetting" and "first episodes" in body["message"]
+    with app.app_context():
+        candidate = (
+            db.session.query(PurgeCandidate).filter_by(media_identity_id=media_id).one()
+        )
+        assert candidate.state == "APPROVED" and candidate.reason_code == "manual_reset"
+
+
+def test_a_show_with_never_purge_isnt_deleted(app, client, monkeypatch):
+    from test_reset import _show
+
+    from curatarr.models import TitleOverride
+
+    with app.app_context():
+        set_setting("webhook_token", "plugin-token")
+        media, _parts = _show()
+        media.jellyfin_id = ITEM
+        db.session.add(
+            TitleOverride(
+                media_identity_id=media.id, override_json={"never_purge": True}
+            )
+        )
+        db.session.commit()
+    sonarr = _ShowSonarr()
+    monkeypatch.setattr("curatarr.lifecycle.client", lambda kind: sonarr)
+    body = _post(client, {"itemId": ITEM, "userName": "Sam"}).get_json()
+    assert "Never Purge" in body["refused"] and sonarr.deleted == []

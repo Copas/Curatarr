@@ -123,9 +123,11 @@
                     });
             }
             if (field(status, 'canLeave')) {
-                menuItem(del, 'curatarr-leaving-soon', 'auto_delete', 'Leaving Soon', function () {
+                var show = !!field(status, 'isShow');
+                menuItem(del, 'curatarr-leaving-soon', show ? 'content_cut' : 'auto_delete',
+                    show ? 'Reset to minimum' : 'Leaving Soon', function () {
                     api('POST', 'Curatarr/Items/' + id + '/LeavingSoon').then(function (answer) {
-                        toast(field(answer, 'message') || 'Marked Leaving Soon.');
+                        toast(field(answer, 'message') || (show ? 'Trimmed to its first episodes.' : 'Marked Leaving Soon.'));
                     }, function () {
                         toast("Curatarr couldn't mark it Leaving Soon.");
                     });
