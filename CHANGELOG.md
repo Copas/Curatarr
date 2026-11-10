@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc127 (2026-11-10)
+
+- **The Leaving Soon collection's picture shows the four titles leaving soonest**, redrawn as that changes. It was four titles in no particular order. The Last Call collection's picture does the same: Leaving Soon titles by their date first, then films in Last call by when they move on.
+
 ## 0.2.0rc126 (2026-11-10)
 
 - **Delete in Jellyfin deletes straight away.** The delete was approved at once but carried out on the worker's next pass, about 20 seconds later, so the title seemed to stay. It now starts as soon as Delete is pressed. A deletion can't run twice when the worker reaches it too.

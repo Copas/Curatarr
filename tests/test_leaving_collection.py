@@ -111,3 +111,34 @@ def test_turned_off_empties_it(app, monkeypatch):
         db.session.commit()
         leaving_collection.sync()
         assert jellyfin.collections["c1"]["items"] == set()
+
+
+def test_its_picture_is_the_four_leaving_soonest(app, monkeypatch):
+    from datetime import timedelta
+
+    from curatarr.models import utcnow
+
+    jellyfin = _setup(monkeypatch)
+    drawn = []
+    monkeypatch.setattr(
+        leaving_collection,
+        "_set_poster",
+        lambda _j, _c, items: drawn.append(list(items)) or True,
+    )
+    with app.app_context():
+        film = _film()
+        other = _old_unwatched_film()
+        later = request_removal(film)
+        sooner = request_removal(other)
+        later.scheduled_delete_at = utcnow() + timedelta(days=10)
+        sooner.scheduled_delete_at = utcnow() + timedelta(days=2)
+        db.session.commit()
+        leaving_collection.sync()
+        assert drawn[-1] == [N("jf-Never Watched"), N("film-1")]  # soonest first
+        leaving_collection.sync()
+        assert len(drawn) == 1  # same four: not drawn again
+        later.scheduled_delete_at = utcnow() + timedelta(days=1)
+        db.session.commit()
+        leaving_collection.sync()
+        assert drawn[-1] == [N("film-1"), N("jf-Never Watched")]  # order changed
+        assert jellyfin.collections["c1"]["items"]

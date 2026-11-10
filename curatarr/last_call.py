@@ -211,12 +211,18 @@ def now_in() -> list[dict]:
 
 
 def _wanted() -> set[str]:
+    return set(_soonest())
+
+
+def _soonest() -> list[str]:
+    """Films in Last call and titles Leaving Soon, the soonest to go first:
+    Leaving Soon by its date, then Last call by when it moves on."""
     from .leaving_collection import _norm
 
     if not options()["last_call"]:
-        return set()
+        return []
     rows = (
-        db.session.query(MediaIdentity.jellyfin_id)
+        db.session.query(MediaIdentity.jellyfin_id, PurgeCandidate)
         .join(PurgeCandidate, PurgeCandidate.media_identity_id == MediaIdentity.id)
         .filter(
             PurgeCandidate.state.in_(("LAST_CALL", "LEAVING_SOON")),
@@ -225,7 +231,16 @@ def _wanted() -> set[str]:
             MediaIdentity.missing_since.is_(None),
         )
     )
-    return {_norm(jellyfin_id) for (jellyfin_id,) in rows}
+    notice = timedelta(days=options()["last_call_notice_days"])
+    from .policy import _aware
+
+    def when(candidate):
+        if candidate.state == "LEAVING_SOON" and candidate.scheduled_delete_at:
+            return (0, _aware(candidate.scheduled_delete_at))
+        return (1, _aware(candidate.eligible_at) + notice)
+
+    ordered = sorted(rows, key=lambda row: when(row[1]))
+    return list(dict.fromkeys(_norm(jellyfin_id) for jellyfin_id, _c in ordered))
 
 
 def sync_collection() -> dict | None:
@@ -236,10 +251,15 @@ def sync_collection() -> dict | None:
     from .services import client, set_setting, setting
 
     stored = setting(COLLECTION_KEY, {}) or {}
-    wanted = _wanted()
+    soonest = _soonest()
+    wanted = set(soonest)
     if not wanted and not stored.get("id"):
         return None
-    if stored.get("id") and set(stored.get("items", [])) == wanted:
+    if (
+        stored.get("id")
+        and set(stored.get("items", [])) == wanted
+        and stored.get("poster") == soonest[:4]
+    ):
         return stored
     jellyfin = client("jellyfin")
     try:
@@ -259,7 +279,7 @@ def sync_collection() -> dict | None:
             if have - wanted:
                 jellyfin.remove_from_collection(collection, sorted(have - wanted))
         images = []
-        for item in sorted(wanted)[:4]:
+        for item in _soonest()[:4]:
             try:
                 images.append(jellyfin.image(item))
             except IntegrationError:
@@ -273,7 +293,7 @@ def sync_collection() -> dict | None:
             pass  # drawn again when the collection next changes
     except IntegrationError:
         return stored
-    stored = {"id": collection, "items": sorted(wanted)}
+    stored = {"id": collection, "items": sorted(wanted), "poster": soonest[:4]}
     set_setting(COLLECTION_KEY, stored)
     db.session.commit()
     return stored

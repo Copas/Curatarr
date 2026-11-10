@@ -1,7 +1,7 @@
 """A Jellyfin collection of the titles Leaving Soon, kept in step by Curatarr.
 
 Titles join when they're marked Leaving Soon and leave when they're kept,
-watched or deleted. The collection is created once and then known by its id,
+watched or deleted. Its picture is the four leaving soonest. The collection is created once and then known by its id,
 so renaming it in Jellyfin is fine. Settings → Household turns it off; the
 collection is then emptied.
 """
@@ -21,8 +21,13 @@ def enabled() -> bool:
 
 
 def _wanted() -> set[str]:
+    return set(_soonest())
+
+
+def _soonest() -> list[str]:
+    """The titles Leaving Soon, the soonest to go first."""
     if not enabled():
-        return set()
+        return []
     rows = (
         db.session.query(MediaIdentity.jellyfin_id)
         .join(PurgeCandidate, PurgeCandidate.media_identity_id == MediaIdentity.id)
@@ -32,8 +37,9 @@ def _wanted() -> set[str]:
             MediaIdentity.jellyfin_id.isnot(None),
             MediaIdentity.missing_since.is_(None),
         )
+        .order_by(PurgeCandidate.scheduled_delete_at, MediaIdentity.sort_title)
     )
-    return {_norm(jellyfin_id) for (jellyfin_id,) in rows}
+    return list(dict.fromkeys(_norm(jellyfin_id) for (jellyfin_id,) in rows))
 
 
 def _norm(item_id: str) -> str:
@@ -46,13 +52,14 @@ def sync() -> dict | None:
     from .services import client, set_setting, setting
 
     stored = setting(KEY, {}) or {}
-    wanted = _wanted()
+    soonest = _soonest()
+    wanted = set(soonest)
     if not wanted and not stored.get("id"):
         return None  # nothing to show, and no collection yet
     if (
         stored.get("id")
         and set(stored.get("items", [])) == wanted
-        and stored.get("poster")
+        and stored.get("poster") == soonest[:4]
     ):
         return stored
     jellyfin = client("jellyfin")
@@ -75,10 +82,12 @@ def sync() -> dict | None:
                 jellyfin.remove_from_collection(collection, sorted(have - wanted))
     except IntegrationError:
         return stored  # try again next pass
+    shown = soonest[:4]
     stored = {
         "id": collection,
         "items": sorted(wanted),
-        "poster": _set_poster(jellyfin, collection, sorted(wanted)),
+        # The four leaving soonest, drawn again when those change.
+        "poster": shown if _set_poster(jellyfin, collection, shown) else None,
     }
     set_setting(KEY, stored)
     db.session.commit()
