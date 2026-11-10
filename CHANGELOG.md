@@ -38,6 +38,10 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc129 (2026-11-10)
+
+- **The plugin-update banner says whether you need to do anything.** While Curatarr waits to restart Jellyfin itself, it said only "Curatarr restarts Jellyfin once nobody's watching", and its one button, Don't restart, was all but invisible. It now says "Nothing to do: Curatarr restarts Jellyfin by itself once nothing has played for 10 minutes", with **Restart now instead** and **Don't restart** buttons you can see.
+
 ## 0.2.0rc128 (2026-11-10)
 
 - **Delete on a show in Jellyfin removes the show.** It used to mark the show Leaving Soon and only trim it to its first episodes, and refused outright when it was already that small, with Jellyfin's misleading "check write access" error. Leaving Soon means nothing for a show, so Delete now removes the whole series through Sonarr, files and all, and keeps it off Sonarr's lists. Never Purge and dry run still hold it back. Trimming a show is **Reset to minimum**, which is what the web menu's item says on a show (with plugin 0.10.0.0). Films are unchanged: Delete marks them Leaving Soon, and deleting again deletes now.

@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc129 (2026-11-10): plugin banner wording and visible buttons while waiting to restart.
 - v0.2.0rc128 (2026-11-10): lifecycle.remove_show (Sonarr delete_series with exclusion); jellyfin_delete routes series: delete/now remove, leaving_soon reset_series; status kind. Plugin 0.10.0.0: IsShow, refusal header.
 - v0.2.0rc127 (2026-11-10): collection posters from the four soonest (stored list, redrawn on change).
 - v0.2.0rc126 (2026-11-10): jellyfin_delete starts execute_approved in a thread; execute_approved leased per candidate; COMPLETED film snapshots retired without audit.

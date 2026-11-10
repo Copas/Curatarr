@@ -386,6 +386,7 @@ def notice() -> dict | None:
             "kind": "restart",
             "new": waiting,
             "when_idle": bool(stored.get("restart_when_idle")),
+            "idle_minutes": IDLE_MINUTES,
         }
     return None
 

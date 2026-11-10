@@ -233,7 +233,9 @@ def test_the_update_banner(app, client, jellyfin):
     assert "waiting for Jellyfin to restart:</strong> 0.1.0.0 → 0.3.0.0" in page
     # Restart when nobody's watching: not while a film plays, nor straight after.
     client.post("/jellyfin-plugin/update", data={"action": "restart_idle"})
-    assert "once nobody's watching" in client.get("/").text
+    page = client.get("/").text
+    assert "Nothing to do:</strong> Curatarr restarts Jellyfin by itself" in page
+    assert "Restart now instead" in page and "Don't restart" in page
     with app.app_context():
         jellyfin_plugin.tick()
         assert jellyfin.restarts == 0  # someone's watching
