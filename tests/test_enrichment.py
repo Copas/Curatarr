@@ -1972,7 +1972,9 @@ def test_identity_flags_api_reports_swaps_and_confirmed_targets(
     assert [f["filed_as"] for f in flags] == [2]
 
 
-def test_checks_needing_transcription_wait_for_the_chapter_backlog(media_env):
+def test_checks_needing_transcription_wait_for_the_chapter_backlog(
+    media_env, monkeypatch
+):
     _files, _arr = media_env
     _library, media, _part = _movie()
     states = []
@@ -1998,6 +2000,15 @@ def test_checks_needing_transcription_wait_for_the_chapter_backlog(media_env):
     db.session.commit()
     due = {s.id for s in enrichment._due_jobs(10, scans=False, recaps=True)}
     assert due == {transcribed.id, asked_for.id}
+    # an episode someone watches next doesn't wait for the backlog
+    from curatarr import up_next
+
+    monkeypatch.setattr(
+        up_next, "part_ids", lambda users=None: [untranscribed.media_part_id]
+    )
+    due = {s.id for s in enrichment._due_jobs(10, scans=False, recaps=True)}
+    assert untranscribed.id in due
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
     chapter_job.job_state = "idle"
     db.session.commit()
     due = {s.id for s in enrichment._due_jobs(10, scans=False, recaps=True)}

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc123 (2026-11-09)
+
+- **Fixed: episodes coming up next waited days for their skip markers.** While a chapter backlog runs, skip-marker checks that would need a transcript made first wait, to keep the graphics card for chapter work. That held back episodes being watched too: a season someone was in the middle of still had Intro Skipper's short intros. Episodes someone is watching or will watch next now go ahead regardless.
+
 ## 0.2.0rc122 (2026-11-09)
 
 - **Fixed: skip-marker checks stopped whenever chapter jobs filled the job limit.** One slot is meant to be kept for them, but when the machine got busy the limit dropped below the chapter jobs already running, and the slot was never started. Episodes waited hours for their intro, recap and credits markers, including ones being watched: an intro widened on one episode of a season was still Intro Skipper's on the next. The slot now starts regardless, and the next chapter job waits for the room.

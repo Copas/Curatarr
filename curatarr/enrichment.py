@@ -2359,11 +2359,16 @@ def _due_jobs(limit, *, scans, recaps=False):
             # Checking an episode with no saved transcript means transcribing its
             # opening and ending, which takes the GPU from chapter jobs (it
             # doubled their time). Until the backlog is done, only episodes that
-            # need none go ahead, plus checks asked for from an episode's page.
+            # need none go ahead, plus checks asked for from an episode's page,
+            # and episodes someone is watching or will watch next.
+            from . import up_next
+
+            soon = list(up_next.part_ids())
             query = query.filter(
                 or_(
                     ChapterState.transcript_key.isnot(None),
                     ChapterState.requested_at < now - timedelta(days=365),
+                    ChapterState.media_part_id.in_(soon),
                 )
             )
     else:
