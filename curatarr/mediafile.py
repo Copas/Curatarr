@@ -22,6 +22,7 @@ from .chapters import Chapter, chapter_file_text
 TOOL_FALLBACK_DIRS = ("/usr/lib/jellyfin-ffmpeg",)
 MATROSKA_FORMATS = {"matroska", "webm", "matroska,webm"}
 MATROSKA_SUFFIXES = {".mkv", ".mka", ".mk3d", ".webm"}
+MP4_SUFFIXES = {".mp4", ".m4v", ".mov"}
 
 
 class MediaToolError(RuntimeError):
@@ -73,6 +74,14 @@ class MediaInfo:
         )
 
     @property
+    def mp4(self) -> bool:
+        """An MP4 (or MOV) file: chapters go in by rewriting it (rewrite_mp4)."""
+        names = set(self.format_name.split(","))
+        return bool(names & {"mp4", "mov"}) and Path(self.path).suffix.lower() in (
+            MP4_SUFFIXES
+        )
+
+    @property
     def video_length(self) -> float | None:
         """How long the picture runs, in seconds, when the file says."""
         lengths = [
@@ -84,7 +93,15 @@ class MediaInfo:
 
     @property
     def stream_signature(self) -> list[tuple]:
-        """What must be identical before and after a chapter edit."""
+        """What must be identical before and after a chapter edit. In an MP4
+        the chapters are themselves a data track, made new by each rewrite,
+        so there only the picture, sound and subtitle tracks count."""
+        if self.mp4:
+            return [
+                (s.get("codec_type"), s.get("codec_name"))
+                for s in self.streams
+                if s.get("codec_type") in {"video", "audio", "subtitle"}
+            ]
         return [
             (s.get("index"), s.get("codec_type"), s.get("codec_name"))
             for s in self.streams
@@ -248,10 +265,19 @@ def remove_command(path: str) -> list[str]:
 
 
 def can_write(info: MediaInfo) -> tuple[bool, str | None]:
+    if info.mp4:
+        # Rewritten with ffmpeg (copied, nothing re-encoded): rewrite_mp4.
+        if not tool("ffmpeg"):
+            return False, "ffmpeg is not installed"
+        if not os.access(info.path, os.W_OK) or not os.access(
+            os.path.dirname(info.path) or ".", os.W_OK
+        ):
+            return False, "Curatarr does not have permission to modify this file"
+        return True, None
     if not info.matroska:
         return False, (
-            f"{info.format_name or 'This'} container cannot take chapters without "
-            "rewriting the whole file; only Matroska (MKV) is edited in place."
+            f"{info.format_name or 'This'} container can't hold chapters; only "
+            "Matroska (MKV) and MP4 files get them."
         )
     if not tool("mkvpropedit"):
         return False, "mkvpropedit (MKVToolNix) is not installed"
@@ -429,7 +455,100 @@ def rebuild_layout(path: str) -> MediaInfo:
     return probe(path)
 
 
+FFMETADATA = ";FFMETADATA1"
+
+
+def mp4_title(name) -> str:
+    """A chapter title as an MP4 can hold it: one line, no backslashes."""
+    return " ".join(str(name).replace("\\", "/").split())
+
+
+def ffmetadata(chapters, duration: float) -> str:
+    """Chapters as ffmpeg's metadata file: each ends where the next starts."""
+    starts = [
+        (
+            float(c["start"] if isinstance(c, dict) else c.start),
+            c["name"] if isinstance(c, dict) else c.name,
+        )
+        for c in chapters
+    ]
+    lines = [FFMETADATA]
+    for number, (start, name) in enumerate(starts):
+        end = starts[number + 1][0] if number + 1 < len(starts) else duration
+        # ffmpeg's reader keeps a backslash doubled and loses the chapter
+        # after a trailing one, so titles go without (mp4_title).
+        escaped = re.sub(r"([=;#])", r"\\\1", mp4_title(name))
+        lines += [
+            "[CHAPTER]",
+            "TIMEBASE=1/1000",
+            f"START={round(start * 1000)}",
+            f"END={round(max(end, start) * 1000)}",
+            f"title={escaped}",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def rewrite_mp4(path: str, metadata: str | None) -> MediaInfo:
+    """Rewrite an MP4 with these chapters (an ffmetadata text) or none, every
+    track copied as it is, nothing re-encoded. The copy is checked (same
+    tracks and length, the chapters asked for) before it replaces the
+    original, under the same name; on any doubt the original is left alone.
+    Takes as long as copying the file."""
+    before = probe(path)
+    target = Path(path)
+    # Ends in the file's own suffix, so it's checked as the MP4 it is.
+    partial = target.with_name(f".{target.stem}.curatarr-partial{target.suffix}")
+    with tempfile.TemporaryDirectory(prefix="curatarr-chapters-") as folder:
+        meta = Path(folder) / "chapters.txt"
+        if metadata is not None:
+            meta.write_text(metadata, encoding="utf-8")
+        command = [required_tool("ffmpeg"), "-v", "error", "-nostdin", "-y", "-i", path]
+        if metadata is not None:
+            command += ["-f", "ffmetadata", "-i", str(meta)]
+        command += [
+            "-map", "0", "-dn", "-ignore_unknown", "-c", "copy",
+            "-map_metadata", "0",
+            "-map_chapters", "1" if metadata is not None else "-1",
+            "-movflags", "+faststart",
+            "-f", "mp4" if target.suffix.lower() != ".mov" else "mov",
+            str(partial),
+        ]  # fmt: skip
+        if shutil.disk_usage(target.parent).free < before.size * 1.05 + 2**30:
+            raise MediaToolError("Not enough free space beside the file to rewrite it")
+        try:
+            result = _run(command, 4 * 3600)
+            if result.returncode != 0:
+                raise MediaToolError(
+                    "ffmpeg failed: "
+                    + (result.stderr.strip().splitlines() or ["unknown error"])[-1][
+                        :200
+                    ]
+                )
+            after = probe(str(partial))
+
+            wanted = metadata.count("[CHAPTER]") if metadata else 0
+            if (
+                after.stream_signature != before.stream_signature
+                or abs(after.duration - before.duration) > 1.0
+                or len(after.chapters) != wanted
+            ):
+                raise MediaToolError("The rewritten copy didn't match the original")
+            try:
+                shutil.copymode(path, partial)
+            except OSError:
+                pass  # a share that doesn't keep modes
+            os.replace(partial, path)
+        except BaseException:
+            partial.unlink(missing_ok=True)
+            raise
+    return probe(path)
+
+
 def write_chapters(path: str, chapters: list[Chapter]) -> None:
+    info = probe(path)
+    if info.mp4:
+        rewrite_mp4(path, ffmetadata(chapters, info.duration))
+        return
     with tempfile.NamedTemporaryFile(
         "w", suffix=".txt", prefix="curatarr-chapters-", encoding="utf-8", delete=False
     ) as handle:
@@ -701,11 +820,19 @@ def add_compatible_audio(
 
 
 def remove_chapters(path: str) -> None:
+    info = probe(path)
+    if info.mp4:
+        rewrite_mp4(path, None)
+        return
     _mkvpropedit(remove_command(path))
 
 
 def export_chapters_xml(path: str) -> str | None:
-    """The file's own chapters as Matroska XML (editions, UIDs and all)."""
+    """The file's own chapters as Matroska XML (editions, UIDs and all); for
+    an MP4, as an ffmetadata text (restore_chapters_xml knows either)."""
+    info = probe(path)
+    if info.mp4:
+        return ffmetadata(info.chapters, info.duration) if info.chapters else None
     extract = tool("mkvextract")
     if not extract:
         return None
@@ -718,6 +845,9 @@ def export_chapters_xml(path: str) -> str | None:
 
 
 def restore_chapters_xml(path: str, xml: str) -> None:
+    if xml.startswith(FFMETADATA):
+        rewrite_mp4(path, xml)
+        return
     with tempfile.NamedTemporaryFile(
         "w", suffix=".xml", prefix="curatarr-chapters-", encoding="utf-8", delete=False
     ) as handle:

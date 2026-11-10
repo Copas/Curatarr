@@ -19,6 +19,7 @@ import shutil
 import threading
 import time
 import traceback
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
@@ -57,6 +58,8 @@ from .mediafile import (
     can_write,
     detect_scenes,
     export_chapters_xml,
+    ffmetadata,
+    mp4_title,
     probe,
     remove_chapters,
     remove_command,
@@ -1189,6 +1192,18 @@ def curatarr_wrote(state: ChapterState, info: MediaInfo) -> bool:
 
 def write_operation(info: MediaInfo, chapters: list[Chapter]) -> dict:
     """The exact edit a write would make, for previews and history."""
+    if info.mp4:
+        return {
+            "tool": "ffmpeg",
+            "command": [
+                "ffmpeg", "-i", info.path, "-f", "ffmetadata", "-i",
+                "<generated-chapters.txt>", "-map", "0", "-c", "copy",
+                "-map_chapters", "1", "<copy, checked, then renamed over the file>",
+            ],
+            "chapter_file": ffmetadata(chapters, info.duration),
+            "in_place": False,
+            "reencode": False,
+        }  # fmt: skip
     return {
         "tool": "mkvpropedit",
         "command": write_command(info.path, "<generated-chapters.txt>"),
@@ -1352,6 +1367,12 @@ def run_job(state_id: str, *, llm=None) -> str:
 
     if action in WRITE_ACTIONS:
         busy = import_activity(part, media, info, opts["settle_minutes"])
+        if not busy and info.mp4:
+            from .seek_repair import _playing
+
+            if _playing(part):
+                # An MP4 is rewritten whole: not while someone's watching it.
+                busy = "Playing right now; chapters go in once it has stopped"
         if busy:
             _defer(state, busy)
             db.session.commit()
@@ -1451,7 +1472,7 @@ def _scan_result(state, info, config):
         status, source = state.chapter_status, state.chapter_source
     elif info.duration < config["minimum_duration_minutes"] * 60:
         status, source = "skipped_short", None
-    elif not info.matroska:
+    elif not (info.matroska or info.mp4):  # the only two that take chapters
         status, source = "unsupported_container", None
     else:
         status, source = (
@@ -1509,6 +1530,8 @@ def _refresh_jellyfin(part, media):
 
 def _write(state, part, media, info, plan, analysis, config, ours, fields, started):
     chapters = _plan_chapters(plan)
+    if info.mp4:  # titles as they'll read back
+        chapters = [replace(c, name=mp4_title(c.name)) for c in chapters]
     method = plan["method"]
     try:
         validate_chapters(chapters, info.duration)

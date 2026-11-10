@@ -210,3 +210,31 @@ def test_left_alone_once_told_to(app, monkeypatch):
 
 def test_on_by_default(app):
     assert seek_repair.enabled()
+
+
+@pytest.mark.skipif(not TOOLS, reason="needs FFmpeg")
+def test_an_mp4_takes_chapters_and_gives_them_back(tmp_path):
+    from curatarr.chapters import fingerprint
+
+    path = str(tmp_path / "film.mp4")
+    subprocess.run(
+        [
+            tool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i",
+            "testsrc=duration=30:size=160x120:rate=10", "-f", "lavfi", "-i",
+            "sine=duration=30", "-c:v", "libx264", "-c:a", "aac", "-shortest", path,
+        ],
+        check=True,
+    )  # fmt: skip
+    before = mediafile.probe(path)
+    assert before.mp4 and mediafile.can_write(before) == (True, None)
+    chapters = [Chapter(0.0, "Start"), Chapter(12.5, "Q's = #1; a\\b")]
+    mediafile.write_chapters(path, chapters)
+    after = mediafile.probe(path)
+    assert after.stream_signature == before.stream_signature
+    assert [c["name"] for c in after.chapters] == ["Start", "Q's = #1; a/b"]
+    saved = mediafile.export_chapters_xml(path)
+    mediafile.remove_chapters(path)
+    assert mediafile.probe(path).chapters == []
+    mediafile.restore_chapters_xml(path, saved)
+    assert fingerprint(mediafile.probe(path).chapters) == fingerprint(after.chapters)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["film.mp4"]  # no leftovers

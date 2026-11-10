@@ -128,7 +128,10 @@ def media_env(app, monkeypatch, tmp_path):
     monkeypatch.setattr(
         enrichment,
         "can_write",
-        lambda info: (info.matroska, None if info.matroska else "not MKV"),
+        lambda info: (
+            info.matroska or info.mp4,
+            None if info.matroska or info.mp4 else "not MKV or MP4",
+        ),
     )
     monkeypatch.setattr(
         enrichment,
@@ -242,14 +245,28 @@ def test_short_files_and_other_containers_are_left_alone(media_env):
         season_number=1,
         episode_number=1,
         has_file=True,
-        file_path="/movies/Film (2020)/Film.mp4",
+        file_path="/movies/Film (2020)/Film.avi",
     )
     db.session.add(other)
     db.session.commit()
-    files.add(other.file_path, fmt="mov,mp4,m4a,3gp,3g2,mj2")
+    files.add(other.file_path, fmt="avi")
     state = _run(other, "generate")
     assert state.chapter_status == "unsupported_container"
     assert files.writes == []
+
+
+def test_an_mp4_gets_chapters_but_not_while_playing(media_env, monkeypatch):
+    files, _arr = media_env
+    library, _media, part = _movie("/movies/Film (2020)/Film.mp4")
+    files.add(part.file_path, fmt="mov,mp4,m4a,3gp,3g2,mj2")
+    _navigation(library)
+    playing = [True]
+    monkeypatch.setattr("curatarr.seek_repair._playing", lambda _part: playing[0])
+    assert _run(part, "generate").chapter_status != "unsupported_container"
+    assert files.writes == []  # someone's watching it
+    playing[0] = False
+    assert _run(part, "generate").chapter_status == "generated_scene_aligned"
+    assert [path for path, _chapters in files.writes] == [part.file_path]
 
 
 def test_unchanged_file_is_not_processed_twice(media_env):

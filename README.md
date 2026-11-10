@@ -221,7 +221,7 @@ Curatarr was built on a real 8,000-file library and is careful by design:
 - **Dry run is on by default** for every library. Curatarr shows what it *would* remove and why, until you switch that off.
 - **Deletions only go through Sonarr or Radarr**, after Curatarr rechecks playback, grace periods, the download queue and connection health. If anything can't be verified, nothing is deleted.
 - **Replace never leaves you with nothing.** It confirms a better copy can be found before it deletes the one you have.
-- **File edits never re-encode the picture.** Chapters and track flags are written in place with `mkvpropedit`. Removing language tracks, or adding an extra audio track (the one thing that encodes, and only that track), writes a copy that's checked before it replaces the original, which keeps every original track.
+- **File edits never re-encode the picture.** Chapters and track flags are written in place with `mkvpropedit` (an MP4 gets its chapters in a checked copy, since it can't be edited in place). Removing language tracks, or adding an extra audio track (the one thing that encodes, and only that track), writes a copy that's checked before it replaces the original, which keeps every original track.
 - **Everything is undoable or recorded.** Markers it hid can be restored, chapters it wrote can be removed (your originals are kept), and every action is in History with the reason.
 - **It steps aside for viewers.** It measures CPU, GPU and who's watching, and backs off when someone starts a stream.
 
@@ -241,7 +241,7 @@ Quick start on Linux:
 ```bash
 git clone https://github.com/Copas/Curatarr.git curatarr-release
 cd curatarr-release
-git checkout v0.2.0rc132
+git checkout v0.2.0rc133
 sudo EXTRAS=chapters-gpu ./scripts/install.sh   # or leave EXTRAS out for library management only
 ```
 

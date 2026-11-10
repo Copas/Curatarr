@@ -64,9 +64,9 @@
       {{ stat('Files', summary.files) }}
       {{ stat('Scanned', summary.scanned) }}
       {{ stat('Too short for chapters', summary.short) }}
-      {{ stat('Not MKV (left alone)', summary.unsupported) }}
+      {{ stat('Can’t hold chapters (AVI)', summary.unsupported) }}
     </div>
-    <p class="coverage-hint mt-3 mb-0">Short and non-MKV files are skipped, so they aren't counted in the totals above.</p>
+    <p class="coverage-hint mt-3 mb-0">Short files and AVIs are skipped, so they aren't counted in the totals above.</p>
   </div></section>
 </div>
 {% if failed_groups %}<div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h2 class="section-title mb-0" id="failed">Failed</h2><form method="post" action="{{ url_for('main.chapter_failed_retry_all') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-primary" data-tip="Queues every failed chapter and subtitle job again, for example after the network share was offline. Files that still can't be reached wait and retry instead of failing.">Try all {{ summary.failed|commas }} again</button></form></div>

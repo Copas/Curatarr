@@ -38,6 +38,10 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc133 (2026-11-10)
+
+- **MP4 files get chapters.** Only MKV files were given chapters; MP4s were set aside as an unsupported container, so a film like that had no chapters in any app. An MP4 can't be edited in place, so Curatarr now copies it with ffmpeg with the chapters added (every track copied as it is, nothing re-encoded), checks the copy (same picture, sound and subtitle tracks, same length, the chapters read back) and only then puts it in place under the same name, never while it's being watched. Removing chapters and putting a file's own chapters back work the same way. MP4s set aside before go back on the backlog. AVI files still can't hold chapters.
+
 ## 0.2.0rc132 (2026-11-10)
 
 - **Failed pictures say why, and can be tried again or cleared.** Library → Posters showed a count of failed pictures with no way to act on it; one night's outage of the image tool left 455 of them. The Jobs page now groups them by cause: the image tool finished without a picture (usually passing, so try again), hit its usage limit (try later), or was turned down (try a local engine, or let them go). Each group has **Try them again** and **Clear them**. Clearing changes nothing in Jellyfin; each title keeps the pictures it had.

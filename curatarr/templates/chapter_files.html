@@ -15,5 +15,5 @@
 </ul>
 <div class="sticky-actions"><span class="small text-secondary">Selected files</span><button class="btn btn-outline-secondary" name="action" value="preview" data-tip="Queues the ticked files to work out their chapters and show what would be added, without changing the files.">Dry run</button><button class="btn btn-primary" name="action" value="generate" data-tip="Queues the ticked files to have chapters written into them. Files already queued are left as they are.">Process</button></div>
 </form>
-{% else %}<div class="empty-state"><h2 class="h5">Nothing to show yet</h2><p class="mb-0">{{ 'Scan a library to find files without chapters.' if not summary.scanned else 'Every scanned file already has chapters, is too short, or is not MKV.' }}</p></div>{% endif %}
+{% else %}<div class="empty-state"><h2 class="h5">Nothing to show yet</h2><p class="mb-0">{{ 'Scan a library to find files without chapters.' if not summary.scanned else 'Every scanned file already has chapters, is too short, or can’t hold chapters (AVI).' }}</p></div>{% endif %}
 {% endblock %}
