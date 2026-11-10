@@ -1639,6 +1639,104 @@ def prioritise(job: ArtworkJob) -> None:
 # --- Overview ---------------------------------------------------------------
 
 
+# Why pictures failed, in groups a person can act on: (key, how it reads,
+# what to do, words in the error that mark it). The first that matches wins.
+FAILURE_KINDS = (
+    (
+        "limit",
+        "The image tool's usage limit was reached",
+        "It resets after a while (for Codex, within hours). Try them again later.",
+        ("usage limit", "rate limit", "quota"),
+    ),
+    (
+        "refused",
+        "The image service turned the request down",
+        (
+            "Its safety system, or the tool, wouldn't make this one, even as an "
+            "original take. Try a local engine (ComfyUI) or another look, or "
+            "clear them."
+        ),
+        ("safety", "rejected", "refused", "couldn’t generate", "couldn't generate"),
+    ),
+    (
+        "nothing",
+        "The image tool finished without making a picture",
+        (
+            "Usually a passing problem with the image service, or its usage "
+            "limit running out mid-batch: pictures made before and after are "
+            "fine. Try them again."
+        ),
+        ("without making a picture",),
+    ),
+    (
+        "other",
+        "Something else went wrong",
+        "Each picture's page says what. Try them again, or clear them.",
+        (),
+    ),
+)
+
+
+def _failure_kind(error: str | None) -> str:
+    text = (error or "").lower()
+    for key, _label, _advice, words in FAILURE_KINDS:
+        if any(w.lower() in text for w in words):
+            return key
+    return "other"
+
+
+def _failed_images(kind: str | None = None):
+    rows = (
+        db.session.query(ArtworkImage)
+        .join(ArtworkJob)
+        .filter(ArtworkJob.purpose == "library", ArtworkImage.state == "failed")
+        .all()
+    )
+    return [r for r in rows if kind is None or _failure_kind(r.error) == kind]
+
+
+def failed_summary() -> list[dict]:
+    """The failed pictures in groups by why, with what to do, largest first."""
+    counts: dict[str, int] = {}
+    for image in _failed_images():
+        key = _failure_kind(image.error)
+        counts[key] = counts.get(key, 0) + 1
+    groups = [
+        {"key": key, "label": label, "advice": advice, "count": counts[key]}
+        for key, label, advice, _words in FAILURE_KINDS
+        if counts.get(key)
+    ]
+    return sorted(groups, key=lambda g: -g["count"])
+
+
+def retry_failed(kind: str | None = None) -> int:
+    """Puts failed pictures (of one kind, or all) back in the queue."""
+    images = _failed_images(kind)
+    jobs = set()
+    for image in images:
+        _requeue(image, reset=True)
+        jobs.add(image.job)
+    for job in jobs:
+        _refresh(job)
+    db.session.commit()
+    return len(images)
+
+
+def clear_failed(kind: str | None = None) -> int:
+    """Lets failed pictures (of one kind, or all) go: they're cancelled, so
+    they stop counting, and the titles keep the pictures they have."""
+    images = _failed_images(kind)
+    jobs = set()
+    for image in images:
+        image.state = "cancelled"
+        image.message = "Cleared after it failed."
+        jobs.add(image.job)
+    for job in jobs:
+        _refresh(job)
+    db.session.commit()
+    return len(images)
+
+
 def overview() -> dict:
     """Counts for the Generate pages' dashboard."""
     counts: dict[str, int] = {}

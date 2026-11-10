@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc132 (2026-11-10): artwork_jobs.FAILURE_KINDS, failed_summary/retry_failed/clear_failed; Jobs page Failed pictures panel.
 - v0.2.0rc131 (2026-11-10): jellyfin_plugin._recheck_waiting every 2 min while an update waits.
 - v0.2.0rc130 (2026-11-10): jellyfin_plugin.tick re-checks versions when Jellyfin is back after a restart.
 - v0.2.0rc129 (2026-11-10): plugin banner wording and visible buttons while waiting to restart.

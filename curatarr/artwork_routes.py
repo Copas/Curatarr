@@ -455,6 +455,9 @@ def artwork_jobs_page():
         .filter(ArtworkJob.state.in_(("pending", "generating")))
         .count(),
         "reasons": _reasons(jobs),
+        "failed_groups": artwork_jobs.failed_summary()
+        if state in (None, "failed")
+        else [],
         **_common(),
     }
     if request.args.get("fragment"):
@@ -711,6 +714,28 @@ def artwork_jobs_cancel_waiting():
     else:
         _say("Nothing was waiting.", "success")
     return _done(url_for("main.artwork_jobs"))
+
+
+@bp.post("/library/posters/jobs/failed/<action>")
+def artwork_jobs_failed(action):
+    kind = request.form.get("kind") or None
+    if kind and kind not in {k for k, *_rest in artwork_jobs.FAILURE_KINDS}:
+        abort(400)
+    if action == "retry":
+        count = artwork_jobs.retry_failed(kind)
+        _say(
+            f"{count} picture{'' if count == 1 else 's'} back in the queue.", "success"
+        )
+    elif action == "clear":
+        count = artwork_jobs.clear_failed(kind)
+        _say(
+            f"Cleared {count} failed picture{'' if count == 1 else 's'}; the titles "
+            "keep the pictures they have.",
+            "success",
+        )
+    else:
+        abort(404)
+    return _done(url_for("main.artwork_jobs", state="failed"))
 
 
 @bp.post("/library/posters/jobs/<job_id>/<action>")

@@ -1944,3 +1944,31 @@ def test_the_default_look_can_be_put_back(app, client, tmp_path):
     assert now["style"] == custom_posters.DEFAULT_STYLE
     assert now["cast"] == ["Sam"] and now["engine"] == "codex/image"  # kept
     assert client.get("/library/posters/house").status_code == 302
+
+
+def test_failed_pictures_are_grouped_and_can_be_tried_again_or_cleared(app, client):
+    from curatarr.models import ArtworkImage
+
+    _library, media, _part = _movie()
+    job = artwork_jobs.create_job(
+        media, ["Primary", "Backdrop", "Banner"], details={"title": "Film"}
+    )
+    errors = {
+        "Primary": "Codex finished without making a picture. Reading prompt",
+        "Backdrop": "Codex finished without making a picture. The image tool hit "
+        "its usage limit, so no backdrop was made.",
+        "Banner": "The image service's safety system turned it down.",
+    }
+    for image in job.images:
+        image.state, image.error = "failed", errors[image.kind]
+    db.session.commit()
+    groups = {g["key"]: g["count"] for g in artwork_jobs.failed_summary()}
+    assert groups == {"nothing": 1, "limit": 1, "refused": 1}
+    page = client.get("/library/posters/jobs?state=failed").text
+    assert "Failed pictures" in page and "Try them again" in page
+    client.post("/library/posters/jobs/failed/retry", data={"kind": "nothing"})
+    states = {i.kind: i.state for i in db.session.query(ArtworkImage)}
+    assert states["Primary"] == "pending" and states["Banner"] == "failed"
+    client.post("/library/posters/jobs/failed/clear", data={})
+    assert artwork_jobs.overview()["failed"] == 0
+    assert not artwork_jobs.failed_summary()

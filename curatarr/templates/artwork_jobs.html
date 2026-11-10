@@ -5,6 +5,13 @@
 {% set here = 'main.artwork_jobs' %}{% include '_posters_nav.html' %}
 {% include '_artwork_status.html' %}
 {% if waiting %}{% from '_confirm.html' import confirm_submit %}<form method="post" action="{{ url_for('main.artwork_jobs_cancel_waiting') }}" class="mb-3" data-async data-redraw="row"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{{ confirm_submit('Cancel all waiting (' ~ waiting ~ ')', 'Cancel every job that\'s waiting or being made? Pictures already waiting for review stay.', 'Cancel them all', tip='Stops every job not finished yet, on every page.') }}</form>{% endif %}
+{% if failed_groups %}<section class="card p-3 mb-3" id="failed-pictures"><h2 class="h5">Failed pictures</h2>
+  <p class="small text-secondary">Nothing changed in Jellyfin for these: each title keeps the pictures it had. Each was tried three times. Try a group again, or clear it to take it off this list.</p>
+  {% for g in failed_groups %}<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 border-top border-secondary-subtle pt-2 mt-2">
+    <div><strong>{{ g.label }}</strong> · {{ g.count }} picture{{ 's' if g.count != 1 }}<div class="small text-secondary">{{ g.advice }}</div></div>
+    <form method="post" class="d-flex gap-2"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="kind" value="{{ g.key }}"><button class="btn btn-sm btn-primary" formaction="{{ url_for('main.artwork_jobs_failed', action='retry') }}">Try them again</button><button class="btn btn-sm btn-secondary" formaction="{{ url_for('main.artwork_jobs_failed', action='clear') }}">Clear them</button></form>
+  </div>{% endfor %}
+</section>{% endif %}
 <ul class="nav nav-pills gap-2 mb-3" aria-label="Show">{% for key, label in [(None, 'All')] + job_state_names.items()|list %}<li class="nav-item"><a class="nav-link{{ ' active' if key == state }}" href="{{ url_for('main.artwork_jobs', state=key) }}">{{ label }}</a></li>{% endfor %}</ul>
 {% include '_artwork_jobs.html' %}
 {% if pages > 1 %}<nav class="d-flex justify-content-between mt-3" aria-label="Pages">{% if page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_jobs', state=state, page=page - 1) }}">Previous</a>{% else %}<span></span>{% endif %}<span class="small text-secondary">Page {{ page }} of {{ pages }}</span>{% if page < pages %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_jobs', state=state, page=page + 1) }}">Next</a>{% else %}<span></span>{% endif %}</nav>{% endif %}
