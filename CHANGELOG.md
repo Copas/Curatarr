@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.2.0 (release candidate; notes for the final release)
+
+0.1.0 was the cleanup engine on its own. 0.2.0 turns Curatarr into the household's librarian: it decides what goes when space runs short, with everyone's say, and makes every file nicer to watch on every device. The release candidates below say what changed, week by week; this is the whole of it.
+
+**Keeping the right things on disk**
+- **Leaving Soon**, everywhere people look: a countdown on the poster, the home-screen card and the background, a Jellyfin collection, and Delete in any Jellyfin app marks a title Leaving Soon instead of deleting it behind Radarr's and Sonarr's backs (with the Curatarr plugin for Jellyfin). Playing a title or Keep saves it.
+- **Cleanup driven by free space**, with **Compression first** (waits for Tdarr or another transcoder), **Shrink instead of delete**, a **disk forecast**, and **dry run** on by default.
+- **The household's choices count:** Seerr requests stay until watched, favourites and rewatches go to the back of the line, import-list arrivals go first, **seasonal shelves** keep Halloween and Christmas films through their season, **Leave after watched** for one last watch.
+- **Last call:** films nobody has watched in a year get a "Last call · ♥ to keep" banner and a collection, a few a week, before Leaving Soon; a heart in any app keeps one.
+- **TV one season ahead:** finish an episode and the rest of the season is requested; shows nobody continues stop downloading, and every show keeps its first few episodes.
+
+**What to watch next**
+- **Picks for each person:** a private Jellyfin playlist of ten unwatched films matched to what each account likes, in every app, Roku included.
+- **Film series and suggestions:** the series you have part of, **Find Favorites** to complete a favourite's series, and suggestions ranked by the household's taste.
+- **What's next is ready first:** episodes people are about to watch get their chapters, subtitles and skip markers before the back catalogue.
+- **Finished at the credits:** something stopped in its end credits counts as watched.
+
+**Every file nicer to watch** (local Whisper and Ollama, nothing leaves the machine)
+- **Chapters** named from what's said, for files that have none or only useless ones.
+- **Subtitles** for files with no English ones, transcribed by Whisper large-v3-turbo with every line kept, each line timed from its words, at a chosen reading speed; downloaded subtitles that are out of sync are re-timed.
+- **Skip markers:** "previously on" and "next time on" get Jellyfin's skip button; Intro Skipper's intros are widened to the footage the season shares, end credits start where the lettering does, and plainly wrong guesses are hidden, each undoable.
+- **Search by what was said**, and **Fun facts** ranking the library by what's said in it.
+
+**Bad downloads, caught and fixed**
+- **File problems:** burned-in subtitles, files cut short or cut off, decoding errors, with Replace that only deletes once a better copy is confirmed.
+- **The wrong show**, **misfiled episodes**, **failed imports** and **English dubs** that aren't English, each fixed automatically when Curatarr can be sure (Settings → Automatic), or listed for you.
+- **No English to be found:** a film an import list added with no English audio, and none anywhere, goes Leaving Soon and stays off the lists.
+
+**Plays smoothly everywhere**
+- Each device gets the copy and audio track it plays as it is; stereo AAC for browsers and AC3 for TVs that need it; the film's own soundtrack and English first; files Roku can't seek in rebuilt; unwanted subtitle tracks removed. Nothing is ever re-encoded.
+- Curatarr measures CPU, GPU and who's watching, and backs off when someone starts a stream.
+
+**Pictures**
+- **Custom posters** and the rest of a title's pictures, for everyone or for chosen accounts; **favourite ribbons** with who favourited; **posters in your language**; pictures **made with an AI**, locally through ComfyUI or with Codex, with your review before anything changes.
+
+**For administrators**
+- Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
+
 ## 0.2.0rc127 (2026-11-10)
 
 - **The Leaving Soon collection's picture shows the four titles leaving soonest**, redrawn as that changes. It was four titles in no particular order. The Last Call collection's picture does the same: Leaving Soon titles by their date first, then films in Last call by when they move on.

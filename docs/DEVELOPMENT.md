@@ -82,4 +82,4 @@ GitHub runs the tests and linters on every push (`.github/workflows/tests.yml`),
 
 ## Screenshots
 
-The Overview and Review images in `docs/images/` come from demo mode (`CURATARR_DEMO_MODE=true`, `demo-seed`, `worker --once`), captured at 1280 px wide. Demo mode has no media files, so the Chapter maintenance image shows counts from a real library.
+The Overview, Review, Problems and phone images in `docs/images/` come from demo mode, dressed for the purpose: on a scratch database, run `db upgrade`, `demo-seed` and `worker --once` with `CURATARR_DEMO_MODE=true`, then `python scripts/stage_screenshots.py`, which gives some demo titles made-up names and posters, keeps a three-title review queue and adds one example of each problem. Capture at 1280 px wide (432 px for the phone) with a device scale of 1.25. Demo mode has no media files, so the Enhance progress image shows counts from a library, with its names changed.
