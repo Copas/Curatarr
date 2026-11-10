@@ -18,6 +18,9 @@ from .services import audit, client
 LAST_CALL_LABEL = "LAST CALL · ♥ TO KEEP"
 LAST_CALL_AMBER = "#F5B301"
 BADGED_STATES = ("REVIEW", "LEAVING_SOON", "LAST_CALL")
+# Deleting now (Delete in Review or in Jellyfin): the banner stays, rather than
+# the original poster coming back for the moment before the title goes.
+DELETING_STATES = ("APPROVED", "EXECUTING")
 
 
 def badge_label(candidate, today=None) -> str:
@@ -748,7 +751,7 @@ def _keep_badged(snapshot, label):
         return False
 
 
-def restore_badge(snapshot):
+def restore_badge(snapshot, candidate=None):
     if snapshot.original_suspect:
         return _restore_from_providers(snapshot)
     try:
@@ -772,10 +775,7 @@ def restore_badge(snapshot):
                 # External artwork changed; avoid overwriting someone else's edit.
                 return False
         _put(jellyfin, snapshot.jellyfin_item_id, original, kind, original)
-        _record_restored(
-            snapshot,
-            "Original poster restored after cleanup was cancelled.",
-        )
+        _record_restored(snapshot, _restored_because(candidate))
         return True
     except (IntegrationError, OSError, ValueError) as exc:
         db.session.rollback()
@@ -787,6 +787,12 @@ def restore_badge(snapshot):
             type(exc).__name__,
         )
         return False
+
+
+def _restored_because(candidate) -> str:
+    if candidate is not None and candidate.state == "COMPLETED":
+        return "Original poster restored: the cleanup is done (a show keeps its always-keep episodes)."
+    return "Original poster restored after cleanup was cancelled."
 
 
 def _item_gone(exc, snapshot) -> bool:
@@ -956,5 +962,7 @@ def reconcile_artwork():
     snapshots = db.session.query(PosterSnapshot).filter_by(active=True).all()
     for snapshot in snapshots:
         candidate = db.session.get(PurgeCandidate, snapshot.candidate_id)
+        if candidate and candidate.state in DELETING_STATES:
+            continue  # being deleted: the banner stays until the title goes
         if not candidate or candidate.state not in BADGED_STATES:
-            restore_badge(snapshot)
+            restore_badge(snapshot, candidate)

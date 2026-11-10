@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc125 (2026-11-10)
+
+- **Fixed: Delete on a Leaving Soon title looked as if it cancelled it.** Deleting approves the notice, and Curatarr took the title's poster back to the original at once, without the Leaving Soon banner, for the moment before the film went. History also said "cleanup was cancelled". The banner now stays until the title is gone. A show trimmed to its always-keep episodes gets its poster back with a message saying the cleanup is done.
+
 ## 0.2.0rc124 (2026-11-10)
 
 - **Fixed: some intros weren't widened because a longer stretch was taken for the intro.** The intro was the longest footage a season's episodes share early on. Some shows share a longer stretch after the titles (a studio set, a host's opening), which doesn't touch Intro Skipper's intro, so nothing was widened. On one panel show, four of seven episodes kept intros ending at 0:22 or 0:24 instead of 0:30. The intro is now the shared stretch that overlaps Intro Skipper's intro most. The labelled episodes score the same. Episodes checked before are checked again in the background, what's up next first.

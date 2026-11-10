@@ -711,3 +711,62 @@ def test_a_poster_for_a_title_jellyfin_no_longer_has_is_not_retried(
         monkeypatch.setattr("curatarr.artwork.client", lambda _kind: GoneJellyfin())
         assert restore_badge(snapshot)
         assert not db.session.get(PosterSnapshot, snapshot.id).active
+
+
+def test_the_banner_stays_while_a_title_is_being_deleted(app, monkeypatch):
+    """Delete approves the Leaving Soon notice; the original poster mustn't
+    come back for the moment before the title goes, which looked as if Delete
+    had cancelled Leaving Soon."""
+    from curatarr.artwork import reconcile_artwork
+
+    source = _poster()
+
+    class FakeJellyfin:
+        current = source
+
+        def item(self, _item_id):
+            return {"ImageTags": {"Primary": sha256(self.current).hexdigest()}}
+
+        def image(self, _item_id, _kind="Primary"):
+            return self.current
+
+        def put_image(self, _item_id, data, _kind="Primary"):
+            self.current = data
+
+    fake = FakeJellyfin()
+    monkeypatch.setattr("curatarr.artwork.client", lambda _kind: fake)
+    with app.app_context():
+        library = Library(
+            jellyfin_library_id="films-del", name="F", media_type="movies"
+        )
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id,
+            media_type="movie",
+            title="Film",
+            jellyfin_id="film-del",
+        )
+        db.session.add(media)
+        db.session.flush()
+        candidate = PurgeCandidate(
+            media_identity_id=media.id,
+            state="LEAVING_SOON",
+            reason_code="requested",
+            reason_text="Asked",
+            reclaimable_bytes=100,
+        )
+        db.session.add(candidate)
+        db.session.commit()
+        reconcile_artwork()
+        badged = fake.current
+        assert badged != source
+        candidate.state = "APPROVED"
+        db.session.commit()
+        reconcile_artwork()
+        assert fake.current == badged  # still showing Leaving Soon
+        assert db.session.query(PosterSnapshot).one().active
+        candidate.state = "RESCUED"  # kept after all: the original comes back
+        db.session.commit()
+        reconcile_artwork()
+        assert fake.current != badged  # the saved original, back
