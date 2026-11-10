@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc131 (2026-11-10): jellyfin_plugin._recheck_waiting every 2 min while an update waits.
 - v0.2.0rc130 (2026-11-10): jellyfin_plugin.tick re-checks versions when Jellyfin is back after a restart.
 - v0.2.0rc129 (2026-11-10): plugin banner wording and visible buttons while waiting to restart.
 - v0.2.0rc128 (2026-11-10): lifecycle.remove_show (Sonarr delete_series with exclusion); jellyfin_delete routes series: delete/now remove, leaving_soon reset_series; status kind. Plugin 0.10.0.0: IsShow, refusal header.

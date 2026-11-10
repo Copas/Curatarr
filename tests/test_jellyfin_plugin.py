@@ -313,3 +313,22 @@ def test_updates_can_install_themselves_and_restart_when_nobodys_watching(
         assert jellyfin.restarts == 1
         jellyfin_plugin.sync()
         assert jellyfin.installed == ["Curatarr"]  # not again
+
+
+def test_a_restart_done_outside_curatarr_clears_the_banner(app, jellyfin):
+    from curatarr.services import set_setting
+
+    with app.app_context():
+        set_setting(
+            jellyfin_plugin.KEY,
+            {"version": "0.1.0.0", "waiting": "0.3.0.0", "latest": "0.3.0.0"},
+        )
+        db.session.commit()
+        assert jellyfin_plugin.notice()["kind"] == "restart"
+        # Jellyfin restarted from its own dashboard: the new version loaded
+        jellyfin.status, jellyfin.extra = (
+            None,
+            [PLUGIN | {"Version": "0.3.0.0", "Status": "Active"}],
+        )
+        jellyfin_plugin.tick()
+        assert jellyfin_plugin.notice() is None

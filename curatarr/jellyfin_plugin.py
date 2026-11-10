@@ -241,6 +241,33 @@ def configure(jellyfin=None) -> bool:
         return False
 
 
+WAITING_RECHECK_MINUTES = 2
+
+
+def _recheck_waiting() -> None:
+    """While an update waits for Jellyfin to restart, look every couple of
+    minutes whether it has (Jellyfin can be restarted outside Curatarr), so
+    the banner goes soon after."""
+    from datetime import timedelta
+
+    from .models import utcnow
+    from .services import _as_datetime, client
+
+    stored = _stored()
+    waiting, version = stored.get("waiting"), stored.get("version")
+    if not waiting or (version and version_key(waiting) <= version_key(version)):
+        return
+    last = _as_datetime(stored.get("waiting_checked_at"))
+    now = utcnow()
+    if last and now - last < timedelta(minutes=WAITING_RECHECK_MINUTES):
+        return
+    _store(waiting_checked_at=now.isoformat())
+    try:
+        _check_versions(client("jellyfin"))
+    except IntegrationError:
+        return
+
+
 def tick() -> None:
     """Every worker cycle: once Jellyfin is back with the plugin loaded after
     a set up, set it up; and restart Jellyfin for a waiting update once
@@ -249,6 +276,7 @@ def tick() -> None:
 
     if _stored().get("restart_when_idle"):
         _restart_if_idle()
+    _recheck_waiting()
     if not _stored().get("pending"):
         return
     try:
