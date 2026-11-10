@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/logo.png",
     "versions": [
       {
+        "version": "0.10.0.0",
+        "changelog": "- On a show, the web menu's item is Reset to minimum (trim it to its first episodes) instead of Leaving Soon, since Delete removes a show (with Curatarr 0.2.0rc128).\n- When Curatarr keeps a title (Never Purge, or a reason of its own), the web app shows Curatarr's reason, not only its own \"check write access\" error.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/Copas/Curatarr/releases/download/plugin-v0.10.0.0/curatarr-jellyfin-plugin_0.10.0.0.zip",
+        "checksum": "aefd4206c9cfb3d84dfc68f3ab36b828",
+        "timestamp": "2026-11-10T15:54:13Z"
+      },
+      {
         "version": "0.9.0.0",
         "changelog": "- Fixed: the web app's Leaving Soon and Leave after I watch menu items never appeared. Jellyfin sends the plugin's answers with capitalised names (\"CanLeave\"), and the menu looked for \"canLeave\".\n- Delete in the web app says what Curatarr did (\"… is being deleted.\", \"… is Leaving Soon.\"). Before, nothing showed, and the title stayed listed, so it looked as if nothing had happened.\n- A film Curatarr deletes leaves Jellyfin's library a few seconds after its file is gone, not at Jellyfin's next library scan, a few minutes later. Only the library entry is removed; files are left to Radarr.\n- Fixed: asking for a title's menu with an API key instead of a signed-in account was an error; it now answers that there's no menu.",
         "targetAbi": "12.2.0.0",
