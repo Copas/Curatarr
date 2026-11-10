@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0rc126 (2026-11-10)
+
+- **Delete in Jellyfin deletes straight away.** The delete was approved at once but carried out on the worker's next pass, about 20 seconds later, so the title seemed to stay. It now starts as soon as Delete is pressed. A deletion can't run twice when the worker reaches it too.
+- **Fixed: a deleted film's History said its poster was restored, "trimmed to its always-keep episodes".** There's no poster to put back for a film that's gone; it's now let go quietly. That message is kept for shows, which are trimmed.
+
 ## 0.2.0rc125 (2026-11-10)
 
 - **Fixed: Delete on a Leaving Soon title looked as if it cancelled it.** Deleting approves the notice, and Curatarr took the title's poster back to the original at once, without the Leaving Soon banner, for the moment before the film went. History also said "cleanup was cancelled". The banner now stays until the title is gone. A show trimmed to its always-keep episodes gets its poster back with a message saying the cleanup is done.

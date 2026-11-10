@@ -6,6 +6,7 @@ from datetime import timedelta
 from math import isfinite
 
 from sqlalchemy import func, update
+from sqlalchemy.exc import OperationalError
 
 from . import curation, db
 from .integrations import IntegrationError
@@ -1229,6 +1230,24 @@ def _finish_reset(media, policy, arr, action, unmonitored):
 
 
 def execute_approved(candidate_id):
+    """Carry out an approved deletion. One at a time per candidate: the worker
+    and a delete from Jellyfin (started at once in the web app) can both try."""
+    from . import leases
+
+    scope = f"execute:{candidate_id}"
+    owner = leases.acquire(scope, 600)
+    if not owner:
+        return "busy"
+    try:
+        return _execute_approved(candidate_id)
+    finally:
+        try:
+            leases.release(scope, owner)
+        except OperationalError:
+            db.session.rollback()  # it expires on its own
+
+
+def _execute_approved(candidate_id):
     from .services import process_pending_events
 
     process_pending_events()

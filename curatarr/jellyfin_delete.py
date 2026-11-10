@@ -56,9 +56,34 @@ def _refused(media, who, message) -> tuple[int, dict]:
     return 200, {"handled": True, "refused": message}
 
 
+def _start_now(candidate_id) -> None:
+    """Carry out the deletion straight away, beside the request, rather than
+    on the worker's next pass: someone pressed Delete and is looking at it."""
+    import threading
+
+    from flask import current_app
+
+    app = current_app._get_current_object()
+    if app.config.get("TESTING"):
+        return  # the worker's pass does it in tests
+
+    def run():
+        from .lifecycle import execute_approved
+
+        with app.app_context():
+            try:
+                execute_approved(candidate_id)
+            except Exception:
+                db.session.rollback()
+                app.logger.exception("Deleting %s straight away failed", candidate_id)
+
+    threading.Thread(target=run, name="curatarr-delete-now", daemon=True).start()
+
+
 def _delete_now(media, candidate, who) -> tuple[int, dict]:
-    """Approve the title's Leaving Soon notice, as Delete in Review does: the
-    worker deletes it within a minute, through Radarr or Sonarr."""
+    """Approve the title's Leaving Soon notice, as Delete in Review does, and
+    delete it straight away, through Radarr or Sonarr (the worker would
+    within a minute)."""
     from .lifecycle import review_candidate
     from .services import audit, resolved_policy
 
@@ -72,6 +97,7 @@ def _delete_now(media, candidate, who) -> tuple[int, dict]:
         candidate_id=candidate.id,
     )
     db.session.commit()
+    _start_now(candidate.id)
     policy, _ = resolved_policy(media)
     if policy["dry_run"]:
         message = f"Dry run: {media.title} isn't deleted; History says what would be."

@@ -170,3 +170,13 @@ def test_jellyfin_is_told_when_curatarr_deletes_a_film(app, monkeypatch):
         assert execute_approved(candidate.id) == "succeeded"
     # The film's folder, as Jellyfin sees it: Radarr deleted the whole folder.
     assert told == ["/Movies/Not Very Good (2020)"]
+
+
+def test_a_deletion_is_carried_out_once_however_many_try(app):
+    from curatarr import leases
+    from curatarr.lifecycle import execute_approved
+
+    owner = leases.acquire("execute:some-candidate", 60)
+    assert owner
+    assert execute_approved("some-candidate") == "busy"
+    leases.release("execute:some-candidate", owner)

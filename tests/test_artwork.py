@@ -770,3 +770,48 @@ def test_the_banner_stays_while_a_title_is_being_deleted(app, monkeypatch):
         db.session.commit()
         reconcile_artwork()
         assert fake.current != badged  # the saved original, back
+
+
+def test_a_deleted_films_poster_is_retired_quietly(app, monkeypatch):
+    from curatarr.artwork import reconcile_artwork
+    from curatarr.models import LifecycleAction
+
+    monkeypatch.setattr(
+        "curatarr.artwork.client",
+        lambda _kind: (_ for _ in ()).throw(AssertionError("asked Jellyfin")),
+    )
+    with app.app_context():
+        library = Library(jellyfin_library_id="gone", name="F", media_type="movies")
+        db.session.add(library)
+        db.session.flush()
+        media = MediaIdentity(
+            library_id=library.id, media_type="movie", title="Gone", jellyfin_id="gone"
+        )
+        db.session.add(media)
+        db.session.flush()
+        candidate = PurgeCandidate(
+            media_identity_id=media.id,
+            state="COMPLETED",
+            reason_code="requested",
+            reason_text="Asked",
+            reclaimable_bytes=100,
+        )
+        db.session.add(candidate)
+        db.session.flush()
+        db.session.add(
+            PosterSnapshot(
+                media_identity_id=media.id,
+                jellyfin_item_id="gone",
+                candidate_id=candidate.id,
+                image_type="Primary",
+                active=True,
+            )
+        )
+        db.session.commit()
+        reconcile_artwork()
+        assert not db.session.query(PosterSnapshot).one().active
+        assert (
+            not db.session.query(LifecycleAction)
+            .filter_by(action_type="leaving_soon_removed")
+            .count()
+        )

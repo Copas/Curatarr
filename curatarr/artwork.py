@@ -791,7 +791,7 @@ def restore_badge(snapshot, candidate=None):
 
 def _restored_because(candidate) -> str:
     if candidate is not None and candidate.state == "COMPLETED":
-        return "Original poster restored: the cleanup is done (a show keeps its always-keep episodes)."
+        return "Original poster restored: trimmed to its always-keep episodes."
     return "Original poster restored after cleanup was cancelled."
 
 
@@ -964,5 +964,16 @@ def reconcile_artwork():
         candidate = db.session.get(PurgeCandidate, snapshot.candidate_id)
         if candidate and candidate.state in DELETING_STATES:
             continue  # being deleted: the banner stays until the title goes
+        if (
+            candidate
+            and candidate.state == "COMPLETED"
+            and candidate.media
+            and candidate.media.media_type == "movie"
+        ):
+            # Deleted: no poster to put back, nothing to say in History.
+            snapshot.active = False
+            snapshot.restored_at = utcnow()
+            db.session.commit()
+            continue
         if not candidate or candidate.state not in BADGED_STATES:
             restore_badge(snapshot, candidate)
