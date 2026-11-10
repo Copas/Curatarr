@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc121 (2026-11-09)
+
+- **Every card on Household choices starts closed.** Picks for each person opened by itself whenever picks were on.
+
 ## 0.2.0rc120 (2026-11-09)
 
 - **Last call waits a year by default.** A film now needs 365 days unplayed before it gets a Last call, not 90; 90 days caught too many films people simply hadn't got round to yet. The number can still be changed.
