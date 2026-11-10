@@ -3835,7 +3835,7 @@ class _Episode:
                 break
         return found
 
-    def intro_block(self):
+    def intro_block(self, near=None):
         """The intro the season's shared footage shows (footage.intro_block),
         fingerprinting the nearest episodes of the season the first time."""
         from . import footage
@@ -3867,7 +3867,7 @@ class _Episode:
         if len(others) < footage.MIN_SIBLINGS:
             return None
         mine = footage.fingerprint(self.info.path, self.info.duration, cache)
-        return footage.intro_block(mine, others, self.info.duration)
+        return footage.intro_block(mine, others, self.info.duration, near)
 
     def others(self, limit=12):
         """Other episodes' saved transcripts (whole or openings), nearest first."""
@@ -4222,8 +4222,9 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
-INTRO_RULE = 2  # how intros are widened (footage.py); raising it checks again
+INTRO_RULE = 3  # how intros are widened (footage.py); raising it checks again
 # 2: an edge moves only when it moves a second or more (footage.MIN_MOVE)
+# 3: the shared stretch overlapping Intro Skipper's intro, not the longest
 
 
 def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
@@ -4256,7 +4257,7 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
         return None  # none to widen, or two: left to Intro Skipper
     current = intros[0]
     try:
-        found = ep.intro_block()
+        found = ep.intro_block((current["Start"], current["End"]))
         if found is None:
             return None
         edges = []

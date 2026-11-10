@@ -29,6 +29,22 @@ def test_the_intro_is_the_footage_the_season_shares():
     assert footage.intro_block(episodes[0], episodes[1:3], 1200.0) is None  # too few
 
 
+def test_the_intro_is_the_shared_stretch_by_intro_skippers_not_a_longer_one():
+    rng = np.random.default_rng(7)
+    titles = rng.integers(0, 255, (30, footage.H, footage.W), dtype=np.uint8)
+    studio = rng.integers(0, 255, (60, footage.H, footage.W), dtype=np.uint8)
+    episodes = []
+    for n in range(5):
+        _unused, thumbs = _print(1200, 20 + n)
+        thumbs[0:30] = titles  # the title sequence
+        thumbs[100:160] = studio  # a longer shared studio opening, later
+        hashes, flat = footage.picture_hashes(thumbs)
+        episodes.append(footage.Print(hashes, flat, None))
+    assert footage.intro_block(episodes[0], episodes[1:], 1200.0) == (100, 160)
+    assert footage.intro_block(episodes[0], episodes[1:], 1200.0, (0, 22)) == (0, 30)
+    assert footage.intro_block(episodes[0], episodes[1:], 1200.0, (300, 320)) is None
+
+
 def test_blank_pictures_are_no_evidence():
     thumbs = np.zeros((10, footage.H, footage.W), np.uint8)
     _hashes, flat = footage.picture_hashes(thumbs)
@@ -68,7 +84,7 @@ def _ep(block, rule=None):
     return SimpleNamespace(
         info=SimpleNamespace(duration=2600.0, path="file"),
         state=SimpleNamespace(id="state", intro_rule=rule),
-        intro_block=lambda: block,
+        intro_block=lambda near=None: block,
     )
 
 

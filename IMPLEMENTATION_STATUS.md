@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc124 (2026-11-10): footage.intro_block(near=) picks the shared block overlapping Intro Skipper's intro; INTRO_RULE 3.
 - v0.2.0rc123 (2026-11-09): backlog gate on recap checks lets up_next parts through.
 - v0.2.0rc122 (2026-11-09): dispatch starts the reserved recap slot before the free-slot check; RECAP_BATCH 10.
 - v0.2.0rc121 (2026-11-09): picks card no longer open by default.

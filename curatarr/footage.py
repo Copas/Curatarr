@@ -9,9 +9,10 @@ Chromaprint fingerprint. A second of an episode is shared with another when
   dark and blank frames don't count), or
 - it's inside a run of identical sound.
 
-The intro is the longest stretch of SHARE or more of the season shared, MIN_LEN
-to MAX_LEN seconds long, in the first part of the episode: logo bumpers are
-shared too but shorter, and a studio set shared for minutes isn't an intro.
+The intro is the stretch of SHARE or more of the season shared, MIN_LEN to
+MAX_LEN seconds long, in the first part of the episode, that overlaps Intro
+Skipper's intro most: logo bumpers are shared too but shorter, and a studio
+set or a host's opening can be shared for longer, after the titles.
 
 Found on its own, that is sometimes something else (a dark scene after the
 titles looks shared), so it's only used to widen Intro Skipper's intro: each
@@ -211,13 +212,25 @@ def blocks(shared) -> list[tuple[int, int]]:
     return [(a, b + 1) for a, b in found if b + 1 - a >= MIN_LEN]
 
 
-def intro_block(here: Print, others: list, duration: float) -> tuple[int, int] | None:
-    """The shared stretch that is the intro, in seconds, or None."""
+def intro_block(
+    here: Print, others: list, duration: float, near=None
+) -> tuple[int, int] | None:
+    """The shared stretch that is the intro, in seconds, or None. With
+    ``near`` (Intro Skipper's intro, start and end), the stretch that overlaps
+    it most: a show can share longer footage elsewhere early on (a studio
+    set, a host's opening), which isn't the intro. Without, the longest."""
     if len(others) < MIN_SIBLINGS:
         return None
     seconds = range(min(int(duration * EARLY), len(here.hashes)))
     found = [b for b in blocks(share(here, others, seconds)) if b[1] - b[0] <= MAX_LEN]
-    return max(found, key=lambda b: b[1] - b[0], default=None)
+    if near is None:
+        return max(found, key=lambda b: b[1] - b[0], default=None)
+
+    def overlap(block):
+        return min(block[1], near[1]) - max(block[0], near[0])
+
+    touching = [b for b in found if overlap(b) > 0]
+    return max(touching, key=overlap, default=None)
 
 
 def snap(t: float, breaks) -> float:

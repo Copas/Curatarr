@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0rc124 (2026-11-10)
+
+- **Fixed: some intros weren't widened because a longer stretch was taken for the intro.** The intro was the longest footage a season's episodes share early on. Some shows share a longer stretch after the titles (a studio set, a host's opening), which doesn't touch Intro Skipper's intro, so nothing was widened. On one panel show, four of seven episodes kept intros ending at 0:22 or 0:24 instead of 0:30. The intro is now the shared stretch that overlaps Intro Skipper's intro most. The labelled episodes score the same. Episodes checked before are checked again in the background, what's up next first.
+
 ## 0.2.0rc123 (2026-11-09)
 
 - **Fixed: episodes coming up next waited days for their skip markers.** While a chapter backlog runs, skip-marker checks that would need a transcript made first wait, to keep the graphics card for chapter work. That held back episodes being watched too: a season someone was in the middle of still had Intro Skipper's short intros. Episodes someone is watching or will watch next now go ahead regardless.
