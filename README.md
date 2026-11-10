@@ -163,6 +163,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Misfiled episodes](docs/FEATURES.md#episodes-filed-under-the-wrong-episode) | An episode Sonarr filed in another's slot is moved back, when what's said in it agrees with its download's name. | **On** (asks first) |
 | [Failed imports](docs/FEATURES.md#problems-burned-in-subtitles-and-broken-files) | Completed downloads stuck in Sonarr or Radarr can be blocklisted and retried from Problems. | **On** (manual action) |
 | [English dubs](docs/FEATURES.md#english-dubs) | Listens to films sold as English dubs: relabels wrong tracks, makes real English the default, replaces ones with none. | **On** (asks first) |
+| [No English to be found](docs/FEATURES.md#films-with-no-english-audio-that-cant-be-put-right) | A film an import list added with no English audio, and no English copy anywhere, goes Leaving Soon and stays off Radarr's lists. | Off |
 | [Wrong episodes](docs/FEATURES.md#recaps-previews-and-skip-markers) | Flags an episode whose dialogue fits another episode's summary. Experimental. | Off |
 | [Automatic fixes](docs/FEATURES.md#automatic-fixes) | The fixes above happen by themselves when Curatarr can be confident, each switchable. Until then, each problem waits on Problems with a button to fix it. | Off |
 | [Replace checks first](docs/FEATURES.md#replace-checks-first) | A file is only deleted once a better copy is confirmed to exist. | Always |
@@ -172,9 +173,9 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | Feature | What it does | Default |
 |---|---|---|
 | [Chapters](docs/FEATURES.md#chapters-and-subtitles) | Chapters for files that have none, named from what's said (local Whisper and Ollama) or spaced at scene changes. | Off until you choose |
-| [Subtitles](docs/FEATURES.md#chapters-and-subtitles) | English subtitles from the soundtrack, for files with none, or with only picture subtitles a Roku can't draw. | Off until you choose |
+| [Subtitles](docs/FEATURES.md#chapters-and-subtitles) | English subtitles from the soundtrack (Whisper large-v3-turbo, every line kept), for files with none, or with only picture subtitles a Roku can't draw; each line timed from its words, at the reading speed you choose. | Off until you choose |
 | [Recaps and previews](docs/FEATURES.md#recaps-previews-and-skip-markers) | "Previously on…" and "Next time on…" get Jellyfin's Skip button. | With Intro Skipper |
-| [Better skip markers](docs/FEATURES.md#recaps-previews-and-skip-markers) | Intro Skipper guesses that are plainly wrong are hidden, each undoable; films keep only their credits. | With Intro Skipper |
+| [Better skip markers](docs/FEATURES.md#recaps-previews-and-skip-markers) | Intros widened to the footage the season shares, end credits starting where the lettering does, recaps running to the intro or the fade after them; plainly wrong guesses hidden. Each change undoable; films keep only their credits. | With Intro Skipper |
 | [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** (asks first) |
 | [English first](docs/FEATURES.md#playing-smoothly-on-every-device) | A track heard to be English becomes first and default over another language's |
 | [Custom posters](docs/FEATURES.md#custom-posters) | Your own poster for any title, and its wide tile, background, logo and banner, uploaded or picked up from a folder (or made by an AI from prompts Curatarr writes), with the originals kept to restore. | One click |

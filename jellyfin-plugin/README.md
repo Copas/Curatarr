@@ -13,6 +13,10 @@ Makes Jellyfin and Curatarr play nicely together. It lives in Curatarr's reposit
 
 **Leaving Soon in the web app's menus.** Jellyfin's apps build their menus themselves, so a plugin can't add to the Roku, phone or TV apps' menus. The web app can be changed, through the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin: with it installed, the web app's menu for a film or show Curatarr manages has **Leaving Soon** beside **Delete**, and **Delete** there deletes straight away (through Radarr or Sonarr). Without it, the web app works like the other apps. It can be switched off in the plugin's settings.
 
+**Delete in the web app says what Curatarr did** (plugin 0.9.0.0): a message at the bottom of the screen, "… is being deleted." or "… is Leaving Soon.", since the app itself says nothing when Curatarr takes over a delete. The Roku, phone and TV apps can't show it.
+
+**A deleted film leaves the library at once** (plugin 0.9.0.0). When Curatarr deletes a film through Radarr, the plugin watches for its file to go and then drops it from Jellyfin's library, a few seconds later, instead of at Jellyfin's next library scan. Only the library entry is removed; files are left to Radarr, and nothing is dropped while its file is still there.
+
 **Leave after I watch, in the web app's menus** (plugin 0.6.0.0, with the File Transformation plugin): for a film, show, season or episode Curatarr knows, the menu has **Leave after I watch**. It marks the item Leaving Soon once the account that chose it has watched it (a show or season once its last episode on disk is watched; one episode once it is). **Don't leave after watched** undoes it. The choice between each episode as it's watched and a whole season at once is on the title's page in Curatarr.
 
 Only people Jellyfin already lets delete an item can do any of this.
