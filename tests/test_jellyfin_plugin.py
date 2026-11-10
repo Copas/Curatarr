@@ -256,6 +256,9 @@ def test_the_update_banner(app, client, jellyfin):
         [PLUGIN | {"Version": "0.3.0.0", "Status": "Active"}],
     )
     with app.app_context():
+        # the worker's next pass after the restart, not the hourly sync
+        jellyfin_plugin.tick()
+        assert jellyfin_plugin.notice() is None
         jellyfin_plugin.sync()
         assert jellyfin_plugin.notice() is None
     # Restart now.

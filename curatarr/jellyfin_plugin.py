@@ -257,6 +257,9 @@ def tick() -> None:
         return  # still restarting
     if _loaded(plugin):
         _store(active=True)
+        # Back after a restart: what's loaded now, so the banner goes at once
+        # rather than at the next reconciliation.
+        _check_versions(client("jellyfin"))
         configure()
 
 

@@ -38,6 +38,10 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc130 (2026-11-10)
+
+- **Fixed: the plugin banner stayed after Jellyfin restarted.** After the restart Curatarr reconnected to the plugin, but went on saying the update was waiting until its next reconciliation, up to an hour later, beside the green "Restarting Jellyfin" message. It now notes the version Jellyfin loaded as soon as Jellyfin is back, and the banner goes.
+
 ## 0.2.0rc129 (2026-11-10)
 
 - **The plugin-update banner says whether you need to do anything.** While Curatarr waits to restart Jellyfin itself, it said only "Curatarr restarts Jellyfin once nobody's watching", and its one button, Don't restart, was all but invisible. It now says "Nothing to do: Curatarr restarts Jellyfin by itself once nothing has played for 10 minutes", with **Restart now instead** and **Don't restart** buttons you can see.
