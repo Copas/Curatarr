@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc138 (2026-11-11): recheck_credits tops up the backlog beside up-next, RECHECK_REST 6 h; _check_markers sets intro_rule when there is no Jellyfin item.
 - v0.2.0rc137 (2026-11-10): services.counted_sessions (viewers, up_next, finished); viewers.browser_viewers skips ignored; thumbnails._look drops items Jellyfin no longer has.
 - v0.2.0rc136 (2026-11-10): titles-filter.js requests location.pathname, not form.action (which carried the current query).
 - v0.2.0rc135 (2026-11-10): usability pass: services.DECIDE_STATES, routes.problems_count, title-link/action-row CSS, btn-outline-secondary only, section-title headings, Sync now, titles poster grid + titles-filter.js, settings setting-cards.

@@ -110,6 +110,7 @@ LEASE_SECONDS = 600
 # a long batch.
 RECAP_BATCH = 10
 RECHECK_QUEUED = 5  # re-checks kept queued for the skip-marker slot
+RECHECK_REST = timedelta(hours=6)  # before an episode is re-checked again
 SCAN_BATCH = 200
 IMPORT_COMMANDS = {
     "DownloadedEpisodesScan",
@@ -1808,24 +1809,39 @@ def recheck_credits(now=None) -> int:
             ChapterState.markers_checked_at.isnot(None),
             ChapterState.job_state == "idle",
             or_(credits_old, intro_old, recap_old),
+            # Not one checked again lately: one that can't move to the new
+            # rules (a check that keeps failing) is left for a while instead
+            # of being picked every cycle ahead of the rest of the library.
+            or_(
+                ChapterState.requested_at.is_(None),
+                ChapterState.requested_at < now - RECHECK_REST,
+            ),
         )
     )
     soon = up_next.part_ids()
     due = rows.filter(ChapterState.media_part_id.in_(soon)).all() if soon else []
-    if not due:
-        # Skip-marker checks have a job slot of their own, so chapter work
-        # waiting doesn't hold these back: keep a few queued for it.
-        waiting = (
-            db.session.query(func.count(ChapterState.id))
-            .filter(
-                ChapterState.job_state.in_(("queued", "running")),
-                ChapterState.requested_action == "recap",
-            )
-            .scalar()
+    # The rest of the library too, every cycle (up next going first used to
+    # stop it whenever anything was up next). Skip-marker checks have a job
+    # slot of their own, so chapter work waiting doesn't hold these back:
+    # keep a few queued for it.
+    waiting = (
+        db.session.query(func.count(ChapterState.id))
+        .filter(
+            ChapterState.job_state.in_(("queued", "running")),
+            ChapterState.requested_action == "recap",
         )
-        room = RECHECK_QUEUED - waiting
-        if room > 0:
-            due = rows.order_by(ChapterState.markers_checked_at).limit(room).all()
+        .scalar()
+    )
+    room = RECHECK_QUEUED - waiting - len(due)
+    if room > 0:
+        taken = {state.id for state in due}
+        due += [
+            state
+            for state in rows.order_by(ChapterState.markers_checked_at)
+            .limit(room + len(taken))
+            .all()
+            if state.id not in taken
+        ][:room]
     for state in due:
         if (state.credits_rule or 0) < CREDITS_RULE or (
             state.intro_rule or 0
@@ -4012,6 +4028,10 @@ def _check_markers(ep: _Episode) -> str:
     state = ep.state
     item_id = jellyfin_item_id(ep.part, ep.media)
     if not item_id:
+        # The second half of a two-episode file (S04E01-E02): Jellyfin lists
+        # the file once, so this one has no markers of its own to check. As
+        # checked, or it was picked again every cycle.
+        state.intro_rule = INTRO_RULE
         return "markers: no Jellyfin item"
     plugin = IntroSkipper(client("jellyfin"))
     try:

@@ -1,3 +1,4 @@
+from datetime import timedelta
 from types import SimpleNamespace
 
 import numpy as np
@@ -205,6 +206,7 @@ def test_episodes_checked_under_older_rules_are_checked_again(app, monkeypatch):
         state.job_state, state.credits_rule = "idle", enrichment.CREDITS_RULE
         state.intro_rule = enrichment.INTRO_RULE
         state.markers_checked_at = state.recap_checked_at = utcnow()
+        state.requested_at = None  # some hours later
     db.session.commit()
     assert enrichment.recheck_credits() == 0  # checked the current way
     # a recap found by older rules: only the recap is checked again
@@ -234,3 +236,64 @@ def test_a_marker_already_gone_counts_as_hidden():
 
     with pytest.raises(IntegrationError):
         IntroSkipper(Down()).hide("item", "segment")
+
+
+def test_an_episode_that_cant_be_rechecked_doesnt_hold_up_the_rest(app, monkeypatch):
+    """The second half of a two-episode file has no Jellyfin item: it used to
+    stay on the old rules and be picked every cycle, and while anything was
+    up next the rest of the library wasn't rechecked at all."""
+    from curatarr import db, enrichment, up_next
+    from curatarr.models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
+
+    library = Library(jellyfin_library_id="tv", name="TV", media_type="tv")
+    db.session.add(library)
+    db.session.flush()
+    show = MediaIdentity(library_id=library.id, media_type="series", title="Show")
+    db.session.add(show)
+    db.session.flush()
+    states = []
+    for number in (1, 2, 3):
+        part = MediaPart(
+            media_identity_id=show.id,
+            kind="episode",
+            season_number=1,
+            episode_number=number,
+            has_file=True,
+        )
+        db.session.add(part)
+        db.session.flush()
+        state = ChapterState(media_part_id=part.id, media_identity_id=show.id)
+        state.job_state = "idle"
+        state.markers_checked_at = utcnow() - timedelta(days=number)
+        db.session.add(state)
+        states.append(state)
+    db.session.commit()
+    monkeypatch.setattr(enrichment, "RECHECK_QUEUED", 2)
+    monkeypatch.setattr(
+        up_next, "part_ids", lambda users=None: [states[0].media_part_id]
+    )
+    # up next, and the oldest of the rest beside it
+    assert enrichment.recheck_credits() == 2
+    assert {s.requested_action for s in states[::2]} == {"recap"}
+    # the up-next one comes back unchanged (no Jellyfin item): not again soon
+    states[0].job_state, states[0].requested_action = "idle", None
+    states[2].job_state, states[2].requested_action = "idle", None
+    db.session.commit()
+    assert enrichment.recheck_credits() == 1  # …so the remaining one gets a turn
+    assert states[1].requested_action == "recap"
+    assert states[0].requested_action is None
+
+
+def test_no_jellyfin_item_counts_as_checked(app):
+    from types import SimpleNamespace
+
+    from curatarr import enrichment
+
+    state = SimpleNamespace(intro_rule=None)
+    ep = SimpleNamespace(
+        state=state,
+        part=SimpleNamespace(jellyfin_id=None, kind="episode"),
+        media=SimpleNamespace(jellyfin_id="show"),
+    )
+    assert enrichment._check_markers(ep) == "markers: no Jellyfin item"
+    assert state.intro_rule == enrichment.INTRO_RULE

@@ -38,6 +38,10 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc138 (2026-11-11)
+
+- **Skip markers are checked again across the whole library, not just what's up next.** Five The Office episodes that share a file with the episode before (S04E01-E02 and the like) have no Jellyfin item of their own, so their check could never finish; someone was watching the show, so they were picked every cycle, about 3,000 times a day each. And while anything was up next, the rest of the library wasn't topped up at all, so only 444 of about 8,200 episodes had been checked the new way. Now an episode without its own Jellyfin item counts as checked, one checked lately waits six hours before it's tried again, and the rest of the library keeps a few checks queued every cycle beside what's up next.
+
 ## 0.2.0rc137 (2026-11-10)
 
 - **Ignored hidden accounts are ignored everywhere.** With hidden accounts set to be ignored, Curatarr still read what they were playing: which app they used (so a hidden account watching in a browser had browser audio tracks made for its next episodes), what to prepare first, and whether something stopped in its credits counts as watched. None of those count an ignored account now; whether anyone at all is streaming, to hold back heavy work, still does.
