@@ -38,6 +38,10 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc139 (2026-11-11)
+
+- **Skip buttons show a moment early.** The recap, intro and preview markers Curatarr writes now start 3 seconds before the part they skip (Settings → Enhance → Skip markers, *Show skip buttons early*, 0-10 seconds), so the button is up in time to reach for the remote. Credits markers still start where the credits do. Intros Curatarr widened before are written again by the library-wide recheck. Intros Intro Skipper places itself follow its own *Intro Start Offset*.
+
 ## 0.2.0rc138 (2026-11-11)
 
 - **Skip markers are checked again across the whole library, not just what's up next.** Five The Office episodes that share a file with the episode before (S04E01-E02 and the like) have no Jellyfin item of their own, so their check could never finish; someone was watching the show, so they were picked every cycle, about 3,000 times a day each. And while anything was up next, the rest of the library wasn't topped up at all, so only 444 of about 8,200 episodes had been checked the new way. Now an episode without its own Jellyfin item counts as checked, one checked lately waits six hours before it's tried again, and the rest of the library keeps a few checks queued every cycle beside what's up next.

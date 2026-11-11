@@ -252,7 +252,7 @@ def parse_layer(form, *, library: bool) -> dict:
 
 def parse_options(form) -> dict:
     values = {}
-    for key in ("concurrency", "settle_minutes"):
+    for key in ("concurrency", "settle_minutes", "skip_lead_seconds"):
         raw = (form.get(key) or "").strip()
         if raw:
             try:
@@ -3679,6 +3679,8 @@ def _mark_segment(state, part, media, kind, *, clear_guesses=False):
     if segments is None:
         return  # Intro Skipper isn't installed
     found = end is not None
+    if found:
+        start = skip_lead(start)  # the button shows a moment before it starts
     current = [s for s in segments if s.get("Type") == kind and not s.get("Suppressed")]
     keep = next(
         (
@@ -4272,7 +4274,22 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
-INTRO_RULE = 3  # how intros are widened (footage.py); raising it checks again
+INTRO_RULE = 4  # how intros are widened (footage.py); raising it checks again
+# 4: the marker starts skip_lead_seconds early, so the button shows in time
+
+
+def skip_lead(start: float) -> float:
+    """Where a skip marker Curatarr writes starts: a few seconds before the
+    part it skips (Settings → Enhance), so the Skip button is up in time to
+    pick up the remote. Credits don't get it: the button would skip the end
+    of the story."""
+    try:
+        lead = options()["skip_lead_seconds"]
+    except (ChapterConfigError, RuntimeError):  # unreadable, or outside the app
+        lead = 0
+    return max(0.0, start - lead)
+
+
 # 2: an edge moves only when it moves a second or more (footage.MIN_MOVE)
 # 3: the shared stretch overlapping Intro Skipper's intro, not the longest
 
@@ -4329,7 +4346,7 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
     if wider is None:
         return None
     try:
-        ours = plugin.add(item_id, "Introduction", *wider)
+        ours = plugin.add(item_id, "Introduction", skip_lead(wider[0]), wider[1])
     except IntegrationError as exc:
         _log("intro_add_failed", state_id=ep.state.id, error=str(exc))
         return None

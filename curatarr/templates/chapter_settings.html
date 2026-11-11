@@ -91,6 +91,9 @@
     {{ option('finish_at_credits', 'Count something stopped in its credits as watched', 'Jellyfin counts a film as watched only past 90%, and long end credits keep finished films in Continue Watching. When someone stops a film or episode in its credits, or after its last line of dialogue with only a few minutes left, it\'s marked watched for them.') }}
     {{ option('episode_identity_check', 'Check episodes against their summaries', 'Experimental. Flags an episode whose transcript fits another episode\'s summary far better. Finds real mix-ups, but also some that are fine.') }}
   </div>
+  <div class="setting-grid mt-2">
+    <div class="setting"><label class="form-label w-100">Show skip buttons early<div class="input-group"><input class="form-control" type="number" min="0" max="10" name="skip_lead_seconds" value="{{ opts.skip_lead_seconds }}"><span class="input-group-text">seconds</span></div></label><div class="form-text">Recap, intro and preview markers Curatarr writes start this long before the part they skip, so the Skip button is up in time to reach for the remote. Pressing it straight away skips those seconds too. Credits are left where they start.</div></div>
+  </div>
 {% endcall %}
 {% call card('dubs', 'audio', 'English dubs', ('Checking foreign films' if opts.dub_check else 'Off') ~ (' · removes other languages' if opts.dub_check and opts.dub_remove_other_languages else '') ~ (' · replaces automatically' if opts.dub_check and opts.dub_replace_automatically else ''), opts.dub_check, toggles='dub_check') %}
   <div class="setting-grid">

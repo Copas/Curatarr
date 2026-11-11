@@ -99,6 +99,7 @@ GLOBAL_DEFAULTS: dict[str, Any] = {
     "subtitle_languages": ["eng"],
     "pace_rebuilds": True,
     "settle_minutes": 10,
+    "skip_lead_seconds": 3,  # skip buttons show this early (enrichment.skip_lead)
     "scene_threshold": 0.3,
     "ollama_url": "http://127.0.0.1:11434",
     "whisper_device": "auto",
@@ -263,6 +264,11 @@ def validate_global_options(values: dict) -> dict:
         or not 1 <= merged["settle_minutes"] <= 1440
     ):
         raise ChapterConfigError("Settle time must be 1-1440 minutes")
+    if (
+        type(merged["skip_lead_seconds"]) is not int
+        or not 0 <= merged["skip_lead_seconds"] <= 10
+    ):
+        raise ChapterConfigError("Skip buttons can show 0-10 seconds early")
     threshold = merged["scene_threshold"]
     if not isinstance(threshold, int | float) or not 0.05 <= threshold <= 0.95:
         raise ChapterConfigError("Scene threshold must be between 0.05 and 0.95")

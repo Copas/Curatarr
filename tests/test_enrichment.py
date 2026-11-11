@@ -1640,7 +1640,11 @@ def test_skip_marker_check_marks_the_preview_and_hides_a_false_outro(
     assert (
         "POST",
         "/Episode/jf-ep4/Segments",
-        {"Type": "Preview", "Start": 3559.5, "End": 3600.0},
+        {
+            "Type": "Preview",
+            "Start": 3556.5,
+            "End": 3600.0,
+        },  # 3 s early: the button in time
     ) in calls
     assert ("DELETE", "/Episode/jf-ep4/Segments/music", None) in calls
     assert ("DELETE", "/Episode/jf-ep4/Segments/real", None) not in calls
@@ -2906,3 +2910,15 @@ def test_looking_again_at_kept_chapters_never_piles_up_or_holds_up_new_files(
     new.requested_at = utcnow()
     db.session.commit()
     assert enrichment._due_jobs(1, scans=False)[0].id == new.id
+
+
+def test_skip_buttons_show_a_moment_early(app):
+    from curatarr.chapters import ChapterConfigError, validate_global_options
+
+    assert enrichment.skip_lead(100.0) == 97.0  # 3 seconds by default
+    assert enrichment.skip_lead(1.0) == 0.0  # never before the start
+    set_setting("chapter_options", {"skip_lead_seconds": 0})
+    db.session.commit()
+    assert enrichment.skip_lead(100.0) == 100.0
+    with pytest.raises(ChapterConfigError):
+        validate_global_options({"skip_lead_seconds": 30})
