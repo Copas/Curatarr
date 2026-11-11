@@ -86,10 +86,10 @@ def _files(wanted: dict[str, set]) -> tuple[list, dict]:
 
 def _note_playing(jellyfin) -> None:
     """Every cycle: what's playing right now (and the episodes after it)."""
-    from .services import set_setting, setting
+    from .services import counted_sessions, set_setting, setting
 
     try:
-        sessions = jellyfin.sessions() or []
+        sessions = counted_sessions(jellyfin.sessions() or [])
     except IntegrationError:
         return
     wanted = {}

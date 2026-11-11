@@ -871,6 +871,18 @@ def ignored_user_ids() -> set[str]:
     return set(setting("jellyfin_hidden_user_ids", []) or [])
 
 
+def counted_sessions(sessions) -> list[dict]:
+    """Jellyfin's playback sessions less those of accounts Curatarr ignores
+    (hidden accounts, when set to be ignored). For what people watch; whether
+    anyone is streaming at all (to hold back heavy work) counts every session."""
+    ignored = {u.replace("-", "").lower() for u in ignored_user_ids()}
+    return [
+        s
+        for s in sessions or []
+        if str(s.get("UserId") or "").replace("-", "").lower() not in ignored
+    ]
+
+
 def account_names() -> dict[str, str]:
     """Jellyfin account id → name, for every account Curatarr's pages show."""
     left_out = left_out_user_ids()

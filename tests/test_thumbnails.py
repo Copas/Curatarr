@@ -15,6 +15,7 @@ class Part:
 class Jellyfin:
     def __init__(self):
         self.with_thumbnails = set()
+        self.gone = set()
         self.asked = []
 
     def items_trickplay(self, ids):
@@ -25,6 +26,7 @@ class Jellyfin:
                 "Trickplay": {i: {"320": {}}} if i in self.with_thumbnails else {},
             }
             for i in ids
+            if i not in self.gone  # Jellyfin leaves out items it doesn't have
         ]
 
 
@@ -140,3 +142,14 @@ def test_the_seek_repair_leaves_the_last_spot_for_tv_friendly_audio(app, monkeyp
     set_setting(compat_audio.REMAINING_KEY, {"films": 0, "episodes": 0})
     db.session.commit()
     assert thumbnails.room(leave=seek_repair._audio_waiting())
+
+
+def test_a_file_jellyfin_no_longer_has_stops_waiting(app, monkeypatch):
+    fake = _jellyfin(monkeypatch)
+    for n in range(3):
+        thumbnails.note_rebuilt(Part(f"item{n}"), None, had_thumbnails=True)
+    assert not thumbnails.room()
+    fake.gone.add("item0")  # replaced or deleted since: no thumbnails will come
+    assert thumbnails.room()
+    assert [w["item"] for w in setting(thumbnails.KEY)] == ["item1", "item2"]
+    assert not thumbnails.has_thumbnails(Part("item0"), None)

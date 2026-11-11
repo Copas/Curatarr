@@ -38,6 +38,11 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc137 (2026-11-10)
+
+- **Ignored hidden accounts are ignored everywhere.** With hidden accounts set to be ignored, Curatarr still read what they were playing: which app they used (so a hidden account watching in a browser had browser audio tracks made for its next episodes), what to prepare first, and whether something stopped in its credits counts as watched. None of those count an ignored account now; whether anyone at all is streaming, to hold back heavy work, still does.
+- **Rebuilds no longer wait on files Jellyfin no longer has.** Each rebuild waits for Jellyfin to remake the file's scrubbing thumbnails, three at a time. A file replaced or deleted since kept its place for two days, holding up every rebuild behind it; it now frees it at once.
+
 ## 0.2.0rc136 (2026-11-10)
 
 - **Browse titles filters properly as you type.** After the first letter, each search was sent with the previous one still attached, so the list stayed on the first letter's results and backspacing did nothing. Typing now narrows the list, deleting widens it again, and clearing the box shows everything.

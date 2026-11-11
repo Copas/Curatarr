@@ -145,9 +145,11 @@ def _label(part) -> str:
 
 
 def _playing(sessions) -> set[tuple[str, str]]:
+    from .services import counted_sessions
+
     return {
         (_norm(s.get("UserId")), _norm((s.get("NowPlayingItem") or {}).get("Id")))
-        for s in sessions or []
+        for s in counted_sessions(sessions)
         if s.get("NowPlayingItem")
     }
 

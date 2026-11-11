@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc137 (2026-11-10): services.counted_sessions (viewers, up_next, finished); viewers.browser_viewers skips ignored; thumbnails._look drops items Jellyfin no longer has.
 - v0.2.0rc136 (2026-11-10): titles-filter.js requests location.pathname, not form.action (which carried the current query).
 - v0.2.0rc135 (2026-11-10): usability pass: services.DECIDE_STATES, routes.problems_count, title-link/action-row CSS, btn-outline-secondary only, section-title headings, Sync now, titles poster grid + titles-filter.js, settings setting-cards.
 - v0.2.0rc134 (2026-11-10): mediafile.editing/_exclusive per-file lock + FileChanged; lifecycle._played_since; IntroSkipper.hide 404 ok, _check_markers skips hidden ids; write_watch; migrations c7e2a4b6d815, d3f5b7c9e126; conftest imports all modules.

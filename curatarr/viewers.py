@@ -24,9 +24,13 @@ def _norm(user_id) -> str:
 def note(sessions, now=None) -> None:
     """Count who's watching in which kind of app, per day."""
     from . import db
-    from .services import set_setting, setting
+    from .services import counted_sessions, set_setting, setting
 
-    playing = [s for s in sessions or [] if s.get("NowPlayingItem") and s.get("UserId")]
+    playing = [
+        s
+        for s in counted_sessions(sessions)
+        if s.get("NowPlayingItem") and s.get("UserId")
+    ]
     if not playing:
         return
     now = now or utcnow()
@@ -49,12 +53,15 @@ def note(sessions, now=None) -> None:
 
 def browser_viewers(now=None) -> set[str]:
     """People who've mostly watched in a browser over the last 30 days."""
-    from .services import setting
+    from .services import ignored_user_ids, setting
 
     now = now or utcnow()
     oldest = (now - timedelta(days=DAYS)).date().isoformat()
+    ignored = {_norm(u) for u in ignored_user_ids()}
     viewers = set()
     for user, days in (setting(KEY) or {}).items():
+        if user in ignored:
+            continue  # counted before the account was ignored
         web = sum(c[0] for d, c in days.items() if d >= oldest)
         other = sum(c[1] for d, c in days.items() if d >= oldest)
         if web >= MIN_SAMPLES and web >= other:

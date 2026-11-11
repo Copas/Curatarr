@@ -343,3 +343,23 @@ def test_browsers_get_a_stereo_aac_track_and_tvs_keep_theirs(tmp_path):
     assert audio[0]["default"] and not audio[1]["default"]
     assert audio[1]["channels"] == 2 and audio[1]["language"] == "eng"
     assert browser_audio_source(after) is None  # not added twice
+
+
+def test_an_ignored_hidden_account_isnt_a_browser_viewer(app):
+    from curatarr import viewers
+    from curatarr.services import save_hidden_accounts, set_setting, setting
+
+    set_setting("jellyfin_hidden_user_ids", ["admin"])
+    db.session.commit()
+    watching = [
+        {"UserId": user, "Client": "Jellyfin Web", "NowPlayingItem": {"Id": "x"}}
+        for user in ("admin", "kid")
+    ]
+    for _ in range(25):
+        viewers.note(watching)
+    assert viewers.browser_viewers() == {"admin", "kid"}  # hidden, but shown
+    save_hidden_accounts("ignore")
+    assert viewers.browser_viewers() == {"kid"}  # what was counted before
+    before = setting(viewers.KEY)["admin"]
+    viewers.note(watching)
+    assert setting(viewers.KEY)["admin"] == before  # and nothing new

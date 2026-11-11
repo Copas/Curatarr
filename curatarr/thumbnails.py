@@ -38,16 +38,24 @@ def _item(part, media):
 
 def _with_thumbnails(item_ids) -> set[str]:
     """The ones Jellyfin has thumbnails for (raises IntegrationError)."""
+    return _look(item_ids)[0]
+
+
+def _look(item_ids) -> tuple[set, set]:
+    """(those with thumbnails, those Jellyfin has at all); raises
+    IntegrationError."""
     from .services import client
 
     if not item_ids:
-        return set()
+        return set(), set()
     found = client("jellyfin").items_trickplay(sorted(item_ids))
-    return {
+    known = {item.get("Id", "").replace("-", "").lower() for item in found}
+    have = {
         item.get("Id", "").replace("-", "").lower()
         for item in found
         if item.get("Trickplay")
     }
+    return have, known
 
 
 def has_thumbnails(part, media) -> bool:
@@ -117,8 +125,11 @@ def waiting() -> list[dict]:
         return []
     now = utcnow()
     recent = [w for w in entries if (_as_datetime(w["at"]) or now) > now - GIVE_UP]
-    done = _with_thumbnails({w["item"] for w in recent})
-    still = [w for w in recent if w["item"] not in done]
+    have, known = _look({w["item"] for w in recent})
+    # Done once it has thumbnails again, or once Jellyfin no longer has the
+    # item at all (replaced or deleted since): its thumbnails will never come,
+    # and waiting held up every rebuild behind it for two days.
+    still = [w for w in recent if w["item"] in known and w["item"] not in have]
     if still != entries:
         set_setting(KEY, still)
         db.session.commit()
