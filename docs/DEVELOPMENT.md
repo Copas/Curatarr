@@ -16,6 +16,8 @@ export CURATARR_DEMO_MODE=true          # synthetic data; never contacts real se
 .venv/bin/python -m curatarr
 ```
 
+The development server answers on this PC only (127.0.0.1:8787); set `CURATARR_HOST=0.0.0.0` to reach it from a phone or TV on the network. The installed service listens on every interface (`CURATARR_BIND`).
+
 In a second shell, run the worker with `.venv/bin/flask --app curatarr worker`. The development server listens on port 8787.
 
 ### Keeping personal data out

@@ -1378,7 +1378,9 @@ def account_tag(poster: CustomPoster, label: str | None) -> str:
 
     if not label:
         return poster.id.replace("-", "")
-    return hashlib.sha1(f"{poster.id}|{BADGE_STYLE}|{label}".encode()).hexdigest()[:32]
+    return hashlib.sha1(
+        f"{poster.id}|{BADGE_STYLE}|{label}".encode(), usedforsecurity=False
+    ).hexdigest()[:32]
 
 
 def account_picture(poster: CustomPoster, label: str | None) -> bytes:
@@ -1854,7 +1856,9 @@ def plugin_list(version: int = 1) -> list[dict]:
                 "item": bare(jellyfin_id),
                 "user": bare(viewer),
                 "id": f"{'v' if kind == 't' else 'e'}.{viewer}.{item_id}",
-                "tag": hashlib.sha1(spec.encode()).hexdigest()[:32],
+                "tag": hashlib.sha1(spec.encode(), usedforsecurity=False).hexdigest()[
+                    :32
+                ],
                 # A second picture, listing the names, for where it's shown big.
                 "large": bool(ribbon) and has_large(options, ribbon["household"], kind),
                 # A landscape version, for rows of wide tiles (a title's Thumb).
@@ -1910,7 +1914,9 @@ def plugin_list(version: int = 1) -> list[dict]:
                     "user": bare(viewer),
                     "kind": kind,
                     "id": f"{kind.lower()}.{viewer}.{media_id}",
-                    "tag": hashlib.sha1(spec.encode()).hexdigest()[:32],
+                    "tag": hashlib.sha1(
+                        spec.encode(), usedforsecurity=False
+                    ).hexdigest()[:32],
                     "large": False,
                 }
             )

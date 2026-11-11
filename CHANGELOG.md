@@ -38,6 +38,15 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc140 (2026-11-11)
+
+A second sweep before the release: static analysis, a dependency audit, the web security hooks, the deletion and file-rewrite paths, migrations and the plugin.
+
+- **Pillow 13.** The image library had twenty fixed decoder bugs (crafted images could crash or corrupt memory); Curatarr opens pictures from Jellyfin, TMDB, uploads and the artwork tools, so it now requires 13.0.0 or later, which the whole test suite passes with.
+- **The development server answers on this PC only** (`python -m curatarr`); `CURATARR_HOST=0.0.0.0` opens it to the network. The installed service is unchanged.
+- **Long database waits are logged with their real cause.** The report added in rc134 kept SQLAlchemy's own frames (an installed copy lives under a path that itself contains "curatarr"), so it never said where the write came from.
+- Checked and found sound: every form post needs the session's token and refuses JSON bodies; token endpoints compare in constant time; household accounts are limited to their pages; the worker and plugin use their own tokens; cookies are HttpOnly and SameSite; nothing is run through a shell; served files come from the database, never a request; no template output is unescaped; a fresh database upgrades and downgrades cleanly and matches the models; deletions take a lease and re-read playback events before every destructive call; the Jellyfin plugin builds and its 36 tests pass.
+
 ## 0.2.0rc139 (2026-11-11)
 
 - **Skip buttons show a moment early.** The recap, intro and preview markers Curatarr writes now start 3 seconds before the part they skip (Settings → Enhance → Skip markers, *Show skip buttons early*, 0-10 seconds), so the button is up in time to reach for the remote. Credits markers still start where the credits do. Intros Curatarr widened before are written again by the library-wide recheck. Intros Intro Skipper places itself follow its own *Intro Start Offset*.

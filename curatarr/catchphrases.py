@@ -266,7 +266,7 @@ def sweep() -> int:
         done += 1
     spread = setting(SPREAD_KEY) or {}
     stale = time.time() - spread.get("at", 0) > SPREAD_EVERY
-    if done and stale or not spread and stored:
+    if (done and stale) or (not spread and stored):
         spread = _spread(stored)
         set_setting(SPREAD_KEY, spread)
         done = done or 1

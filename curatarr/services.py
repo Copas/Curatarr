@@ -2506,7 +2506,7 @@ def app_version():
 
 def operational_status(*, demo_mode=False):
     """Non-secret operational state for /api/v1/status and Overview."""
-    integrations = {kind: "unconfigured" for kind in CLIENTS}
+    integrations = dict.fromkeys(CLIENTS, "unconfigured")
     for row in db.session.query(Integration).all():
         integrations[row.kind] = row.health_state
     if demo_mode:

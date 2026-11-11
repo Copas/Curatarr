@@ -181,7 +181,7 @@ class TranscriptIndex:
                 padded = f" {window} "
                 if quoted and not all(f" {q} " in padded for q in quoted):
                     continue
-                if quoted and not wanted or phrase and f" {phrase} " in padded:
+                if (quoted and not wanted) or (phrase and f" {phrase} " in padded):
                     score = 2.0
                 else:
                     present = {stem(w) for w in window.split()}

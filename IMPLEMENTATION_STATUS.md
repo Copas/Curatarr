@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc140 (2026-11-11): bug sweep: Pillow>=13, __main__ binds 127.0.0.1, write_watch filters by package dir, sha1 usedforsecurity=False, and/or parenthesised.
 - v0.2.0rc139 (2026-11-11): chapters skip_lead_seconds (default 3), enrichment.skip_lead on recap/preview/intro markers, INTRO_RULE 4.
 - v0.2.0rc138 (2026-11-11): recheck_credits tops up the backlog beside up-next, RECHECK_REST 6 h; _check_markers sets intro_rule when there is no Jellyfin item.
 - v0.2.0rc137 (2026-11-10): services.counted_sessions (viewers, up_next, finished); viewers.browser_viewers skips ignored; thumbnails._look drops items Jellyfin no longer has.

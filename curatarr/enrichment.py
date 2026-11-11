@@ -3417,7 +3417,9 @@ def queue_library(library_id, action="generate") -> int:
 
 def describe(state: ChapterState | None) -> dict:
     """What the title page shows for one file."""
-    if not state or state.chapter_status == "not_processed" and not state.chapter_count:
+    if not state or (
+        state.chapter_status == "not_processed" and not state.chapter_count
+    ):
         label = (
             "None" if state and state.duration_seconds is not None else "Not checked"
         )

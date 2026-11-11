@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curatarr"
-version = "0.2.0rc139"
+version = "0.2.0rc140"
 description = "A deterministic media lifecycle manager for Jellyfin, Sonarr, and Radarr"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,7 +12,7 @@ dependencies = [
   "Flask-SQLAlchemy>=3.1,<4",
   "Flask-Migrate>=4,<5",
   "requests>=2.32,<3",
-  "Pillow>=11,<13",
+  "Pillow>=13,<14",  # 13.0.0 fixed twenty image-decoder CVEs
   "gunicorn>=23,<24",
   "psycopg[binary]>=3.2,<4",
   "cryptography>=45,<51",

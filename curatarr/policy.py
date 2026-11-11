@@ -143,7 +143,7 @@ def effective_policy(
             else "oldest_watched_nonfavorite_first"
         )
     }
-    sources = {key: "default" for key in values}
+    sources = dict.fromkeys(values, "default")
     for source, layer in (
         ("global", global_values or {}),
         ("library", library_values or {}),

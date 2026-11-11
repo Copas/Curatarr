@@ -9,12 +9,14 @@ longer than HELD_TOO_LONG, so the slow path can be found and fixed.
 """
 
 import logging
+import os
 import time
 import traceback
 
 from sqlalchemy import event
 
 log = logging.getLogger("curatarr.write_watch")
+PACKAGE = os.path.dirname(os.path.abspath(__file__))
 HELD_TOO_LONG = 10.0  # seconds
 WRITES = ("INSERT", "UPDATE", "DELETE", "REPLACE")
 
@@ -36,10 +38,14 @@ def watch(engine) -> None:
             return
         held = time.monotonic() - since
         if held >= HELD_TOO_LONG:
+            # Curatarr's own frames only: an installed copy lives under a
+            # path that itself contains "curatarr", so the name alone picked
+            # out SQLAlchemy's frames and hid where the write came from.
             frames = [
-                f"{f.filename.rsplit('curatarr/', 1)[-1]}:{f.lineno} {f.name}"
+                f"{f.filename[len(PACKAGE) + 1 :]}:{f.lineno} {f.name}"
                 for f in where or []
-                if "/curatarr/" in f.filename and "write_watch" not in f.filename
+                if f.filename.startswith(PACKAGE + os.sep)
+                and not f.filename.endswith("write_watch.py")
             ]
             log.warning(
                 "The database write lock was held for %.0f s; first write from %s",
