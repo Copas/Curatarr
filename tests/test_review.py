@@ -151,4 +151,4 @@ def test_review_queue_shows_section_29_context(app, client):
     assert "Delete the movie and its files via Radarr" in page
     # Demo Series 05 stores four Season 1 episodes; the first three are retained.
     assert "Delete 1 episode file outside the retained footprint via Sonarr" in page
-    assert "Meaningful watch: No" in page
+    assert "Watched enough to count: No" in page

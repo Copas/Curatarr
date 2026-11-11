@@ -29,7 +29,10 @@ def test_the_overview_updates_its_status_line_in_place(app, client):
     set_setting("last_reconcile_at", utcnow().isoformat())
     db.session.commit()
     finished = client.get("/overview/reconcile-status").text
-    assert "data-active" not in finished and "Last reconciliation finished" in finished
+    assert (
+        "data-active" not in finished
+        and "Last sync with Jellyfin, Sonarr and Radarr finished" in finished
+    )
 
 
 def test_refreshed_sections_have_ids_to_stay_open():

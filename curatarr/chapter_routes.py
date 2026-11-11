@@ -817,7 +817,7 @@ def failed_download_retry(service, queue_id):
 
 @bp.post("/chapters/problems/<kind>/<state_id>/<action>")
 def found_file_action(kind, state_id, action):
-    """Fix, or Leave it, a file found playing an extra first ("audio") or that
+    """Fix, or Keep, a file found playing an extra first ("audio") or that
     Roku can't seek in ("seek"); state_id "all" with Fix does every one."""
     from . import default_audio, seek_repair
 

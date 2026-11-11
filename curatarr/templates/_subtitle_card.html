@@ -15,8 +15,8 @@
       {% if entry.checked_at %}<div class="text-secondary">Checked {{ entry.checked_at|when }}</div>{% endif %}
     </div>
     <form method="post" class="d-flex gap-2" data-async><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ name }}">
-      {% if entry.outcome == 'resynced' and entry.backup %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.chapter_subtitle_action', state_id=state.id, action='undo') }}" data-tip="Puts back the file as it was before re-timing ({{ entry.backup }}), and leaves it that way.">Undo</button>{% endif %}
-      {% if entry.outcome == 'set_aside' %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.chapter_subtitle_action', state_id=state.id, action='restore') }}" data-tip="Brings back the file set aside ({{ entry.aside }}) and leaves it that way. Curatarr's own stay beside it; remove them from the file's page if you don't want them.">Bring back</button>{% endif %}
+      {% if entry.outcome == 'resynced' and entry.backup %}<button class="btn btn-sm btn-outline-secondary" formaction="{{ url_for('main.chapter_subtitle_action', state_id=state.id, action='undo') }}" data-tip="Puts back the file as it was before re-timing ({{ entry.backup }}), and leaves it that way.">Undo</button>{% endif %}
+      {% if entry.outcome == 'set_aside' %}<button class="btn btn-sm btn-outline-secondary" formaction="{{ url_for('main.chapter_subtitle_action', state_id=state.id, action='restore') }}" data-tip="Brings back the file set aside ({{ entry.aside }}) and leaves it that way. Curatarr's own stay beside it; remove them from the file's page if you don't want them.">Bring back</button>{% endif %}
       {% if state.job_state not in ('queued', 'running') %}<button class="btn btn-sm btn-outline-secondary" formaction="{{ url_for('main.chapter_subtitle_action', state_id=state.id, action='recheck') }}" data-tip="Listens to the film again and decides afresh.">Check again</button>{% endif %}
     </form>
   </div>

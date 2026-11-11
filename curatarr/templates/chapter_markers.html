@@ -5,8 +5,8 @@
 <div class="eyebrow">Enhance</div><h1>Skip markers</h1>
 <p class="text-secondary">Recaps and previews Curatarr marked, credits it started where the picture does, and Intro Skipper markers it hid as wrong, newest first. Open an episode in Jellyfin and jump to the time shown to check it; <strong>Undo</strong> reverses one if it's wrong.</p>
 <div class="d-flex flex-wrap gap-2 mb-3" aria-label="Show">
-  <a class="btn btn-sm {{ 'btn-primary' if not kind else 'btn-outline-light' }}" href="{{ url_for('main.chapter_markers') }}">Everything</a>
-  {% for key, label in [('recap', 'Recaps'), ('preview', 'Previews'), ('hidden', 'Hidden markers')] %}<a class="btn btn-sm {{ 'btn-primary' if kind == key else 'btn-outline-light' }}" href="{{ url_for('main.chapter_markers', kind=key) }}">{{ label }}</a>{% endfor %}
+  <a class="btn btn-sm {{ 'btn-primary' if not kind else 'btn-outline-secondary' }}" href="{{ url_for('main.chapter_markers') }}">Everything</a>
+  {% for key, label in [('recap', 'Recaps'), ('preview', 'Previews'), ('hidden', 'Hidden markers')] %}<a class="btn btn-sm {{ 'btn-primary' if kind == key else 'btn-outline-secondary' }}" href="{{ url_for('main.chapter_markers', kind=key) }}">{{ label }}</a>{% endfor %}
 </div>
 {% if rows %}
 <div class="table-responsive"><table class="table align-middle"><thead><tr><th scope="col">Episode</th><th scope="col">Change</th><th scope="col">Span</th><th scope="col">Why</th><th scope="col"><span class="visually-hidden">Undo</span></th></tr></thead><tbody>

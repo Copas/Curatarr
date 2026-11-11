@@ -42,6 +42,7 @@ from .models import (
 )
 from .policy import effective_policy
 from .services import (
+    DECIDE_STATES,
     RoutineWebhookEvent,
     UnsupportedWebhookEvent,
     _as_datetime,
@@ -368,6 +369,7 @@ NAV_SECTIONS = {
 
 # Pages where the full dry-run explanation belongs; elsewhere the header pill says it.
 DRY_RUN_BANNER_PAGES = {
+    "main.overview",
     "main.review",
     "main.review_delete_confirm",
     "main.cleanup_preview",
@@ -557,7 +559,7 @@ def _nav_counts(signed_in_user, is_admin) -> dict:
         return {}
     counts = {
         "review": db.session.query(PurgeCandidate)
-        .filter(PurgeCandidate.state == "REVIEW")
+        .filter(PurgeCandidate.state.in_(DECIDE_STATES))
         .count()
     }
     if is_admin and _nav_section() == "enhance":
@@ -565,26 +567,32 @@ def _nav_counts(signed_in_user, is_admin) -> dict:
         from .enrichment import maintenance_failed_count
 
         counts["dubs"] = dub_jobs.counts()["dubs_to_act"]
-        from . import (
-            failed_downloads,
-            filecheck_jobs,
-            misfiled,
-            missing_keep,
-            wrong_version,
-        )
-
-        counts["problems"] = (
-            filecheck_jobs.counts()["problems_to_act"]
-            + failed_downloads.count()
-            + missing_keep.count()
-            + wrong_version.count()
-            + misfiled.count()
-        )
+        counts["problems"] = problems_count()
         counts["failed"] = maintenance_failed_count()
         from .enrichment import identity_issues
 
         counts["identity"] = len(identity_issues())
     return counts
+
+
+def problems_count() -> int:
+    """Everything on Enhance → Problems to act on: the tab's badge and the
+    page's own count."""
+    from . import (
+        failed_downloads,
+        filecheck_jobs,
+        misfiled,
+        missing_keep,
+        wrong_version,
+    )
+
+    return (
+        filecheck_jobs.counts()["problems_to_act"]
+        + failed_downloads.count()
+        + missing_keep.count()
+        + wrong_version.count()
+        + misfiled.count()
+    )
 
 
 def _dry_run_status():

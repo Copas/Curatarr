@@ -8,7 +8,7 @@
       <option value="default"{% if not look_choice or look_choice == 'default' %} selected{% endif %}>The default look{% if default_look.name and default_look.name != 'Built-in' %} ({{ default_look.name }}){% endif %}</option>
       {% for look in saved_looks %}<option value="saved:{{ look.id }}"{% if look_choice == 'saved:' ~ look.id %} selected{% endif %}>{{ look.name }}</option>{% endfor %}
     </select></div>
-  <div class="col-md-6"><button type="button" class="btn btn-outline-light" data-restore-default>Restore the default</button>
+  <div class="col-md-6"><button type="button" class="btn btn-outline-secondary" data-restore-default>Restore the default</button>
     <span class="small text-secondary ms-2">Puts the settings below back to the default look. <a href="{{ url_for('main.artwork_looks') }}">Looks</a></span></div>
   <script type="application/json" data-look-values>{{ look_values|tojson }}</script>
 </div>

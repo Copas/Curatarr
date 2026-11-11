@@ -13,7 +13,7 @@
 <p class="text-secondary mb-0">What people ask for, rewatch and save for a time of year changes what cleanup picks, and what Curatarr puts in Jellyfin for everyone. These apply to every library.</p></div></header>
 <form method="post" class="settings-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-<h2 class="section-label">What cleanup keeps</h2>
+<h2 class="section-title">What cleanup keeps</h2>
 <div class="setting-cards mb-4">
 {% call card('requests', 'user', 'Requests', ('Held up to ' ~ options.request_hold_days ~ ' days until watched' if options.request_hold_days else 'Not held') ~ (' · Seerr not connected' if not seerr else ''), options.request_hold_days > 0 and seerr) %}
   <p class="text-secondary">A title someone asked for in Seerr isn't cleaned up until they've played it.{% if seerr %} {{ requests }} title{{ 's' if requests != 1 }} in the library {{ 'were' if requests != 1 else 'was' }} requested.{% else %} <a href="{{ url_for('main.settings') }}#seerr">Connect Seerr</a> to use this.{% endif %}</p>
@@ -58,7 +58,7 @@
 {% endcall %}
 </div>
 
-<h2 class="section-label">What Curatarr puts in Jellyfin</h2>
+<h2 class="section-title">What Curatarr puts in Jellyfin</h2>
 <div class="setting-cards mb-4">
 {% call card('picks', 'star', 'Picks for each person', ((picks|selectattr('picks')|list|length) ~ ' playlist' ~ ('s' if (picks|selectattr('picks')|list|length) != 1 else '') ~ ' of ten films, made again weekly') if options.picks else 'A playlist of films for each account', options.picks, toggles='picks') %}
   <p class="text-secondary">A private Jellyfin playlist for each account, "Picks for" their name, of ten unwatched films matched to what they've favourited and finished. It shows on every Jellyfin app, Roku included, under Playlists. Only films that account can see (its libraries and parental rating) are picked. A film comes off the list a few minutes after it's watched, and the list is made again each week. An account needs five favourited or finished films first.</p>
@@ -84,5 +84,5 @@
 </div>
 <div class="sticky-actions"><span class="small text-secondary" data-unsaved hidden>Not saved yet · </span><span class="small text-secondary">Household choices</span><button class="btn btn-primary">Save</button></div>
 </form>
-<script src="{{ url_for('static', filename='setting-cards.js', v='2') }}"></script>
+<script src="{{ url_for('static', filename='setting-cards.js', v='3') }}"></script>
 {% endblock %}

@@ -13,8 +13,8 @@
     <button type="button" class="gallery-viewer-nav gallery-viewer-prev" aria-label="Previous picture">‹</button>
     <button type="button" class="gallery-viewer-nav gallery-viewer-next" aria-label="Next picture">›</button>
     <div class="gallery-viewer-bar">
-      <button type="button" class="btn btn-sm btn-outline-light" data-play>Slideshow</button>
-      <button type="button" class="btn btn-sm btn-outline-light" data-close>Close</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-play>Slideshow</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-close>Close</button>
     </div>`;
   document.body.append(viewer);
   const big = viewer.querySelector("img");

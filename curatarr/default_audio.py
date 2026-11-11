@@ -7,7 +7,7 @@ flags or its name, and the file has its own soundtrack in the same language,
 that soundtrack becomes the default instead: in place, with mkvpropedit, no
 re-encode (Settings → Enhance). Unless the fix is automatic (Settings →
 Automatic, off by default), a file found like this is listed on Problems with
-Fix and Leave it, and changed only once Fix is pressed.
+Fix and Keep, and changed only once Fix is pressed.
 
 Another language works the same way (its own switch, on by default): when the
 default track is tagged as another language and a track is tagged English, the
@@ -170,7 +170,7 @@ def _label(stream, why) -> str:
 
 def _look_again_for_language():
     """Once, when this check first runs: files already looked at are looked at
-    again, except those waiting for Fix or Leave it."""
+    again, except those waiting for Fix or Keep."""
     from .services import set_setting, setting
 
     if english_enabled() and not setting(LANGUAGE_RESET):
@@ -249,7 +249,7 @@ def _automatic() -> bool:
 
 
 def found_rows() -> list:
-    """Files found playing an extra first, waiting for Fix (or Leave it), when
+    """Files found playing an extra first, waiting for Fix (or Keep), when
     the fix isn't automatic (Settings → Automatic)."""
     from sqlalchemy.orm import contains_eager
 
@@ -345,7 +345,7 @@ def sweep() -> int:
         redo_chapters = False
         previous = state.default_audio or {}
         if state.default_audio_size != info.size:
-            previous = {}  # a new copy of the file: an earlier Fix or Leave it was for the old one
+            previous = {}  # a new copy of the file: an earlier Fix or Keep was for the old one
         if choice is not None:
             writable, reason = can_write(info)
             audio = [s for s in info.streams if s.get("codec_type") == "audio"]
@@ -363,7 +363,7 @@ def sweep() -> int:
                 if previous.get("tries"):
                     record["tries"] = previous["tries"]
             elif not automatic and not previous.get("approved"):
-                # Ask first: listed on Problems with Fix and Leave it.
+                # Ask first: listed on Problems with Fix and Keep.
                 after = next(s for s in info.streams if s["index"] == choice)
                 record |= {
                     "found": True,

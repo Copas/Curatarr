@@ -1790,6 +1790,13 @@ def unwatched_reset_plan(skip_recent_days=30, library_id=None):
     return plan, skipped
 
 
+# What the Review page asks someone to decide (its count, the Review badge and
+# Overview's line all count these). Recommendations (ELIGIBLE, from libraries
+# set to recommend only), snoozed and approved titles are listed too, but
+# nothing is asked of anyone about them.
+DECIDE_STATES = ("REVIEW",)
+
+
 def review_rows():
     """Pending candidates with the section 29 review context."""
     from . import curation, shrink
@@ -2502,7 +2509,7 @@ def operational_status(*, demo_mode=False):
         "dry_run_libraries": split["dry_run"],
         "deleting_libraries": split["deleting"],
         "review_count": db.session.query(PurgeCandidate)
-        .filter_by(state="REVIEW")
+        .filter(PurgeCandidate.state.in_(DECIDE_STATES))
         .count(),
         "leaving_soon_count": db.session.query(PurgeCandidate)
         .filter_by(state="LEAVING_SOON")

@@ -32,7 +32,7 @@
 {% set mode_label = ('Smart Chapters' if effective.mode == 'smart' else 'Navigation Chapters') if effective.enabled else 'No chapters' %}
 {% set tools_ok = environment.ffprobe and environment.mkvpropedit %}
 <form method="post" class="settings-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<h2 class="section-label">{{ 'This library' if library else 'Every library' }}</h2>
+<h2 class="section-title">{{ 'This library' if library else 'Every library' }}</h2>
 <div class="setting-cards mb-4">
 {% call card('chapters', 'chapters', 'Chapters', mode_label ~ (' · about every ' ~ effective.target_spacing_minutes ~ ' min' if effective.enabled else ''), effective.enabled, open=not effective.enabled) %}
   <fieldset class="mode-picker">
@@ -82,7 +82,7 @@
 </div>
 
 {% if not library and opts %}
-<h2 class="section-label">This server <small>(every library)</small></h2>
+<h2 class="section-title">This server <small>(every library)</small></h2>
 <div class="setting-cards mb-4">
 {% call card('skip-markers', 'skip', 'Skip markers', ('Movies keep only credits' if opts.movie_credits_only else 'Movies keep every marker') ~ (' · episode check on' if opts.episode_identity_check else ''), opts.movie_credits_only, toggles='movie_credits_only') %}
   <p class="form-text mt-0">Recaps, previews and fixes to Intro Skipper's markers come from Smart Chapters transcripts; start a check from <a href="{{ url_for('main.chapter_maintenance') }}">Enhance → Progress</a> and review changes under <a href="{{ url_for('main.chapter_markers') }}">Skip markers</a>.</p>
@@ -159,5 +159,5 @@
 {% endif %}
 <div class="sticky-actions"><span class="small text-secondary" data-unsaved hidden>Not saved yet · </span><span class="small text-secondary">{{ 'Settings for ' ~ library.name if library else 'Settings for every library' }}</span><button class="btn btn-primary">Save</button></div>
 </form>
-<script src="{{ url_for('static', filename='setting-cards.js', v='2') }}"></script>
+<script src="{{ url_for('static', filename='setting-cards.js', v='3') }}"></script>
 {% endblock %}

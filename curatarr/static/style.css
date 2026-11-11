@@ -31,7 +31,6 @@ body { background: var(--app-bg); color: var(--bs-body-color); }
 .card { border-radius: .85rem; }
 .text-secondary, .form-text { color: var(--app-muted) !important; }
 .btn-outline-secondary { --bs-btn-color: var(--bs-emphasis-color); --bs-btn-border-color: var(--app-border); --bs-btn-hover-color: var(--bs-emphasis-color); --bs-btn-hover-bg: var(--app-border); --bs-btn-hover-border-color: var(--app-border); }
-.btn-outline-info { --bs-btn-color: var(--app-accent); --bs-btn-border-color: var(--app-accent); --bs-btn-hover-color: var(--app-surface); --bs-btn-hover-bg: var(--app-accent); --bs-btn-hover-border-color: var(--app-accent); }
 a { text-underline-offset: .18em; }
 :focus-visible { outline: 3px solid var(--app-accent); outline-offset: 3px; }
 .skip-link { position: absolute; left: -9999px; top: .5rem; z-index: 100; background: var(--app-surface); padding: .5rem 1rem; }
@@ -265,8 +264,12 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .tone-warning .needs-icon { color: var(--app-warning); background: var(--app-warning-bg); }
 .tone-danger .needs-icon { color: var(--app-danger); background: color-mix(in srgb, var(--app-danger) 14%, transparent); }
 .needs-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.needs-text a { font-weight: 600; text-decoration: none; color: var(--bs-emphasis-color); }
-.needs-text a:hover { text-decoration: underline; }
+/* A title that heads a row or card is one style everywhere (Overview, Review,
+   Problems, dubs…): bold, the text colour, underlined on hover. Links inside a
+   sentence or a table stay link-coloured. */
+.needs-text a, :is(h2, h3, h4, h5, h6) > a:not(.btn), a.h5, a.h6 { font-weight: 600; text-decoration: none; color: var(--bs-emphasis-color); }
+.needs-text a:hover, :is(h2, h3, h4, h5, h6) > a:not(.btn):hover, a.h5:hover, a.h6:hover,
+.needs-text a:focus-visible, :is(h2, h3, h4, h5, h6) > a:not(.btn):focus-visible, a.h5:focus-visible, a.h6:focus-visible { text-decoration: underline; color: var(--bs-emphasis-color); }
 .needs-text small { color: var(--app-muted); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .needs-actions { display: flex; gap: .4rem; flex: none; }
 .needs-actions form { margin: 0; }
@@ -563,3 +566,10 @@ body:has(.title-show) { overflow-x: clip; }
 .artwork-note-success { border-color: var(--app-success); }
 .artwork-note-warning, .artwork-note-danger { border-color: var(--app-danger); }
 .artwork-reviewed { margin: .75rem 0; }
+summary.section-title { display: list-item; cursor: pointer; }
+/* A card row with something to do: what it is on the left, its buttons on the
+   right (title page). On a narrow screen the buttons wrap under the text. */
+.action-row { flex-wrap: wrap; }
+.action-row > :first-child { flex: 1 1 18rem; min-width: 0; }
+.action-row > :not(:first-child) { margin-left: auto; }
+.poster-tile .tile-link { position: relative; z-index: 2; }

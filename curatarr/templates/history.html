@@ -9,7 +9,7 @@
   <div class="col-md-3"><label class="form-label w-100">From<input class="form-control" type="date" name="from" value="{{ filters['from'] }}"></label></div>
   <div class="col-md-3"><label class="form-label w-100">To<input class="form-control" type="date" name="to" value="{{ filters.to }}"></label></div>
   <div class="col-md-3"><label class="form-label w-100">Jellyfin user<select class="form-select" name="user"><option value="">All users</option>{% for user_id, name in users %}<option value="{{ user_id }}" {% if user_id == filters.user %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label></div>
-  <div class="col-md-3 align-self-end"><button class="btn btn-outline-light w-100">Filter</button></div>
+  <div class="col-md-3 align-self-end"><button class="btn btn-outline-secondary w-100">Filter</button></div>
 </form>
 <div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Title</th><th>Action</th><th>State</th><th>Reason</th></tr></thead><tbody>
 {% for action in actions %}<tr><td>{{ action.created_at|when }}</td><td>{{ media_titles.get(action.media_identity_id, '—') }}{{ jellyfin_link_for(action.media_identity_id) if action.media_identity_id }}</td><td><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action_name(action) }}</a></td><td>{{ action.state }}</td><td>{{ action.reason_text }}</td></tr>{% else %}<tr><td colspan="5">No matching history.</td></tr>{% endfor %}

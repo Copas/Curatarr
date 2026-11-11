@@ -38,6 +38,19 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc135 (2026-11-10)
+
+A usability pass: the same thing looks and reads the same everywhere.
+
+- **Counts agree.** The Review badge, the Review page and Overview count the same titles: those waiting for a decision. Recommendations from libraries set to recommend only, and snoozed or approved titles, are listed in sections of their own. The Problems page's count is its tab badge's.
+- **One name per action:** **Replace** for a better copy, **Keep** to leave a file as it is, **Dismiss** to stop listing something, **Check again**. The Problems tab is Problems on phones too.
+- **One look for titles, buttons and headings.** A title heading a row is bold in the text colour everywhere; inside a card the main action is the one blue button and the rest share one outlined style that follows the light theme; page sections share one heading style.
+- **Plainer words.** **Sync now** replaces Overview's Discover and Reconcile buttons, which did the same thing; "Cleanup rules for this library", "Cleanup history", "Watched enough to count" and "this title's own cleanup rules" replace the policy jargon.
+- **Browse titles is a poster grid** that filters as you type; the Library tabs drop a second Search (the header's search is the same page).
+- **Settings → Integrations** keeps the four connections at the top; the rest are closed cards with a one-line summary and On/Off, open when something needs you, and a link to one opens it.
+- The title page's action rows line up (what it is on the left, its button on the right), and the dry-run notice is on Overview as well as Review.
+- The plugin's description in Settings says how Delete works now; README screenshots retaken.
+
 ## 0.2.0rc134 (2026-11-10)
 
 A bug sweep of the logs and the database.

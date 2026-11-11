@@ -9,7 +9,7 @@
   {{ row(url_for('main.history'), 'activity', 'Activity', 'Everything Curatarr has done') }}
   {% endif %}
 </div>
-{% if is_admin %}<h2 class="section-label">Settings</h2>
+{% if is_admin %}<h2 class="section-title">Settings</h2>
 <div class="more-list mb-4">
   {{ row(url_for('main.settings'), 'settings', 'Integrations', 'Jellyfin, Sonarr, Radarr, household access') }}
   {{ row(url_for('main.rules', section='acquisition'), 'library', 'Acquisition', 'What gets downloaded next') }}

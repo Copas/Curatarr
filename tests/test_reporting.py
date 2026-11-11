@@ -22,7 +22,7 @@ def test_demo_exposes_review_leaving_soon_policy_and_history(app, client):
     assert b"Last watched" in queue.data
     title = client.get(f"/titles/{media_id}")
     assert title.status_code == 200
-    assert b"Lifecycle decisions" in title.data
+    assert b"Cleanup history" in title.data
     assert b"Effective policy" in title.data
     assert b"Decision score and observations" in title.data
     assert client.get("/history").status_code == 200
@@ -36,7 +36,7 @@ def test_title_shows_current_cleanup_status_before_controls(app, client):
 
     page = client.get(f"/titles/{review.media_identity_id}").text
     assert "Waiting for a cleanup decision." in page
-    assert page.index("Cleanup status") < page.index("Lifecycle decisions")
+    assert page.index("Cleanup status") < page.index("Cleanup history")
 
     page = client.get(f"/titles/{leaving.media_identity_id}").text
     assert "Leaving Soon: scheduled for" in page

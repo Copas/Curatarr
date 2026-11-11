@@ -8,7 +8,7 @@ such files straight away; this finds the ones already like that.
 
 When Settings → Enhance → Seeking on Roku is on (the default), each MKV file's
 first few hundred kilobytes are read once (again only if the file changes).
-Affected files are listed on Problems with Fix and Leave it, unless rebuilding
+Affected files are listed on Problems with Fix and Keep, unless rebuilding
 is automatic (Settings → Automatic, off by default); either way they're rebuilt
 with mkvmerge, one or two per worker cycle, in the background, never one that's
 playing. Nothing is re-encoded.
@@ -121,7 +121,7 @@ def _automatic() -> bool:
 
 
 def found_rows() -> list:
-    """Files found that Roku can't seek in, waiting for Fix (or Leave it)."""
+    """Files found that Roku can't seek in, waiting for Fix (or Keep)."""
     # Filtered in the database: every checked file has a record, and loading
     # them all (and each one's file) took over a second per page.
     from sqlalchemy.orm import contains_eager
@@ -188,14 +188,14 @@ def sweep(checks=CHECKS_PER_RUN, rebuilds=REBUILDS_PER_RUN) -> int:
         state = e.state_for(part)
         previous = state.seek_layout or {}
         if state.seek_layout_size != part.size_bytes:
-            previous = {}  # a new copy: an earlier Fix or Leave it was for the old one
+            previous = {}  # a new copy: an earlier Fix or Keep was for the old one
         if not seek_index_hidden(path):
             state.seek_layout_size = part.size_bytes
             state.seek_layout = {"ok": True, "at": utcnow().isoformat()}
             db.session.commit()
             continue
         if not automatic and not previous.get("approved"):
-            # Ask first: listed on Problems with Fix and Leave it.
+            # Ask first: listed on Problems with Fix and Keep.
             state.seek_layout_size = part.size_bytes
             state.seek_layout = {
                 "found": True,

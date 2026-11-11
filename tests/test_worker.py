@@ -98,26 +98,29 @@ def test_worker_runs_a_requested_reconciliation_immediately(app, monkeypatch):
 def test_overview_banner_tracks_reconciliation(app, client):
     now = utcnow()
     page = client.get("/").text
-    assert "No reconciliation has run yet" in page
+    assert "No sync has run yet" in page
     set_setting("reconcile_requested_at", now.isoformat())
     page = client.get("/").text
-    assert "Discovery queued" in page and 'data-active="1"' in page  # updates itself
+    assert "Sync queued" in page and 'data-active="1"' in page  # updates itself
     set_setting("last_reconcile_attempt_at", (now + timedelta(seconds=5)).isoformat())
     set_setting("worker_heartbeat_at", (now - timedelta(minutes=2)).isoformat())
     page = client.get("/").text
-    assert "Discovery and reconciliation running" in page
+    assert "Syncing</strong>" in page
     assert client.get("/health").get_json()["scheduler"] == "busy"
     set_setting(
         "last_reconcile_error",
         {"at": (now + timedelta(seconds=9)).isoformat(), "message": "sonarr down"},
     )
     page = client.get("/").text
-    assert "Last reconciliation failed:</strong> sonarr down" in page
+    assert "Last sync failed:</strong> sonarr down" in page
     assert 'data-active="1"' not in page
     set_setting("last_reconcile_at", (now + timedelta(seconds=60)).isoformat())
     set_setting("last_reconcile_duration_ms", 134743)
     page = client.get("/").text
-    assert "Last reconciliation finished" in page and "in 135 s" in page
+    assert (
+        "Last sync with Jellyfin, Sonarr and Radarr finished" in page
+        and "in 135 s" in page
+    )
 
 
 def test_unfinished_run_is_reported_as_interrupted(app, client):

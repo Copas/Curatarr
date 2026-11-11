@@ -17,7 +17,7 @@
   </div>
   {% include '_artwork_job_fields.html' %}
   <input type="hidden" name="preview" value="1">
-  <div><button class="btn btn-outline-light">Preview</button> <span class="small text-secondary ms-2">Shows exactly which titles it would make pictures for, before anything is queued.</span></div>
+  <div><button class="btn btn-outline-secondary">Preview</button> <span class="small text-secondary ms-2">Shows exactly which titles it would make pictures for, before anything is queued.</span></div>
 </form>
 {% if preview is not none %}
 <section class="card p-3 mb-4" id="preview"><h2 class="h5">{{ preview.count }} title{{ '' if preview.count == 1 else 's' }} would get pictures</h2>
@@ -41,8 +41,8 @@
     <div class="small text-secondary">{{ p.queued }} of {{ p.total }} queued · {{ p.counts.get('review', 0) }} to review · {{ p.counts.get('completed', 0) }} done{% if p.counts.get('failed') %} · {{ p.counts.failed }} failed{% endif %}{% if p.remaining and b.state == 'active' %} · {{ p.remaining }} picture{{ '' if p.remaining == 1 else 's' }} left{% if p.estimate %}, about {{ (p.estimate / 3600)|round(1) if p.estimate >= 3600 else (p.estimate / 60)|round|int }} {{ 'hours' if p.estimate >= 3600 else 'minutes' }}{% endif %}{% endif %}</div></td>
   <td>{{ {'active': 'Running', 'paused': 'Paused', 'cancelled': 'Cancelled', 'done': 'Finished'}[b.state] }}</td>
   <td class="text-end"><form method="post" class="d-inline-flex gap-1"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    {% if b.state == 'active' %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='pause') }}">Pause</button>{% elif b.state == 'paused' %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='resume') }}">Resume</button>{% endif %}
-    {% if p.counts.get('failed') %}<button class="btn btn-sm btn-outline-light" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='retry') }}">Retry failed</button>{% endif %}
+    {% if b.state == 'active' %}<button class="btn btn-sm btn-outline-secondary" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='pause') }}">Pause</button>{% elif b.state == 'paused' %}<button class="btn btn-sm btn-outline-secondary" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='resume') }}">Resume</button>{% endif %}
+    {% if p.counts.get('failed') %}<button class="btn btn-sm btn-outline-secondary" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='retry') }}">Retry failed</button>{% endif %}
     {% if b.state in ('active', 'paused') %}<button class="btn btn-sm btn-outline-danger" formaction="{{ url_for('main.artwork_batch_action', batch_id=b.id, action='cancel') }}">Cancel</button>{% endif %}
   </form></td></tr>{% endfor %}</tbody></table></div>
 {% else %}<p class="text-secondary">None yet.</p>{% endif %}

@@ -5,8 +5,8 @@
 <div class="eyebrow">Manage · {{ 'Library policy' if library else 'Global defaults' }}</div><h1>{{ heading }}{% if library %} · {{ library.name }}{% endif %}</h1>
 {% if section %}
 <div class="d-flex flex-wrap gap-2 mb-3" aria-label="Policy scope">
-  <a class="btn btn-sm {{ 'btn-primary' if not library else 'btn-outline-light' }}" href="{{ url_for('main.rules', section=section, scope='global') }}">Global defaults</a>
-  {% for other in libraries %}<a class="btn btn-sm {{ 'btn-primary' if library and other.id == library.id else 'btn-outline-light' }}" href="{{ url_for('main.rules', section=section, scope=other.id) }}">{{ other.name }}</a>{% endfor %}
+  <a class="btn btn-sm {{ 'btn-primary' if not library else 'btn-outline-secondary' }}" href="{{ url_for('main.rules', section=section, scope='global') }}">Global defaults</a>
+  {% for other in libraries %}<a class="btn btn-sm {{ 'btn-primary' if library and other.id == library.id else 'btn-outline-secondary' }}" href="{{ url_for('main.rules', section=section, scope=other.id) }}">{{ other.name }}</a>{% endfor %}
 </div>
 {% endif %}
 <p class="text-secondary">

@@ -32,7 +32,7 @@ One word or phrase per line, matched as a whole word with its capitals as writte
 
 ## Demo mode
 
-Demo mode uses synthetic adapters and never contacts private services. After creating the database, set `CURATARR_DEMO_MODE=true` and run `flask --app curatarr demo-seed`. Sign in as `demo-admin` with password `demo`, and enable `demo-viewer` from the household list to try that view. The overview includes controls for playback, favorites, time and size changes, and simulated outages. Run `flask --app curatarr worker --once` or use Reconcile in the UI to evaluate the sample libraries.
+Demo mode uses synthetic adapters and never contacts private services. After creating the database, set `CURATARR_DEMO_MODE=true` and run `flask --app curatarr demo-seed`. Sign in as `demo-admin` with password `demo`, and enable `demo-viewer` from the household list to try that view. The overview includes controls for playback, favorites, time and size changes, and simulated outages. Run `flask --app curatarr worker --once` or use Sync now on Overview to evaluate the sample libraries.
 
 ## Tests
 

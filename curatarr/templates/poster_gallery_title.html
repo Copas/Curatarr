@@ -12,7 +12,7 @@
     <div class="title-show-heading">
       {% if pics.Logo %}<button type="button" class="title-show-logo" data-full="{{ picture_url(pics.Logo) }}" data-alt="{{ title }}, its logo" aria-label="Show the logo full screen"><img src="{{ picture_url(pics.Logo) }}" alt="{{ title }}"></button>
       {% else %}<h1 class="title-show-name">{{ title }}</h1>{% endif %}
-      <div class="title-show-actions"><button type="button" class="btn btn-light" data-slideshow>▶ Slideshow</button><a class="btn btn-outline-light" href="{{ url_for('main.title', media_id=card.media.id) }}">Title page</a></div>
+      <div class="title-show-actions"><button type="button" class="btn btn-light" data-slideshow>▶ Slideshow</button><a class="btn btn-outline-secondary" href="{{ url_for('main.title', media_id=card.media.id) }}">Title page</a></div>
     </div>
   </header>
   {% if rest %}<section class="title-show-art{{ ' title-show-art-poster' if rest|map(attribute=0)|select('in', ['Primary', 'Thumb'])|list|length == 2 }}" aria-label="{{ title }}'s other pictures">

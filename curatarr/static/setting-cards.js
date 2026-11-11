@@ -1,3 +1,17 @@
+// A link to one card (Settings#never-compress, from another page) opens it.
+(function () {
+  function openLinked() {
+    var id = decodeURIComponent(location.hash.slice(1));
+    var card = id && document.getElementById(id);
+    if (card && card.matches("details.setting-card")) {
+      card.open = true;
+      card.scrollIntoView({ block: "start" });
+    }
+  }
+  openLinked();
+  window.addEventListener("hashchange", openLinked);
+})();
+
 // Settings cards (Enhance, Household choices): a card's On/Off follows its
 // switches as they're changed, and the save bar says when something isn't
 // saved yet.

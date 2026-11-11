@@ -67,11 +67,14 @@ def test_global_defaults_cover_size_space_and_dry_run(app, client, tmp_path):
     page = client.get("/rules/retention").text
     for field in ("dry_run", "quota_enabled", "free_space_enabled", "disk_path"):
         assert f'name="{field}"' in page
-    # Every library is in dry run by default: the full notice is on Review and
-    # the retention rules, and every other page has the pill in its header.
+    # Every library is in dry run by default: the full notice is on Overview,
+    # Review and the retention rules, and every other page has the pill in its
+    # header.
     assert "Dry run is on for every library." in client.get("/review").text
     overview = client.get("/").text
-    assert "status-pill-warning" in overview and "dry-run-banner" not in overview
+    assert "status-pill-warning" in overview and "dry-run-banner" in overview
+    history = client.get("/history").text
+    assert "status-pill-warning" in history and "dry-run-banner" not in history
     client.post(
         "/rules/retention",
         data={

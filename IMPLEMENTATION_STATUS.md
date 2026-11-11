@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc135 (2026-11-10): usability pass: services.DECIDE_STATES, routes.problems_count, title-link/action-row CSS, btn-outline-secondary only, section-title headings, Sync now, titles poster grid + titles-filter.js, settings setting-cards.
 - v0.2.0rc134 (2026-11-10): mediafile.editing/_exclusive per-file lock + FileChanged; lifecycle._played_since; IntroSkipper.hide 404 ok, _check_markers skips hidden ids; write_watch; migrations c7e2a4b6d815, d3f5b7c9e126; conftest imports all modules.
 - v0.2.0rc133 (2026-11-10): mediafile.rewrite_mp4/ffmetadata/mp4_title; MP4 chapters write, remove and restore; migration b5d9e1f3a724 requeues MP4s.
 - v0.2.0rc132 (2026-11-10): artwork_jobs.FAILURE_KINDS, failed_summary/retry_failed/clear_failed; Jobs page Failed pictures panel.
