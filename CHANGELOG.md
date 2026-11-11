@@ -38,6 +38,10 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## 0.2.0rc136 (2026-11-10)
+
+- **Browse titles filters properly as you type.** After the first letter, each search was sent with the previous one still attached, so the list stayed on the first letter's results and backspacing did nothing. Typing now narrows the list, deleting widens it again, and clearing the box shows everything.
+
 ## 0.2.0rc135 (2026-11-10)
 
 A usability pass: the same thing looks and reads the same everywhere.

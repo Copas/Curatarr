@@ -9,7 +9,10 @@
   let asked = 0;
   async function refresh() {
     const params = new URLSearchParams(new FormData(form));
-    const url = `${form.action || location.pathname}?${params}`;
+    // The page's own path, never form.action: with no action attribute the
+    // browser gives the current address, query and all, so after the first
+    // keystroke every request carried two queries and was turned down.
+    const url = `${location.pathname}?${params}`;
     const mine = ++asked;
     try {
       const response = await fetch(url, { headers: { "X-Requested-With": "fetch" } });
