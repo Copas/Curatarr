@@ -33,6 +33,14 @@ SPLIT = re.compile(
     r"(?i)(?:^|[ ._\-\[(])(part|pt|cd|disc|disk)[ ._\-]?(\d|i{1,3}|iv)(?=[ ._\-\])]|$)"
 )
 KINDS = ("file", "dub", "version")
+# A release that says it has English audio. A copy of a French or Korean film
+# with nothing like this in its name is another copy in French or Korean:
+# replacing for a dub with one of those deleted good copies for nothing, one
+# release after another. ("DL" and "MULTi" usually mean the original plus a
+# German or French dub, so they don't count.)
+ENGLISH_AUDIO = re.compile(
+    r"(?i)(?:^|[ ._\-\[(])(dub|dubbed|eng|english|dual[ ._\-]?audio)(?=[ ._\-\])]|$)"
+)
 
 
 def _target(item_id, kind):
@@ -224,7 +232,13 @@ def _check(state, kind):
         if grabs:
             current = grabs[0].get("sourceTitle")
         releases = arr.releases(part.sonarr_episode_id)
-    return candidate(releases, current, split_film=split_film), len(releases or [])
+    reject = None
+    if kind == "dub":
+        reject = lambda title: not ENGLISH_AUDIO.search(title)
+    return (
+        candidate(releases, current, split_film=split_film, reject=reject),
+        len(releases or []),
+    )
 
 
 def _replace(target, kind):

@@ -20,11 +20,12 @@ import hashlib
 import hmac
 import re
 import secrets
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 
 from flask import current_app
+from markupsafe import Markup
 from PIL import Image, ImageFilter, ImageStat, UnidentifiedImageError
 from sqlalchemy import func
 
@@ -207,9 +208,93 @@ def _clean_capabilities(raw) -> list[dict]:
                 "external": bool(entry.get("external")),
                 "ready": bool(entry.get("ready", True)),
                 "why": str(entry.get("why") or "")[:300],
+                "limited_until": _limit_time(entry.get("limited_until")),
             }
         )
     return kept[:20]
+
+
+def _limit_time(value) -> float | None:
+    """When an engine's usage limit resets (Unix time), if it says so and it's
+    within a week; anything else is ignored."""
+    try:
+        until = float(value)
+    except (TypeError, ValueError):
+        return None
+    now = utcnow().timestamp()
+    return until if now < until < now + 8 * 86400 else None
+
+
+LIMIT_WORDS = re.compile(r"usage limit|rate limit|quota", re.IGNORECASE)
+
+
+def _service(label: str) -> str:
+    """Whose usage limit it is, as a sentence says it."""
+    if re.search(r"chatgpt|codex", label or "", re.IGNORECASE):
+        return "the ChatGPT plan's"
+    return f"{label}'s" if label else "the image service's"
+
+
+def _in(moment) -> str:
+    """ "in 2 h 14 min", worked out here; local-time.js keeps it counting down."""
+    minutes = max(0, -(-int((_aware(moment) - utcnow()).total_seconds()) // 60))
+    if minutes < 1:
+        return "any moment now"
+    if minutes < 60:
+        return f"in {minutes} min"
+    hours, minutes = divmod(minutes, 60)
+    return f"in {hours} h" + (f" {minutes} min" if minutes else "")
+
+
+def resets_at(moment) -> Markup:
+    """ "today at 6:09 PM (in 2 h 14 min)", in the viewer's own time zone."""
+    from .routes import when
+
+    moment = _aware(moment)
+    return Markup('{} (<time datetime="{}" data-style="in">{}</time>)').format(
+        when(moment), moment.isoformat(), _in(moment)
+    )
+
+
+def usage_limit(now=None) -> dict | None:
+    """An image service's usage limit holding pictures back: {"service" (the
+    ChatGPT plan's…), "until" (when it resets), "held" (pictures tried and
+    waiting for it)}, or None. Read from what the workers report, else from
+    the pictures waiting for it (a worker too old to say)."""
+    now = now or utcnow()
+    resets = []
+    for worker in db.session.query(ArtworkWorker).filter_by(enabled=True):
+        if not online(worker):
+            continue
+        for entry in worker.capabilities or []:
+            if entry.get("limited_until"):
+                at = datetime.fromtimestamp(entry["limited_until"], UTC)
+                if at > now:
+                    resets.append((at, entry.get("label") or entry["engine"]))
+    held = [
+        image
+        for image in db.session.query(ArtworkImage).filter(
+            ArtworkImage.state == "pending", ArtworkImage.not_before > now
+        )
+        if LIMIT_WORDS.search(image.message or "")
+    ]
+    if not resets and held:
+        resets.append(
+            (
+                max(_aware(i.not_before) for i in held),
+                _limit_label(f"{held[0].engine} {held[0].message}"),
+            )
+        )
+    if not resets:
+        return None
+    until, label = max(resets)
+    return {"service": _service(label), "until": until, "held": len(held)}
+
+
+def _limit_label(message: str) -> str:
+    return (
+        "ChatGPT" if re.search(r"chatgpt|codex", message or "", re.IGNORECASE) else ""
+    )
 
 
 INFO_FIELDS = (
@@ -540,10 +625,17 @@ def waiting_reason(image: ArtworkImage, now=None) -> str | None:
     now = now or utcnow()
     job = image.job
     if image.not_before and _aware(image.not_before) > now:
-        when = _aware(image.not_before).astimezone().strftime("%H:%M")
-        return (
-            image.message or "It's waiting before trying again."
-        ) + f" (until {when})"
+        if LIMIT_WORDS.search(image.message or ""):
+            return Markup(
+                "Waiting for {} usage limit to reset; it tries again {}."
+            ).format(
+                _service(_limit_label(f"{image.engine} {image.message}")),
+                resets_at(image.not_before),
+            )
+        return Markup("{} It tries again {}.").format(
+            image.message or "It's waiting before trying again.",
+            resets_at(image.not_before),
+        )
     if paused():
         return "Curatarr's work is paused; it starts when work resumes."
     if job.batch is not None and job.batch.state == "paused":
@@ -589,7 +681,9 @@ def waiting_reason(image: ArtworkImage, now=None) -> str | None:
         if entry is None:
             return f"No online worker offers {job.engine}."
         if not entry.get("ready"):
-            return f"{entry['label']} isn't ready: {entry.get('why') or 'see Workers'}."
+            return _not_ready(entry) or (
+                f"{entry['label']} isn't ready: {entry.get('why') or 'see Workers'}."
+            )
         if (
             entry.get("external")
             and options.get("photos")
@@ -600,8 +694,23 @@ def waiting_reason(image: ArtworkImage, now=None) -> str | None:
                 "service, and this job doesn't allow that. Allow it on this job's page."
             )
     if not_ready:
-        return f"{not_ready[0]['label']} isn't ready: {not_ready[0].get('why') or ''}"
+        return _not_ready(not_ready[0]) or (
+            f"{not_ready[0]['label']} isn't ready: {not_ready[0].get('why') or ''}"
+        )
     return "No online worker has an engine that can make it."
+
+
+def _not_ready(entry) -> Markup | None:
+    """An engine waiting for its usage limit, with when it resets (its own
+    words, "resets in about 2.3 hours", go stale)."""
+    until = entry.get("limited_until")
+    if not until or until <= utcnow().timestamp():
+        return None
+    return Markup("{} is waiting for {} usage limit to reset, {}.").format(
+        entry["label"],
+        _service(entry["label"]),
+        resets_at(datetime.fromtimestamp(until, UTC)),
+    )
 
 
 def default_audience(image: ArtworkImage) -> tuple[bool, list[str]]:
@@ -815,6 +924,10 @@ def build_task(image: ArtworkImage, engine: str, agent: bool) -> dict:
     job = image.job
     options = job.options or {}
     feedback = image.feedback
+    if options.get("softened") and not options.get("original_take"):
+        # After a first safety refusal: the same picture from its own art,
+        # with what usually sets the filter off toned down.
+        feedback = f"{SOFTENED} {feedback}" if feedback else SOFTENED
     if options.get("original_take"):
         # After a safety refusal: a new scene, without the title's own art
         # (its poster is the very character that was turned down).
@@ -843,15 +956,21 @@ def build_task(image: ArtworkImage, engine: str, agent: bool) -> dict:
     lettering = None
     if options.get("originals") and job.media is not None:
         if agent:
-            # Its poster for the feel and its logo for the lettering, and its
-            # own picture of this type, as tonal references.
-            kinds = ["Primary", "Logo"]
-            if image.kind not in kinds:
-                kinds.append(image.kind)
-            for kind in kinds:
-                path = original_art(job.media, kind)
-                if path is not None:
-                    originals[kind] = add(path, "original")
+            # Its own picture of this type to work from, and its logo for the
+            # lettering. The original poster only stands in when there's no
+            # original of this type: given both, a wide tile copied the
+            # poster's people and poses instead of its own.
+            own = original_art(job.media, image.kind)
+            if own is not None:
+                originals[image.kind] = add(own, "original")
+            elif image.kind != "Logo":
+                poster_art = original_art(job.media, "Primary")
+                if poster_art is not None:
+                    originals["Primary"] = add(poster_art, "original")
+            if image.kind != "Logo":
+                logo = original_art(job.media, "Logo")
+                if logo is not None:
+                    originals["Logo"] = add(logo, "original")
         elif image.kind in artwork_prompts.LETTERED_KINDS:
             path = original_art(job.media, "Logo")
             if path is not None:
@@ -951,9 +1070,18 @@ SAFETY = re.compile(
 )
 # A safety refusal is usually about a trademarked character (a superhero's
 # costume and emblem) with real people's faces in it. Asked again the same
-# way it's refused again, so the set is tried once more as an original take:
+# way it's refused again. So it's first tried again from its own art with
+# what usually sets the filter off toned down (SOFTENED), then, refused
+# again, the set is tried once more as an original take:
 # a new scene, without the title's own art, designed afresh. If that's turned
 # down too, it stops.
+SOFTENED = (
+    "Keep it suitable for everyone: no nudity, gore, wounds, blood or graphic "
+    "violence, and everyone fully clothed. Where the artwork shows a "
+    "trademarked character's costume, emblem or logo, make an original "
+    "version of it instead. Keep everything else: its composition, style, "
+    "colors and mood."
+)
 ORIGINAL_TAKE = (
     "An original take: don't depict any trademarked or copyrighted character, "
     "costume, emblem or logo from this title. Design original characters, "
@@ -980,6 +1108,19 @@ def fail(worker: ArtworkWorker, image_id: str, report_: dict) -> dict:
         code = "safety"  # from a worker that doesn't say so itself
     image.error = error
     job = image.job
+    if code == "safety" and not (job.options or {}).get("softened"):
+        # First, the same picture from its own art, toned down: a new scene
+        # loses what made the art recognisable.
+        job.options = (job.options or {}) | {"softened": True}
+        image.attempts = max(0, image.attempts - 1)
+        _requeue(image, not_before=utcnow() + timedelta(seconds=30))
+        image.message = (
+            "The image service's safety system turned it down; trying again from "
+            "its own art, toned down (no nudity, gore or trademarked costumes)."
+        )
+        _refresh(job)
+        db.session.commit()
+        return {"ok": True}
     if code == "safety" and not (job.options or {}).get("original_take"):
         job.options = (job.options or {}) | {
             "original_take": True,

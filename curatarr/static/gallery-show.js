@@ -2,6 +2,17 @@
 // the arrow keys, swiping or the buttons to move, and a slideshow. Esc, or a
 // click on the picture's surroundings, closes it.
 (() => {
+  // Before & after: an original that can't be found says so in its place.
+  document.addEventListener("error", (event) => {
+    const img = event.target;
+    if (!(img instanceof HTMLImageElement)) return;
+    const holder = img.closest(".compare-original");
+    if (!holder) return;
+    holder.classList.add("compare-missing");
+    holder.removeAttribute("data-full");
+    holder.disabled = true;
+    img.remove();
+  }, true);
   const pictures = [...document.querySelectorAll("[data-full]")];
   if (!pictures.length) return;
   const viewer = document.createElement("dialog");
@@ -68,6 +79,8 @@
   // it, until a picture is open full screen.
   const page = document.querySelector("[data-before], [data-after]");
   document.addEventListener("keydown", (event) => {
+    // Alt+Left is the browser's Back, not "the title before".
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (!viewer.open && page && !event.target.closest("input, textarea, select")) {
       const to = event.key === "ArrowRight" ? page.dataset.after : event.key === "ArrowLeft" ? page.dataset.before : "";
       if (to) window.location.href = to;

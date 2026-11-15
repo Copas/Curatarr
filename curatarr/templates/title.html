@@ -1,8 +1,15 @@
 {% extends 'base.html' %}
 {% block content %}
 {% from '_signals.html' import household_notes with context %}{% from '_shrink.html' import shrink_actions with context %}{% from '_confirm.html' import confirm_submit %}
-<div class="eyebrow">{{ 'TV show' if media.media_type == 'series' else 'Movie' }} · {{ media.library.name }}</div><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h1 class="mb-0">{{ media.title }}</h1>{% if jellyfin_url(media.jellyfin_id) %}<a class="btn btn-sm btn-outline-secondary" href="{{ jellyfin_url(media.jellyfin_id) }}" target="_blank" rel="noopener">Open in Jellyfin</a>{% endif %}</div><p class="text-secondary mt-2">Decisions{% if is_admin %}, recent activity,{% endif %} and options for this title.</p>
+<div class="eyebrow">{{ 'TV show' if media.media_type == 'series' else 'Movie' }} · {{ media.library.name }}</div><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h1 class="mb-0">{{ media|labelled }}</h1>{% if jellyfin_url(media.jellyfin_id) %}<a class="btn btn-sm btn-outline-secondary" href="{{ jellyfin_url(media.jellyfin_id) }}" target="_blank" rel="noopener">Open in Jellyfin</a>{% endif %}</div><p class="text-secondary mt-2">Decisions{% if is_admin %}, recent activity,{% endif %} and options for this title.</p>
 {% set notes = household_notes(signals)|trim %}{% if notes %}<div class="d-flex flex-wrap gap-1 mb-4">{{ notes }}</div>{% endif %}
+{% set o = origin %}<section class="card p-3 mb-4" aria-labelledby="origin-heading">
+  <h2 class="h5 mb-2" id="origin-heading">Where it came from</h2>
+  {% if o.added %}<p class="mb-1">Added to {{ o.app }} {{ o.added|when('date') }}.</p>{% endif %}
+  {% if o.reasons %}<ul class="mb-1 ps-3">{% for r in o.reasons %}<li>{{ r.text }}{% if r.at %} <span class="text-secondary small">({{ r.at|when('date') }})</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+  {% if o.guess %}<p class="mb-1">{{ o.guess }}</p>{% endif %}
+  {% if o.copy %}<p class="mb-0 mt-2"><strong>This copy</strong> arrived {{ o.copy.arrived|when('date') }}. {{ o.copy.why }}{% if o.copy.source %}<br><span class="small text-secondary text-break">{{ o.copy.source }}</span>{% endif %}</p>{% endif %}
+</section>
 <section class="card p-3 mb-4" aria-labelledby="title-status-heading">
   <h2 class="h5 mb-2" id="title-status-heading">Cleanup status</h2>
   {% if values.never_purge %}<p class="mb-0">Protected: Never Purge is on for this title.</p>
@@ -13,7 +20,8 @@
   {% else %}<p class="mb-0">No cleanup is scheduled for this title.</p>{% endif %}
 </section>
 {% set removable = media.radarr_id and media.parts|selectattr('has_file')|list and not active_candidate and not values.never_purge %}
-{% if is_admin and media.media_type == 'movie' and (shrink.offered or shrink.status or removable) %}<div class="card mb-4">
+{% set deletable = media.radarr_id and media.parts|selectattr('has_file')|list and not values.never_purge and not (active_candidate and active_candidate.state in ('APPROVED', 'EXECUTING')) %}
+{% if is_admin and media.media_type == 'movie' and (shrink.offered or shrink.status or removable or deletable) %}<div class="card mb-4">
   <h2 class="h5 px-3 pt-3 mb-2">Actions</h2>
   {% if shrink.offered or shrink.status %}<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 px-3 py-3 border-top border-secondary-subtle action-row">
     <div><div class="fw-semibold">Shrink instead of delete</div><div class="text-secondary small">Keep the film but free space: swap it for a copy half the size or smaller{% if shrink.offered %} (it's {{ media.parts|selectattr('has_file')|sum(attribute='size_bytes')|size }} now){% endif %}. Nothing changes unless one exists.</div></div>
@@ -21,7 +29,11 @@
   </div>{% endif %}
   {% if removable %}<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 px-3 py-3 border-top border-secondary-subtle action-row">
     <div><div class="fw-semibold">Remove this film</div><div class="text-secondary small">Mark it Leaving Soon: its Jellyfin poster says so, and it's deleted through Radarr after {{ values.notice_days }} day{{ '' if values.notice_days == 1 else 's' }} unless someone plays it or you choose Keep.</div></div>
-    <form method="post" action="{{ url_for('main.title_remove', media_id=media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{{ confirm_submit('Remove', 'Mark ' ~ media.title ~ ' Leaving Soon?', 'Mark Leaving Soon', tip='Starts the notice period. Nothing is deleted yet.') }}</form>
+    <form method="post" action="{{ url_for('main.title_remove', media_id=media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{{ confirm_submit('Remove', 'Mark ' ~ media|labelled ~ ' Leaving Soon?', 'Mark Leaving Soon', tip='Starts the notice period. Nothing is deleted yet.') }}</form>
+  </div>{% endif %}
+  {% if deletable %}<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 px-3 py-3 border-top border-secondary-subtle action-row">
+    <div><div class="fw-semibold">Delete now</div><div class="text-secondary small">{% if active_candidate and active_candidate.state == 'LEAVING_SOON' %}It's Leaving Soon; this deletes it today instead. {% endif %}Deletes the film and its files through Radarr straight away, with no notice period, and keeps Radarr's import lists from adding it back. It can't be undone, though Radarr can download it again.</div></div>
+    <form method="post" action="{{ url_for('main.title_delete', media_id=media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="confirm" value="delete">{{ confirm_submit('Delete', 'Delete ' ~ media|labelled ~ ' and its files now?', 'Delete now', tip='Deletes it through Radarr straight away. Nothing is deleted until you confirm.') }}</form>
   </div>{% endif %}
 </div>{% endif %}
 {% if is_admin and media.media_type == 'series' %}<div class="card mb-4">
@@ -51,10 +63,10 @@
 </div>{% endif %}
 {% if is_admin and media.jellyfin_id %}<div class="card p-3 mb-4" id="poster"><h2 class="h5">Pictures</h2>
   <div class="d-flex flex-wrap gap-3 align-items-start">
-    <figure class="mb-0">{% set main_src = url_for('main.custom_poster_image', poster_id=custom_poster.id) if custom_poster else url_for('main.poster', media_id=media.id) %}<button type="button" class="picture-open" data-full="{{ main_src }}" data-alt="{{ media.title }}, its poster" aria-label="Show the poster full screen"><img class="poster poster-large" id="poster-preview" src="{{ main_src }}" alt="" loading="lazy"></button><figcaption class="small text-secondary mt-1" id="poster-caption">{{ 'Everyone sees this poster' if not title_posters|selectattr('image_type', 'equalto', 'Primary')|selectattr('jellyfin_user_id')|list else 'Everyone else sees this poster' }}</figcaption></figure>
+    <figure class="mb-0">{% set main_src = url_for('main.custom_poster_image', poster_id=custom_poster.id) if custom_poster else url_for('main.poster', media_id=media.id) %}<button type="button" class="picture-open" data-full="{{ main_src }}" data-alt="{{ media|labelled }}, its poster" aria-label="Show the poster full screen"><img class="poster poster-large" id="poster-preview" src="{{ main_src }}" alt="" loading="lazy"></button><figcaption class="small text-secondary mt-1" id="poster-caption">{{ 'Everyone sees this poster' if not title_posters|selectattr('image_type', 'equalto', 'Primary')|selectattr('jellyfin_user_id')|list else 'Everyone else sees this poster' }}</figcaption></figure>
     <div class="flex-grow-1">
       {% if not title_posters %}<p class="mb-2 text-secondary">Jellyfin's own pictures. Upload one to use instead (its poster, wide tile, background, logo or banner), for everyone or for one account; the current one is kept to restore.</p>{% endif %}
-      {% for p in title_posters %}{% set noun = picture_names.get(p.image_type, 'picture') %}<div class="d-flex flex-wrap align-items-center gap-2 mb-2">{% if p.jellyfin_user_id or p.image_type != 'Primary' %}{% set src = url_for('main.custom_poster_image', poster_id=p.id) %}<button type="button" class="picture-open" data-full="{{ src }}" data-alt="{{ media.title }}, its {{ noun }}" aria-label="Show the {{ noun }} full screen"><img class="poster poster-{{ p.image_type|lower }}" src="{{ src }}" alt="" loading="lazy"></button>{% endif %}
+      {% for p in title_posters %}{% set noun = picture_names.get(p.image_type, 'picture') %}<div class="d-flex flex-wrap align-items-center gap-2 mb-2">{% if p.jellyfin_user_id or p.image_type != 'Primary' %}{% set src = url_for('main.custom_poster_image', poster_id=p.id) %}<button type="button" class="picture-open" data-full="{{ src }}" data-alt="{{ media|labelled }}, its {{ noun }}" aria-label="Show the {{ noun }} full screen"><img class="poster poster-{{ p.image_type|lower }}" src="{{ src }}" alt="" loading="lazy"></button>{% endif %}
         <span>{% if p.jellyfin_user_id %}<strong>{{ poster_accounts|selectattr(0, 'equalto', p.jellyfin_user_id)|map(attribute=1)|first or 'One account' }}</strong> sees their own {{ noun }}{% else %}<strong>Everyone</strong> sees a custom {{ noun }}{% endif %}{% if p.source and p.source != 'Uploaded' %} from <code>{{ p.source }}</code>{% endif %}, since {{ p.applied_at|when('datetime') }}.</span>
         <form method="post" action="{{ url_for('main.title_poster_restore', media_id=media.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="poster" value="{{ p.id }}"><button class="btn btn-sm btn-outline-secondary" data-tip="{{ ('Shows this account the usual ' ~ noun ~ ' again.') if p.jellyfin_user_id else ('Puts back the ' ~ noun ~ ' this title had before.' if p.original_path else ('The title had no ' ~ noun ~ ' before, so this removes it.' if p.original_path == '' else 'Curatarr has no copy of the ' ~ noun ~ ' from before, so this takes the metadata provider\'s.')) }}">{{ 'Remove' if p.jellyfin_user_id or p.original_path == '' else 'Restore original' }}</button></form>
       </div>{% endfor %}
@@ -77,7 +89,7 @@
 {% if is_admin and chapter_rows %}
 {% macro clock(seconds) %}{{ '%d:%02d'|format((seconds or 0) // 60, (seconds or 0) % 60) }}{% endmacro %}
 {% macro file_row(part, c) %}<li class="enh-row">
-  <div class="enh-name">{% if media.media_type == 'series' %}<strong>E{{ '%02d'|format(part.episode_number or 0) }}</strong>{% else %}<strong>{{ media.title }}</strong>{% endif %}{{ jellyfin_part_link(part, media) }}</div>
+  <div class="enh-name">{% if media.media_type == 'series' %}<strong>E{{ '%02d'|format(part.episode_number or 0) }}</strong>{% else %}<strong>{{ media|labelled }}</strong>{% endif %}{{ jellyfin_part_link(part, media) }}</div>
   <div class="enh-chips">
     <span class="chip{{ ' chip-on' if c.label in ('Generated', 'Existing') }}" title="Chapters: {{ c.label }}{% if c.source != '—' %}, {{ c.source }}{% endif %}">{{ icon('chapters', 12) }} {% if c.count %}{{ c.count }} chapters{% else %}{{ c.label }}{% endif %}{% if c.queued %} · queued{% endif %}</span>
     {% if c.subtitles_ours %}<span class="chip chip-on" title="Generated subtitles">{{ icon('subtitles', 12) }} Generated subtitles</span>{% endif %}
@@ -85,8 +97,9 @@
     {% if c.preview %}<span class="chip chip-accent" title="Preview Curatarr marked">{{ icon('skip', 12) }} Preview</span>{% endif %}
     {% if c.markers_fixed %}<span class="chip" title="Intro Skipper markers Curatarr hid or trimmed">{{ c.markers_fixed }} marker{{ '' if c.markers_fixed == 1 else 's' }} fixed</span>{% endif %}
     {% if c.dub %}<span class="chip chip-{{ c.dub[1] }}">{{ icon('audio', 12) }} {{ c.dub[0] }}</span>{% endif %}
+    {% if c.set_aside %}<a class="chip chip-accent" href="#subs-{{ c.state.id }}" title="English subtitles set aside as out of sync: Bring back is below">{{ icon('subtitles', 12) }} Subtitles set aside</a>{% endif %}
   </div>
-  <a class="enh-go" href="{{ url_for('main.chapter_part', part_id=part.id) }}" aria-label="Preview and actions for {{ 'E%02d'|format(part.episode_number or 0) if media.media_type == 'series' else media.title }}">Preview and actions {{ icon('chevron', 14) }}</a>
+  <a class="enh-go" href="{{ url_for('main.chapter_part', part_id=part.id) }}" aria-label="Preview and actions for {{ 'E%02d'|format(part.episode_number or 0) if media.media_type == 'series' else media|labelled }}">Preview and actions {{ icon('chevron', 14) }}</a>
 </li>{% endmacro %}
 <section class="card p-3 mb-4" aria-labelledby="enhance-heading">
   <h2 class="h5 mb-1" id="enhance-heading">{{ icon('enhance', 18) }} Enhancements</h2>
@@ -101,7 +114,11 @@
   {% else %}
     <ul class="enh-list list-unstyled mb-0">{% for part, c in chapter_rows %}{{ file_row(part, c) }}{% endfor %}</ul>
   {% endif %}
+  {% set aside = chapter_rows|selectattr('1.set_aside')|list %}
+  {% if aside %}<h3 class="h6 mt-3">Subtitles set aside</h3><p class="small text-secondary mb-2">English subtitles Curatarr judged out of sync and moved aside. Bring back puts them back for good.</p>
+  {% set back_to = request.path %}{% for part, c in aside %}{% set state = c.state %}{% include '_subtitle_card.html' %}{% endfor %}{% endif %}
 </section>
+{% if aside %}<script src="{{ url_for('static', filename='artwork-actions.js', v='4') }}"></script>{% endif %}
 {% endif %}
 {% if is_admin and actions %}<h2 class="section-title">Recent activity</h2><ul>{% for action in actions %}<li><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action_name(action) }}</a> · {{ action.state }} · {{ action.reason_text }}</li>{% endfor %}</ul>{% endif %}
 {% if is_admin %}<details class="mt-4"><summary class="section-title">Advanced: this title's own cleanup rules</summary><div class="pt-3">

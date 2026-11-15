@@ -332,11 +332,16 @@ def _agent_cast(people: dict[str, list[int]], from_art: bool) -> list[str]:
     who = ", ".join(f"{name} ({_numbers(numbers)})" for name, numbers in people.items())
     if from_art:
         role = (
-            "They replace the people in the original artwork: each takes the "
-            "place of the character they suit best, in that character's costume, "
-            "pose and look. If the artwork shows fewer characters than there are "
-            "people, add the others as the film's other main characters; if it "
-            "shows none, make it without people."
+            "They replace the people in the original artwork, in each "
+            "character's costume, pose and look. Cast by sex first: a woman's "
+            "role goes to a woman, a man's to a man. Use only as many of them as "
+            "the artwork shows people and leave the others out, however many "
+            "photos there are; when roles outnumber people of that sex, the "
+            "closest fit takes the rest. Never show anyone twice. If it shows no "
+            "people, make it without them. In drawn, painted or animated "
+            "artwork, draw them in that same style, the way it draws faces, "
+            "still recognisable by face shape, hair, facial hair, skin tone and "
+            "build."
         )
     else:
         role = (
@@ -406,7 +411,8 @@ def agent_prompt(
         lines.append(
             f"- Base it on the title's own artwork, {source} ({_numbers([base])}): "
             "make a new version of it, keeping what makes it recognisable (its "
-            "concept, composition, mood, colour palette, era"
+            "art style and medium, whether photograph, painting, drawing or "
+            "animation; its concept, composition, mood, colour palette, era"
             + (
                 " and iconic imagery"
                 if kind == "Backdrop"
@@ -440,7 +446,14 @@ def agent_prompt(
             "Don't use any real person's likeness, actors included"
             + (": the people in it are new faces." if from_art else "."),
         ]
-    if set_image:
+    if set_image and from_art and kind != "Logo":
+        lines.append(
+            f"{_numbers([set_image]).capitalize()} is this set's new poster: use it "
+            "only so each person looks the same (face, hair, who plays whom). "
+            f"Take the composition, poses, costumes and setting from "
+            f"{_numbers([base])}, not from the poster."
+        )
+    elif set_image:
         lines.append(
             f"It's one of a matching set: keep the cast, costumes, look and style "
             f"of {_numbers([set_image])}, in this picture's own framing."

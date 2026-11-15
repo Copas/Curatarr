@@ -43,8 +43,9 @@ def overall(now=None) -> dict | None:
 
     now = now or utcnow()
     parts = []
+    jobs = job_forecast(now)
     for name, forecast in (
-        ("Chapter jobs", job_forecast(now)),
+        ("Chapter jobs", jobs),
         ("Skip-marker checks", marker_forecast(now)),
         ("Subtitles", subtitle_forecast(now)),
     ):
@@ -61,18 +62,27 @@ def overall(now=None) -> dict | None:
     quality = chapter_quality_progress()
     if quality and quality["left"]:
         # Queued a batch at a time as chapter jobs: those waiting are counted
-        # with the chapter jobs, the rest here. The time is all of them at the
-        # pace they've been judged lately.
-        pace = quality["per_hour"]
+        # with the chapter jobs, the rest here.
+        waiting = quality.get("waiting", 0)
+        ahead = (jobs["remaining"] - waiting) if jobs else 0
+        pace, after = quality["per_hour"], None
+        if ahead > 0 and jobs.get("finishes_at"):
+            # New chapter jobs go first, squeezing these to a trickle, so
+            # today's pace says little. They speed up once those are done:
+            # from then, at their best pace lately.
+            pace = max(pace or 0, quality.get("best_per_hour") or 0) or None
+            after = {"what": "chapter jobs", "count": ahead}
+            start, left = jobs["finishes_at"], quality["left"] - waiting
+        else:
+            start, left = now, quality["left"]
         parts.append(
             {
                 "name": "Chapter quality checks",
                 "done": quality["checked"],
-                "left": quality["left"] - quality.get("waiting", 0),
-                "finishes_at": now + timedelta(hours=quality["left"] / pace)
-                if pace
-                else None,
+                "left": quality["left"] - waiting,
+                "finishes_at": start + timedelta(hours=left / pace) if pace else None,
                 "approximate": False,
+                "after": after,
             }
         )
     # What rewrites whole files shares one limit (rebuilds wait for Jellyfin's
@@ -144,6 +154,7 @@ def overall(now=None) -> dict | None:
         "finishes_at": slowest["finishes_at"] if slowest else None,
         "time_left": _duration_words(slowest["finishes_at"] - now) if slowest else None,
         "slowest": slowest["name"] if slowest else None,
+        "after": slowest.get("after") if slowest else None,
         "approximate": bool(slowest and slowest["approximate"]),
         "unknown": [p["name"] for p in parts if not p["finishes_at"]],
         "parts": parts,

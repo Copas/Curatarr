@@ -55,6 +55,7 @@ It knows what your household cares about, too:
 - **Halloween films stay through October** (and Christmas ones through December), and can even come back before their season.
 - **Shrink instead of delete:** swap a 25 GB copy of a film you keep for a 6 GB one, only if one exists.
 - **A disk forecast** says when you'll run low at this week's pace, and what would go first.
+- **Recently watched and added** on Overview: what each person watched lately, and what just arrived.
 
 #### How Leaving Soon works
 
@@ -175,7 +176,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Chapters](docs/FEATURES.md#chapters-and-subtitles) | Chapters for files that have none, named from what's said (local Whisper and Ollama) or spaced at scene changes. | Off until you choose |
 | [Subtitles](docs/FEATURES.md#chapters-and-subtitles) | English subtitles from the soundtrack (Whisper large-v3-turbo, every line kept), for files with none, or with only picture subtitles a Roku can't draw; each line timed from its words, at the reading speed you choose. | Off until you choose |
 | [Recaps and previews](docs/FEATURES.md#recaps-previews-and-skip-markers) | "Previously on…" and "Next time on…" get Jellyfin's Skip button. | With Intro Skipper |
-| [Better skip markers](docs/FEATURES.md#recaps-previews-and-skip-markers) | Intros widened to the footage the season shares, end credits starting where the lettering does, recaps running to the intro or the fade after them; plainly wrong guesses hidden. Each change undoable; films keep only their credits. | With Intro Skipper |
+| [Better skip markers](docs/FEATURES.md#recaps-previews-and-skip-markers) | Intros widened to the footage the season shares, end credits starting where the lettering does, recaps running to the intro or the fade after them; plainly wrong guesses hidden. Each change undoable; films have none. | With Intro Skipper |
 | [The film's own soundtrack first](docs/FEATURES.md#playing-smoothly-on-every-device) | A commentary or audio description set as the default track gives way to the film's soundtrack. | **On** (asks first) |
 | [English first](docs/FEATURES.md#playing-smoothly-on-every-device) | A track heard to be English becomes first and default over another language's |
 | [Custom posters](docs/FEATURES.md#custom-posters) | Your own poster for any title, and its wide tile, background, logo and banner, uploaded or picked up from a folder (or made by an AI from prompts Curatarr writes), with the originals kept to restore. | One click |
@@ -183,7 +184,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 | [Favourite ribbons](docs/FEATURES.md#favourite-ribbons) | A gold band with a star and Sam's face on what someone favourited (and "★ Sam" on its page), shown to the accounts you choose; NEW for a week, "♥ Household favourite" for everyone's, and on favourite episodes too. | Off, with the plugin |
 | [Make them with an AI](docs/FEATURES.md#make-them-with-an-ai) | Prompts in batches for an image-making AI agent, with each title's plot, original art for reference and file name, and your household cast as the leads where it suits. | One click |
 | [Generate with AI](docs/FEATURES.md#generate-with-ai) | Curatarr makes the pictures itself, on a local image model (through ComfyUI) or Codex's image tool, on this computer or another: matching sets, your household as the cast, titles checked for spelling, every picture reviewed before it goes on, and library-wide batches for what's missing. Benchmarks compare the engines. | Off until a [worker](docs/ARTWORK.md) is set up |
-| [Gallery](docs/FEATURES.md#gallery) | Every picture made, laid out to show people: a page per title (its background and logo, then its poster, wide tile and banner), full screen and a slideshow. | **On** |
+| [Gallery](docs/FEATURES.md#gallery) | Every picture made, laid out to show people: a page per title (its background and logo, then its poster, wide tile and banner), each original beside what was made, full screen and a slideshow. | **On** |
 | [Posters in your language](docs/FEATURES.md#collections-and-suggestions) | A new release that arrived with a foreign poster gets one in your language once TMDB has it. | **On** |
 
 ### ▶️ Plays smoothly everywhere

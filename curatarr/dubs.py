@@ -15,6 +15,7 @@ mostly measures music, which Whisper often mistakes for another language.
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -31,6 +32,18 @@ CONFIDENT = 0.6  # a sample counts only when Whisper is at least this sure
 MIN_CONFIDENT = 3  # and a track's language needs this many such samples
 AGREEMENT = 0.6  # of which this share must agree
 MAX_TRACKS = 4  # commentary and extra dubs past this aren't worth the time
+# A commentary talks over the whole film, quiet scenes and music included; the
+# film's own soundtrack, dubbed or not, has stretches with little said. An
+# English track counts as a commentary when there's speech in at least
+# COMMENTARY_EVERY of every clip, and it says COMMENTARY_MORE more on average
+# than the film's other audio. (Measured: commentaries 0.88 to 1.0 in every
+# clip; films, talky ones too, under 0.5 in at least one.)
+COMMENTARY_EVERY = 0.5
+COMMENTARY_MORE = 0.15
+# Named or flagged as a commentary or an audio description.
+EXTRA_NAME = re.compile(
+    r"comment|descri|narrat|visually impaired|\bad\b|\bdvs\b", re.IGNORECASE
+)
 
 # Matroska language codes (ISO 639-2/B) and Radarr's names, by ISO 639-1.
 LANGUAGES = {
@@ -66,9 +79,26 @@ LANGUAGES = {
     "ja": ("jpn", "Japanese"),
     "ko": ("kor", "Korean"),
     "zh": ("chi", "Chinese"),
+    "sr": ("srp", "Serbian"),
+    "hr": ("hrv", "Croatian"),
+    "bs": ("bos", "Bosnian"),
+    "bg": ("bul", "Bulgarian"),
+    "sk": ("slo", "Slovak"),
+    "sl": ("slv", "Slovenian"),
+    "mk": ("mac", "Macedonian"),
+    "et": ("est", "Estonian"),
+    "lv": ("lav", "Latvian"),
+    "lt": ("lit", "Lithuanian"),
+    "ms": ("may", "Malay"),
+    "tl": ("tgl", "Tagalog"),
 }
 # Other spellings found in files' language tags (639-2/T codes, names).
 _ALIASES = {
+    "slk": "sk",
+    "mkd": "mk",
+    "msa": "ms",
+    "scc": "sr",
+    "scr": "hr",
     "fra": "fr",
     "deu": "de",
     "nld": "nl",
@@ -118,19 +148,57 @@ def heard(samples: list) -> str | None:
     return language if count / len(confident) >= AGREEMENT else None
 
 
-def plan(streams: list[dict], heard_by_track: dict) -> dict:
+def _mean(values) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def commentary(speech: dict, track: int, others) -> bool:
+    """Whether ``track`` talks like a commentary next to the ``others``:
+    ``speech`` is {track: [share of each clip with speech in it]}."""
+    mine = speech.get(track) or []
+    theirs = [speech.get(o) for o in others if speech.get(o)]
+    if len(mine) < 3 or not theirs:
+        return False
+    if min(mine) < COMMENTARY_EVERY:
+        return False
+    return _mean(mine) >= max(_mean(t) for t in theirs) + COMMENTARY_MORE
+
+
+def _unanimous(samples, language) -> bool:
+    """No sample confidently in a language other than ``language``."""
+    return not any(
+        lang != language and chance >= CONFIDENT for lang, chance in samples or []
+    )
+
+
+def plan(streams: list[dict], heard_by_track: dict, speech=None, samples=None) -> dict:
     """What to do about a file's audio, given what each track sounded like.
 
     ``verdict`` is "english" (a real English track exists), "no_english"
     (every track was heard clearly and none is English) or "unsure".
     ``actions`` are ("label", track, language) for a wrong or missing label
-    and ("default", track) to make a real English track the default.
+    and ("default", track) to make a real English track the default. An
+    English track that talks like a commentary (``speech``, see commentary())
+    isn't a real English track. With ``samples``, a track labelled as one
+    language is taken to be in another, where English is one of them, only
+    when no clip was confidently in a third: Whisper heard two clips of a
+    Serbian soundtrack as English and one as Croatian, and the Serbian track
+    was relabelled English.
     """
     audio = [s for s in streams if s.get("codec_type") == "audio"]
     tracks, actions = [], []
     for stream in audio:
         index = stream["index"]
         label, sounds = code(stream.get("language")), heard_by_track.get(index)
+        if (
+            samples is not None
+            and label
+            and sounds
+            and sounds != label
+            and "en" in (label, sounds)
+            and not _unanimous(samples.get(index), sounds)
+        ):
+            sounds = None  # not clear enough to say the label is wrong
         tracks.append(
             {
                 "index": index,
@@ -149,7 +217,21 @@ def plan(streams: list[dict], heard_by_track: dict) -> dict:
             and (label is None or "en" in (label, sounds))
         ):
             actions.append(("label", index, sounds))
-    english = [t["index"] for t in tracks if t["heard"] == "en"]
+    speech = speech or {}
+    named = {
+        s["index"]
+        for s in audio
+        if s.get("extra") or EXTRA_NAME.search(s.get("title") or "")
+    }
+    for track in tracks:
+        others = [t["index"] for t in tracks if t["heard"] and t["heard"] != "en"]
+        if track["heard"] == "en" and (
+            track["index"] in named or commentary(speech, track["index"], others)
+        ):
+            track["commentary"] = True
+    english = [
+        t["index"] for t in tracks if t["heard"] == "en" and not t.get("commentary")
+    ]
     if english:
         verdict = "english"
         default = next((t for t in tracks if t["default"]), None)
@@ -188,8 +270,16 @@ def sample_times(duration: float) -> list[float]:
     return [round(duration * p, 1) for p in POSITIONS[:CLIPS]]
 
 
-def listen(info: MediaInfo, tracks: list[int], device: str, model: str, make_room=None):
-    """{track: [(language, probability), ...]} for each audio track."""
+def listen(
+    info: MediaInfo,
+    tracks: list[int],
+    device: str,
+    model: str,
+    make_room=None,
+    speech=None,
+):
+    """{track: [(language, probability), ...]} for each audio track. With a
+    ``speech`` dict, it's filled with {track: [share of each clip spoken]}."""
     times = sample_times(info.duration)
     with tempfile.TemporaryDirectory(prefix="curatarr-dubs-") as directory:
         clips = {}
@@ -239,6 +329,10 @@ def listen(info: MediaInfo, tracks: list[int], device: str, model: str, make_roo
         found = json.loads(result.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError) as exc:
         raise MediaToolError("Language detection produced no readable output") from exc
+    if "samples" in found:
+        if speech is not None:
+            speech.update({int(k): v for k, v in found["speech"].items()})
+        found = found["samples"]
     return {int(k): [tuple(s) for s in v] for k, v in found.items()}
 
 
@@ -259,10 +353,20 @@ def _detect(clips: dict, model_name: str, device: str) -> dict:
             last_error = exc
     else:
         raise RuntimeError(f"faster-whisper could not run: {last_error}")
-    found = {}
+    from faster_whisper.vad import get_speech_timestamps
+
+    found, speech = {}, {}
     for track, paths in clips.items():
-        found[track] = []
+        found[track], speech[track] = [], []
         for path in paths:
+            try:
+                audio = decode_audio(path)
+                spoken = sum(
+                    t["end"] - t["start"] for t in get_speech_timestamps(audio)
+                )
+                speech[track].append(round(spoken / max(len(audio), 1), 2))
+            except (RuntimeError, ValueError, OSError):
+                pass
             try:
                 # The voice filter drops music and silence, which is what
                 # Whisper most often mistakes for another language.
@@ -272,7 +376,7 @@ def _detect(clips: dict, model_name: str, device: str) -> dict:
             except (RuntimeError, ValueError, IndexError):
                 continue  # nothing spoken in this clip
             found[track].append([language, round(float(probability), 3)])
-    return found
+    return {"samples": found, "speech": speech}
 
 
 def main(argv=None):

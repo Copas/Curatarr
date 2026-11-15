@@ -3,7 +3,9 @@
 A sweep runs in its own background thread from the worker cycle, a few files
 at a time, and stands aside while playback has priority (it reads from the
 same disks people are watching from). Films are checked first. A file is
-checked again only when it's replaced. What's found is listed on Enhance →
+checked again only when it's replaced. Files checked before blank stretches
+were looked for (BLANK_SCAN) are read for them afterwards, a few at a time,
+what's about to be watched first. What's found is listed on Enhance →
 Problems, where a file can be replaced through Radarr or Sonarr (its release
 blocklisted, the file deleted, a new search started) or kept.
 """
@@ -22,6 +24,8 @@ from .models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
 from .services import audit, client, setting
 
 PER_RUN = 4
+BLANK_SCAN = 1  # how blank stretches are found; raising it reads every file again
+BLANK_KEY = "file_blank_scan"
 
 _thread = None
 _lock = threading.Lock()
@@ -43,16 +47,9 @@ def enabled() -> bool:
 def _due():
     """Files not yet checked, or replaced since they were; films first."""
     return (
-        db.session.query(MediaPart)
-        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
-        .join(Library, MediaIdentity.library_id == Library.id)
+        _files()
         .outerjoin(ChapterState, ChapterState.media_part_id == MediaPart.id)
         .filter(
-            MediaPart.kind.in_(("movie_file", "episode")),
-            MediaPart.has_file.is_(True),
-            MediaPart.file_path.isnot(None),
-            MediaIdentity.missing_since.is_(None),
-            Library.media_type.in_(("tv", "movies")),
             or_(
                 ChapterState.id.is_(None),
                 ChapterState.file_checked_at.is_(None),
@@ -64,6 +61,124 @@ def _due():
     )
 
 
+def _files():
+    return (
+        db.session.query(MediaPart)
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .join(Library, MediaIdentity.library_id == Library.id)
+        .filter(
+            MediaPart.kind.in_(("movie_file", "episode")),
+            MediaPart.has_file.is_(True),
+            MediaPart.file_path.isnot(None),
+            MediaIdentity.missing_since.is_(None),
+            Library.media_type.in_(("tv", "movies")),
+        )
+    )
+
+
+def _blank_progress() -> dict:
+    progress = setting(BLANK_KEY) or {}
+    return progress if progress.get("rule") == BLANK_SCAN else {"rule": BLANK_SCAN}
+
+
+def _blank_due(limit) -> list:
+    """Checked files not yet read for blank stretches: what someone will watch
+    next first, then the library in order (where the last pass stopped)."""
+    from . import up_next
+
+    def unread(rows):
+        return [
+            (part, state)
+            for part, state in rows
+            if (state.file_check or {}).get("blank_scan") != BLANK_SCAN
+        ]
+
+    checked = (
+        _files()
+        .join(ChapterState, ChapterState.media_part_id == MediaPart.id)
+        .filter(
+            ChapterState.file_checked_at.isnot(None),
+            ChapterState.file_check_size == MediaPart.size_bytes,
+        )
+    )
+    rows = checked.add_entity(ChapterState)
+    soon = up_next.part_ids()
+    found = unread(rows.filter(MediaPart.id.in_(soon)).all()) if soon else []
+    progress = _blank_progress()
+    if progress.get("finished_at"):
+        return found[:limit]
+    after = progress.get("after")
+    while len(found) < limit:
+        page = rows.order_by(MediaPart.id)
+        if after:
+            page = page.filter(MediaPart.id > after)
+        page = page.limit(200).all()
+        if not page:
+            break
+        after = page[-1][0].id
+        found += [r for r in unread(page) if r not in found]
+    return found[:limit]
+
+
+def _blank_scan(limit=PER_RUN) -> int:
+    """Read checked files for blank stretches (missing pieces of a download)."""
+    from .services import set_setting
+
+    e = _enrichment()
+    rows = _blank_due(limit * 3)
+    progress = _blank_progress()
+    done = 0
+    for part, state in rows:
+        if done >= limit:
+            break
+        if setting("chapters_paused_since") or throttle.stopping():
+            break
+        path = e.local_path(part.file_path)
+        if not path or not e.file_exists(path):
+            continue
+        db.session.commit()
+        read = True
+        try:
+            info = probe(path)
+            issues = filecheck.blank_issues(
+                path, info.duration, between=throttle.wait_while_paused
+            )
+        except (MediaToolError, OSError, ValueError):
+            issues, read = [], False  # unreadable: not held up on it for good
+        result = dict(state.file_check or {})
+        result["issues"] = [
+            i for i in result.get("issues") or [] if i.get("kind") != "blank_data"
+        ] + issues
+        result["blank_scan"] = BLANK_SCAN
+        state.file_check = result
+        found = issues and not state.file_problem and _needs_action(result)
+        state.file_problem = _needs_action(result)
+        if progress.get("after") is None or part.id > progress["after"]:
+            progress["after"] = part.id
+        db.session.commit()
+        done += read
+        if found:
+            _act_on_problem(state, part.media, result)
+    if not rows:
+        progress["finished_at"] = utcnow().isoformat()
+    set_setting(BLANK_KEY, progress)
+    db.session.commit()
+    return done
+
+
+def _act_on_problem(state, media, result) -> None:
+    e = _enrichment()
+    e._log("file_problem", state_id=state.id, kinds=_kinds(result))
+    if (
+        e.options()["file_replace_automatically"]
+        and not _dry_run(media)
+        and automatic(result)
+    ):
+        from . import better_copy
+
+        better_copy.request(state, "file", auto=True)  # only if a better copy exists
+
+
 def start(app=None):
     """Start a sweep in the background unless one is running (worker cycle)."""
     global _thread
@@ -72,7 +187,7 @@ def start(app=None):
     with _lock:
         if _thread and _thread.is_alive():
             return False
-        if not _due().first():
+        if not _due().first() and not _blank_due(1):
             return False
         app = app or current_app._get_current_object()
         _thread = threading.Thread(
@@ -128,6 +243,25 @@ def _episode_runtime(part, media, runtimes):
     return runtimes[key].get(part.sonarr_episode_id) or None
 
 
+def _subtitle_end(path) -> float | None:
+    """When the last line of an English .srt beside the video is shown."""
+    from pathlib import Path
+
+    from .subtitle_sync import parse_srt
+    from .subtitles import read_text, sidecar_english
+
+    ends = []
+    for name in sidecar_english(path, text_only=True):
+        if not name.lower().endswith(".srt"):
+            continue
+        try:
+            text, _encoding = read_text(Path(path).with_name(name))
+        except OSError:
+            continue
+        ends.extend(line.end for line in parse_srt(text))
+    return max(ends) if ends else None
+
+
 def _segments(part, info):
     """The saved transcript, if Curatarr has made one; never a new one."""
     e = _enrichment()
@@ -178,7 +312,7 @@ def sweep(limit=PER_RUN) -> int:
     # Look further than `limit`: files that can't be reached are skipped.
     parts = _due().limit(limit * 10).all()
     if not parts:
-        return 0
+        return _blank_scan(limit)
     runtimes = _runtimes()
     e = _enrichment()
     checked = 0
@@ -226,9 +360,23 @@ def check(state, part, runtimes=None) -> dict:
     )
     segments = _segments(part, info)
     result = {
-        "issues": filecheck.health(path, info.duration, listed, segments, film=film),
+        "issues": filecheck.health(
+            path,
+            info.duration,
+            listed,
+            segments,
+            film=film,
+            subtitle_end=_subtitle_end(path),
+        ),
         "transcript": bool(segments),
     }
+    try:
+        result["issues"] += filecheck.blank_issues(
+            path, info.duration, between=throttle.wait_while_paused
+        )
+        result["blank_scan"] = BLANK_SCAN
+    except (MediaToolError, OSError):
+        pass  # read again by the blank-stretch pass
     _trust_agreeing_lengths(state, result, info.duration)
     if film:
         result["subtitles"] = filecheck.burned_subtitles(path, info.duration, segments)
@@ -238,14 +386,19 @@ def check(state, part, runtimes=None) -> dict:
     state.file_problem = _needs_action(result)
     db.session.commit()
     if state.file_problem:
-        e._log("file_problem", state_id=state.id, kinds=_kinds(result))
-        if e.options()["file_replace_automatically"] and not _dry_run(media):
-            from . import better_copy
-
-            better_copy.request(
-                state, "file", auto=True
-            )  # only if a better copy exists
+        _act_on_problem(state, media, result)
     return result
+
+
+# Found from a sidecar file's timing, not the video itself: worth a look, but
+# not reason enough to delete a file unattended.
+REVIEW_ONLY = {"subtitles_longer"}
+
+
+def automatic(result) -> bool:
+    """Whether a problem found may be replaced without asking."""
+    kinds = set(_kinds(result))
+    return bool(kinds - REVIEW_ONLY)
 
 
 SAME_LENGTH_MINUTES = 2
@@ -377,10 +530,10 @@ def replace(state) -> str:
         current = (movie.get("movieFile") or {}).get("id")
         if part.arr_file_id and current and current != part.arr_file_id:
             return _already_replaced(state, media)
-        grabs = radarr.grabs(media.radarr_id)
-        if grabs and not _blocklisted_before(state):
-            radarr.mark_failed(grabs[0]["id"])
-            blocklisted = grabs[0].get("sourceTitle")
+        grab = radarr.current_grab(movie)
+        if grab and not _blocklisted_before(state):
+            radarr.mark_failed(grab["id"])
+            blocklisted = grab.get("sourceTitle")
             _note_blocklisted(state, blocklisted)
         file_id = (movie.get("movieFile") or {}).get("id")
         from . import replacements

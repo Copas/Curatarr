@@ -15,6 +15,9 @@ within 3 seconds (Intro Skipper: 9) and 11 of 16 unseen ones (Intro Skipper:
 4), never early: a late start only shows a little of the credits, an early
 one would skip the end of the show.
 
+A card of a name or two on black counts too, though its few small letters
+fall short of TEXT: a frame almost entirely black is no scene from the show.
+
 Short end cards with no lettering (a logo, a title) aren't found; Intro
 Skipper's marker is then left as it is.
 """
@@ -28,6 +31,8 @@ from .mediafile import MediaToolError, required_tool
 
 TAIL = 360.0  # seconds at the end looked at for lettering
 TEXT = 600  # stroke pixels in a frame with credit lettering
+CARD_TEXT = 100  # …or, on a frame that's black around it, this few (a name card)
+CARD_DARK = 12  # a black ground: nine pixels in ten at most this bright
 GAP = 6  # seconds without, inside the credits (logo cards, a last shot)
 MIN_RUN = 10  # seconds of lettering, at least
 END_SLACK = 40.0  # the lettering may stop this short of the end (logos)
@@ -63,7 +68,7 @@ def frames(path, start, seconds, fps, width, height):
                  "-v", "error", "-y"]
                 + (["-hwaccel", "auto"] if hardware else [])
                 + ["-ss", f"{max(start, 0):.3f}", "-t", f"{seconds:.3f}", "-i", path,
-                   "-map", "0:v:0", "-an", "-sn", "-dn",
+                   "-map", "0:V:0", "-an", "-sn", "-dn",
                    "-vf", f"fps={fps},scale={width}:{height},format=gray",
                    "-f", "rawvideo", out],
                 timeout=900,
@@ -105,6 +110,16 @@ def text_score(pic) -> int:
     return int(per_row[per_row >= 4].sum())
 
 
+def credit_score(pic) -> int:
+    """text_score, with a card of a few names on black counted as lettering."""
+    import numpy as np
+
+    score = text_score(pic)
+    if CARD_TEXT <= score < TEXT and np.percentile(pic, 90) <= CARD_DARK:
+        return TEXT
+    return score
+
+
 def last_run(scores, offset, duration) -> float | None:
     """The start of the last stretch of lettering (one score a second from
     ``offset``) that runs to within END_SLACK of the end."""
@@ -125,7 +140,7 @@ def last_run(scores, offset, duration) -> float | None:
 def lettering_start(path, duration) -> float | None:
     start = max(duration - TAIL, 0.0)
     pics = frames(path, start, duration - start, 1, TEXT_W, TEXT_H)
-    return last_run([text_score(p) for p in pics], start, duration)
+    return last_run([credit_score(p) for p in pics], start, duration)
 
 
 def find_breaks(pics, start) -> list[tuple[float, str]]:

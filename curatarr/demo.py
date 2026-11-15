@@ -510,7 +510,7 @@ class DemoClient:
     def delete_episode_file(self, _file_id):
         self._check()
 
-    def image(self, _item_id, _kind="Primary"):
+    def image(self, _item_id, _kind="Primary", max_width=None):
         row = (
             db.session.query(AppSetting).filter_by(key=f"demo_image:{_item_id}").first()
         )

@@ -1,13 +1,22 @@
 {% extends 'base.html' %}
 {% block title %}Gallery · Posters · Curatarr{% endblock %}
 {% block content %}
-<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Gallery</h1><p class="text-secondary mb-0">{{ cards|length }} title{{ '' if cards|length == 1 else 's' }} with {{ 'pictures' if not kind else views[view][0]|lower }} made for them. {{ 'Open a title to see all its pictures, or play them all.' if not kind else 'Click any picture to see it full screen, then use the arrows to look through them all.' }}</p></div>{% if cards %}<button type="button" class="btn btn-primary" data-slideshow>Slideshow</button>{% endif %}</header>
+<header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Gallery</h1><p class="text-secondary mb-0">{{ cards|length }} title{{ '' if cards|length == 1 else 's' }} with {{ 'pictures' if not kind else (pieces[kind]|lower ~ 's' if compare else views[view][0]|lower) }} made for them.{% if compare %} Each title's own art beside the picture made for it; click either to see it full screen.{% else %} {{ 'Open a title to see all its pictures, or play them all.' if not kind else 'Click any picture to see it full screen, then use the arrows to look through them all.' }}{% endif %}</p></div>{% if cards %}<button type="button" class="btn btn-primary" data-slideshow>Slideshow</button>{% endif %}</header>
 {% set here = 'main.custom_posters_gallery' %}{% include '_posters_nav.html' %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4"><ul class="nav nav-pills gap-2" aria-label="What to show">{% for key, (label, _k, _n) in views.items() %}<li class="nav-item"><a class="nav-link{{ ' active' if key == view }}" href="{{ url_for('main.custom_posters_gallery', view=key) }}"{% if key == view %} aria-current="page"{% endif %}>{{ label }}</a></li>{% endfor %}</ul>
 {% if cards|length > 1 %}{% macro sort_url(key) %}{{ url_for('main.custom_posters_gallery', view=view, sort=key) }}{% endmacro %}{% include '_gallery_sort.html' %}{% endif %}</div>
-{% if cards and kind %}<div class="picture-wall picture-wall-{{ kind|lower }}">{% for c in cards %}{% set p = c.pictures[kind] %}{% set src = url_for('main.custom_poster_image', poster_id=p.id) %}
-  <figure class="picture-wall-item"><button type="button" class="picture-wall-open" data-full="{{ src }}" data-alt="{{ c.media.title }}, its {{ views[view][2] }}" aria-label="Show {{ c.media.title }} full screen"><img src="{{ src }}" alt="" loading="lazy"></button>
-    <figcaption><a href="{{ url_for('main.title', media_id=c.media.id) }}">{{ c.media.title }}</a></figcaption></figure>{% endfor %}</div>
+{% if compare %}<ul class="nav nav-pills gap-2 mb-3" aria-label="Which pictures">{% for k, label in pieces.items() %}<li class="nav-item"><a class="nav-link{{ ' active' if k == kind }}" href="{{ url_for('main.custom_posters_gallery', view='compare', kind=k) }}"{% if k == kind %} aria-current="page"{% endif %}>{{ label }}s</a></li>{% endfor %}</ul>{% endif %}
+{% if cards and compare %}<div class="compare-wall compare-wall-{{ kind|lower }}">{% for c in cards %}{% set made = url_for('main.custom_poster_image', poster_id=c.pictures[kind].id) %}{% set own = url_for('main.custom_poster_original', media_id=c.media.id, kind=kind) %}{% set noun = pieces[kind]|lower %}
+  <section class="compare-pair" aria-label="{{ c.media|labelled }}">
+    <h2 class="compare-title h6"><a href="{{ url_for('main.title', media_id=c.media.id) }}">{{ c.media|labelled }}</a></h2>
+    <div class="compare-sides">
+      <figure class="compare-side"><button type="button" class="picture-wall-open compare-original" data-full="{{ own }}" data-alt="{{ c.media|labelled }}, its original {{ noun }}" aria-label="Show {{ c.media|labelled }}'s original {{ noun }} full screen"><img src="{{ own }}" alt="" loading="lazy"></button><figcaption>Original</figcaption></figure>
+      <figure class="compare-side"><button type="button" class="picture-wall-open" data-full="{{ made }}" data-alt="{{ c.media|labelled }}, its {{ noun }} made for it" aria-label="Show {{ c.media|labelled }}'s new {{ noun }} full screen"><img src="{{ made }}" alt="" loading="lazy"></button><figcaption>Made</figcaption></figure>
+    </div>
+  </section>{% endfor %}</div>
+{% elif cards and kind %}<div class="picture-wall picture-wall-{{ kind|lower }}">{% for c in cards %}{% set p = c.pictures[kind] %}{% set src = url_for('main.custom_poster_image', poster_id=p.id) %}
+  <figure class="picture-wall-item"><button type="button" class="picture-wall-open" data-full="{{ src }}" data-alt="{{ c.media|labelled }}, its {{ views[view][2] }}" aria-label="Show {{ c.media|labelled }} full screen"><img src="{{ src }}" alt="" loading="lazy"></button>
+    <figcaption><a href="{{ url_for('main.title', media_id=c.media.id) }}">{{ c.media|labelled }}</a></figcaption></figure>{% endfor %}</div>
 {% elif cards %}<div class="showcase-grid">{% for c in cards %}{% set pics = c.pictures %}{% set title = c.media.title %}
   <figure class="showcase-card"><a class="showcase-link" href="{{ url_for('main.custom_posters_gallery_title', media_id=c.media.id) }}" aria-label="{{ title }}: all its pictures">
     <div class="showcase{{ ' showcase-plain' if not (pics.Backdrop or pics.Thumb) }}">
@@ -19,5 +28,5 @@
     {% for kind, noun in [('Backdrop', 'background'), ('Primary', 'poster'), ('Thumb', 'wide tile'), ('Logo', 'logo'), ('Banner', 'banner')] %}{% if pics[kind] %}<span hidden data-full="{{ url_for('main.custom_poster_image', poster_id=pics[kind].id) }}" data-alt="{{ title }}, its {{ noun }}"></span>{% endif %}{% endfor %}
   </figure>{% endfor %}</div>
 {% else %}<div class="empty-state"><h2 class="h6">Nothing to show yet</h2><p class="mb-0">Pictures made for titles show here once they're put on, from a title's page or the import folder (see <a href="{{ url_for('main.custom_posters_page') }}">Posters</a>).</p></div>{% endif %}
-<script src="{{ url_for('static', filename='gallery-show.js', v='2') }}"></script>
+<script src="{{ url_for('static', filename='gallery-show.js', v='4') }}"></script>
 {% endblock %}

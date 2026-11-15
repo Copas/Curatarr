@@ -2,7 +2,8 @@
 // page (Approve, Turn down, Make it again, the job's own buttons), so going
 // through many pictures is quick, Jobs (Cancel, Cancel all waiting) and
 // Enhance → Subtitles. On Review, a picture that's dealt with folds to a
-// one-line note and the next moves up; on a job's page, just that picture
+// one-line note and the next moves up, and when none are left the next
+// pictures load in; on a job's page, just that picture
 // (and the top of the page) is redrawn. If the background request fails,
 // the form is sent the usual way, so nothing's lost.
 (function () {
@@ -42,6 +43,24 @@
       });
   }
 
+  // Review: once everything shown is dealt with, the next pictures load in
+  // its place (those dealt with have left the list, so the same page now
+  // holds the next ones), without a click on Next.
+  function nextPictures() {
+    var list = document.querySelector("[data-review-list]");
+    if (!list || list.querySelector("[data-review-item]")) return;
+    var wait = document.createElement("p");
+    wait.className = "small text-secondary mt-3";
+    wait.textContent = "Loading the next pictures…";
+    list.appendChild(wait);
+    return redraw(list).then(function () {
+      var fresh = document.querySelector("[data-review-list]");
+      if (fresh && fresh.querySelector("[data-review-item]")) {
+        fresh.scrollIntoView({ block: "start" });
+      }
+    });
+  }
+
   document.addEventListener("submit", function (event) {
     var form = event.target;
     if (!form.matches("form[data-async]")) return;
@@ -67,7 +86,7 @@
           var title = item.querySelector("h2");
           done.textContent = "✓ " + ((answer.messages[0] || {}).text || (title ? title.textContent : "Done"));
           item.replaceWith(done);
-          return;
+          return nextPictures();
         }
         var panel = form.closest("[data-live]");
         var top = document.querySelector('[data-live="head"]');

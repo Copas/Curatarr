@@ -5,6 +5,7 @@ from conftest import database_free
 from test_enrichment import _movie
 
 from curatarr import better_copy, db, dub_jobs, dubs, enrichment
+from curatarr.integrations import RadarrClient
 from curatarr.mediafile import MediaInfo
 from curatarr.models import ChapterState
 from curatarr.services import set_setting
@@ -78,7 +79,12 @@ class FakeRadarr:
         self.calls.append(("rescan", movie_id))
 
     def movie(self, movie_id):
-        return {"id": movie_id, "movieFile": {"id": 55}}
+        return {
+            "id": movie_id,
+            "movieFile": {"id": 55, "sceneName": "Film.2020.1080p.WEB-DL"},
+        }
+
+    current_grab = RadarrClient.current_grab
 
     def grabs(self, movie_id):
         return [{"id": 300, "sourceTitle": "Film.2020.1080p.WEB-DL"}]
@@ -144,7 +150,7 @@ def dub_env(app, monkeypatch):
     monkeypatch.setattr(
         dubs,
         "listen",
-        lambda info, tracks, device, model, make_room=None: {
+        lambda info, tracks, device, model, make_room=None, speech=None: {
             t: [(files["heard"][t], 0.9)] * 5 for t in tracks
         },
     )
@@ -410,3 +416,112 @@ def test_remove_tracks_rewrites_a_real_file(tmp_path):
     assert len(after.chapters) == 2 and abs(after.duration - info.duration) < 1
     assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith(".")) == []
     shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_a_track_talking_all_through_is_a_commentary():
+    film = [0.9, 0.1, 0.4, 0.0, 0.6]
+    talk = [0.98, 1.0, 0.95, 1.0, 0.9]
+    assert dubs.commentary({1: talk, 2: film}, 1, [2])
+    # A talky film: busy, but with a quieter clip, like its own soundtrack.
+    assert not dubs.commentary({1: [0.86, 0.72, 0.47, 0.48, 1.0], 2: film}, 1, [2])
+    # A dub talks about as much as the original.
+    assert not dubs.commentary({1: [0.95, 0.9, 0.85, 0.7, 0.8], 2: talk}, 1, [2])
+    assert not dubs.commentary({1: talk}, 1, [2])  # nothing to compare with
+
+
+def test_an_english_commentary_isnt_a_real_english_track():
+    streams = _streams(("eng", True), ("srp", False))
+    speech = {1: [0.98, 1.0, 0.95, 1.0, 0.9], 2: [0.9, 0.0, 0.4, 0.1, 0.6]}
+    result = dubs.plan(streams, {1: "en", 2: "sr"}, speech)
+    assert result["verdict"] == "no_english"
+    assert result["tracks"][0]["commentary"] is True
+    assert dubs.removable(result, streams) == {"audio": [], "subtitles": []}
+
+
+def test_listen_reads_what_was_heard_and_how_much_was_said(monkeypatch, tmp_path):
+    import json as _json
+    from types import SimpleNamespace
+
+    from curatarr.mediafile import MediaInfo
+
+    out = {"samples": {"1": [["en", 0.9]]}, "speech": {"1": [0.95, 1.0]}}
+    monkeypatch.setattr(dubs, "extract_audio", lambda *a, **k: None)
+    monkeypatch.setattr(
+        dubs.throttle,
+        "run",
+        lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout=_json.dumps(out) + "\n", stderr=""
+        ),
+    )
+    info = MediaInfo(
+        path=str(tmp_path / "f.mkv"),
+        size=1,
+        mtime=1.0,
+        duration=6000.0,
+        format_name="matroska,webm",
+    )
+    speech = {}
+    assert dubs.listen(info, [1], "cpu", "small", speech=speech) == {1: [("en", 0.9)]}
+    assert speech == {1: [0.95, 1.0]}
+
+
+def test_a_track_named_as_a_commentary_isnt_a_real_english_track():
+    streams = _streams(("fre", False), ("eng", True))
+    streams[2]["title"] = "Commentary by a film historian"
+    result = dubs.plan(streams, {1: "fr", 2: "en"})
+    assert result["verdict"] == "no_english"
+    assert dubs.removable(result, streams)["audio"] == []
+
+
+def test_a_label_is_only_called_wrong_when_every_clear_clip_agrees():
+    streams = _streams(("srp", True))
+    samples = {
+        1: [("hr", 0.95), ("en", 0.51), ("en", 0.73), ("en", 0.55), ("en", 0.99)]
+    }
+    result = dubs.plan(streams, {1: "en"}, samples=samples)
+    assert result["actions"] == [] and result["tracks"][0]["heard"] is None
+    clear = {1: [("en", 0.9), ("en", 0.8), ("en", 0.95), ("hr", 0.3)]}
+    assert dubs.plan(streams, {1: "en"}, samples=clear)["actions"][0] == (
+        "label",
+        1,
+        "en",
+    )
+
+
+def test_a_dub_is_only_looked_for_in_releases_that_say_they_have_english():
+    from curatarr import better_copy
+
+    def ok(title):
+        return better_copy.candidate(
+            [{"title": title, "rejections": []}],
+            None,
+            reject=lambda t: not better_copy.ENGLISH_AUDIO.search(t),
+        )
+
+    assert ok("Film.2020.1080p.BluRay.English-DUB")
+    assert ok("Film 2020 DUAL-AUDIO 1080p")
+    assert ok("Film.2020.ENG.1080p.WEB")
+    assert not ok("Baise-moi.2000.1080p.BluRay.x265.DD.2.0-SM737")
+    assert not ok("Film.2020.German.DL.1080p.BluRay")
+    assert not ok("Film.2020.MULTi.1080p.BluRay")
+    assert not ok("Film.2020.Engelsk.1080p")
+
+
+def test_a_file_imported_by_hand_doesnt_blocklist_an_older_grab():
+    from curatarr.integrations import RadarrClient
+
+    class Radarr:
+        current_grab = RadarrClient.current_grab
+
+        def grabs(self, _movie_id):
+            return [{"id": 9, "sourceTitle": "Film.2020.Black.and.White.1080p"}]
+
+    by_hand = {"id": 1, "movieFile": {"relativePath": "Film.2020.Colour.1080p.mkv"}}
+    assert Radarr().current_grab(by_hand) is None
+    grabbed = {"id": 1, "movieFile": {"sceneName": "Film.2020.Black.and.White.1080p"}}
+    assert Radarr().current_grab(grabbed)["id"] == 9
+    named = {
+        "id": 1,
+        "movieFile": {"relativePath": "Film.2020.Black.and.White.1080p.mkv"},
+    }
+    assert Radarr().current_grab(named)["id"] == 9

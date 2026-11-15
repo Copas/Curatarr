@@ -297,3 +297,58 @@ def test_no_jellyfin_item_counts_as_checked(app):
     )
     assert enrichment._check_markers(ep) == "markers: no Jellyfin item"
     assert state.intro_rule == enrichment.INTRO_RULE
+
+
+def test_a_name_card_on_black_counts_as_credits():
+    pic = np.zeros((credits.TEXT_H, credits.TEXT_W), np.uint8)
+    for row in range(130, 136):  # one small name, centred
+        pic[row, 190:290:4] = 230
+    assert credits.text_score(pic) < credits.TEXT  # too few letters alone…
+    assert credits.credit_score(pic) == credits.TEXT  # …but black all round
+    scene = pic.copy()
+    scene[:, :] = np.maximum(scene, 40)  # the same strokes in a dim scene
+    scene[130:136, 190:290:4] = 230
+    assert credits.credit_score(scene) < credits.TEXT
+    assert credits.credit_score(np.zeros_like(pic)) == 0  # plain black
+
+
+def test_recaps_intro_skipper_guessed_again_are_hidden_again(monkeypatch):
+    from curatarr import enrichment
+    from curatarr.chapters import Segment
+
+    marked = []
+
+    def mark(state, part, media, kind, *, clear_guesses=False):
+        marked.append((kind, clear_guesses))
+        if clear_guesses:
+            state.markers_hidden = [*(state.markers_hidden or []), {"id": "new"}]
+
+    monkeypatch.setattr(enrichment, "_mark_segment", mark)
+
+    def episode(source, said=None, end=None):
+        state = SimpleNamespace(recap_source=source, recap_end=end, markers_hidden=None)
+        return SimpleNamespace(
+            state=state,
+            part=None,
+            media=None,
+            span=lambda *_a, **_k: said,
+        )
+
+    cold_open = [Segment(0, 5, "Who took the last donut?")]
+    previously = [Segment(0, 3, "Previously on Show...")]
+    # no "previously on": the plugin's new guess goes
+    ep = episode("no opener")
+    assert enrichment._settle_recap_guesses(ep) == "1 guessed recap hidden"
+    assert marked[-1] == ("Recap", True)
+    # recorded by a chapter job as none: the saved transcript decides
+    ep = episode("none", said=cold_open)
+    assert enrichment._settle_recap_guesses(ep)
+    assert ep.state.recap_source == "no opener"
+    marked.clear()
+    assert enrichment._settle_recap_guesses(episode("none", said=previously)) is None
+    assert enrichment._settle_recap_guesses(episode("none", said=None)) is None
+    assert enrichment._settle_recap_guesses(episode("unclear:3")) is None
+    assert marked == []
+    # Curatarr's own recap: put back in place of any guess
+    assert enrichment._settle_recap_guesses(episode("closing line", end=80.0)) is None
+    assert marked == [("Recap", False)]

@@ -270,10 +270,18 @@ class JellyfinClient(Client):
         )
         return (data or {}).get("Items") or []
 
-    def image(self, item_id, kind="Primary"):
+    def image(self, item_id, kind="Primary", max_width=None):
         """One of an item's images: Primary (poster), Thumb (the wide card),
-        or Backdrop (its first one)."""
-        return self.request("GET", f"/Items/{item_id}/Images/{_image_path(kind)}")
+        or Backdrop (its first one). With ``max_width``, a JPEG Jellyfin has
+        scaled down (for showing on a page; the full size is for editing)."""
+        params = (
+            {"maxWidth": int(max_width), "quality": 85, "format": "Jpg"}
+            if max_width
+            else None
+        )
+        return self.request(
+            "GET", f"/Items/{item_id}/Images/{_image_path(kind)}", params=params
+        )
 
     def user_image(self, user_id):
         """An account's profile picture (Jellyfin answers 404 when it has none)."""
@@ -389,6 +397,48 @@ class JellyfinClient(Client):
 
     def mark_played(self, user_id, item_id):
         return self.request("POST", f"/Users/{user_id}/PlayedItems/{item_id}")
+
+    def activity_log(self, since, limit=3000) -> list[dict]:
+        """Jellyfin's activity log since a time, newest first: playback
+        started and stopped, sign-ins… (an administrator's API key)."""
+        rows, start, page_size = [], 0, 500
+        while start < limit:
+            page = self.request(
+                "GET",
+                "/System/ActivityLog/Entries",
+                params={
+                    "startIndex": start,
+                    "limit": page_size,
+                    "minDate": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "hasUserId": "true",
+                },
+            )
+            items = (page or {}).get("Items") or [] if isinstance(page, dict) else []
+            rows.extend(items)
+            if len(items) < page_size:
+                break
+            start += page_size
+        return rows
+
+    def played(self, user_id, item_ids) -> set[str]:
+        """Which of these items the account has watched (Jellyfin's Played)."""
+        found, ids = set(), list(item_ids)
+        for start in range(0, len(ids), 100):
+            data = self.request(
+                "GET",
+                "/Items",
+                params={
+                    "Ids": ",".join(ids[start : start + 100]),
+                    "userId": user_id,
+                    "Fields": "UserData",
+                },
+            )
+            for item in (
+                (data or {}).get("Items") or [] if isinstance(data, dict) else []
+            ):
+                if (item.get("UserData") or {}).get("Played"):
+                    found.add(str(item.get("Id")))
+        return found
 
     def sessions(self):
         return self.request("GET", "/Sessions")
@@ -992,6 +1042,22 @@ class RadarrClient(Client):
             params={"movieId": movie_id, "eventType": 1},
         )
         return sorted(rows or [], key=lambda r: r.get("date") or "", reverse=True)
+
+    def current_grab(self, movie):
+        """The grab the movie's file came from, or None: the newest grab only
+        when its name matches the file's (a file imported by hand has no grab
+        of its own, and the newest one is some earlier copy)."""
+        current = (movie or {}).get("movieFile") or {}
+        names = {
+            str(current.get(key) or "").rsplit("/", 1)[-1].lower()
+            for key in ("sceneName", "relativePath", "originalFilePath")
+        } - {""}
+        names |= {n.rsplit(".", 1)[0] for n in names}
+        grabs = self.grabs(movie["id"]) if movie and movie.get("id") else []
+        if not grabs:
+            return None
+        title = str(grabs[0].get("sourceTitle") or "").lower()
+        return grabs[0] if title and title in names else None
 
     def mark_failed(self, history_id):
         """Blocklist the release behind a grab, so it isn't downloaded again."""

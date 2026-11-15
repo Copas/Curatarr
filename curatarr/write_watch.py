@@ -10,6 +10,7 @@ longer than HELD_TOO_LONG, so the slow path can be found and fixed.
 
 import logging
 import os
+import sys
 import time
 import traceback
 
@@ -19,17 +20,30 @@ log = logging.getLogger("curatarr.write_watch")
 PACKAGE = os.path.dirname(os.path.abspath(__file__))
 HELD_TOO_LONG = 10.0  # seconds
 WRITES = ("INSERT", "UPDATE", "DELETE", "REPLACE")
+DEPTH = 80  # frames kept of where a write came from
 
 
 def watch(engine) -> None:
     @event.listens_for(engine, "before_cursor_execute")
     def _first_write(conn, _cursor, statement, _params, _context, _many):
         info = conn.info
-        if "write_since" in info:
+        if "write_since" in info or "write_from" in info:
             return
         if statement.lstrip()[:7].upper().startswith(WRITES):
+            # Deep enough to reach past SQLAlchemy's own frames (a flush is
+            # some 25 of them) to the Curatarr code that asked for the write.
+            info["write_from"] = traceback.StackSummary.extract(
+                traceback.walk_stack(sys._getframe()), limit=DEPTH, lookup_lines=False
+            )
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def _has_lock(conn, _cursor, _statement, _params, _context, _many):
+        # Counted from when the first write went through, which is when this
+        # connection got the lock: counted from before it, every writer kept
+        # waiting by a long hold was reported as holding the lock itself.
+        info = conn.info
+        if "write_from" in info and "write_since" not in info:
             info["write_since"] = time.monotonic()
-            info["write_from"] = traceback.extract_stack(limit=25)
 
     def _ended(conn):
         since = conn.info.pop("write_since", None)
@@ -43,7 +57,7 @@ def watch(engine) -> None:
             # out SQLAlchemy's frames and hid where the write came from.
             frames = [
                 f"{f.filename[len(PACKAGE) + 1 :]}:{f.lineno} {f.name}"
-                for f in where or []
+                for f in reversed(where or [])  # walk_stack gives the newest first
                 if f.filename.startswith(PACKAGE + os.sep)
                 and not f.filename.endswith("write_watch.py")
             ]

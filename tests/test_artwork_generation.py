@@ -4,7 +4,9 @@ Curatarr through the test client."""
 
 import json
 import os
+import re
 import stat
+import time
 from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
@@ -353,6 +355,20 @@ def test_a_safety_refusal_is_tried_once_as_an_original_take(app, client):
     # From a worker that doesn't say why: recognised by what it says.
     artwork_jobs.fail(worker_row, task["image"], {"error": refused})
     image = job.images[0]
+    # First, again from its own art, toned down: a new scene loses what made
+    # the art recognisable.
+    assert image.state == "pending" and image.attempts == 0
+    assert "toned down" in image.message and job.options["softened"]
+    assert not job.options.get("original_take")
+    image.not_before = None
+    db.session.commit()
+    [task] = _claim(worker_row)
+    assert artwork_jobs.SOFTENED in task["prompt"]
+    assert artwork_jobs.ORIGINAL_TAKE not in task["prompt"]  # not reinvented yet
+    page = client.get(f"/library/posters/jobs/{job.id}").text
+    assert "Toned down, after a safety refusal" in page
+    # Refused again: an original take, without the title's own art.
+    artwork_jobs.fail(worker_row, task["image"], {"error": refused})
     assert image.state == "pending" and image.attempts == 0
     assert "original take" in image.message and job.options["original_take"]
     image.not_before = None
@@ -360,9 +376,46 @@ def test_a_safety_refusal_is_tried_once_as_an_original_take(app, client):
     [task] = _claim(worker_row)
     assert artwork_jobs.ORIGINAL_TAKE in task["prompt"]
     assert not any(r["role"] == "original" for r in image.task["references"])
+    # Its page says the art was left out on purpose, not that none was found.
+    page = client.get(f"/library/posters/jobs/{job.id}").text
+    assert "left out on purpose: after safety refusals" in page
+    assert "no original art found" not in page
     # Turned down as an original take too: it stops, and says what's left.
     artwork_jobs.fail(worker_row, task["image"], {"error": refused, "code": "safety"})
     assert image.state == "failed" and "local engine" in image.error
+
+
+def test_the_toned_down_retry_still_works_from_the_films_own_art(
+    app, tmp_path, monkeypatch
+):
+    """After a first safety refusal the picture is asked for again from its
+    own original art, toned down, not reinvented as a new scene."""
+    from curatarr.models import ArtworkImage
+
+    _library, media, _part = _movie()
+    poster = tmp_path / "poster.jpg"
+    poster.write_bytes(_picture("#664422"))
+    monkeypatch.setattr(
+        artwork_jobs,
+        "original_art",
+        lambda m, kind: poster if kind == "Primary" else None,
+    )
+    job = artwork_jobs.create_job(
+        media,
+        ["Primary"],
+        engine="codex/image",
+        options={"approach": "original", "originals": True},
+    )
+    job.options = job.options | {"softened": True}
+    db.session.commit()
+    image = db.session.query(ArtworkImage).filter_by(job_id=job.id).one()
+    artwork_jobs.build_task(image, "codex/image", True)
+    assert [r["path"] for r in image.task["references"] if r["role"] == "original"] == [
+        str(poster)
+    ]
+    assert "Base it on the title's own artwork" in image.prompt
+    assert artwork_jobs.SOFTENED in image.prompt
+    assert artwork_jobs.ORIGINAL_TAKE not in image.prompt
 
 
 def test_the_original_take_note_can_be_changed(app, client):
@@ -788,6 +841,93 @@ def test_codex_says_when_its_allowance_is_used_up(tmp_path, monkeypatch):
     assert caught.value.code == "usage_limit" and caught.value.retry_after >= 5000
     ready, why = backend.status()
     assert not ready and "resets in about" in why
+
+
+CODEX_PLAN_LIMIT = """import json, sys
+if sys.argv[1:3] == ["login", "status"]:
+    print("Logged in using ChatGPT"); sys.exit()
+if sys.argv[1:3] == ["features", "list"]:
+    print("image_generation   stable   true"); sys.exit()
+sys.stdin.read()
+print("Reading prompt from stdin...", file=sys.stderr)
+said = "You've hit your usage limit. Visit the usage page or try again at 6:09 PM."
+for line in (
+    {"type": "thread.started", "thread_id": "t3"},
+    {"type": "turn.started"},
+    {"type": "error", "message": said},
+    {"type": "turn.failed", "error": {"message": said}},
+):
+    print(json.dumps(line))
+"""
+
+CODEX_ERROR = CODEX_PLAN_LIMIT.replace(
+    "You've hit your usage limit. Visit the usage page or try again at 6:09 PM.",
+    "stream disconnected before completion",
+)
+
+
+def test_codex_reads_the_plans_usage_limit_from_its_events(tmp_path, monkeypatch):
+    """The plan's limit came as an error event, not on stderr: every picture
+    used up its tries in seconds and failed, saying only "Reading prompt
+    from stdin...". Now it waits for the reset without using a try."""
+    backend = _fake_codex(tmp_path, monkeypatch, CODEX_PLAN_LIMIT)
+    with pytest.raises(Failed) as caught:
+        backend.make(
+            {"image": "i", "engine": "codex/image", "prompt": "p"}, [], lambda *a: None
+        )
+    assert caught.value.code == "usage_limit"
+    assert 60 < caught.value.retry_after <= 86400 + 60
+    assert not backend.status()[0]
+
+
+def test_codex_says_what_went_wrong_from_its_error_event(tmp_path, monkeypatch):
+    backend = _fake_codex(tmp_path, monkeypatch, CODEX_ERROR)
+    with pytest.raises(Failed) as caught:
+        backend.make(
+            {"image": "i", "engine": "codex/image", "prompt": "p"}, [], lambda *a: None
+        )
+    assert caught.value.code is None
+    assert "stream disconnected" in str(caught.value)
+    assert "Reading prompt" not in str(caught.value)
+
+
+def test_codex_reset_times_are_read_as_its_words_put_them():
+    from curatarr.artwork_worker.backends.codex import LIMIT_GUESS, _reset_in
+
+    assert _reset_in("It resets in about 14 minutes.") == 14 * 60
+    assert _reset_in("try again in 2 hours") == 7200
+    now = time.mktime((2026, 11, 13, 17, 0, 0, 0, 0, -1))
+    assert _reset_in("try again at 6:09 PM.", now) == 69 * 60
+    assert _reset_in("try again at 1:30 PM.", now) == (20 * 60 + 30) * 60  # tomorrow
+    # Asked again a few seconds into the minute it named, before it reset:
+    # that's minutes away, not tomorrow (it waited a whole day).
+    assert _reset_in("try again at 5:00 PM.", now + 16) == 120
+    assert _reset_in("try again at 4:30 PM.", now) == 120
+    assert _reset_in("You've hit your usage limit.") == LIMIT_GUESS
+
+
+CODEX_SILENT = """import sys, time
+if sys.argv[1:3] == ["login", "status"]:
+    print("Logged in using ChatGPT"); sys.exit()
+if sys.argv[1:3] == ["features", "list"]:
+    print("image_generation   stable   true"); sys.exit()
+sys.stdin.read()
+time.sleep(60)
+"""
+
+
+def test_a_codex_that_hangs_without_a_word_is_ended_at_its_time_limit(
+    tmp_path, monkeypatch
+):
+    """The time was only looked at when a line of output arrived."""
+    backend = _fake_codex(tmp_path, monkeypatch, CODEX_SILENT)
+    backend.options["timeout"] = 1
+    started = time.monotonic()
+    with pytest.raises(Failed, match="longer than 1 seconds"):
+        backend.make(
+            {"image": "i", "engine": "codex/image", "prompt": "p"}, [], lambda *a: None
+        )
+    assert time.monotonic() - started < 20
 
 
 def test_codex_isnt_offered_when_missing(tmp_path):
@@ -1617,6 +1757,12 @@ def test_review_actions_answer_without_a_page_reload(
     # Sent the usual way, it still redirects back.
     plain = client.post(f"/library/posters/jobs/{job.id}/first")
     assert plain.status_code == 302
+    # Once everything shown is dealt with, the page fetches its list again
+    # for the next pictures: just the list, never past the last page.
+    assert 'data-review-list data-live-url="/library/posters/review?page=1' in page
+    more = client.get("/library/posters/review?page=3&fragment=1").text
+    assert "<html" not in more and "data-review-list" in more
+    assert more.count("data-review-item") == 1  # the logo, on the only page
 
 
 def test_chatgpt_works_from_the_films_own_art_not_its_plot():
@@ -1657,6 +1803,68 @@ def test_chatgpt_works_from_the_films_own_art_not_its_plot():
     ):
         assert "don't illustrate its plot details" in prompt
         assert "Base it on the title's own artwork" not in prompt
+
+
+def test_from_the_films_art_only_its_people_are_cast_in_its_own_style():
+    """Starting from a film's poster: as many of the household as it shows
+    people, matched by sex, never anyone twice, in the poster's own style (an
+    animated poster stays animated). Once, everyone was added in."""
+    details = {"title": "Carrie", "year": 1976, "kind": "film", "genres": ["Horror"]}
+    poster = artwork_prompts.agent_prompt(
+        "Primary", details, {}, {"Sam": [1], "Alex": [2]}, originals={"Primary": 3}
+    )
+    assert "art style and medium, whether photograph, painting, drawing or " in poster
+    assert "Cast by sex first: a woman's role goes to a woman, a man's to a man." in (
+        " ".join(poster.split())
+    )
+    assert "leave the others out" in poster and "Never show anyone twice" in poster
+    assert "draw them in that same style" in poster
+    assert "add the others as the film's other main characters" not in poster
+
+
+def test_a_wide_tile_from_original_art_follows_its_own_original_not_the_poster(
+    app, tmp_path, monkeypatch
+):
+    """A wide tile came back with the poster's people, costumes and poses: it
+    was given the original poster too, and told to keep the set poster's
+    costumes and look. Now it's given its own original (and the logo), and
+    the set's poster only for how each person looks."""
+    from curatarr.models import ArtworkImage
+
+    _library, media, _part = _movie()
+    art = {}
+    for kind in ("Primary", "Thumb", "Logo"):
+        art[kind] = tmp_path / f"{kind}.jpg"
+        art[kind].write_bytes(_picture("#334455"))
+    monkeypatch.setattr(artwork_jobs, "original_art", lambda m, kind: art.get(kind))
+    job = artwork_jobs.create_job(
+        media, ["Thumb"], engine="codex/image", options={"originals": True}
+    )
+    thumb = db.session.query(ArtworkImage).filter_by(job_id=job.id).one()
+    artwork_jobs.build_task(thumb, "codex/image", True)
+    refs = thumb.task["references"]
+    originals = [r["path"] for r in refs if r["role"] == "original"]
+    assert originals == [str(art["Thumb"]), str(art["Logo"])]  # not the poster
+    assert "its original wide tile" in thumb.prompt
+    # With no original wide tile, the original poster stands in.
+    art.pop("Thumb")
+    artwork_jobs.build_task(thumb, "codex/image", True)
+    refs = thumb.task["references"]
+    originals = [r["path"] for r in refs if r["role"] == "original"]
+    assert originals == [str(art["Primary"]), str(art["Logo"])]
+
+    details = {"title": "Heist", "year": 1988, "kind": "film"}
+    tile = artwork_prompts.agent_prompt(
+        "Thumb", details, {}, {"Sam": [1]}, set_image=2, originals={"Thumb": 3}
+    )
+    assert "Image 2 is this set's new poster: use it only so each person looks" in tile
+    assert "poses, costumes and setting from image 3, not from the poster" in tile
+    assert "keep the cast, costumes, look and style" not in tile
+    # A new scene (no original to follow) still matches the poster's look.
+    scene = artwork_prompts.agent_prompt(
+        "Thumb", details, {"approach": "story"}, {"Sam": [1]}, set_image=2
+    )
+    assert "keep the cast, costumes, look and style of image 2" in scene
 
 
 def test_an_untouched_old_default_look_follows_todays_default(app, client):
@@ -1972,3 +2180,152 @@ def test_failed_pictures_are_grouped_and_can_be_tried_again_or_cleared(app, clie
     client.post("/library/posters/jobs/failed/clear", data={})
     assert artwork_jobs.overview()["failed"] == 0
     assert not artwork_jobs.failed_summary()
+
+
+def test_generate_shows_whos_in_the_reference_photos_to_tick(app, client, tmp_path):
+    """Generate lists the people in the photos folder, each with a picture,
+    to tick; the ticks fill the cast that's sent (as typing names did)."""
+
+    photos = tmp_path / "people"
+    photos.mkdir()
+    for name in ("Sam 1.jpg", "Sam 2.jpg", "Pat.png"):
+        Image.new("RGB", (600, 900), "teal").save(photos / name)
+    (photos / "notes.txt").write_text("not a photo")
+
+    listed = client.get(
+        "/library/posters/generate/people", query_string={"folder": str(photos)}
+    ).get_json()
+    assert listed["found"] and listed["most"] == 3
+    assert [(p["name"], p["photos"]) for p in listed["people"]] == [
+        ("Pat", 1),
+        ("Sam", 2),
+    ]
+
+    thumb = client.get(listed["people"][1]["thumb"])
+    assert thumb.mimetype == "image/jpeg"
+    with Image.open(BytesIO(thumb.data)) as small:
+        assert max(small.size) <= 240  # a small copy, not the photo itself
+    # Only people the folder's listing names: no other file can be read.
+    for name in ("notes", "Nobody", ""):
+        assert (
+            client.get(
+                "/library/posters/generate/people/photo",
+                query_string={"folder": str(photos), "name": name},
+            ).status_code
+            == 404
+        )
+    missing = client.get(
+        "/library/posters/generate/people", query_string={"folder": str(tmp_path / "x")}
+    ).get_json()
+    assert missing == missing | {"found": False, "people": []}
+
+    page = client.get(
+        "/library/posters/generate", query_string={"photos": str(photos)}
+    ).text
+    assert 'id="g-cast-picker"' in page and 'class="cast-name">Sam<' in page
+    assert 'type="hidden" name="cast"' in page and "Tick up to 3" in page
+
+
+def test_the_jobs_page_lists_the_queue_in_the_order_its_worked(app, client):
+    """Being made first, then waiting as a worker picks them (moved up
+    first, then oldest), then the rest, newest first."""
+
+    library, media, _part = _movie()
+    now = utcnow()
+    jobs = {}
+    for n, (name, state) in enumerate(
+        (
+            ("old-done", "completed"),
+            ("first-waiting", "pending"),
+            ("second-waiting", "pending"),
+            ("making", "generating"),
+            ("new-done", "review"),
+            ("moved-up", "pending"),
+        )
+    ):
+        title = media if n == 0 else _second(library, name, f"j{n}")
+        job = artwork_jobs.create_job(title, ["Primary"])
+        job.state = state
+        job.created_at = now + timedelta(minutes=n)
+        jobs[job.id] = name
+    db.session.commit()
+    artwork_jobs.prioritise(
+        next(j for j in db.session.query(ArtworkJob) if jobs[j.id] == "moved-up")
+    )
+    page = client.get("/library/posters/jobs").text
+    shown = [
+        jobs[i] for i in re.findall(r'data-live="row" data-live-id="([^"]+)"', page)
+    ]
+    assert shown == [
+        "making",
+        "moved-up",
+        "first-waiting",
+        "second-waiting",
+        "new-done",
+        "old-done",
+    ]
+
+
+def test_the_posters_pages_say_when_the_usage_limit_resets(app, client):
+    from datetime import timedelta
+
+    _library, media, _part = _movie()
+    worker_row, _token = artwork_jobs.create_worker("Codex PC", 1)
+    resets = utcnow() + timedelta(hours=2, minutes=14)
+    worker_row.capabilities = artwork_jobs._clean_capabilities(
+        [
+            {
+                "engine": "codex/image",
+                "label": "Codex image tool (ChatGPT)",
+                "external": True,
+                "ready": False,
+                "why": "The ChatGPT plan's usage limit was reached; it resets in "
+                "about 2.2 hours.",
+                "limited_until": resets.timestamp(),
+            }
+        ]
+    )
+    worker_row.last_seen_at = utcnow()
+    db.session.commit()
+    job = artwork_jobs.create_job(
+        media,
+        ["Primary"],
+        engine="codex/image",
+        options={"external_ok": True},
+        details={"title": "Film"},
+    )
+    # One tried and held back by the limit (another, below, not tried yet).
+    tried = job.images[0]
+    tried.not_before = resets + timedelta(minutes=1)
+    tried.engine = "codex/image"
+    tried.message = "You've hit your usage limit. Try again at 6:09 PM."
+    db.session.commit()
+    limit = artwork_jobs.usage_limit()
+    assert limit["service"] == "the ChatGPT plan's" and limit["held"] == 1
+    assert abs((limit["until"] - resets).total_seconds()) < 1
+    held = str(artwork_jobs.waiting_reason(tried)).replace("&#39;", "'")
+    assert "Waiting for the ChatGPT plan's usage limit to reset" in held
+    assert 'data-style="in"' in held and "in 2 h 15 min" in held
+    other = artwork_jobs.create_job(
+        media,
+        ["Primary"],
+        engine="codex/image",
+        options={"external_ok": True},
+        details={"title": "Film"},
+    )
+    fresh = str(artwork_jobs.waiting_reason(other.images[0])).replace("&#39;", "'")
+    assert "waiting for the ChatGPT plan's usage limit to reset" in fresh
+    assert "about 2.2 hours" not in fresh  # the worker's own words go stale
+    page = client.get("/library/posters/jobs").text.replace("&#39;", "'")
+    assert "Waiting for the ChatGPT plan's usage limit to reset." in page
+    assert "1 picture already tried waits for it" in page
+    assert "in 2 h 14 min" in page or "in 2 h 13 min" in page
+    # A worker too old to report it: read from the pictures waiting.
+    worker_row.capabilities = [{**worker_row.capabilities[0], "limited_until": None}]
+    db.session.commit()
+    assert artwork_jobs.usage_limit()["service"] == "the ChatGPT plan's"
+    # Once it's over, nothing is said.
+    tried.not_before = None
+    db.session.commit()
+    assert artwork_jobs.usage_limit() is None
+    assert 'class="artwork-limit"' not in client.get("/library/posters/jobs").text

@@ -12,7 +12,7 @@
     <input class="form-control" type="search" id="title-search" autocomplete="off" placeholder="Start typing a title…" data-find-url="{{ url_for('main.artwork_find_titles') }}" aria-describedby="title-search-help">
     <div id="title-search-help" class="form-text">Pick as many as you like. For a whole library's missing artwork, use <a href="{{ url_for('main.artwork_batches') }}">Batches</a>.</div>
     <ul class="list-group mt-1 artwork-results" id="title-results" aria-live="polite"></ul>
-    <div class="d-flex flex-wrap gap-2 mt-2" id="chosen-titles">{% for m in chosen %}<span class="badge text-bg-secondary artwork-chip">{{ m.title }}<input type="hidden" name="media" value="{{ m.id }}"><button type="button" class="btn-close btn-close-white ms-1" aria-label="Remove {{ m.title }}" data-remove-chip></button></span>{% endfor %}</div>
+    <div class="d-flex flex-wrap gap-2 mt-2" id="chosen-titles">{% for m in chosen %}<span class="badge text-bg-secondary artwork-chip">{{ m|labelled }}<input type="hidden" name="media" value="{{ m.id }}"><button type="button" class="btn-close btn-close-white ms-1" aria-label="Remove {{ m|labelled }}" data-remove-chip></button></span>{% endfor %}</div>
   </div>
   <fieldset class="mb-3"><legend class="h6">Pictures to make</legend>
     <div class="d-flex flex-wrap gap-3">{% for kind in kinds %}<div class="form-check"><input class="form-check-input" type="checkbox" name="kinds" value="{{ kind }}" id="g-kind-{{ kind }}"{% if kind in saved.get('kinds', options.kinds) %} checked{% endif %}><label class="form-check-label" for="g-kind-{{ kind }}">{{ kind_names[kind]|capitalize }}{% if kind == 'Logo' %} <span class="text-secondary small">(not made when starting from the film's own art: its own logo is kept)</span>{% endif %}</label></div>{% endfor %}</div>
@@ -36,10 +36,11 @@
   <div class="row g-3 mb-3">
     <div class="col-md-6"><label class="form-label" for="g-photos">Reference photos folder</label>
       <input class="form-control" type="text" name="photos" id="g-photos" value="{{ photos }}" placeholder="/path/to/photos" aria-describedby="g-photos-help">
-      <div id="g-photos-help" class="form-text">Optional. Each file name starts with who's in it ("Sam 1.jpg"). With photos, those people play the leads.{% if people %} Found: {{ people.keys()|join(', ') }}.{% elif photos %} No photos found there.{% endif %}</div></div>
-    <div class="col-md-6"><label class="form-label" for="g-cast">Who's in them</label>
-      <input class="form-control" type="text" name="cast" id="g-cast" value="{{ saved.get('cast', '') }}" placeholder="{{ people.keys()|join(', ') if people else 'Everyone in the folder' }}" aria-describedby="g-cast-help">
-      <div id="g-cast-help" class="form-text">Names, separated by commas (up to three). Empty: everyone in the folder.</div></div>
+      <div id="g-photos-help" class="form-text">Optional. Each file name starts with who's in it ("Sam 1.jpg"). With photos, the people you tick below play the leads.</div></div>
+    <div class="col-12"><span class="form-label d-block" id="g-cast-label">Who's in them</span>
+      <input type="hidden" name="cast" id="g-cast" value="{{ saved.get('cast', '') }}">
+      <div class="cast-picker" id="g-cast-picker" role="group" aria-labelledby="g-cast-label" aria-describedby="g-cast-help" data-people-url="{{ url_for('main.artwork_people') }}" data-most="{{ most_people }}">{% for name, files in people.items() %}<label class="cast-person"><input class="form-check-input" type="checkbox" value="{{ name }}"><img src="{{ url_for('main.artwork_person_photo', folder=photos, name=name) }}" alt="" loading="lazy"><span class="cast-name">{{ name }}</span><span class="cast-count">{{ files|length }} photo{{ '' if files|length == 1 else 's' }}</span></label>{% endfor %}</div>
+      <div id="g-cast-help" class="form-text" data-cast-help>{% if people %}Tick up to {{ most_people }}. None ticked: the first {{ most_people }} in the folder.{% elif photos %}No photos found in that folder.{% else %}Choose a reference photos folder to see who's in it.{% endif %}</div></div>
     <div class="col-12"><label class="form-label" for="g-approach">Start from</label>
       {% set chosen_approach = saved.get('approach', options.get('approach', 'original')) %}
       <select class="form-select" name="approach" id="g-approach" aria-describedby="g-approach-help">{% for key, label in approaches.items() %}<option value="{{ key }}"{% if key == chosen_approach %} selected{% endif %}>{{ label }}{% if key == 'original' %} (recommended){% endif %}</option>{% endfor %}</select>
@@ -52,6 +53,6 @@
   {% set p = 'g' %}{% include '_look_extra.html' %}
   <div><button class="btn btn-primary">Generate</button> <span class="small text-secondary ms-2">Prefer to paste prompts into an AI yourself? <a href="{{ url_for('main.custom_posters_page') }}#prompts">Write prompts</a> still works.</span></div>
 </form>
-<script src="{{ url_for('static', filename='artwork-generate.js', v='1') }}"></script>
+<script src="{{ url_for('static', filename='artwork-generate.js', v='2') }}"></script>
 <script src="{{ url_for('static', filename='look-choice.js', v='3') }}"></script>
 {% endblock %}

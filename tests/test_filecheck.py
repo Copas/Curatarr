@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 from test_enrichment import _movie
 
 from curatarr import better_copy, db, enrichment, filecheck, filecheck_jobs
-from curatarr.integrations import IntegrationError
+from curatarr.integrations import IntegrationError, RadarrClient
 from curatarr.mediafile import MediaInfo, tool
 from curatarr.models import ChapterState, MediaIdentity, MediaPart, utcnow
 from curatarr.services import set_setting, setting
@@ -110,7 +110,12 @@ class FakeArr:
         return [{"id": 3, "runtime": 22}]
 
     def movie(self, movie_id):
-        return {"id": movie_id, "movieFile": {"id": 55}}
+        return {
+            "id": movie_id,
+            "movieFile": {"id": 55, "sceneName": "Film.2020.1080p.HC.WEBRip"},
+        }
+
+    current_grab = RadarrClient.current_grab
 
     def grabs(self, movie_id):
         return [{"id": 300, "sourceTitle": "Film.2020.1080p.HC.WEBRip"}]
@@ -361,6 +366,27 @@ def test_a_real_cut_off_download_is_found(tmp_path):
     assert kinds == ["truncated"]
 
 
+@pytest.mark.skipif(not tool("ffmpeg"), reason="needs FFmpeg")
+def test_frames_come_from_the_picture_not_its_cover_art(tmp_path):
+    """Some releases carry cover art as a second video stream; ffmpeg picked
+    it, found no frame there, and the file's checks saw no picture at all."""
+    cover = tmp_path / "cover.png"
+    subprocess.run(
+        [tool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i",
+         "color=c=red:size=1920x1080", "-frames:v", "1", str(cover)],
+        check=True,
+    )  # fmt: skip
+    film = tmp_path / "film.mkv"
+    subprocess.run(
+        [tool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i",
+         "testsrc=size=320x180:rate=10", "-i", str(cover), "-t", "30",
+         "-map", "0", "-map", "1", "-c:v:0", "libx264", "-c:v:1", "png",
+         "-disposition:v:1", "attached_pic", str(film)],
+        check=True,
+    )  # fmt: skip
+    assert filecheck.grab(str(film), 20) is not None
+
+
 def test_nothing_is_left_unsaved_while_frames_are_read(app, check_env, monkeypatch):
     """Unsaved changes hold SQLite's write lock; the web app would wait on it."""
     seen = []
@@ -598,3 +624,118 @@ def test_episodes_flagged_short_by_the_show_runtime_are_checked_again(check_env)
     filecheck_jobs._recheck_short_episodes()
     assert not state.file_problem and state.file_checked_at is None
     assert "replace_requested" not in state.file_check
+
+
+def test_subtitles_running_past_the_picture_mean_the_ending_is_missing(monkeypatch):
+    monkeypatch.setattr(filecheck, "grab", lambda path, t, width=640: frame())
+    monkeypatch.setattr(filecheck, "_decode_errors", lambda path, t: False)
+    cut = 65 * 60 + 22  # listed at 76 minutes: 86%, over the length bar
+    assert filecheck.health("film.mkv", cut, 76, [], film=True) == []
+    issues = filecheck.health(
+        "film.mkv", cut, 76, [], film=True, subtitle_end=70 * 60 + 44
+    )
+    assert [i["kind"] for i in issues] == ["subtitles_longer"]
+    assert "1:10:44" in issues[0]["text"]
+    # Subtitles a little past the picture are ordinary.
+    assert (
+        filecheck.health("film.mkv", cut, 76, [], film=True, subtitle_end=cut + 30)
+        == []
+    )
+    # One finding is enough when the length already says so.
+    both = filecheck.health("film.mkv", 3000, 76, [], film=True, subtitle_end=4400)
+    assert [i["kind"] for i in both] == ["short"]
+    # Subtitles running past the film's listed length are for something else.
+    assert (
+        filecheck.health(
+            "film.mkv", 97 * 60, 93, [], film=True, subtitle_end=2 * 3600 + 9 * 60
+        )
+        == []
+    )
+    # A PAL copy runs 4% fast: subtitles timed for the cinema run longer.
+    assert (
+        filecheck.health(
+            "film.mkv", 97 * 60, 102, [], film=True, subtitle_end=3600 + 41 * 60 + 18
+        )
+        == []
+    )
+
+
+def test_a_finding_from_subtitles_alone_is_never_replaced_unattended():
+    review = {"issues": [{"kind": "subtitles_longer", "text": "x"}]}
+    assert filecheck_jobs._needs_action(review)  # listed on Problems
+    assert not filecheck_jobs.automatic(review)
+    review["issues"].append({"kind": "truncated", "text": "y"})
+    assert filecheck_jobs.automatic(review)
+
+
+def test_blank_stretches_are_found_wherever_they_fall(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setattr(filecheck, "READ_CHUNK", 1 << 20)  # many chunk edges
+    monkeypatch.setattr(filecheck, "_PROBE", bytes(4096))
+    minimum = 300_000
+    data = bytearray(os.urandom(4_000_000))
+    data[100_000:150_000] = bytes(50_000)  # padding: too short to count
+    data[1_000_000:1_500_000] = bytes(500_000)  # across a chunk's end
+    data[2_200_000:2_600_000] = bytes(400_000)  # inside a chunk
+    data[3_700_000:] = bytes(300_000)  # to the end of the file
+    path = tmp_path / "film.mkv"
+    path.write_bytes(bytes(data))
+    found = filecheck.blank_stretches(path, minimum=minimum)
+    assert found == [
+        (1_000_000, 500_000),
+        (2_200_000, 400_000),
+        (3_700_000, 300_000),
+    ]
+    clean = tmp_path / "clean.mkv"
+    clean.write_bytes(os.urandom(2_000_000))
+    assert filecheck.blank_stretches(clean, minimum=minimum) == []
+
+
+def test_a_blank_stretch_is_placed_in_time_by_the_files_own_timing():
+    anchors = [(100, 10.0), (900, 20.0)]  # a busy start, a quiet rest
+    assert filecheck._moment(500, 1000, 30.0, anchors) == 15.0
+    assert filecheck._moment(950, 1000, 30.0, anchors) == 25.0
+    assert filecheck._moment(500, 1000, 30.0, []) == 15.0  # by its share
+
+
+def test_files_checked_before_are_read_for_blank_stretches(
+    check_env, tmp_path, monkeypatch
+):
+    from curatarr import up_next
+
+    _arr, found = check_env
+    found["subtitles"] = "clean"
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
+    _library, _media, part = _movie(PATH)
+    part.size_bytes = 1000
+    state = enrichment.state_for(part)
+    state.file_checked_at = utcnow()
+    state.file_check_size = 1000
+    state.file_check = {"issues": [], "transcript": False}  # checked before
+    state.file_problem = False
+    db.session.commit()
+    real = tmp_path / "Film.mkv"
+    real.write_bytes(b"x" * 1000)
+    monkeypatch.setattr(enrichment, "local_path", lambda p, m=None: str(real))
+    blank = {
+        "kind": "blank_data",
+        "text": "About 10 seconds missing at 16:21",
+        "at": 981.0,
+    }
+    monkeypatch.setattr(filecheck, "blank_issues", lambda *a, **k: [blank])
+    asked = []
+    monkeypatch.setattr(
+        better_copy, "request", lambda state, why, auto=False: asked.append(why)
+    )
+    assert filecheck_jobs.sweep() == 1
+    db.session.expire_all()
+    state = db.session.query(ChapterState).one()
+    assert state.file_problem and state.file_check["issues"] == [blank]
+    assert state.file_check["blank_scan"] == filecheck_jobs.BLANK_SCAN
+    assert "missing at 16:21" in " ".join(filecheck_jobs.describe(state.file_check))
+    assert asked == []  # replacing waits for approval by default
+    # Read once: the pass moves on, and finishes.
+    assert filecheck_jobs.sweep() == 0
+    assert setting(filecheck_jobs.BLANK_KEY)["finished_at"]
+    assert not filecheck_jobs._blank_due(5)

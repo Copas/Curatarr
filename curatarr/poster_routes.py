@@ -52,6 +52,13 @@ def custom_posters_gallery():
     sort = _sort()
     cards = custom_posters.showcase(sort)
     kind = GALLERY_VIEWS[view][1]
+    compare = view == "compare"
+    if compare:
+        # Before & after, one type at a time: each title's own art beside
+        # the picture made for it.
+        kind = request.args.get("kind", "Primary")
+        if kind not in PIECE_NAMES:
+            kind = "Primary"
     if kind:
         cards = [c for c in cards if kind in c["pictures"]]
     return render_template(
@@ -60,9 +67,28 @@ def custom_posters_gallery():
         view=view,
         views=GALLERY_VIEWS,
         kind=kind,
+        compare=compare,
+        pieces=PIECE_NAMES,
         sort=sort,
         sorts=custom_posters.GALLERY_SORTS,
     )
+
+
+@bp.get("/library/posters/original/<media_id>/<kind>")
+def custom_poster_original(media_id, kind):
+    """A title's own picture of ``kind``, from before any made for it."""
+    from .artwork_jobs import original_art
+
+    media = db.session.get(MediaIdentity, media_id)
+    if media is None or kind not in custom_posters.KINDS:
+        abort(404)
+    try:
+        found = original_art(media, kind)
+    except (IntegrationError, OSError):
+        found = None
+    if found is None or not found.is_file():
+        abort(404)
+    return send_file(found, mimetype=custom_posters.mimetype(kind), max_age=3600)
 
 
 @bp.get("/library/posters/gallery/<media_id>")
@@ -108,6 +134,7 @@ GALLERY_VIEWS = {
     "backgrounds": ("Backgrounds", "Backdrop", "background"),
     "posters": ("Posters", "Primary", "poster"),
     "tiles": ("Wide tiles", "Thumb", "wide tile"),
+    "compare": ("Before & after", None, "picture"),  # the type is chosen
 }
 
 
@@ -397,7 +424,10 @@ def jellyfin_poster_image(poster_id):
     try:
         size = request.args.get("size")
         picture = custom_posters.plugin_picture(
-            poster_id, large=size == "large", wide=size == "wide"
+            poster_id,
+            large=size == "large",
+            wide=size == "wide",
+            plain=request.args.get("plain") == "1",
         )
     except (IntegrationError, ValueError, OSError):
         abort(503)  # Jellyfin's poster couldn't be read: the plugin tries again

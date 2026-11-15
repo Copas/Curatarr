@@ -85,7 +85,7 @@ def _extract(path, seconds):
         pics, sound = os.path.join(folder, "p.raw"), os.path.join(folder, "s.fp")
         for args in (
             [ffmpeg, "-v", "error", "-nostdin", "-y", "-skip_frame", "nokey",
-             "-t", f"{seconds:.0f}", "-i", path, "-map", "0:v:0", "-an", "-sn", "-dn",
+             "-t", f"{seconds:.0f}", "-i", path, "-map", "0:V:0", "-an", "-sn", "-dn",
              "-vf", f"fps=1,scale={W}:{H}:flags=area,format=gray",
              "-f", "rawvideo", pics],
             [ffmpeg, "-v", "error", "-nostdin", "-y", "-t", f"{seconds:.0f}",

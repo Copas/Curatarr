@@ -58,7 +58,7 @@
   function redraw(doc) {
     var fresh = doc.querySelector("[data-live-page]");
     var here = document.querySelector("[data-live-page]");
-    if (!fresh || !here) return;
+    if (!fresh || !here) return false;
     var open = {};
     here.querySelectorAll("details[open]").forEach(function (d, n) {
       if (!d.classList.contains("confirm-inline")) open[n] = true;
@@ -74,7 +74,15 @@
     });
     window.scrollTo(x, y);
     if (window.curatarrLocalTime) window.curatarrLocalTime(fresh);
+    if (window.curatarrReel) window.curatarrReel(fresh);
     remark(fresh);
+    return true;
+  }
+
+  // The answer wasn't this page (signed out since, say, so it's the sign-in
+  // page): go there, rather than leave the button working for ever.
+  function show(doc, url) {
+    if (!redraw(doc)) location.assign(url);
   }
 
   function refresh(html, url) {
@@ -83,12 +91,11 @@
     var doc = parse(html);
     notesFrom(doc);
     if (url && new URL(url).pathname === location.pathname) {
-      redraw(doc);
+      show(doc, url);
       return Promise.resolve();
     }
     return fetch(location.href)
-      .then(function (r) { return r.text(); })
-      .then(function (page) { redraw(parse(page)); });
+      .then(function (r) { return r.text().then(function (page) { show(parse(page), r.url); }); });
   }
 
   document.addEventListener("submit", function (event) {
@@ -113,6 +120,21 @@
       .catch(function () {
         delete pending[k];
         note("Couldn't do that in place; sending it the usual way.", "warning");
+        // Sent as the button would have sent it: to its own address, with
+        // its name and value (a plain submit leaves both out).
+        if (button && button.getAttribute("formaction")) form.action = action;
+        if (button && button.name) {
+          var extra = document.createElement("input");
+          extra.type = "hidden";
+          extra.name = button.name;
+          extra.value = button.value;
+          form.appendChild(extra);
+        }
+        if (!form.isConnected) {
+          // Redrawn away meanwhile: a form outside the page can't be sent.
+          form.hidden = true;
+          document.body.appendChild(form);
+        }
         HTMLFormElement.prototype.submit.call(form);
       });
   }, true);

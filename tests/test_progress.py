@@ -290,3 +290,73 @@ def test_quality_progress_only_when_a_library_has_it_on(app):
 
     quality = next(p for p in overall()["parts"] if p["name"].startswith("Chapter q"))
     assert quality["left"] == 0  # waiting as a chapter job, counted there
+
+
+def test_quality_checks_waiting_behind_chapter_jobs_use_their_free_pace(
+    app, monkeypatch
+):
+    """New chapter jobs go first, squeezing quality checks to a trickle; the
+    estimate used to divide what's left by that trickle and grew each day."""
+    now = utcnow()
+    monkeypatch.setattr(
+        enrichment,
+        "job_forecast",
+        lambda now=None: {
+            "done": 100,
+            "remaining": 130,  # 100 of them quality checks already queued
+            "finishes_at": now + timedelta(hours=10),
+        },
+    )
+    monkeypatch.setattr(enrichment, "marker_forecast", lambda now=None: None)
+    monkeypatch.setattr(
+        enrichment,
+        "chapter_quality_progress",
+        lambda: {
+            "checked": 900,
+            "left": 700,
+            "waiting": 100,
+            "total": 1600,
+            "per_hour": 1.0,  # squeezed today
+            "best_per_hour": 60.0,  # a day with the worker to itself
+        },
+    )
+    monkeypatch.setattr(compat_audio, "progress", lambda: None)
+    monkeypatch.setattr(seek_repair, "progress", lambda: None)
+    result = progress.overall(now)
+    # 10 h of chapter jobs (the queued checks among them), then 600 at 60 an hour.
+    assert result["slowest"] == "Chapter quality checks"
+    assert result["time_left"] == "20 h"
+    assert result["after"] == {"what": "chapter jobs", "count": 30}
+
+
+def test_quality_checks_best_day_is_measured(app):
+    from test_enrichment import _movie
+
+    from curatarr import db
+    from curatarr.models import ChapterState, MediaPart
+
+    library, _media, _part = _movie()
+    enrichment.save_settings(
+        library, {"chapter_mode": "navigation", "replace_poor": "true"}
+    )
+    identity = _part.media_identity_id
+    long_ago = utcnow() - timedelta(days=3)
+    for n in range(48):
+        part = MediaPart(
+            media_identity_id=identity,
+            kind="episode",
+            season_number=1,
+            episode_number=n + 2,
+            has_file=True,
+            file_path=f"/movies/ep{n}.mkv",
+        )
+        db.session.add(part)
+        db.session.flush()
+        state = enrichment.state_for(part)
+        state.chapter_status, state.chapter_source = "existing", "embedded_ok"
+        state.chapter_processed_at = long_ago.replace(hour=12, minute=n % 60)
+    db.session.commit()
+    assert db.session.query(ChapterState).count() >= 48
+    quality = enrichment.chapter_quality_progress()
+    assert quality["per_hour"] is None  # nothing judged in the last day
+    assert quality["best_per_hour"] == 2.0  # 48 judged in one day

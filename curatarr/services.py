@@ -155,6 +155,15 @@ def _as_datetime(value):
         return None
 
 
+def _year(value) -> int | None:
+    """A plausible release year, or None (Radarr says 0 when it doesn't know)."""
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        return None
+    return year if 1870 <= year <= 2200 else None
+
+
 def _providers(item):
     ids = item.get("ProviderIds") or item.get("providerIds") or {}
 
@@ -198,6 +207,7 @@ def _match_media(library, media_type, item):
     media.tvdb_id = tvdb or media.tvdb_id
     media.imdb_id = imdb or media.imdb_id
     media.added_at = _as_datetime(item.get("DateCreated")) or media.added_at
+    media.year = _year(item.get("ProductionYear")) or media.year
     media.last_seen_at = utcnow()
     media.missing_since = None
     db.session.flush()
@@ -252,15 +262,16 @@ def _unlink(media, field):
 
 def _sync_series(media, match, sonarr, curation, from_lists):
     """A show's Sonarr side: its ids and monitoring, and every episode with its file."""
+    # Sonarr is asked before anything is written (see discover).
+    episode_files = {entry["id"]: entry for entry in sonarr.episode_files(match["id"])}
+    episodes = sonarr.episodes(match["id"])
     media.sonarr_id = match["id"]
     media.arr_monitored = match.get("monitored")
+    media.year = _year(match.get("year")) or media.year
     media.series_type = match.get("seriesType")
     curation.remember_tags(media, match)
     from_lists.observe(media, match)
-    episode_files = {
-        entry["id"]: entry for entry in sonarr.episode_files(media.sonarr_id)
-    }
-    for episode in sonarr.episodes(media.sonarr_id):
+    for episode in episodes:
         file_entry = episode_files.get(episode.get("episodeFileId"))
         part = _upsert_part(
             media,
@@ -375,9 +386,10 @@ def _discover_sonarr_only(sonarr_series, sonarr, curation, from_lists):
         media.tmdb_id = series.get("tmdbId") or media.tmdb_id
         media.imdb_id = series.get("imdbId") or media.imdb_id
         media.added_at = media.added_at or _as_datetime(series.get("added"))
+        media.year = _year(series.get("year")) or media.year
         media.last_seen_at = utcnow()
         media.missing_since = None
-        db.session.flush()
+        db.session.commit()  # Sonarr is asked next
         _sync_series(media, series, sonarr, curation, from_lists)
         db.session.commit()
         seen.add(media.id)
@@ -422,6 +434,11 @@ def discover():
             db.session.flush()
         library.name = source.get("Name", library.name)
         library.media_type = _library_type(source.get("CollectionType"))
+        # Nothing written is left waiting while Jellyfin and Sonarr are asked:
+        # the last library's scan time, flushed by the query above, held
+        # SQLite's write lock through this one's first pages (13-30 seconds
+        # every reconcile), and other writes, a webhook among them, failed.
+        db.session.commit()
         if not library.enabled or library.media_type not in {"tv", "movies"}:
             continue
         offset = 0
@@ -441,6 +458,7 @@ def discover():
                 if media_type == "series" and media.tvdb_id:
                     match = series_by_tvdb.get(str(media.tvdb_id))
                     if match:
+                        db.session.commit()  # Sonarr is asked next
                         _sync_series(media, match, sonarr, curation, from_lists)
                     elif sonarr is not None:
                         _unlink(media, "sonarr_id")
@@ -451,6 +469,7 @@ def discover():
                     if match:
                         media.radarr_id = match["id"]
                         media.arr_monitored = match.get("monitored")
+                        media.year = _year(match.get("year")) or media.year
                         curation.remember_tags(media, match)
                         from_lists.observe(media, match)
                         file_data = match.get("movieFile") or {}
@@ -475,7 +494,7 @@ def discover():
             offset += len(entries)
             if not entries or offset >= page.get("TotalRecordCount", offset):
                 break
-        for item in observed_episodes:
+        for count, item in enumerate(observed_episodes, 1):
             media = (
                 db.session.query(MediaIdentity)
                 .filter_by(library_id=library.id, jellyfin_id=str(item.get("SeriesId")))
@@ -489,7 +508,10 @@ def discover():
                     item.get("IndexNumber"),
                     item,
                 )
+            if count % 200 == 0:
+                db.session.commit()  # thousands of episodes: in short batches
         library.last_scanned_at = utcnow()
+        db.session.commit()
     seen |= _discover_sonarr_only(sonarr_series, sonarr, curation, from_lists)
     for media in db.session.query(MediaIdentity).all():
         if media.id not in seen and media.missing_since is None:

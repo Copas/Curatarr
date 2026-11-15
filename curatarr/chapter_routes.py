@@ -301,6 +301,9 @@ def _answer(message, category="success"):
             }
         )
     flash(message, category)
+    back = request.form.get("next", "")
+    if back.startswith("/") and not back.startswith("//"):
+        return redirect(back)  # the file's or the title's page it was pressed on
     return redirect(url_for("main.chapter_subtitle_sync"))
 
 
@@ -474,6 +477,8 @@ def chapter_confirm_library(library_id):
 
 @bp.get("/chapters/parts/<part_id>")
 def chapter_part(part_id):
+    from . import outside_subtitles
+
     part = db.session.get(MediaPart, part_id)
     if not part:
         abort(404)
@@ -487,6 +492,8 @@ def chapter_part(part_id):
         preview=state.last_preview_json if state else None,
         identity_on=identity_check_enabled(),
         generation_version=GENERATION_VERSION,
+        entries=outside_subtitles.entries,
+        file_label=file_label,
     )
 
 

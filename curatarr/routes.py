@@ -21,7 +21,7 @@ from flask import (
 from markupsafe import Markup
 from sqlalchemy import func
 
-from . import better_copy, db, flags, icons, jellyfin_links
+from . import better_copy, db, flags, icons, jellyfin_links, recent
 from .auth import (
     SignInError,
     current_user,
@@ -281,6 +281,7 @@ WHEN_FORMATS = {
     "time": "%H:%M",
     "seconds": "%H:%M:%S",
     "datetime": "%Y-%m-%d %H:%M",
+    "ago": "%Y-%m-%d %H:%M",  # local-time.js: "14h ago"
 }
 
 
@@ -297,6 +298,14 @@ def when(value, style="datetime"):
     return Markup(
         f'<time datetime="{moment.isoformat()}" data-style="{style}">{text}</time>'
     )
+
+
+@bp.app_template_filter("labelled")
+def labelled(media):
+    """A title with its year, "Carrie (1976)" (MediaIdentity.label); anything
+    else that stands in for a title (a cached copy) by its plain name."""
+    label = getattr(media, "label", None)
+    return label if isinstance(label, str) else getattr(media, "title", "")
 
 
 @bp.app_template_filter("commas")
@@ -790,6 +799,8 @@ def overview():
         care=_library_care() if admin else None,
         handled=_handled_summary() if admin else None,
         leaving=_leaving_summary(data["scheduled"]),
+        recently_watched=recent.watched(),
+        recently_added=recent.added(),
         **data,
     )
 
@@ -945,7 +956,7 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
             {
                 "icon": "tools",
                 "tone": "danger",
-                "title": row["media"].title,
+                "title": row["media"].label,
                 "detail": "Looks like another show with the same name: "
                 + "; ".join(row["evidence"])
                 + ".",
@@ -964,7 +975,7 @@ def _needs_you(status, scheduled, setup_incomplete, admin) -> list[dict]:
             {
                 "icon": "tools",
                 "tone": "warning",
-                "title": row["media"].title,
+                "title": row["media"].label,
                 "detail": f"Missing {row['codes']}, which it always keeps.",
                 "missing_show": row["media"].id,
                 "search_state": row["state"],
@@ -1575,14 +1586,43 @@ def poster(media_id):
         (current_user() or {}).get("role") == "household" and not media.library.managed
     ):
         abort(404)
+    data = _poster_bytes(media.jellyfin_id)
+    if data is None:
+        abort(404)
+    return send_file(BytesIO(data), mimetype="image/jpeg", max_age=POSTER_FRESH_FOR)
+
+
+POSTER_WIDTH = 400  # px: the largest a page shows one is 140 px, at up to 2.5x
+POSTER_FRESH_FOR = 300  # s: Leaving Soon banners and custom posters change
+POSTERS_KEPT = 400  # in memory, about 40 KB each
+
+
+def _poster_bytes(item_id):
+    """A title's poster, small, as Jellyfin scales it. Pages show dozens at
+    once (Overview's reels), so they're kept a few minutes: fetching and
+    re-encoding full-size posters on every request held up every page."""
+    import time
+
+    # Jellyfin id -> (fetched at, JPEG bytes or None)
+    _posters = current_app.extensions.setdefault("curatarr_posters", {})
+    now = time.monotonic()
+    kept = _posters.get(item_id)
+    if kept and now - kept[0] < POSTER_FRESH_FOR:
+        return kept[1]
     try:
         from .artwork import _jpeg
         from .services import client as integration_client
 
-        data = _jpeg(integration_client("jellyfin").image(media.jellyfin_id))
-    except (IntegrationError, OSError, ValueError):
-        abort(404)
-    return send_file(BytesIO(data), mimetype="image/jpeg", max_age=300)
+        data = integration_client("jellyfin").image(item_id, max_width=POSTER_WIDTH)
+        if not data.startswith(b"\xff\xd8"):  # not a JPEG: convert it
+            data = _jpeg(data)
+    except (IntegrationError, OSError, ValueError, AttributeError):
+        data = None
+    if len(_posters) >= POSTERS_KEPT:
+        for old in sorted(_posters, key=lambda k: _posters[k][0])[: POSTERS_KEPT // 4]:
+            _posters.pop(old, None)
+    _posters[item_id] = (now, data)
+    return data
 
 
 @bp.post("/review/<candidate_id>/<choice>")
@@ -1660,6 +1700,29 @@ def title_remove(media_id):
             "plays it or you choose Keep. Approve deletion to remove it sooner.",
             "info",
         )
+    return redirect(url_for("main.title", media_id=media_id))
+
+
+@bp.post("/titles/<media_id>/delete")
+def title_delete(media_id):
+    """Delete a film now, through Radarr (jellyfin_delete.delete_film_now)."""
+    from .artwork import reconcile_artwork
+    from .jellyfin_delete import delete_film_now
+
+    media = db.session.get(MediaIdentity, media_id)
+    if not media:
+        abort(404)
+    if request.form.get("confirm") != "delete":
+        abort(400)
+    who = (session.get("user") or {}).get("name") or "An administrator"
+    try:
+        message = delete_film_now(media, who, "on its Curatarr page")
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+    else:
+        reconcile_artwork()
+        flash(message, "info")
     return redirect(url_for("main.title", media_id=media_id))
 
 
@@ -2064,10 +2127,14 @@ def title(media_id):
         else:
             flash("Title override saved", "success")
         return redirect(url_for("main.title", media_id=media.id))
-    from . import custom_posters
+    from . import custom_posters, origin, outside_subtitles
+    from .enrichment import file_label
 
     return render_template(
         "title.html",
+        origin=origin.describe(media),
+        entries=outside_subtitles.entries,
+        file_label=file_label,
         media=media,
         custom_poster=custom_posters.active(media.id),
         title_flags=flags.flags_for(media),

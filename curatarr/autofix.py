@@ -113,7 +113,11 @@ def _queue_replacements(on) -> int:
     started = 0
     targets = []
     if on["files"]:
-        targets += [(s, "file") for s in filecheck_jobs.review()["to_act"]]
+        targets += [
+            (s, "file")
+            for s in filecheck_jobs.review()["to_act"]
+            if filecheck_jobs.automatic(s.file_check or {})
+        ]
     if on["dubs"]:
         targets += [(s, "dub") for s in dub_jobs.review()["to_act"]]
     if on["wrong_show"]:

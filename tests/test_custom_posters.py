@@ -559,6 +559,43 @@ def test_a_ribbon_goes_on_an_accounts_own_poster(app, monkeypatch):
     assert custom_posters.plugin_list()[0]["id"] == mine.id
 
 
+def test_a_plain_picture_has_no_ribbon_drawn_on(app, monkeypatch):
+    """A desktop wallpaper made from the plugin's pictures had a favourite's
+    ribbon on its poster: asked for plain, it's the picture as made."""
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    monkeypatch.setattr(
+        "curatarr.services.client",
+        lambda _kind: RibbonJellyfin(_picture("#223344", size=(400, 600))),
+    )
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex"})
+    db.session.commit()
+    mine = custom_posters.apply(
+        media, _picture("#22aa22", size=(400, 600)), "Uploaded", user_id="u2"
+    )
+    custom_posters.save_ribbon_settings(
+        {"enabled": "on", "own": "on", "see-u2-u1": "on"},
+        [("u1", "Sam"), ("u2", "Alex")],
+    )
+    _favourite(media, "u2")
+    _favourite(media, "u1")
+    entry = next(e["id"] for e in custom_posters.plugin_list() if e["user"] == "u2")
+    assert entry.startswith("v.")  # Alex's poster, with the ribbon drawn on
+    ribboned = custom_posters.plugin_picture(entry)
+    plain = custom_posters.plugin_picture(entry, plain=True)
+    from PIL import ImageChops
+
+    def drawn_on(picture):  # what differs from the poster as made
+        made = Image.open(mine.image_path).convert("RGB")
+        shown = Image.open(BytesIO(picture)).convert("RGB")
+        return ImageChops.difference(made, shown).getbbox()
+
+    assert drawn_on(ribboned)  # the ribbon
+    assert drawn_on(plain) is None
+    assert drawn_on(custom_posters.plugin_picture(mine.id, plain=True)) is None
+
+
 def _band_height(picture: bytes) -> int:
     """How far up from the bottom the ribbon reaches (stops at the poster's blue)."""
     shown = Image.open(BytesIO(picture)).convert("RGB")

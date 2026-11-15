@@ -28,7 +28,27 @@
     return { text: d.toLocaleDateString([], options), relative: false };
   }
 
+  // "just now", "25m ago", "14h ago", "3d ago": for lists of what just happened.
+  function ago(d, now) {
+    var minutes = Math.max(0, Math.floor((now - d) / 60000));
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return minutes + "m ago";
+    if (minutes < 1440) return Math.floor(minutes / 60) + "h ago";
+    return Math.floor(minutes / 1440) + "d ago";
+  }
+
+  // "in 2 h 14 min", "in 5 min": a countdown, kept up to date below.
+  function until(d, now) {
+    var minutes = Math.ceil((d - now) / 60000);
+    if (minutes < 1) return "any moment now";
+    if (minutes < 60) return "in " + minutes + " min";
+    var hours = Math.floor(minutes / 60), rest = minutes % 60;
+    return "in " + hours + " h" + (rest ? " " + rest + " min" : "");
+  }
+
   function phrase(d, style, now) {
+    if (style === "ago") return { text: ago(d, now), relative: false };
+    if (style === "in") return { text: until(d, now), relative: false };
     var on = day(d, now);
     if (style === "date") return on;
     // A time on its own ("time", "seconds") says which day only when it isn't today.
@@ -73,4 +93,8 @@
   }
   window.curatarrLocalTime = apply;
   apply();
+  // Countdowns move on by themselves.
+  setInterval(function () {
+    if (document.querySelector('time[data-style="in"]')) apply();
+  }, 30000);
 })();

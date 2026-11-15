@@ -24,14 +24,17 @@ the file is looked at again for a TV-friendly copy of its English track.
 With its own switch, off by default because only downloading again brings them
 back, audio tagged as other languages is also removed from those files, and
 from files where English already leads. Only once English has been heard; a
-file with no such track, and untagged tracks, are left as they are.
+file with no such track, and untagged tracks, are left as they are. An English
+track that talks like a commentary (speech all through every clip listened to,
+much more than the film's other audio) doesn't count: a director's commentary
+with no name on it was once made the default and the film's own soundtrack
+removed, leaving nothing but the commentary.
 
 Every file is looked at once, a few each worker cycle (it means reading each
 file's track list), and again when it's replaced. Files being played, and
 files in dry-run libraries, wait.
 """
 
-import re
 import threading
 import time
 
@@ -56,9 +59,7 @@ LENGTH_RETRY = "default_audio_length_retry"
 ONE_CLIP_RETRY = "default_audio_one_clip_retry"
 REMAINING_KEY = "default_audio_remaining"
 UNTAGGED = {"", "und"}
-EXTRA_NAME = re.compile(
-    r"comment|descri|narrat|visually impaired|\bad\b|\bdvs\b", re.IGNORECASE
-)
+EXTRA_NAME = dubs.EXTRA_NAME
 
 
 def enabled() -> bool:
@@ -687,14 +688,24 @@ def hear(limit=HEARD_PER_RUN) -> int:
         )
         model = enrichment._language_model(config, opts)
         tries = (state.default_audio or {}).get("tries", 0) + 1
+        # The film's other audio too, to tell a commentary from a soundtrack.
+        others = [
+            s["index"]
+            for s in info.streams
+            if s.get("codec_type") == "audio"
+            and s["index"] != choice
+            and str(s.get("language") or "").lower() not in ENGLISH
+        ][: dubs.MAX_TRACKS - 1]
+        speech = {}
         db.session.commit()  # never hold the write lock while listening
         try:
             samples = dubs.listen(
                 info,
-                [choice],
+                [choice, *others],
                 opts["whisper_device"],
                 config["semantic"]["model"],
                 make_room=getattr(model, "unload", None),
+                speech=speech,
             )
         except (MediaToolError, OSError) as exc:
             state.default_audio = (
@@ -706,7 +717,13 @@ def hear(limit=HEARD_PER_RUN) -> int:
             continue
         listened += 1
         heard = samples.get(choice, [])
-        if sounds_english(heard):
+        if dubs.commentary(speech, choice, others):
+            state.default_audio = {
+                "at": now,
+                "not_english": "commentary",
+                "speech": {str(k): v for k, v in speech.items()},
+            }
+        elif sounds_english(heard):
             audio = [s for s in info.streams if s.get("codec_type") == "audio"]
             before = next((s for s in audio if s.get("default")), audio[0])
             after = next(s for s in audio if s["index"] == choice)

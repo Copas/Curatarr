@@ -97,6 +97,8 @@ class MediaIdentity(db.Model, Timed):
     tvdb_id = db.Column(db.Integer, index=True)
     imdb_id = db.Column(db.String(100), index=True)
     added_at = db.Column(db.DateTime(timezone=True))
+    # Release year (Jellyfin, Radarr, Sonarr): two films can share a name.
+    year = db.Column(db.Integer)
     last_seen_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
     missing_since = db.Column(db.DateTime(timezone=True))
     # Sonarr/Radarr's own monitored flag; False means "download nothing".
@@ -110,6 +112,14 @@ class MediaIdentity(db.Model, Timed):
     library = db.relationship("Library")
     override = db.relationship("TitleOverride", backref="media", uselist=False)
     parts = db.relationship("MediaPart", backref="media", cascade="all, delete-orphan")
+
+    @property
+    def label(self) -> str:
+        """The title with its year, "Carrie (1976)", for lists and pickers:
+        a remake shares its name. Not twice when the name already has it."""
+        if not self.year or self.title.rstrip().endswith(f"({self.year})"):
+            return self.title
+        return f"{self.title} ({self.year})"
 
 
 class TitleOverride(db.Model, Timed):

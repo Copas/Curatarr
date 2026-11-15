@@ -89,6 +89,44 @@ def test_discovery_keeps_missing_sonarr_episodes(app, monkeypatch):
         assert not parts[1].has_file
 
 
+def test_nothing_written_waits_while_jellyfin_and_sonarr_are_asked(app, monkeypatch):
+    """A write left uncommitted across a web call holds SQLite's one write
+    lock for as long as the call takes: the last library's scan time was held
+    through the next library's first pages, and other writes failed."""
+
+    def idle(what):
+        assert "write_from" not in db.session.connection().info, what
+
+    class Jellyfin(FakeJellyfin):
+        def libraries(self):
+            return [
+                {"ItemId": "films", "Name": "Films", "CollectionType": "movies"},
+                {"ItemId": "tv-demo", "Name": "Demo TV", "CollectionType": "tvshows"},
+            ]
+
+        def items(self, library_id, start, limit):
+            idle(f"Jellyfin asked for {library_id} with a write waiting")
+            if library_id == "films":
+                return {"Items": [], "TotalRecordCount": 0}
+            return super().items(library_id, start, limit)
+
+    class Sonarr(FakeSonarr):
+        def episodes(self, series_id):
+            idle("Sonarr asked for episodes with a write waiting")
+            return super().episodes(series_id)
+
+        def episode_files(self, series_id):
+            idle("Sonarr asked for files with a write waiting")
+            return super().episode_files(series_id)
+
+    adapters = {"jellyfin": Jellyfin(), "sonarr": Sonarr(), "radarr": FakeRadarr()}
+    monkeypatch.setattr("curatarr.services.client", lambda kind: adapters[kind])
+    with app.app_context():
+        assert discover() == 2
+        assert discover() == 2  # and again, with everything already known
+        assert db.session.query(MediaPart).count() == 3
+
+
 def test_renamed_series_and_changed_ids_keep_stable_provider_identity(app, monkeypatch):
     jellyfin = FakeJellyfin()
     sonarr = FakeSonarr()

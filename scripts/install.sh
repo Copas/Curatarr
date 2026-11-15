@@ -11,7 +11,8 @@
 # transcription) or EXTRAS=chapters-gpu (the same, with CUDA libraries).
 # The choice is remembered in $PREFIX/extras, so later upgrades keep it without
 # repeating EXTRAS; pass EXTRAS= (empty) to drop them.
-# Re-running the script upgrades in place, backing up the SQLite database first.
+# Re-running the script upgrades in place, backing up the SQLite database first
+# (the newest KEEP_BACKUPS backups are kept, 10 by default; 0 keeps them all).
 set -eu
 
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -272,6 +273,22 @@ case ",$EXTRAS," in *,chapters-gpu,*) gpu_extras=1 ;; *) gpu_extras= ;; esac
 if [ -z "$gpu_extras" ] && command -v nvidia-smi >/dev/null 2>&1 \
     && nvidia-smi -L >/dev/null 2>&1; then
     say "Found an NVIDIA graphics card. For Smart Chapters and subtitles, install with EXTRAS=chapters-gpu so transcription uses it."
+fi
+# Every upgrade backs the database up; left alone they pile up for good (one
+# a release, each the size of the database). Keep the newest KEEP_BACKUPS.
+KEEP_BACKUPS=${KEEP_BACKUPS:-10}
+case "$KEEP_BACKUPS" in ''|*[!0-9]*) KEEP_BACKUPS=10 ;; esac
+if [ -d "$DATA_DIR/backups" ] && [ "$KEEP_BACKUPS" -gt 0 ]; then
+    # The names start with their date and time, so they sort oldest first.
+    total=$(find "$DATA_DIR/backups" -maxdepth 1 -type f -name 'curatarr-*.db' | wc -l)
+    extra=$((total - KEEP_BACKUPS))
+    if [ "$extra" -gt 0 ]; then
+        say "Removing $extra old database backups (keeping the newest $KEEP_BACKUPS)"
+        find "$DATA_DIR/backups" -maxdepth 1 -type f -name 'curatarr-*.db' \
+            | sort | head -n "$extra" | while IFS= read -r old_backup; do
+                rm -f -- "$old_backup"
+            done
+    fi
 fi
 # Keep the new release and the one before it for rollback, only after success.
 for old in "$PREFIX"/releases/*; do

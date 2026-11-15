@@ -530,7 +530,10 @@ def _facts() -> dict:
         totals["files"] += 1
         # Plain values: the result is cached past this request's session.
         media = SimpleNamespace(
-            id=media.id, title=media.title, jellyfin_id=media.jellyfin_id
+            id=media.id,
+            title=media.title,
+            label=media.label,
+            jellyfin_id=media.jellyfin_id,
         )
         part = SimpleNamespace(
             kind=part.kind,

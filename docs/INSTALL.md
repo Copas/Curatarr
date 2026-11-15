@@ -129,7 +129,7 @@ sudo ./scripts/install.sh              # remembers your EXTRAS; pass EXTRAS=… 
 sudo systemctl is-active curatarr-web curatarr-worker
 ```
 
-The installer builds the new release first, then stops the services, backs up the SQLite database to `/var/lib/curatarr/backups/`, migrates, switches `current` to the new release and starts the services. Configuration is kept. If anything fails after the services stop, it restores the backup and the previous release and restarts what was running. With PostgreSQL or a custom database path, make your own database backup first; the installer can't restore an external database. Read [CHANGELOG.md](../CHANGELOG.md) before upgrading.
+The installer builds the new release first, then stops the services, backs up the SQLite database to `/var/lib/curatarr/backups/` (the newest ten backups are kept; `KEEP_BACKUPS=20` keeps more, `KEEP_BACKUPS=0` all of them), migrates, switches `current` to the new release and starts the services. Configuration is kept. If anything fails after the services stop, it restores the backup and the previous release and restarts what was running. With PostgreSQL or a custom database path, make your own database backup first; the installer can't restore an external database. Read [CHANGELOG.md](../CHANGELOG.md) before upgrading.
 
 ### Roll back
 

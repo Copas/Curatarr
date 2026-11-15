@@ -117,7 +117,7 @@ def _show(media, who, mode) -> tuple[int, dict]:
     return 200, {"handled": True, "result": "deleting", "message": message}
 
 
-def _delete_now(media, candidate, who) -> tuple[int, dict]:
+def _delete_now(media, candidate, who, where="in Jellyfin") -> tuple[int, dict]:
     """Approve the title's Leaving Soon notice, as Delete in Review does, and
     delete it straight away, through Radarr or Sonarr (the worker would
     within a minute)."""
@@ -126,9 +126,9 @@ def _delete_now(media, candidate, who) -> tuple[int, dict]:
 
     review_candidate(candidate.id, "delete")
     audit(
-        "jellyfin_delete_now",
+        "jellyfin_delete_now" if where == "in Jellyfin" else "delete_now",
         media.id,
-        f"{who} deleted {media.title} in Jellyfin; it's deleted now, "
+        f"{who} deleted {media.title} {where}; it's deleted now, "
         "through Radarr or Sonarr.",
         f"jellyfin-delete-now:{candidate.id}",
         candidate_id=candidate.id,
@@ -141,6 +141,25 @@ def _delete_now(media, candidate, who) -> tuple[int, dict]:
     else:  # films only: a show's Delete is _show
         message = f"{media.title} is being deleted."
     return 200, {"handled": True, "result": "deleting", "message": message}
+
+
+def delete_film_now(media, who, where) -> str:
+    """Delete a film now, through Radarr (Delete now on its page): marked
+    Leaving Soon if it isn't, approved and carried out straight away, every
+    check applying (Never Purge, dry run). Returns what to tell the person;
+    ValueError when it can't be deleted."""
+    from .lifecycle import request_removal
+    from .services import _active_candidate
+
+    if media.media_type != "movie":
+        raise ValueError(f"{media.title} isn't a film.")
+    existing = _active_candidate(media.id)
+    state = existing.state if existing else None
+    if state in GOING:
+        return f"{media.title} is already being deleted."
+    if state != "LEAVING_SOON":
+        existing = request_removal(media, where=f"Delete now {where} by {who}")
+    return _delete_now(media, existing, who, where)[1]["message"]
 
 
 def handle(item_id, user_name=None, mode=None) -> tuple[int, dict]:

@@ -14,9 +14,12 @@ Broken files
     A file shorter than Radarr or Sonarr says the film or episode runs, a
     picture that stops before the file says it ends (an incomplete download),
     a soundtrack in which nobody speaks for the last part of a film, and
-    decoding errors at points through the file.
+    decoding errors at points through the file, and stretches of the file
+    that are blank (megabytes of zero bytes in a row, where pieces of a
+    download never arrived: the picture and sound skip or cut out there).
 
-Only frames and a few seconds of the file are read; nothing is re-encoded.
+Only frames and a few seconds of the file are decoded; nothing is re-encoded.
+Looking for blank stretches reads the whole file once, from start to end.
 """
 
 import io
@@ -42,6 +45,16 @@ BURNED_SHARE, CLEAN_SHARE = 0.5, 0.25  # of speech frames with subtitles
 EVEN_BURNED_SHARE, EVEN_CLEAN_SHARE = 0.4, 0.2  # without a transcript
 
 SHORT_SHARE = 0.75  # of the listed runtime
+# Subtitles whose last line comes this long after the picture ends belong to a
+# longer cut of the film, so the video may have lost its ending. Not when the
+# subtitles run past the film's listed length too (they're for something
+# else), or by PAL's 25/24 (a European disc plays 4% fast, so subtitles timed
+# for the cinema run that much longer). Listed for a person to look at: never
+# replaced automatically.
+SUBTITLES_PAST_END = 120  # seconds
+LISTED_MARGIN = 300  # seconds past the listed runtime a subtitle may run
+PAL_SPEEDUP = 25 / 24
+PAL_TOLERANCE = 0.012
 SILENT_END_SHARE = 0.6  # last speech before this share of a film's length
 DECODE_POINTS = 6
 # "Part.2", "CD1", "Disc 2": one piece of a film released in several files.
@@ -69,6 +82,10 @@ def grab(path: str, seconds: float, width: int = 640) -> Image.Image | None:
                 f"{max(seconds, 0):.2f}",
                 "-i",
                 path,
+                # The picture itself: "V" passes over cover art some releases
+                # carry as a second video stream, which ffmpeg can pick instead.
+                "-map",
+                "0:V:0",
                 "-frames:v",
                 "1",
                 "-vf",
@@ -192,6 +209,111 @@ def burned_subtitles(path: str, duration: float, segments=None) -> dict:
     }
 
 
+# Zero bytes this many in a row are missing data: Matroska and MP4 pad with a
+# few kilobytes at most, and a missing piece of a download is megabytes.
+BLANK_BYTES = 4 << 20
+READ_CHUNK = 16 << 20
+_PROBE = bytes(64 << 10)
+
+
+def blank_stretches(path, minimum=BLANK_BYTES, between=None) -> list:
+    """(offset, length) of each run of at least ``minimum`` zero bytes in the
+    file. ``between`` is called before each chunk is read (to wait while
+    someone is watching)."""
+    found, run_at, offset = [], None, 0
+    with open(path, "rb") as f:
+        while True:
+            if between:
+                between()
+            chunk = f.read(READ_CHUNK)
+            if not chunk:
+                break
+            size, pos = len(chunk), 0
+            if run_at is not None:  # a run carried on from the last chunk
+                pos = size - len(chunk.lstrip(b"\0"))
+                if pos == size:
+                    offset += size
+                    continue
+                if offset + pos - run_at >= minimum:
+                    found.append((run_at, offset + pos - run_at))
+                run_at = None
+            while True:
+                at = chunk.find(_PROBE, pos)
+                if at < 0:
+                    tail = size - len(chunk.rstrip(b"\0"))
+                    if tail and size - tail >= pos:
+                        run_at = offset + size - tail
+                    break
+                start = len(chunk[:at].rstrip(b"\0"))
+                end = size - len(chunk[at:].lstrip(b"\0"))
+                if end == size:
+                    run_at = offset + start
+                    break
+                if end - start >= minimum:
+                    found.append((offset + start, end - start))
+                pos = end
+            offset += size
+    if run_at is not None and offset - run_at >= minimum:
+        found.append((run_at, offset - run_at))
+    return found
+
+
+ANCHORS = 40  # points read for where in the file each moment is
+
+
+def _anchors(path, duration) -> list:
+    """(byte offset, seconds) at points through the file, from its packets."""
+    points = [duration * i / ANCHORS for i in range(ANCHORS)]
+    done = subprocess.run(
+        [required_tool("ffprobe"), "-v", "error", "-select_streams", "v:0",
+         "-read_intervals", ",".join(f"{t:.1f}%+#1" for t in points),
+         "-show_entries", "packet=pts_time,pos", "-of", "csv=p=0", path],
+        capture_output=True, text=True, timeout=300, check=False,
+    )  # fmt: skip
+    found = set()
+    for line in done.stdout.splitlines():
+        parts = line.split(",")
+        try:
+            found.add((int(parts[1]), float(parts[0])))
+        except (IndexError, ValueError):
+            continue
+    return sorted(found)
+
+
+def _moment(offset, size, duration, anchors) -> float:
+    """Seconds into the file at ``offset``, between the anchors around it
+    (the bitrate changes through a film, so its share of the size is rough)."""
+    points = [(0, 0.0), *anchors, (size, duration)]
+    for (a, t), (b, u) in pairwise(points):
+        if a <= offset <= b and b > a:
+            return t + (u - t) * (offset - a) / (b - a)
+    return offset / size * duration
+
+
+def blank_issues(path, duration, between=None) -> list:
+    """The blank stretches of a file as problems, each placed in time."""
+    size = os.path.getsize(path)
+    if not size or not duration:
+        return []
+    issues = []
+    stretches = blank_stretches(path, between=between)
+    anchors = _anchors(path, duration) if stretches else []
+    for offset, length in stretches:
+        at = _moment(offset, size, duration, anchors)
+        seconds = max(1, round(_moment(offset + length, size, duration, anchors) - at))
+        issues.append(
+            {
+                "kind": "blank_data",
+                "text": f"About {seconds} second{'s' if seconds != 1 else ''} "
+                f"missing at {clock(at)} ({length / 1e6:.1f} MB of the file is "
+                "blank): probably an incomplete download, so the picture and "
+                "sound skip or cut out there",
+                "at": round(at, 1),
+            }
+        )
+    return issues
+
+
 def clock(seconds: float) -> str:
     seconds = int(seconds)
     hours, rest = divmod(seconds, 3600)
@@ -232,9 +354,18 @@ def _decode_errors(path: str, seconds: float) -> bool:
 
 
 def health(
-    path: str, duration: float, runtime_minutes, segments, *, film: bool
+    path: str,
+    duration: float,
+    runtime_minutes,
+    segments,
+    *,
+    film: bool,
+    subtitle_end: float | None = None,
 ) -> list:
-    """Problems found, each {"kind", "text"} (and "at", seconds, where useful)."""
+    """Problems found, each {"kind", "text"} (and "at", seconds, where useful).
+
+    ``subtitle_end`` is when the last line of an English .srt beside the file
+    is shown, if there is one."""
     issues = []
     if runtime_minutes and duration < SHORT_SHARE * runtime_minutes * 60:
         split = SPLIT_PART.search(os.path.basename(path))
@@ -249,6 +380,23 @@ def health(
                 "kind": "short",
                 "text": f"Runs {round(duration / 60)} min, but it's listed as "
                 f"{runtime_minutes} min: {reason}",
+            }
+        )
+    if (
+        subtitle_end
+        and duration >= 600
+        and subtitle_end > duration + SUBTITLES_PAST_END
+        and not any(i["kind"] == "short" for i in issues)
+        and not (
+            runtime_minutes and subtitle_end > runtime_minutes * 60 + LISTED_MARGIN
+        )
+        and abs(subtitle_end / duration - PAL_SPEEDUP) > PAL_TOLERANCE
+    ):
+        issues.append(
+            {
+                "kind": "subtitles_longer",
+                "text": f"Runs {round(duration / 60)} min, but its subtitles go on "
+                f"to {clock(subtitle_end)}: the ending is probably missing",
             }
         )
     # A subtitle or audio track often runs a little past the picture, so only a

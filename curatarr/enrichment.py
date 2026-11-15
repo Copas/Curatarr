@@ -602,8 +602,11 @@ def analyse(
             segments = transcript(model)
             recap = None
             if find_recap is not None:
+                from . import recaps
+
                 recap = find_recap(segments, scenes or [], model)
                 result["recap"] = recap.as_dict() if recap else None
+                result["recap_opener"] = recaps.opener(segments) is not None
             plan = semantic_plan(
                 info.duration,
                 scenes or [],
@@ -749,6 +752,8 @@ def queue_new_media() -> int:
                 if _queue_follow_up(state, part, config, now):
                     queued += 1
                 continue
+            if _replaced(state, part):
+                _forget_old_file(state)
             state.job_state = "queued"
             state.requested_action = "auto"
             state.requested_at = now
@@ -758,6 +763,7 @@ def queue_new_media() -> int:
 
 
 QUALITY_CHECKS_PER_PASS = 100  # each a quick look at the file's chapters
+QUALITY_PACE_LOOKBACK = timedelta(days=14)
 
 
 def chapter_quality_progress() -> dict | None:
@@ -807,12 +813,31 @@ def chapter_quality_progress() -> dict | None:
         ),
     ).scalar()
     hours = FORECAST_WINDOW.total_seconds() / 3600
+    # They go after new chapter jobs, so a run of those squeezes them to a
+    # trickle. Their best day lately is the pace once they have the worker
+    # back: the time left is reckoned from it while others are ahead.
+    day = func.date(ChapterState.chapter_processed_at)
+    best = (
+        base.filter(
+            ChapterState.chapter_processed_at >= utcnow() - QUALITY_PACE_LOOKBACK,
+            or_(
+                ChapterState.chapter_source == "embedded_ok",
+                ChapterState.original_chapters_xml.isnot(None),
+            ),
+        )
+        .with_entities(func.count(ChapterState.id))
+        .group_by(day)
+        .order_by(func.count(ChapterState.id).desc())
+        .limit(1)
+        .scalar()
+    ) or 0
     return {
         "checked": kept,
         "left": left,
         "waiting": waiting,  # queued as chapter jobs, counted there too
         "total": kept + left,
         "per_hour": judged / hours if judged >= FORECAST_MIN_SAMPLES else None,
+        "best_per_hour": best / 24 if best >= FORECAST_MIN_SAMPLES else None,
     }
 
 
@@ -837,22 +862,11 @@ def _queue_chapter_quality_checks(library_id, now) -> int:
     with their own chapters before it was (whenever they were added): a few
     at a time: topped up to QUALITY_CHECKS_PER_PASS waiting, never piled up
     faster than they're done. Each is looked at once; kept ones are marked
-    embedded_ok."""
-    waiting = (
-        db.session.query(func.count(ChapterState.id))
-        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
-        .filter(
-            MediaIdentity.library_id == library_id,
-            ChapterState.chapter_status == "existing",
-            ChapterState.chapter_source == "embedded",
-            ChapterState.job_state.in_(("queued", "running")),
-        )
-        .scalar()
-    )
-    room = QUALITY_CHECKS_PER_PASS - waiting
-    if room <= 0:
-        return 0
-    rows = (
+    embedded_ok. Files someone is watching or will watch next go straight
+    away, whatever is waiting: their chapters are the ones about to be used."""
+    from . import up_next
+
+    unjudged = (
         db.session.query(ChapterState)
         .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
         .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
@@ -864,9 +878,28 @@ def _queue_chapter_quality_checks(library_id, now) -> int:
             ChapterState.chapter_source == "embedded",
             ChapterState.job_state == "idle",
         )
-        .limit(room)
-        .all()
     )
+    soon = up_next.part_ids()
+    due = unjudged.filter(ChapterState.media_part_id.in_(soon)).all() if soon else []
+    waiting = (
+        db.session.query(func.count(ChapterState.id))
+        .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaIdentity.library_id == library_id,
+            ChapterState.chapter_status == "existing",
+            ChapterState.chapter_source == "embedded",
+            ChapterState.job_state.in_(("queued", "running")),
+        )
+        .scalar()
+    )
+    room = QUALITY_CHECKS_PER_PASS - waiting - len(due)
+    rows = due
+    if room > 0:
+        rows += (
+            unjudged.filter(ChapterState.id.notin_([s.id for s in due]))
+            .limit(room)
+            .all()
+        )
     for state in rows:
         state.job_state = "queued"
         state.requested_action = "auto"
@@ -900,18 +933,35 @@ def _queue_follow_up(state, part, config, now) -> bool:
     return True
 
 
+def _replaced(state, part) -> bool:
+    """Re-imported (an upgrade, a better copy) since Curatarr handled it."""
+    processed = _as_datetime(state.chapter_processed_at)
+    acquired = _as_datetime(part.acquired_at)
+    return bool(processed and acquired and acquired > processed)
+
+
+def _forget_old_file(state) -> None:
+    """A new copy of the file: what was found in the old one (its recap,
+    "next time on" and Intro Skipper's markers, its transcript) is looked at
+    again in this one, after its chapters, as for a new file. A different
+    release has its scenes and credits at different times."""
+    state.recap_checked_at = state.preview_checked_at = None
+    state.markers_checked_at = state.identity_checked_at = None
+    state.transcript_key = state.opening_key = None
+
+
 def _due_automatically(state, part, now) -> bool:
     if state.job_state != "idle":
         return False
-    processed = _as_datetime(state.chapter_processed_at)
-    acquired = _as_datetime(part.acquired_at)
-    if processed and acquired and acquired > processed:
-        return True  # re-imported (an upgrade) since Curatarr handled it
+    if _replaced(state, part):
+        return True
     if state.chapter_status == "failed":
         retry_at = _as_datetime(state.next_attempt_at)
         return state.attempts < MAX_ATTEMPTS and (not retry_at or retry_at <= now)
     # Never handled: new, or only inspected by a library scan.
-    return state.chapter_status == "not_processed" and processed is None
+    return (
+        state.chapter_status == "not_processed" and state.chapter_processed_at is None
+    )
 
 
 def _finish(state, status, *, error=None, info=None, source=None, count=None):
@@ -1580,7 +1630,13 @@ def _write(state, part, media, info, plan, analysis, config, ours, fields, start
     state.written_chapters_json = after.chapters
     refresh_error = _refresh_jellyfin(part, media)
     if analysis.get("transcript") and part.kind == "episode":
-        _record_recap(state, part, media, analysis.get("recap"))
+        _record_recap(
+            state,
+            part,
+            media,
+            analysis.get("recap"),
+            no_opener=analysis.get("recap_opener") is False,
+        )
     state.last_preview_json = {
         **_preview_record(info, analysis, config, ours),
         "written_at": utcnow().isoformat(),
@@ -2174,6 +2230,16 @@ def _restore_set_aside(state, path) -> bool:
     return restored
 
 
+def _foreign_audio(info) -> bool:
+    """No English audio, and audio labelled as another language."""
+    from .dubs import code
+
+    languages = {
+        code(s.get("language")) for s in info.streams if s.get("codec_type") == "audio"
+    }
+    return "en" not in languages and bool(languages - {None})
+
+
 def run_subtitles(state, action, part, media, path, config, opts) -> str:
     """Write (or remove) the generated English subtitle file for one video."""
     fields = {"state_id": state.id, "action": action, "file": path}
@@ -2228,6 +2294,11 @@ def run_subtitles(state, action, part, media, path, config, opts) -> str:
             return _subtitles_done(state, "existing", fields=fields)
         outside = sidecar_english(path, text_only=True)
         if outside and not config["subtitles"].get("check_sync", True):
+            return _subtitles_done(state, "existing", fields=fields)
+        if outside and _foreign_audio(info):
+            # A transcript of audio in another language is Whisper's English
+            # translation, which never matches people's subtitles line for
+            # line: good subtitles were set aside as out of sync.
             return _subtitles_done(state, "existing", fields=fields)
         if outside:
             status = _check_sync(
@@ -3459,6 +3530,15 @@ def describe(state: ChapterState | None) -> dict:
             else None
         ),
         "queued": bool(state and state.job_state in {"queued", "running"}),
+        "state": state,
+        # English subtitles beside the file that the sync check set aside.
+        "set_aside": bool(
+            state
+            and any(
+                (entry or {}).get("outcome") == "set_aside"
+                for entry in ((state.subtitle_sync or {}).get("files") or {}).values()
+            )
+        ),
         "recap": (state.recap_start, state.recap_end)
         if state and state.recap_end is not None
         else None,
@@ -3640,17 +3720,23 @@ def _recap_finder(state, part, media=None, path=None):
     return find
 
 
-def _record_recap(state, part, media, recap: dict | None):
-    """Store what was found and mark it in Intro Skipper (best effort)."""
+def _record_recap(state, part, media, recap: dict | None, *, no_opener=False):
+    """Store what was found and mark it in Intro Skipper (best effort). With
+    no "previously on" at all, the plugin's guessed recap goes too."""
     state.recap_checked_at = utcnow()
     if recap:
         state.recap_start, state.recap_end = recap["start"], recap["end"]
         state.recap_source = recap["source"]
+    elif no_opener:
+        state.recap_start = state.recap_end = None
+        state.recap_source = "no opener"
     else:
         state.recap_start = state.recap_end = None
         state.recap_source = "none" if state.recap_source != "none" else "rechecked"
     try:
-        _mark_segment(state, part, media, "Recap")
+        _mark_segment(
+            state, part, media, "Recap", clear_guesses=not recap and no_opener
+        )
     except IntegrationError as exc:
         _log("recap_segment_failed", state_id=state.id, error=str(exc))
 
@@ -3668,6 +3754,8 @@ def _mark_segment(state, part, media, kind, *, clear_guesses=False):
     """
     from .integrations import IntroSkipper
 
+    if part.kind != "episode":
+        return  # films get no skip markers from Curatarr
     field = SEGMENT_FIELDS[kind]
     start = getattr(state, f"{field}_start")
     end = getattr(state, f"{field}_end")
@@ -4152,17 +4240,53 @@ def _check_markers(ep: _Episode) -> str:
     )
     state.intro_rule = INTRO_RULE
     state.markers_hidden = hidden or None
+    try:
+        recap = _settle_recap_guesses(ep)
+    except IntegrationError as exc:
+        recap = None
+        _log("recap_segment_failed", state_id=state.id, error=str(exc))
     changed = [f"{len(bad)} hidden"] if bad else []
+    changed += [recap] if recap else []
     changed += [f"{len(trims)} trimmed"] if trims else []
     changed += [moved] if moved else []
     changed += [widened] if widened else []
     return f"markers: {', '.join(changed)}" if changed else "markers: ok"
 
 
-CREDITS_RULE = 2  # how credits starts are placed; raising it checks episodes again
+CREDITS_RULE = 3  # how credits starts are placed; raising it checks episodes again
+# 3: name cards on black count as credit lettering (credits.py), and recaps
+#    Intro Skipper guessed again after Curatarr hid them are hidden again
 CREDITS_FROM = 0.6  # end credits start in the last 40% of the runtime
 CREDITS_MOVE = 1.0  # a start this close to Intro Skipper's is left alone
 CREDITS_MAX_MOVE = 180.0  # never moved earlier than this
+
+
+def _settle_recap_guesses(ep) -> str | None:
+    """Make Intro Skipper's recap match Curatarr's again. The plugin's own
+    analysis, run again (after a file changes, or a plugin update), brings
+    back recaps it guessed under new ids, though Curatarr hid them: usually a
+    cold open, skipped as if it were a "previously on"."""
+    from . import recaps
+
+    state = ep.state
+    if state.recap_end is not None:
+        clear = False  # Curatarr's own recap replaces any guess
+    elif state.recap_source == "no opener":
+        clear = True
+    elif state.recap_source in ("none", "rechecked"):
+        # Recorded by a chapter job, which doesn't say why: no "previously
+        # on" in the saved transcript means the episode has no recap.
+        lines = ep.span(0, recaps.OPENER_WITHIN + 1, transcribe_missing=False)
+        if lines is None or recaps.opener(lines) is not None:
+            return None
+        state.recap_source = "no opener"
+        clear = True
+    else:
+        return None  # not checked yet, or a recap whose end wasn't found
+    before = len(state.markers_hidden or [])
+    _mark_segment(state, ep.part, ep.media, "Recap", clear_guesses=clear)
+    hidden = len(state.markers_hidden or []) - before
+    return f"{hidden} guessed recap hidden" if hidden else None
 
 
 def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
@@ -4602,23 +4726,30 @@ def dismiss_identity(state):
     db.session.commit()
 
 
-MOVIE_HIDDEN_TYPES = ("Introduction", "Recap", "Preview")
+# Every kind Intro Skipper and Jellyfin give: a film has no intro, recap,
+# preview or "outro" to skip.
+MOVIE_HIDDEN_TYPES = (
+    "Introduction",
+    "Intro",
+    "Recap",
+    "Preview",
+    "Credits",
+    "Outro",
+    "Commercial",
+)
 
 
-def _check_movie(state, part, media) -> str:
-    """Movies keep only their credits marker: Intro Skipper's movie "recaps" and
-    "intros" come from chapter names like "Chapter 1" or "Opening Credits"."""
+def _hide_movie_markers(item_id) -> list[dict] | None:
+    """Hide a movie's skip segments (intro, recap, preview, credits); what was
+    hidden, or None when the Intro Skipper plugin isn't installed. Ones a
+    person added by hand stay."""
     from .integrations import IntroSkipper
 
-    item_id = jellyfin_item_id(part, media)
-    if not item_id:
-        return "movie: no Jellyfin item"
     plugin = IntroSkipper(client("jellyfin"))
     segments = plugin.segments(item_id)
     if segments is None:
-        return "movie: Intro Skipper not installed"
-    hidden = list(state.markers_hidden or [])
-    count = 0
+        return None
+    hidden = []
     for segment in segments:
         if (
             segment.get("Type") not in MOVIE_HIDDEN_TYPES
@@ -4627,7 +4758,6 @@ def _check_movie(state, part, media) -> str:
         ):
             continue
         plugin.hide(item_id, segment["Id"])
-        count += 1
         hidden.append(
             {
                 "id": segment["Id"],
@@ -4635,12 +4765,26 @@ def _check_movie(state, part, media) -> str:
                 "start": round(segment.get("Start", 0), 1),
                 "end": round(segment.get("End", 0), 1),
                 "source": segment.get("Source"),
-                "reason": "movies keep only their credits marker",
+                "reason": "movies have no skip markers",
                 "at": utcnow().isoformat(),
             }
         )
-    state.markers_hidden = hidden or None
-    return f"movie: {count} hidden" if count else "movie: ok"
+    return hidden
+
+
+def _check_movie(state, part, media) -> str:
+    """Movies have no skip markers: Intro Skipper's movie "recaps" and "intros"
+    come from black frames and chapter names like "Chapter 1", and a Skip
+    Credits button on a film skips nothing worth skipping."""
+    item_id = jellyfin_item_id(part, media)
+    if not item_id:
+        return "movie: no Jellyfin item"
+    found = _hide_movie_markers(item_id)
+    if found is None:
+        return "movie: Intro Skipper not installed"
+    if found:
+        state.markers_hidden = [*(state.markers_hidden or []), *found]
+    return f"movie: {len(found)} hidden" if found else "movie: ok"
 
 
 def run_recap(state, part, media, info, config, opts, fields, *, llm=None):
@@ -5025,10 +5169,14 @@ def _remove_recap_chapter(state, part, media) -> str:
 
 
 MOVIE_SWEEP = 25  # movies checked per worker cycle (a few API calls each)
+# Intro Skipper analyses a movie again when its files or settings change, and
+# adds a recap the earlier check never saw; so every movie is looked at again.
+MOVIE_RECHECK = timedelta(days=1)
+OTHER_MOVIES_KEY = "other_movie_markers_checked"
 
 
 def check_movie_markers(limit=MOVIE_SWEEP) -> int:
-    """Hide Intro Skipper's recaps, previews and intros on movies not yet checked.
+    """Hide Intro Skipper's markers on movies not checked today.
 
     Runs from the worker cycle, outside the job queue: it needs no transcript
     and must not hold up a movie's chapter job.
@@ -5046,8 +5194,12 @@ def check_movie_markers(limit=MOVIE_SWEEP) -> int:
         .filter(
             MediaPart.kind == "movie_file",
             MediaPart.has_file.is_(True),
-            ChapterState.markers_checked_at.is_(None),
+            or_(
+                ChapterState.markers_checked_at.is_(None),
+                ChapterState.markers_checked_at < utcnow() - MOVIE_RECHECK,
+            ),
         )
+        .order_by(ChapterState.markers_checked_at.asc())
         .limit(limit * 2)
         .all()
     )
@@ -5068,6 +5220,55 @@ def check_movie_markers(limit=MOVIE_SWEEP) -> int:
         checked += 1
         if checked == limit:
             break
+    if checked < limit:
+        checked += _check_other_movies(limit - checked)
+    return checked
+
+
+def _check_other_movies(limit) -> int:
+    """The same for films in Jellyfin libraries Curatarr doesn't manage (home
+    videos, a mixed library): they have no record here, so the day each one was
+    last looked at is kept in a setting."""
+    from .integrations import IntegrationError
+
+    libraries = (
+        db.session.query(Library)
+        .filter(Library.enabled.is_(True), Library.media_type == "other")
+        .all()
+    )
+    seen = dict(setting(OTHER_MOVIES_KEY, {}) or {})
+    cutoff = (utcnow() - MOVIE_RECHECK).isoformat()
+    jellyfin, due = client("jellyfin"), []
+    try:
+        for library in libraries:
+            start = 0
+            while len(due) < limit:
+                page = jellyfin.items(library.jellyfin_library_id, start=start) or {}
+                items = page.get("Items") or []
+                due.extend(
+                    i["Id"]
+                    for i in items
+                    if i.get("Type") in ("Movie", "Video")
+                    and seen.get(i["Id"], "") < cutoff
+                )
+                start += len(items)
+                if not items or start >= (page.get("TotalRecordCount") or 0):
+                    break
+        checked = 0
+        for item_id in due[:limit]:
+            found = _hide_movie_markers(item_id)
+            if found is None:
+                break  # Intro Skipper isn't installed
+            if found:
+                _log("movie_markers_checked", item=item_id, result="other library")
+            seen[item_id] = utcnow().isoformat()
+            checked += 1
+    except IntegrationError as exc:
+        _log("movie_markers_failed", error=str(exc))
+        return 0
+    if checked:
+        set_setting(OTHER_MOVIES_KEY, seen)
+        db.session.commit()
     return checked
 
 

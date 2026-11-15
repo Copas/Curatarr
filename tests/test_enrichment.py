@@ -491,10 +491,21 @@ def test_new_media_is_queued_only_after_enabling(media_env):
     state = db.session.query(ChapterState).filter_by(media_part_id=new.id).one()
     assert state.chapter_status == "generated_scene_aligned"
     assert enrichment.queue_new_media() == 0
-    # An upgrade (newer import of the same episode) is processed again.
+    # An upgrade (newer import of the same episode) is processed again, and
+    # what was found in the old copy's skip markers is looked at again too: a
+    # different release has its credits at a different time.
+    checked = utcnow()
+    state.recap_checked_at = state.preview_checked_at = checked
+    state.markers_checked_at = state.identity_checked_at = checked
+    state.transcript_key = state.opening_key = "old-copy"
     new.acquired_at = utcnow() + timedelta(minutes=5)
     db.session.commit()
     assert enrichment.queue_new_media() == 1
+    db.session.expire_all()
+    state = db.session.query(ChapterState).filter_by(media_part_id=new.id).one()
+    assert state.markers_checked_at is None and state.recap_checked_at is None
+    assert state.preview_checked_at is None and state.identity_checked_at is None
+    assert state.transcript_key is None and state.opening_key is None
 
 
 def test_files_a_scan_settled_still_get_subtitles(media_env):
@@ -1789,7 +1800,7 @@ def test_review_page_lists_changes_and_undo_reverses_them(
     assert db.session.get(ChapterState, state.id).markers_hidden is None
 
 
-def test_movies_keep_only_their_credits_marker(app, client, media_env):
+def test_movies_have_no_skip_markers(app, client, media_env):
     files, arr = media_env
     _library, _media, part = _movie()
     files.add(part.file_path)
@@ -1820,6 +1831,14 @@ def test_movies_keep_only_their_credits_marker(app, client, media_env):
             "Source": "BlackFrame",
             "Suppressed": False,
         },
+        {
+            "Id": "mine",
+            "Type": "Credits",
+            "Start": 6810,
+            "End": 7100,
+            "Source": "User",
+            "Suppressed": False,
+        },
     ]
 
     def plugin(method, path, **kwargs):
@@ -1832,10 +1851,66 @@ def test_movies_keep_only_their_credits_marker(app, client, media_env):
     state = db.session.get(ChapterState, state.id)
     assert ("DELETE", "/Episode/jf-film/Segments/rec") in calls
     assert ("DELETE", "/Episode/jf-film/Segments/int") in calls
-    assert ("DELETE", "/Episode/jf-film/Segments/cred") not in calls
+    assert ("DELETE", "/Episode/jf-film/Segments/cred") in calls
+    assert ("DELETE", "/Episode/jf-film/Segments/mine") not in calls
     assert state.job_state == "queued" and state.requested_action == "generate"
-    assert {h["id"] for h in state.markers_hidden} == {"rec", "int"}
-    assert enrichment.check_movie_markers() == 0  # checked once
+    assert {h["id"] for h in state.markers_hidden} == {"rec", "int", "cred"}
+    assert enrichment.check_movie_markers() == 0  # not again the same day
+
+    # Intro Skipper analyses the film again later and adds a recap of its own.
+    segments.append(
+        {
+            "Id": "again",
+            "Type": "Recap",
+            "Start": 0,
+            "End": 80,
+            "Source": "BlackFrame",
+            "Suppressed": False,
+        }
+    )
+    state.markers_checked_at = utcnow() - timedelta(days=2)
+    db.session.commit()
+    assert enrichment.check_movie_markers() == 1
+    assert ("DELETE", "/Episode/jf-film/Segments/again") in calls
+
+
+def test_films_in_libraries_curatarr_doesnt_manage_lose_their_recaps_too(
+    app, client, media_env
+):
+    _files, arr = media_env
+    db.session.add(
+        Library(jellyfin_library_id="lib-mixed", name="Mixed", media_type="other")
+    )
+    db.session.commit()
+    calls = []
+    recap = {
+        "Id": "rec",
+        "Type": "Recap",
+        "Start": 0,
+        "End": 50,
+        "Source": "BlackFrame",
+    }
+
+    def request(method, path, **kwargs):
+        calls.append((method, path))
+        return [recap] if method == "GET" else None
+
+    def items(parent_id=None, start=0, limit=100):
+        assert parent_id == "lib-mixed"
+        return {
+            "Items": [
+                {"Id": "vid", "Type": "Video"},
+                {"Id": "dir", "Type": "Folder"},
+            ],
+            "TotalRecordCount": 2,
+        }
+
+    arr.items = items
+    arr.request = request
+    assert enrichment.check_movie_markers() == 1
+    assert ("DELETE", "/Episode/vid/Segments/rec") in calls
+    assert not any("/dir/" in path for _m, path in calls)
+    assert enrichment.check_movie_markers() == 0  # looked at today
 
 
 def test_identity_check_flags_an_episode_that_fits_another_summary(
@@ -2910,6 +2985,51 @@ def test_looking_again_at_kept_chapters_never_piles_up_or_holds_up_new_files(
     new.requested_at = utcnow()
     db.session.commit()
     assert enrichment._due_jobs(1, scans=False)[0].id == new.id
+
+
+def test_kept_chapters_of_what_someone_watches_next_are_looked_at_first(
+    app, monkeypatch
+):
+    from curatarr import up_next
+    from curatarr.models import Library, MediaIdentity, MediaPart, utcnow
+
+    soon = []
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: list(soon))
+    monkeypatch.setattr(enrichment, "QUALITY_CHECKS_PER_PASS", 2)
+    library = Library(jellyfin_library_id="tv", name="TV", media_type="tv")
+    db.session.add(library)
+    db.session.flush()
+    show = MediaIdentity(library_id=library.id, media_type="series", title="Show")
+    db.session.add(show)
+    db.session.flush()
+    states = []
+    for number in range(1, 6):
+        part = MediaPart(
+            media_identity_id=show.id,
+            kind="episode",
+            season_number=1,
+            episode_number=number,
+            has_file=True,
+            file_path=f"/tv/Show/S01E0{number}.mkv",
+        )
+        db.session.add(part)
+        db.session.flush()
+        state = ChapterState(media_part_id=part.id, media_identity_id=show.id)
+        state.job_state = "idle"
+        state.chapter_status, state.chapter_source = "existing", "embedded"
+        db.session.add(state)
+        states.append(state)
+    db.session.commit()
+    now = utcnow()
+    assert enrichment._queue_chapter_quality_checks(library.id, now) == 2
+    watched = next(s for s in states if s.job_state == "idle")
+    # Someone presses play: its check is queued though the batch is full,
+    # and goes ahead of the batch.
+    soon.append(watched.media_part_id)
+    assert enrichment._queue_chapter_quality_checks(library.id, now) == 1
+    assert watched.job_state == "queued" and watched.requested_action == "auto"
+    assert enrichment._due_jobs(1, scans=False)[0].id == watched.id
+    assert enrichment._queue_chapter_quality_checks(library.id, now) == 0
 
 
 def test_skip_buttons_show_a_moment_early(app):

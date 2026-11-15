@@ -506,3 +506,49 @@ def _show_with_files(folder, subtitles):
         )
     db.session.commit()
     return media
+
+
+def test_subtitles_for_a_film_in_another_language_are_kept(sync_env, monkeypatch):
+    """Its transcript is a translation: no use for judging people's subtitles."""
+    import test_enrichment
+
+    part, sidecar, speech, calls, _arr = sync_env
+    monkeypatch.setattr(
+        test_enrichment,
+        "STREAMS",
+        [
+            {"index": 0, "codec_type": "video", "codec_name": "h264"},
+            {"index": 1, "codec_type": "audio", "language": "srp", "default": True},
+        ],
+    )
+    text = _subtitles(speech, lambda t: t if t < DURATION / 2 else t + 6.0)
+    sidecar.write_text(text, encoding="utf-8")
+    assert _run(part).subtitle_status == "existing"
+    assert sidecar.read_text() == text and calls == []
+    assert not generated_path(part.file_path).exists()
+
+
+def test_set_aside_subtitles_can_be_brought_back_from_the_films_pages(
+    app, client, sync_env
+):
+    """Not only from the long list on Enhance → Subtitles."""
+    part, sidecar, speech, _calls, _arr = sync_env
+    text = _subtitles(speech, lambda t: t if t < DURATION / 2 else t + 6.0)
+    sidecar.write_text(text, encoding="utf-8")
+    state = _run(part)
+    for page in (f"/titles/{part.media.id}", f"/chapters/parts/{part.id}"):
+        html = client.get(page).get_data(as_text=True)
+        assert "Bring back" in html and "Film.en.srt" in html, page
+    assert "Subtitles set aside" in client.get(f"/titles/{part.media.id}").text
+    answer = client.post(
+        f"/chapters/subtitles/{state.id}/restore",
+        data={"name": "Film.en.srt", "next": f"/titles/{part.media.id}"},
+    )
+    assert answer.status_code == 302
+    assert answer.headers["Location"].endswith(f"/titles/{part.media.id}")
+    assert sidecar.read_text() == text
+    away = client.post(
+        f"/chapters/subtitles/{state.id}/recheck",
+        data={"next": "//elsewhere.example/"},
+    )
+    assert away.headers["Location"].endswith("/chapters/subtitles")

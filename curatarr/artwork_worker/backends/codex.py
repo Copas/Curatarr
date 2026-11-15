@@ -23,7 +23,7 @@ import threading
 import time
 from pathlib import Path
 
-from .base import Backend, Cancelled, Failed, Made
+from .base import Backend, Failed, Made
 
 KINDS = ["Primary", "Thumb", "Backdrop", "Logo", "Banner"]
 # Everything but the image tool, turned off.
@@ -49,6 +49,43 @@ SAFETY = re.compile(
 LIMIT = re.compile(
     r'"type"\s*:\s*"usage_limit_reached".*?"resets_in_seconds"\s*:\s*(\d+)'
 )
+# The plan's limit as Codex words it, in an error event or its own reply:
+# "You've hit your usage limit ... try again at 6:09 PM", "its usage limit
+# was reached. It resets in about 14 minutes."
+LIMIT_SAID = re.compile(r"usage limit|rate limit", re.IGNORECASE)
+LIMIT_AT = re.compile(r"try again at (\d{1,2}):(\d{2})\s*([AP]M)?", re.IGNORECASE)
+LIMIT_IN = re.compile(
+    r"(?:resets|try again) in (?:about )?(\d+)\s*(minute|hour|day)", re.IGNORECASE
+)
+LIMIT_GUESS = 3600  # seconds to wait when it doesn't say when
+LIMIT_SOON = 120  # the least wait, when the time it named has just passed
+LIMIT_GRACE = 3 * 3600  # a time named this far in the past means tomorrow's
+
+
+def _reset_in(said: str, now: float | None = None) -> int:
+    """Seconds until a usage limit Codex described resets."""
+    now = time.time() if now is None else now
+    found = LIMIT_IN.search(said)
+    if found:
+        unit = {"minute": 60, "hour": 3600, "day": 86400}[found.group(2).lower()]
+        return int(found.group(1)) * unit
+    found = LIMIT_AT.search(said)
+    if found:
+        hour, minute = int(found.group(1)) % 24, int(found.group(2))
+        half = (found.group(3) or "").upper()
+        if half == "PM" and hour < 12:
+            hour += 12
+        elif half == "AM" and hour == 12:
+            hour = 0
+        local = time.localtime(now)
+        at = time.mktime(
+            (*local[:3], hour, minute, 0, local.tm_wday, local.tm_yday, -1)
+        )
+        if at <= now - LIMIT_GRACE:  # well past: it's tomorrow's
+            at += 86400
+        # Just past: asked again in the minute it named, before it reset.
+        return max(LIMIT_SOON, int(at - now))
+    return LIMIT_GUESS
 
 
 def _codex_home() -> Path:
@@ -104,7 +141,7 @@ class CodexBackend(Backend):
         if self.limited_until > now:
             hours = (self.limited_until - now) / 3600
             return False, (
-                f"The ChatGPT plan's image allowance is used up; it resets in about "
+                f"The ChatGPT plan's usage limit was reached; it resets in about "
                 f"{hours:.1f} hours."
             )
         if self._status and now - self._status_at < 300:
@@ -146,6 +183,10 @@ class CodexBackend(Backend):
                 "external": True,
                 "ready": ready,
                 "why": why,
+                # So Curatarr can say when it resets, and count down to it.
+                "limited_until": self.limited_until
+                if self.limited_until > time.time()
+                else None,
             }
         ]
 
@@ -200,10 +241,22 @@ class CodexBackend(Backend):
             target=lambda: errors.append(process.stderr.read()), daemon=True
         )
         reader.start()
-        process.stdin.write(task["prompt"])
-        process.stdin.close()
-        thread_id, last_message = None, ""
+        # Reading its output only notices the time when a line arrives; a
+        # Codex that hangs without a word would never time out. The timer
+        # ends it, which ends the read below.
+        timed_out = threading.Event()
+
+        def give_up():
+            timed_out.set()
+            process.kill()
+
+        timer = threading.Timer(timeout, give_up)
+        timer.daemon = True
+        timer.start()
+        thread_id, last_message, failure = None, "", ""
         try:
+            process.stdin.write(task["prompt"])
+            process.stdin.close()
             for line in process.stdout:
                 try:
                     event = json.loads(line)
@@ -214,32 +267,46 @@ class CodexBackend(Backend):
                 item = event.get("item") or {}
                 if item.get("type") == "agent_message":
                     last_message = item.get("text") or last_message
+                if event.get("type") == "error":  # it says why it stopped
+                    failure = str(event.get("message") or "") or failure
+                elif event.get("type") == "turn.failed":
+                    failure = str((event.get("error") or {}).get("message") or "")
+                    failure = failure or "its turn failed"
                 elapsed = time.time() - started
                 progress(min(90, 10 + int(elapsed / 3)), "Codex is making it")
                 if elapsed > timeout:
                     raise Failed(f"Codex took longer than {timeout:.0f} seconds.")
             process.wait(timeout=max(1, timeout - (time.time() - started)))
-        except (Cancelled, Failed, subprocess.TimeoutExpired) as exc:
-            process.kill()
-            process.wait()
-            if isinstance(exc, subprocess.TimeoutExpired):
+            if timed_out.is_set():
+                raise Failed(f"Codex took longer than {timeout:.0f} seconds.")
+        except subprocess.TimeoutExpired as exc:
+            raise Failed(f"Codex took longer than {timeout:.0f} seconds.") from exc
+        except BrokenPipeError as exc:  # it ended before reading the prompt
+            if timed_out.is_set():
                 raise Failed(f"Codex took longer than {timeout:.0f} seconds.") from exc
-            raise
         finally:
+            timer.cancel()
+            if process.poll() is None:  # cancelled, failed or timed out
+                process.kill()
+            process.wait()
             reader.join(timeout=5)
+            for pipe in (process.stdin, process.stdout, process.stderr):
+                pipe.close()
             shutil.rmtree(folder, ignore_errors=True)
         stderr = "".join(errors)
         limit = LIMIT.search(stderr)
         made = self._collect(thread_id, started)
         if made is None:
-            if limit:
-                self.limited_until = time.time() + int(limit.group(1))
+            said_limit = f"{failure} {last_message}"
+            if limit or LIMIT_SAID.search(said_limit):
+                wait = int(limit.group(1)) if limit else _reset_in(said_limit)
+                self.limited_until = time.time() + wait
                 self._status = None
                 raise Failed(
-                    "The ChatGPT plan's image allowance is used up; Curatarr will "
+                    "The ChatGPT plan's usage limit was reached; Curatarr will "
                     "try again when it resets.",
                     code="usage_limit",
-                    retry_after=int(limit.group(1)) + 60,
+                    retry_after=wait + 60,
                 )
             if "401" in stderr or "Unauthorized" in stderr:
                 self._status = None
@@ -249,7 +316,8 @@ class CodexBackend(Backend):
                     retry_after=3600,
                 )
             said = (
-                last_message.strip()[:300]
+                failure.strip()[:300]
+                or last_message.strip()[:300]
                 or (stderr.strip().splitlines() or [""])[-1][:300]
             )
             code = "safety" if SAFETY.search(f"{said} {stderr}") else None

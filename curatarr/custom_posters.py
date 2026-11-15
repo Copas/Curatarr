@@ -1924,11 +1924,16 @@ def plugin_list(version: int = 1) -> list[dict]:
 
 
 def plugin_picture(
-    entry_id: str, large: bool = False, wide: bool = False
+    entry_id: str, large: bool = False, wide: bool = False, plain: bool = False
 ) -> bytes | None:
     """The picture for one of plugin_list's entries, or None if it's gone.
     ``large``: a ribbon as shown big (on a title's own page), with names.
-    ``wide``: the picture made landscape, for rows of wide tiles."""
+    ``wide``: the picture made landscape, for rows of wide tiles.
+    ``plain``: the picture as made, with nothing drawn on (no favourite
+    ribbon, waiting mark or Leaving Soon banner), for uses outside
+    Jellyfin such as a desktop wallpaper."""
+    if plain:
+        return _plain_picture(entry_id)
     if wide:
         from .artwork import widen
 
@@ -1991,6 +1996,52 @@ def plugin_picture(
         large=large and kind == "v",
         leaving=leaving,
     )
+
+
+def _plain_picture(entry_id: str) -> bytes | None:
+    """One of plugin_list's entries with nothing drawn on it."""
+    from .artwork import _jpeg, blurred_background, widen
+    from .services import client
+
+    prefix, _dot, rest = entry_id.partition(".")
+    kind = {k.lower(): k for k in KINDS[1:]}.get(prefix)
+    if kind:
+        viewer, _dot, media_id = rest.partition(".")
+        custom = active(media_id, viewer, kind)
+        if custom and Path(custom.image_path).exists():
+            return Path(custom.image_path).read_bytes()
+        made = fallbacks().get(kind, "own")
+        poster = _plain_picture(f"v.{viewer}.{media_id}") if made != "own" else None
+        if poster is None:
+            return None
+        if kind == "Backdrop":
+            return blurred_background(poster)
+        from .artwork import BANNER_SIZE
+
+        return widen(poster, BANNER_SIZE) if kind == "Banner" else widen(poster)
+    if prefix == "v":
+        viewer, _dot, media_id = rest.partition(".")
+        poster = active(media_id, viewer)
+        if poster and Path(poster.image_path).exists():
+            return Path(poster.image_path).read_bytes()
+        media = db.session.get(MediaIdentity, media_id)
+        if media is None or not media.jellyfin_id:
+            return None
+        return _jpeg(client("jellyfin").image(media.jellyfin_id))
+    if prefix == "e":
+        part = db.session.get(MediaPart, rest.partition(".")[2])
+        if part is None or not part.jellyfin_id:
+            return None
+        return _jpeg(client("jellyfin").image(part.jellyfin_id))
+    poster = db.session.get(CustomPoster, entry_id)
+    if (
+        not poster
+        or not poster.active
+        or poster.image_type != "Primary"
+        or not Path(poster.image_path).exists()
+    ):
+        return None
+    return Path(poster.image_path).read_bytes()
 
 
 def _poster_as_seen(viewer, media_id) -> bytes | None:

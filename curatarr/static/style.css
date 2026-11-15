@@ -282,6 +282,15 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .care-bar::-webkit-progress-value { background: var(--app-success); border-radius: 999px; }
 .care-bar::-moz-progress-bar { background: var(--app-success); border-radius: 999px; }
 .care-now { margin-top: 1.1rem; color: var(--app-muted); }
+/* Recently watched (a box per person) and Recently added. */
+.recent-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 1rem; }
+.recent-scroll { max-height: 18rem; overflow-y: auto; padding-right: .4rem; }
+.recent-item { display: flex; justify-content: space-between; align-items: baseline; gap: .9rem; padding: .5rem 0; font-size: .9rem; }
+.recent-item + .recent-item { border-top: 1px solid var(--app-border); }
+.recent-item .needs-text small { font-size: .78rem; }
+.recent-when { color: var(--app-muted); font-size: .78rem; white-space: nowrap; flex: none; }
+.recent-state { color: var(--app-muted); margin-right: .35rem; vertical-align: -2px; }
+.recent-state.is-finished { color: var(--app-success); }
 @media (max-width: 575.98px) {
   .needs-item { flex-wrap: wrap; }
   /* Rows with buttons put them on their own line, under the description. */
@@ -449,6 +458,22 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .picture-wall-item figcaption { padding: .5rem .2rem 0; font-weight: 600; }
 .picture-wall-item figcaption a { color: inherit; text-decoration: none; }
 .picture-wall-item figcaption a:hover { text-decoration: underline; }
+.compare-wall { display: grid; gap: 1.75rem 1.5rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 760px), 1fr)); }
+.compare-wall-primary { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+.compare-pair { margin: 0; }
+.compare-title { margin: 0 0 .5rem; font-weight: 600; }
+.compare-title a { color: inherit; text-decoration: none; }
+.compare-title a:hover { text-decoration: underline; }
+.compare-sides { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.compare-side { margin: 0; }
+.compare-side figcaption { padding: .35rem .2rem 0; font-size: .875rem; color: var(--bs-secondary-color); }
+.compare-wall-primary .picture-wall-open img { aspect-ratio: 2 / 3; }
+.compare-wall-banner .picture-wall-open img { aspect-ratio: 1000 / 185; }
+.compare-missing { display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 9; cursor: default; }
+.compare-wall-primary .compare-missing { aspect-ratio: 2 / 3; }
+.compare-wall-banner .compare-missing { aspect-ratio: 1000 / 185; }
+.compare-missing::after { content: "No original found"; color: #bbb; font-size: .875rem; }
+@media (max-width: 575.98px) { .compare-wall-thumb .compare-sides, .compare-wall-backdrop .compare-sides, .compare-wall-banner .compare-sides { grid-template-columns: 1fr; } }
 /* A title's own Gallery page: background and logo as a full-width hero, then the rest. */
 body:has(.title-show) { overflow-x: clip; }
 .title-show { margin-top: -1.25rem; }
@@ -501,6 +526,7 @@ body:has(.title-show) { overflow-x: clip; }
 .artwork-stat-number { font-size: 1.5rem; font-weight: 650; line-height: 1.1; }
 .artwork-stat-label { font-size: .8rem; color: var(--app-muted); }
 .artwork-stat-attention { border-color: var(--app-warning); }
+.artwork-limit { grid-column: 1 / -1; padding: .75rem 1rem; border: 1px solid var(--app-warning); border-left-width: .3rem; border-radius: .75rem; background: var(--app-surface); }
 .artwork-stat-problem { border-color: var(--app-danger); }
 @media (hover: hover) { .artwork-stat:hover { border-color: var(--app-accent); } }
 .artwork-state { background: var(--app-raised); color: var(--bs-body-color); border: 1px solid var(--app-border); font-weight: 550; }
@@ -573,3 +599,30 @@ summary.section-title { display: list-item; cursor: pointer; }
 .action-row > :first-child { flex: 1 1 18rem; min-width: 0; }
 .action-row > :not(:first-child) { margin-left: auto; }
 .poster-tile .tile-link { position: relative; z-index: 2; }
+/* Overview's Recently added: slow, endless reels of posters (recent-reel.js),
+   moved by scrolling them, so the scroll bar works as usual. */
+.reel { padding: 1rem 0 .6rem 1rem; overflow-x: auto; overflow-y: hidden; scroll-behavior: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--app-muted) 55%, transparent) transparent; }
+.reel::-webkit-scrollbar { height: 8px; }
+.reel::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--app-muted) 55%, transparent); border-radius: 999px; }
+.reel:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+.reel-track { display: flex; width: max-content; }
+.reel-item { width: 7.5rem; margin-right: 1rem; padding-bottom: .4rem; flex: none; display: flex; flex-direction: column; gap: .3rem; }
+.reel-link { display: flex; flex-direction: column; gap: .4rem; color: var(--bs-emphasis-color); text-decoration: none; }
+.reel-link:hover .reel-title, .reel-link:focus-visible .reel-title { text-decoration: underline; }
+.reel-art { position: relative; display: block; aspect-ratio: 2 / 3; border-radius: .45rem; overflow: hidden; background: var(--app-bg); box-shadow: 0 .3rem .9rem rgba(0, 0, 0, .25); transition: transform .25s ease; }
+.reel-link:hover .reel-art, .reel-link:focus-visible .reel-art { transform: translateY(-3px) scale(1.03); }
+.reel-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.reel-fallback { display: none; position: absolute; inset: 0; padding: .6rem; align-items: center; justify-content: center; text-align: center; font-weight: 600; font-size: .85rem; color: var(--app-muted); }
+.reel-art.no-art img { display: none; }
+.reel-art.no-art .reel-fallback { display: flex; }
+.reel-title { font-size: .85rem; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.reel-meta { color: var(--app-muted); font-size: .75rem; }
+/* Posters → Generate: who's in the pictures, a tick for each person. */
+.cast-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: .75rem; }
+.cast-person { position: relative; display: flex; flex-direction: column; gap: .2rem; padding: .5rem; border: 1px solid var(--app-border); border-radius: .6rem; cursor: pointer; background: var(--app-surface); }
+.cast-person:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.cast-person.is-chosen { border-color: var(--app-accent); box-shadow: 0 0 0 1px var(--app-accent); }
+.cast-person input { position: absolute; top: .9rem; left: .9rem; margin: 0; }
+.cast-person img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: .4rem; background: var(--app-bg); }
+.cast-name { font-weight: 600; font-size: .9rem; }
+.cast-count { color: var(--app-muted); font-size: .75rem; }

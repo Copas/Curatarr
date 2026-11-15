@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
-{% block title %}Chapters · {{ media.title }} · Curatarr{% endblock %}
+{% block title %}Chapters · {{ media|labelled }} · Curatarr{% endblock %}
 {% set labels = {'semantic': 'Smart (semantic)', 'scene_aligned': 'Scene-aligned', 'fixed': 'Fixed interval'} %}
 {% block content %}
-<div class="eyebrow"><a href="{{ url_for('main.title', media_id=media.id) }}">{{ media.title }}</a>{% if part.kind == 'episode' %} · S{{ '%02d'|format(part.season_number or 0) }}E{{ '%02d'|format(part.episode_number or 0) }}{% endif %}</div><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h1 class="mb-0">Chapters</h1>{% set item = part.jellyfin_id if part.kind == 'episode' and part.jellyfin_id else media.jellyfin_id %}{% if jellyfin_url(item) %}<a class="btn btn-sm btn-outline-secondary" href="{{ jellyfin_url(item) }}" target="_blank" rel="noopener">Open in Jellyfin</a>{% endif %}</div>
+<div class="eyebrow"><a href="{{ url_for('main.title', media_id=media.id) }}">{{ media|labelled }}</a>{% if part.kind == 'episode' %} · S{{ '%02d'|format(part.season_number or 0) }}E{{ '%02d'|format(part.episode_number or 0) }}{% endif %}</div><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h1 class="mb-0">Chapters</h1>{% set item = part.jellyfin_id if part.kind == 'episode' and part.jellyfin_id else media.jellyfin_id %}{% if jellyfin_url(item) %}<a class="btn btn-sm btn-outline-secondary" href="{{ jellyfin_url(item) }}" target="_blank" rel="noopener">Open in Jellyfin</a>{% endif %}</div>
 <div class="card p-3 mb-4"><div class="row g-3">
   <div class="col-6 col-md-3"><div class="text-secondary small">Chapters</div><div class="h5 mb-0">{{ info.label }}</div></div>
   <div class="col-6 col-md-3"><div class="text-secondary small">Source</div><div class="h5 mb-0">{{ info.source }}</div></div>
@@ -20,6 +20,7 @@
   <form method="post" action="{{ url_for('main.chapter_part_action', part_id=part.id, action='subtitles') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary"{% if info.queued %} disabled{% endif %} data-tip="Writes an English subtitle file next to this video from its transcript, for Jellyfin to offer.">{{ 'Regenerate subtitles' if info.subtitles_ours else 'Generate subtitles' }}</button></form>
   {% if info.subtitles_ours %}<form method="post" action="{{ url_for('main.chapter_part_action', part_id=part.id, action='remove_subtitles') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-danger"{% if info.queued %} disabled{% endif %} data-tip="Deletes the subtitle file Curatarr made. Subtitles from anywhere else are left alone.">Remove generated subtitles</button></form>{% endif %}
 </div>
+{% if state and entries(state) %}<div class="mt-3 pt-3 border-top border-secondary-subtle"><div class="text-secondary small mb-1">English subtitles beside the file</div>{% set back_to = request.path %}{% include '_subtitle_card.html' %}</div>{% endif %}
 {% if identity_on and state and state.identity_issue and state.identity_issue.kind in ('episode', 'audio') and not state.identity_issue.dismissed %}<div class="alert alert-warning mt-3 mb-0">{% if state.identity_issue.kind == 'audio' %}The default audio is in “{{ state.identity_issue.language }}”, not English.{% else %}What's said in this file fits S{{ '%02d'|format(state.identity_issue.season) }}E{{ '%02d'|format(state.identity_issue.fits) }} {{ state.identity_issue.margin }}× better than this episode's own summary; it may be misfiled.{% endif %} <a href="{{ url_for('main.chapter_identity') }}">Details</a></div>{% endif %}
 {% if part.kind == 'episode' %}<div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top border-secondary-subtle"><span class="me-2"><span class="text-secondary small">Skip markers:</span>
   {% if state and state.markers_checked_at %}
@@ -57,4 +58,5 @@
 <pre class="mt-2 overflow-auto"><code>{{ preview.write.command|join(' ') }}</code></pre><pre class="overflow-auto"><code>{{ preview.write.chapter_file }}</code></pre>
 <p class="small text-secondary">In place with mkvpropedit; nothing is re-encoded or remuxed. Streams, duration, and the chapters are verified afterwards.{% if preview.writable != 'yes' %} Right now it could not be written: {{ preview.writable }}{% endif %}</p></details>{% endif %}
 {% endif %}
+{% if state and entries(state) %}<script src="{{ url_for('static', filename='artwork-actions.js', v='4') }}"></script>{% endif %}
 {% endblock %}

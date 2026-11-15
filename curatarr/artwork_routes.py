@@ -20,6 +20,7 @@ from flask import (
     send_file,
     url_for,
 )
+from sqlalchemy import case
 from sqlalchemy.exc import OperationalError
 
 from . import artwork_jobs, artwork_prompts, custom_posters, db
@@ -189,6 +190,8 @@ def _common() -> dict:
         "job_key": artwork_jobs.job_key,
         "head_key": artwork_jobs.head_key,
         "overview": artwork_jobs.overview(),
+        "usage_limit": artwork_jobs.usage_limit(),
+        "resets_at": artwork_jobs.resets_at,
         "kinds": custom_posters.KINDS,
         "kind_names": custom_posters.KIND_NAMES,
         "approaches": artwork_prompts.APPROACHES,
@@ -265,11 +268,60 @@ def artwork_generate():
         chosen=chosen,
         photos=photos,
         people=artwork_prompts.people_in(photos),
+        most_people=artwork_prompts.MAX_PEOPLE,
         accounts=_accounts(),
         workers=db.session.query(ArtworkWorker).order_by(ArtworkWorker.name).all(),
         engine_label=_engine_label,
         **_common(),
     )
+
+
+@bp.get("/library/posters/generate/people")
+def artwork_people():
+    """Who's in a reference photos folder, for Generate's cast picker."""
+    folder = (request.args.get("folder") or "").strip()
+    people = artwork_prompts.people_in(folder)
+    return jsonify(
+        {
+            "folder": folder,
+            "found": bool(folder) and Path(folder).is_dir(),
+            "most": artwork_prompts.MAX_PEOPLE,
+            "people": [
+                {
+                    "name": name,
+                    "photos": len(files),
+                    "thumb": url_for(
+                        "main.artwork_person_photo", folder=folder, name=name
+                    ),
+                }
+                for name, files in people.items()
+            ],
+        }
+    )
+
+
+@bp.get("/library/posters/generate/people/photo")
+def artwork_person_photo():
+    """A small copy of someone's first reference photo. Only a photo the
+    folder's listing names (people_in), so this can't read other files."""
+    from io import BytesIO
+
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    folder = (request.args.get("folder") or "").strip()
+    files = artwork_prompts.people_in(folder).get(request.args.get("name") or "")
+    if not files:
+        abort(404)
+    try:
+        with Image.open(files[0]) as image:
+            image = ImageOps.exif_transpose(image).convert("RGB")
+            image.thumbnail((240, 240))
+            out = BytesIO()
+            image.save(out, format="JPEG", quality=85)
+    except (OSError, UnidentifiedImageError):
+        abort(404)
+    out.seek(0)
+    return send_file(out, mimetype="image/jpeg", max_age=3600)
 
 
 @bp.get("/library/posters/generate/find")
@@ -294,7 +346,7 @@ def artwork_find_titles():
             "titles": [
                 {
                     "id": m.id,
-                    "title": m.title,
+                    "title": m.label,
                     "kind": "TV show" if m.media_type == "series" else "film",
                 }
                 for m in rows
@@ -428,10 +480,32 @@ def artwork_generate_submit():
 
 
 def _jobs_query(state=None, purpose="library"):
+    """Jobs, newest first."""
     query = db.session.query(ArtworkJob).filter(ArtworkJob.purpose == purpose)
     if state:
         query = query.filter(ArtworkJob.state == state)
     return query.order_by(ArtworkJob.created_at.desc())
+
+
+def _queue_order(state=None, purpose="library"):
+    """Jobs in the order they're worked: those being made, then those
+    waiting as a worker picks them (moved up first, then oldest), then the
+    rest, newest first."""
+    query = db.session.query(ArtworkJob).filter(ArtworkJob.purpose == purpose)
+    if state:
+        query = query.filter(ArtworkJob.state == state)
+    group = case(
+        (ArtworkJob.state == "generating", 0),
+        (ArtworkJob.state == "pending", 1),
+        else_=2,
+    )
+    queued = ArtworkJob.state.in_(("generating", "pending"))
+    return query.order_by(
+        group,
+        case((queued, ArtworkJob.priority), else_=0).desc(),
+        case((queued, ArtworkJob.created_at), else_=None),
+        ArtworkJob.created_at.desc(),
+    )
 
 
 @bp.get("/library/posters/jobs", endpoint="artwork_jobs")
@@ -439,7 +513,7 @@ def artwork_jobs_page():
     state = request.args.get("state") or None
     if state and state not in artwork_jobs.JOB_STATE_NAMES:
         state = None
-    query = _jobs_query(state)
+    query = _queue_order(state)
     total = query.count()
     page = _page()
     jobs = query.offset((page - 1) * PER_PAGE).limit(PER_PAGE).all()
@@ -541,16 +615,21 @@ def artwork_review():
         .order_by(ArtworkImage.finished_at)
     )
     total = query.count()
-    page = _page()
+    pages = max(1, -(-total // PER_PAGE))
+    # Dealt-with pictures leave the list, so a later page can run out: show
+    # the last one that has any.
+    page = min(_page(), pages)
     images = query.offset((page - 1) * PER_PAGE).limit(PER_PAGE).all()
     return render_template(
-        "artwork_review.html",
+        "_artwork_review_list.html"
+        if request.args.get("fragment")
+        else "artwork_review.html",
         images=images,
         existing_by_image={i.id: _existing(i.job, i.kind) for i in images},
         versions=_versions(images),
         account_list=_accounts(),
         page=page,
-        pages=max(1, -(-total // PER_PAGE)),
+        pages=pages,
         total=total,
         engine_label=_engine_label,
         **_common(),

@@ -220,16 +220,18 @@ def check(state, part, original) -> dict:
         raise ValueError("The file has no audio")
     config, opts = e.config_for(part.media.library_id), e.options()
     model = e._language_model(config, opts)
+    speech = {}
     samples = dubs.listen(
         info,
         tracks,
         opts["whisper_device"],
         config["semantic"]["model"],
         make_room=getattr(model, "unload", None),
+        speech=speech,
     )
     heard = {track: dubs.heard(samples.get(track, [])) for track in tracks}
-    result = dubs.plan(info.streams, heard)
-    result.update(original=original, applied=[], samples=samples)
+    result = dubs.plan(info.streams, heard, speech, samples)
+    result.update(original=original, applied=[], samples=samples, speech=speech)
     if result["actions"]:
         writable, reason = can_write(info)
         if writable:
@@ -415,13 +417,13 @@ def replace(state) -> str:
         )
     radarr = client("radarr")
     movie = radarr.movie(media.radarr_id)
-    grabs = radarr.grabs(media.radarr_id)
+    grab = radarr.current_grab(movie)
     blocklisted = (state.dub_result or {}).get("blocklisting")
     # A retry (after a slow delete) mustn't blocklist again: by then the
     # latest grab is the new copy.
-    if grabs and not blocklisted:
-        radarr.mark_failed(grabs[0]["id"])
-        blocklisted = grabs[0].get("sourceTitle") or True
+    if grab and not blocklisted:
+        radarr.mark_failed(grab["id"])
+        blocklisted = grab.get("sourceTitle") or True
         state.dub_result = {**(state.dub_result or {}), "blocklisting": blocklisted}
         db.session.commit()
     if blocklisted is True:

@@ -489,3 +489,25 @@ def test_the_gallery_shows_each_titles_set_once(app, client, monkeypatch):
     assert "0 titles with wide tiles" in tiles  # it has none
     empty = custom_posters.showcase()
     assert set(empty[0]["pictures"]) == {"Primary", "Backdrop", "Logo"}
+
+
+def test_the_gallery_puts_each_original_beside_what_was_made(app, client, monkeypatch):
+    _library, media, _part = _movie("/movies/The Big Lebowski (1998)/Film.mkv")
+    media.title, media.year = "The Big Lebowski", 1998
+    db.session.commit()
+    _fake(monkeypatch, Primary=_picture("#223344"))
+    custom_posters.apply(media, _picture("#cc2222"), "Uploaded")
+    page = client.get("/library/posters/gallery?view=compare").text
+    assert "Before &amp; after" in page and 'class="compare-pair"' in page
+    assert "1 title with posters made for them" in page
+    own = f"/library/posters/original/{media.id}/Primary"
+    assert own in page and "its original poster" in page
+    # The original is the picture it replaced, not the one made.
+    shown = Image.open(BytesIO(client.get(own).data)).convert("RGB")
+    assert shown.getpixel((5, 5))[2] > shown.getpixel((5, 5))[0]  # blue, not red
+    # One type at a time: it has no background made.
+    none = client.get("/library/posters/gallery?view=compare&kind=Backdrop").text
+    assert "0 titles with backgrounds" in none
+    odd = client.get("/library/posters/gallery?view=compare&kind=Nope").text
+    assert "with posters made for them" in odd
+    assert client.get(f"/library/posters/original/{media.id}/Nope").status_code == 404

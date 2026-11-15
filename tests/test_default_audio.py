@@ -177,6 +177,10 @@ class _Arr:
         return []
 
 
+class _Listened(list):
+    talk: dict
+
+
 def _language_setup(monkeypatch, heard):
     monkeypatch.setattr(enrichment, "probe", probe)
     monkeypatch.setattr(enrichment, "file_exists", lambda p: True)
@@ -190,13 +194,18 @@ def _language_setup(monkeypatch, heard):
     monkeypatch.setattr("curatarr.thumbnails.room", lambda **kw: True)
     monkeypatch.setattr("curatarr.thumbnails.has_thumbnails", lambda *a: False)
     monkeypatch.setattr("curatarr.thumbnails.note_rebuilt", lambda *a: None)
-    listened = []
+    listened = _Listened()
 
-    def listen(info, tracks, device, model, make_room=None):
+    def listen(info, tracks, device, model, make_room=None, speech=None):
         listened.append(tracks)
+        if speech is not None:
+            speech.update(talk)
         return {track: [(heard, 0.9)] * 5 for track in tracks}
 
+    talk = {}
+
     monkeypatch.setattr(default_audio.dubs, "listen", listen)
+    listened.talk = talk
     return listened
 
 
@@ -210,7 +219,7 @@ def test_english_heard_becomes_the_default(app, media_env, monkeypatch, tmp_path
     audio = [s for s in probe(path).streams if s["codec_type"] == "audio"]
     assert [s["default"] for s in audio] == [True, False]
     assert default_audio.hear() == 1
-    assert listened == [[audio[1]["index"]]]
+    assert listened == [[audio[1]["index"], audio[0]["index"]]]  # and the other
     # The file is copied in the background, not in the cycle.
     assert default_audio.sweep() == 0
     assert len([s for s in probe(path).streams if s["codec_type"] == "audio"]) == 2
@@ -436,6 +445,32 @@ def test_other_languages_go_once_english_is_heard(
     )
     assert "removed audio in jpn" in action.reason_text
     assert default_audio.sweep() == 0 and default_audio.hear() == 0
+
+
+@pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvmerge")), reason="needs FFmpeg")
+def test_an_english_commentary_isnt_taken_for_english_audio(
+    app,
+    media_env,  # noqa: F811
+    monkeypatch,
+    tmp_path,
+):
+    """An unnamed commentary is heard as English; removing the Japanese
+    soundtrack then left the film with only the commentary."""
+    path = str(tmp_path / "Film.mkv")
+    _english_first(path)
+    _movie(path)
+    listened = _language_setup(monkeypatch, "en")
+    _english_only()
+    # Talking all through, where the film has quiet stretches.
+    listened.talk.update({1: [0.98, 1.0, 0.95, 1.0, 0.9], 2: [0.9, 0.1, 0.4, 0.0, 0.6]})
+    default_audio.sweep()
+    assert default_audio.hear() == 1
+    assert listened == [[1, 2, 3]]  # the other tracks too, to compare
+    state = db.session.query(ChapterState).one()
+    assert state.default_audio["not_english"] == "commentary"
+    default_audio.sweep()
+    default_audio.move_first()
+    assert _languages(path) == ["eng", "jpn", None]
 
 
 @pytest.mark.skipif(not (tool("ffmpeg") and tool("mkvmerge")), reason="needs FFmpeg")

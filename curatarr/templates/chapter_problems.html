@@ -33,7 +33,7 @@
 <p class="text-secondary small">Sonarr matches releases by name, so a show can end up with episodes of a different show called the same thing, like a Hong Kong series under an American sitcom.</p>
 {% for row in wrong_shows %}<div class="card p-3 mb-3" data-wrong-version="{{ row.media.id }}">
   <div class="d-flex flex-wrap justify-content-between gap-2">
-    <div><a class="h5" href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media.id) }} <span class="text-secondary small">{{ row.media.library.name }}</span></div>
+    <div><a class="h5" href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media|labelled }}</a>{{ jellyfin_link_for(row.media.id) }} <span class="text-secondary small">{{ row.media.library.name }}</span></div>
     <div class="d-flex flex-wrap gap-2 align-items-center">{{ replace_actions('main.wrong_version_action', {'media_id': row.media.id}, row.status, row.checked_at, replace_label='Replace ' ~ (row.files|length) ~ ' file' ~ ('' if row.files|length == 1 else 's'), replace_tip="Checks Sonarr can find the right show first; only then blocklists these releases, deletes the files and grabs the right ones." ~ (' Sonarr is also told to ignore releases mentioning ' ~ row.year ~ ' for this show.' if row.year else ''), keep_tip="These are the right show's episodes; stop listing it until its files change.") }}</div>
   </div>
   <ul class="mt-2 mb-0">{% for line in row.evidence %}<li class="text-break">{{ line }}.</li>{% endfor %}</ul>
@@ -43,7 +43,7 @@
 <p class="text-secondary small">Every show keeps its first episodes, even when nobody's watching. These never downloaded: every release failed, or none matched the show.</p>
 {% for row in missing_shows %}<div class="card p-3 mb-3" data-missing-show="{{ row.media.id }}">
   <div class="d-flex flex-wrap justify-content-between gap-2">
-    <div><a class="h5" href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media.title }}</a>{{ jellyfin_link_for(row.media.id) }} <span class="text-secondary small">{{ row.media.library.name }}</span></div>
+    <div><a class="h5" href="{{ url_for('main.title', media_id=row.media.id) }}">{{ row.media|labelled }}</a>{{ jellyfin_link_for(row.media.id) }} <span class="text-secondary small">{{ row.media.library.name }}</span></div>
     <div class="d-flex flex-wrap gap-2 align-items-center">{{ search_actions(row.media.id, row.state, row.searched) }}</div>
   </div>
   <p class="mb-1 mt-2">Missing {{ row.codes }}.</p>
@@ -74,5 +74,5 @@
 </div>
 {% else %}<div class="empty-state"><h2 class="h6">Nothing to look at</h2><p class="mb-0">{{ 'No problems found in the files checked so far.' if found.files_checked else 'Files are checked in the background, a few at a time, and listed here if something is wrong.' }}</p></div>{% endfor %}
 </div>
-<script src="{{ url_for('static', filename='live-page.js', v='2') }}"></script>
+<script src="{{ url_for('static', filename='live-page.js', v='4') }}"></script>
 {% endblock %}

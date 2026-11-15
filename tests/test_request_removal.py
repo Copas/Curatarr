@@ -316,3 +316,61 @@ def test_only_viewing_after_it_was_marked_cancels(app, radarr):
         assert candidate.state == "LEAVING_SOON"
         played("later", utcnow() + timedelta(seconds=1))
         assert candidate.state == "RESCUED"
+
+
+def test_delete_now_on_the_title_page_deletes_through_radarr(
+    app, client, radarr, monkeypatch
+):
+    monkeypatch.setattr("curatarr.artwork.reconcile_artwork", lambda: None)
+    with app.app_context():
+        media_id = _film().id
+    page = client.get(f"/titles/{media_id}").text
+    assert "Delete now" in page and "/delete" in page
+    # The confirmation is required: a bare post deletes nothing.
+    assert client.post(f"/titles/{media_id}/delete").status_code == 400
+    response = client.post(
+        f"/titles/{media_id}/delete", data={"confirm": "delete"}, follow_redirects=True
+    )
+    assert "is being deleted" in response.text
+    with app.app_context():
+        candidate = db.session.query(PurgeCandidate).one()
+        assert candidate.state == "APPROVED"  # carried out beside the request
+        assert execute_approved(candidate.id) == "succeeded"
+        assert radarr.deleted == [42]
+        assert candidate.state == "COMPLETED"
+    page = client.get(f"/titles/{media_id}").text
+    assert f"/titles/{media_id}/delete" not in page  # nothing left to delete
+
+
+def test_delete_now_takes_a_film_already_leaving_soon(app, client, radarr, monkeypatch):
+    monkeypatch.setattr("curatarr.artwork.reconcile_artwork", lambda: None)
+    with app.app_context():
+        media = _film()
+        media_id = media.id
+        request_removal(media)
+    assert "this deletes it today instead" in client.get(f"/titles/{media_id}").text
+    client.post(f"/titles/{media_id}/delete", data={"confirm": "delete"})
+    with app.app_context():
+        assert db.session.query(PurgeCandidate).one().state == "APPROVED"
+
+
+def test_delete_now_respects_never_purge(app, client, radarr, monkeypatch):
+    from curatarr.models import TitleOverride
+
+    monkeypatch.setattr("curatarr.artwork.reconcile_artwork", lambda: None)
+    with app.app_context():
+        media = _film()
+        media_id = media.id
+        db.session.add(
+            TitleOverride(
+                media_identity_id=media.id, override_json={"never_purge": True}
+            )
+        )
+        db.session.commit()
+    assert "Delete now" not in client.get(f"/titles/{media_id}").text
+    response = client.post(
+        f"/titles/{media_id}/delete", data={"confirm": "delete"}, follow_redirects=True
+    )
+    assert "Never Purge is on" in response.text
+    with app.app_context():
+        assert db.session.query(PurgeCandidate).count() == 0

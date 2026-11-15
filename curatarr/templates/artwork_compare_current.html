@@ -4,7 +4,7 @@
 <header class="page-heading"><div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_page') }}">Posters</a></div><h1>Which do you like better?</h1><p class="text-secondary mb-0">A title's picture as it is now, and one a worker made for the same title, in random order. Which is which is shown after you choose. Nothing changes in Jellyfin here.</p></div></header>
 {% set here = 'main.artwork_compare' %}{% include '_posters_nav.html' %}
 {% if matchup %}{% set c, current, new_left = matchup %}{% set job = c.image.job %}
-<p class="mb-2"><strong>{{ job.media.title }}</strong>: its {{ kind_names[c.image.kind] }} · {{ remaining }} left to compare</p>
+<p class="mb-2"><strong>{{ job.media|labelled }}</strong>: its {{ kind_names[c.image.kind] }} · {{ remaining }} left to compare</p>
 <form method="post" action="{{ url_for('main.artwork_compare_choose') }}" id="compare-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="candidate" value="{{ c.id }}"><input type="hidden" name="current" value="{{ current.id }}"><input type="hidden" name="new_left" value="{{ '1' if new_left else '0' }}">
   {% set new_src = url_for('main.artwork_candidate_image', candidate_id=c.id, ext='png' if c.has_alpha else 'jpg') %}{% set old_src = url_for('main.artwork_compare_current_image', poster_id=current.id) %}
   {% set sides = [(new_src, 'new'), (old_src, 'current')] if new_left else [(old_src, 'current'), (new_src, 'new')] %}
@@ -21,7 +21,7 @@
     {% for kind in kinds if kind in r.kinds %}{% set t = r.kinds[kind] %}<tr><td>{{ kind_names[kind]|capitalize }}s</td><td class="text-end">{{ t.new }}</td><td class="text-end">{{ t.current }}</td><td class="text-end">{{ t.tie }}</td></tr>{% endfor %}
     {% for engine, t in r.engines.items() %}<tr><td>Made by {{ engine_label(engine) }}</td><td class="text-end">{{ t.new }}</td><td class="text-end">{{ t.current }}</td><td class="text-end">{{ t.tie }}</td></tr>{% endfor %}</tbody></table></div>
   {% if r.preferred %}<h3 class="h6 mt-2">New ones you preferred ({{ r.preferred|length }})</h3><p class="small text-secondary">Open one to put it on in place of the current one.</p>
-  <div class="artwork-versions">{% for choice in r.preferred[:60] %}{% set cc = choice.candidate %}<figure class="mb-0"><a href="{{ url_for('main.artwork_job', job_id=cc.image.job_id) }}#image-{{ cc.image_id }}"><img class="artwork-ref{{ ' artwork-checker' if cc.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=cc.id, ext='png' if cc.has_alpha else 'jpg') }}" alt="{{ cc.image.job.media.title }}, its {{ kind_names[cc.image.kind] }}" loading="lazy"></a><figcaption class="small text-secondary">{{ cc.image.job.media.title }}</figcaption></figure>{% endfor %}</div>{% endif %}
+  <div class="artwork-versions">{% for choice in r.preferred[:60] %}{% set cc = choice.candidate %}<figure class="mb-0"><a href="{{ url_for('main.artwork_job', job_id=cc.image.job_id) }}#image-{{ cc.image_id }}"><img class="artwork-ref{{ ' artwork-checker' if cc.has_alpha }}" src="{{ url_for('main.artwork_candidate_image', candidate_id=cc.id, ext='png' if cc.has_alpha else 'jpg') }}" alt="{{ cc.image.job.media|labelled }}, its {{ kind_names[cc.image.kind] }}" loading="lazy"></a><figcaption class="small text-secondary">{{ cc.image.job.media|labelled }}</figcaption></figure>{% endfor %}</div>{% endif %}
 </section>{% endif %}
 <script src="{{ url_for('static', filename='lightbox.js', v='1') }}"></script>
 <script src="{{ url_for('static', filename='compare-keys.js', v='1') }}"></script>
