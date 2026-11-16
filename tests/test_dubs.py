@@ -525,3 +525,18 @@ def test_a_file_imported_by_hand_doesnt_blocklist_an_older_grab():
         "movieFile": {"relativePath": "Film.2020.Black.and.White.1080p.mkv"},
     }
     assert Radarr().current_grab(named)["id"] == 9
+
+
+def test_no_nvidia_packages_at_all_means_no_extra_library_path(monkeypatch):
+    """Without the GPU extras there's no "nvidia" package, and looking up
+    nvidia.cublas raised instead of finding nothing (the dub check failed)."""
+    import importlib.util
+
+    from curatarr import transcribe
+
+    def missing(name, *args, **kwargs):
+        raise ModuleNotFoundError(f"No module named {name.split('.')[0]!r}")
+
+    monkeypatch.setattr(importlib.util, "find_spec", missing)
+    monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
+    assert transcribe._cuda_library_path() == ""

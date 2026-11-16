@@ -165,7 +165,10 @@ def _cuda_library_path() -> str:
     """Directories of pip-installed CUDA runtime libraries (cuBLAS, cuDNN)."""
     directories = []
     for package in ("nvidia.cublas", "nvidia.cudnn"):
-        spec = importlib.util.find_spec(package)
+        try:
+            spec = importlib.util.find_spec(package)
+        except ModuleNotFoundError:  # no nvidia packages at all (no GPU extras)
+            continue
         if spec and spec.submodule_search_locations:
             for location in spec.submodule_search_locations:
                 lib = Path(location) / "lib"

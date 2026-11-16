@@ -674,7 +674,9 @@ def test_blank_stretches_are_found_wherever_they_fall(tmp_path, monkeypatch):
     monkeypatch.setattr(filecheck, "READ_CHUNK", 1 << 20)  # many chunk edges
     monkeypatch.setattr(filecheck, "_PROBE", bytes(4096))
     minimum = 300_000
-    data = bytearray(os.urandom(4_000_000))
+    # Random, but never zero: a zero byte beside a planted stretch would
+    # (rightly) lengthen it by one, and fail the test now and then.
+    data = bytearray(os.urandom(4_000_000).replace(b"\x00", b"\x01"))
     data[100_000:150_000] = bytes(50_000)  # padding: too short to count
     data[1_000_000:1_500_000] = bytes(500_000)  # across a chunk's end
     data[2_200_000:2_600_000] = bytes(400_000)  # inside a chunk

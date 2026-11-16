@@ -338,6 +338,9 @@ def test_delete_now_on_the_title_page_deletes_through_radarr(
         assert execute_approved(candidate.id) == "succeeded"
         assert radarr.deleted == [42]
         assert candidate.state == "COMPLETED"
+    # Requests in tests share the test's database session (in use each gets
+    # its own): drop what the first page load read, as a new request would.
+    db.session.expire_all()
     page = client.get(f"/titles/{media_id}").text
     assert f"/titles/{media_id}/delete" not in page  # nothing left to delete
 
