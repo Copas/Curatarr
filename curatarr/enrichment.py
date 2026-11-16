@@ -107,9 +107,12 @@ DEFER_MINUTES = 15
 LEASE_SECONDS = 600
 # Skip-marker checks run back to back in a slot, a batch per slot. Small, so
 # an episode someone starts watching is picked up within minutes, not after
-# a long batch.
-RECAP_BATCH = 10
-RECHECK_QUEUED = 5  # re-checks kept queued for the skip-marker slot
+# a long batch, and so the re-checks kept queued spread over several slots
+# (with 10 a batch and 5 queued, one slot took them all: two episodes were
+# checked at a time though eight were allowed, and a library-wide recheck
+# took days).
+RECAP_BATCH = 3
+RECHECK_QUEUED = 12  # re-checks kept queued for the skip-marker slots
 RECHECK_REST = timedelta(hours=6)  # before an episode is re-checked again
 SCAN_BATCH = 200
 IMPORT_COMMANDS = {
