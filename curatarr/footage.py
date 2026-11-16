@@ -7,7 +7,11 @@ Chromaprint fingerprint. A second of an episode is shared with another when
 - its picture is found there, *and* a nearby second is found there at the
   matching distance (footage plays in order; one matching frame is chance;
   dark and blank frames don't count), or
-- it's inside a run of identical sound.
+- its sound is found there: about a second of Chromaprint values within
+  SOUND_ERRORS of the same bits, with a nearby second found at the matching
+  distance too. Not identical: the same music under different credits, or
+  encoded twice, differs by a few bits, and an exact match broke off part way
+  through titles (dark title cards, credits on black).
 
 The intro is the stretch of SHARE or more of the season shared, MIN_LEN to
 MAX_LEN seconds long, in the first part of the episode, that overlaps Intro
@@ -20,6 +24,15 @@ edge moves out to the shared footage's, snapped to a cut, by at most WIDEN
 seconds. Intro Skipper's intros usually start a few seconds late and end a few
 early. On 28 episodes labelled by eye, its intros were right (both edges
 within 3 seconds) on 1 of 17; widened, on 11, and none skips into the show.
+
+Curatarr's own intro (own_intro) goes by the sound alone: the longest stretch
+of OWN_MIN to MAX_LEN seconds whose sound OWN_SHARE or more of the season
+shares. Pictures add false intros on their own (a dark night shot, a logo),
+and a music cue the score repeats is shared by fewer of the season than the
+titles are. On 64 episodes of 24 shows, it found all 38 title sequences
+(Intro Skipper: 32) and none where there wasn't one, each checked by eye or
+by agreeing with Intro Skipper. It's recorded
+beside Intro Skipper's for comparison; it doesn't change markers yet.
 """
 
 import hashlib
@@ -36,8 +49,10 @@ MAX_BITS = 6  # pictures this close (of 64 bits) are the same picture
 FLAT = 6.0  # thumbnails less varied than this are dark or blank
 SUPPORT_WITHIN = 4  # seconds to the nearby matching second
 SUPPORT_SLACK = 2  # how far its distance may differ (keyframes repeat)
-AUDIO_RUN_SECONDS = 1.5  # identical sound for this long is a run
-AUDIO_GAP_SECONDS = 1.0
+SOUND_WINDOW = 8  # Chromaprint values compared at a time (about a second)
+SOUND_ERRORS = 0.15  # of their bits may differ (unrelated sound: about 0.3)
+SOUND_SUPPORT = 2  # seconds to the nearby second found at the same distance
+SOUND_SLACK = 1.5  # seconds that distance may differ
 
 SHARE = 0.3  # of the other episodes
 BRIDGE = 4  # seconds not shared allowed inside a stretch
@@ -49,6 +64,9 @@ WIDEN = 10.0  # Intro Skipper's edges move out at most this far…
 MIN_MOVE = 1.0  # …and at least this far, or they're left as they are
 SIBLINGS = 10  # other episodes of the season compared (the nearest)
 MIN_SIBLINGS = 3
+OWN_SHARE = 0.5  # of the season, typically, has Curatarr's own intro's sound
+OWN_MIN = 15  # seconds; bumpers and stings are shorter
+OWN_BRIDGE = 6  # seconds not shared allowed inside it
 
 
 @dataclass
@@ -157,32 +175,49 @@ def _supported(matches: dict) -> set:
     return supported
 
 
-def _sound_seconds(here: Print, other: Print, seconds) -> set:
-    """Seconds of ``here`` inside an identical-sound run with ``other``."""
+def _sound_found(here: Print, other: Print, seconds) -> dict:
+    """{second: seconds in ``other`` where its sound is} for each second in
+    ``seconds`` whose next SOUND_WINDOW Chromaprint values are in ``other``
+    with at most SOUND_ERRORS of their bits different."""
+    import numpy as np
+
     if here.sound is None or other.sound is None:
-        return set()
-    step = here.sound_step
-    lo = int(seconds.start / step)
-    hi = min(len(here.sound), int(seconds.stop / step) + 1)
-    index: dict[int, list[int]] = {}
-    for j, value in enumerate(other.sound):
-        index.setdefault(int(value), []).append(j)
-    votes: dict[int, list[int]] = {}
-    for i in range(lo, hi):
-        for j in index.get(int(here.sound[i]), ()):
-            votes.setdefault(j - i, []).append(i)
-    run, gap = AUDIO_RUN_SECONDS / step, AUDIO_GAP_SECONDS / step
-    found = set()
-    for positions in votes.values():
-        positions.sort()
-        start = prev = positions[0]
-        for p in [*positions[1:], 10**9]:
-            if p - prev > gap:
-                if prev - start >= run:
-                    found.update(range(int(start * step), int(prev * step) + 1))
-                start = p
-            prev = p
+        return {}
+    step, theirs = here.sound_step, other.sound
+    n = len(theirs) - SOUND_WINDOW + 1
+    if n <= 0:
+        return {}
+    windows = theirs[np.arange(n)[:, None] + np.arange(SOUND_WINDOW)[None, :]]
+    most = SOUND_ERRORS * 32 * SOUND_WINDOW
+    found = {}
+    for i in seconds:
+        k = int(i / step)
+        mine = here.sound[k : k + SOUND_WINDOW]
+        if len(mine) < SOUND_WINDOW:
+            continue
+        errors = np.bitwise_count(windows ^ mine[None, :]).sum(axis=1)
+        at = np.nonzero(errors <= most)[0]
+        if len(at):
+            found[i] = at * other.sound_step
     return found
+
+
+def _sound_seconds(here: Print, other: Print, seconds) -> set:
+    """Seconds of ``here`` whose sound ``other`` has, backed by a nearby
+    second found at the matching distance (one second alike is chance)."""
+    import numpy as np
+
+    found = _sound_found(here, other, seconds)
+    backed = set()
+    for i, js in found.items():
+        for di in range(-SOUND_SUPPORT, SOUND_SUPPORT + 1):
+            if di == 0 or i + di not in found:
+                continue
+            diffs = found[i + di][None, :] - js[:, None] - di
+            if (np.abs(diffs) <= SOUND_SLACK).any():
+                backed.add(i)
+                break
+    return backed
 
 
 def share(here: Print, others: list, seconds):
@@ -199,17 +234,38 @@ def share(here: Print, others: list, seconds):
     return holders / max(len(others), 1)
 
 
-def blocks(shared) -> list[tuple[int, int]]:
+def blocks(shared, bridge=BRIDGE, least=MIN_LEN) -> list[tuple[int, int]]:
     """(start, end) seconds of each stretch shared by SHARE or more."""
     found: list[list[int]] = []
     for i, s in enumerate(shared):
         if s < SHARE:
             continue
-        if found and i - found[-1][1] <= BRIDGE:
+        if found and i - found[-1][1] <= bridge:
             found[-1][1] = i
         else:
             found.append([i, i])
-    return [(a, b + 1) for a, b in found if b + 1 - a >= MIN_LEN]
+    return [(a, b + 1) for a, b in found if b + 1 - a >= least]
+
+
+def own_intro(here: Print, others: list, duration: float) -> tuple[int, int] | None:
+    """Curatarr's own intro, from the sound alone (see the top of this file),
+    in seconds, or None when the season shares none."""
+    import numpy as np
+
+    if len(others) < MIN_SIBLINGS or here.sound is None:
+        return None
+    seconds = range(min(int(duration * EARLY), len(here.hashes)))
+    shared = np.zeros(len(seconds))
+    for other in others:
+        for i in _sound_seconds(here, other, seconds):
+            shared[i - seconds.start] += 1
+    shared /= len(others)
+    found = [
+        (a, b)
+        for a, b in blocks(shared, OWN_BRIDGE, OWN_MIN)
+        if b - a <= MAX_LEN and float(np.median(shared[a:b])) >= OWN_SHARE
+    ]
+    return max(found, key=lambda b: b[1] - b[0], default=None)
 
 
 def intro_block(

@@ -22,6 +22,7 @@ from .chapters import (
 )
 from .enrichment import (
     ACTION_LABELS,
+    INTRO_VERDICTS,
     describe,
     dismiss_identity,
     environment_status,
@@ -34,6 +35,7 @@ from .enrichment import (
     global_layer,
     identity_check_enabled,
     identity_issues,
+    intro_comparison,
     job_activity,
     library_layers,
     maintenance_summary,
@@ -548,8 +550,22 @@ def chapter_part_action(part_id, action):
 def chapter_markers():
     """Recent skip-marker changes to spot-check, each with an undo."""
     kind = request.args.get("kind") or None
-    if kind not in (None, "recap", "preview", "hidden"):
+    if kind not in (None, "recap", "preview", "hidden", "intros"):
         abort(404)
+    if kind == "intros":
+        verdict = request.args.get("verdict") or None
+        if verdict not in (None, *INTRO_VERDICTS):
+            abort(404)
+        counts, rows = intro_comparison(verdict)
+        return render_template(
+            "chapter_markers.html",
+            rows=rows,
+            kind=kind,
+            verdict=verdict,
+            counts=counts,
+            verdicts=INTRO_VERDICTS,
+            file_label=file_label,
+        )
     return render_template(
         "chapter_markers.html",
         rows=marker_review(kind),

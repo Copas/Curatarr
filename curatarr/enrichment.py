@@ -3983,6 +3983,28 @@ class _Episode:
         fingerprinting the nearest episodes of the season the first time."""
         from . import footage
 
+        prints = self.season_prints()
+        if prints is None:
+            return None
+        return footage.intro_block(*prints, self.info.duration, near)
+
+    def own_intro(self):
+        """Curatarr's own intro, from the sound alone (footage.own_intro)."""
+        from . import footage
+
+        prints = self.season_prints()
+        if prints is None:
+            return None
+        return footage.own_intro(*prints, self.info.duration)
+
+    def season_prints(self):
+        """(this episode's fingerprint, the nearest episodes'), made the first
+        time, or None with too few of them."""
+        from . import footage
+
+        if hasattr(self, "_season_prints"):
+            return self._season_prints
+        self._season_prints = None
         cache = cache_dir() / "fingerprints"
         rows = (
             db.session.query(MediaPart)
@@ -4010,7 +4032,8 @@ class _Episode:
         if len(others) < footage.MIN_SIBLINGS:
             return None
         mine = footage.fingerprint(self.info.path, self.info.duration, cache)
-        return footage.intro_block(mine, others, self.info.duration, near)
+        self._season_prints = (mine, others)
+        return self._season_prints
 
     def others(self, limit=12):
         """Other episodes' saved transcripts (whole or openings), nearest first."""
@@ -4417,8 +4440,11 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
-INTRO_RULE = 4  # how intros are widened (footage.py); raising it checks again
+INTRO_RULE = 5  # how intros are widened (footage.py); raising it checks again
 # 4: the marker starts skip_lead_seconds early, so the button shows in time
+# 5: sound alike, not only identical, counts as shared; and Curatarr's own
+#    intro (footage.own_intro) is recorded beside Intro Skipper's
+INTRO_DIFFERS = 5.0  # seconds an edge may differ and still agree
 
 
 def skip_lead(start: float) -> float:
@@ -4463,6 +4489,7 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
         except IntegrationError as exc:
             _log("intro_redo_failed", state_id=ep.state.id, error=str(exc))
             return None
+    _record_own_intro(ep, intros)
     if len(intros) != 1:
         return None  # none to widen, or two: left to Intro Skipper
     current = intros[0]
@@ -4517,6 +4544,49 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
     )
     _log("intro_widened", state_id=ep.state.id, start=wider[0], end=wider[1])
     return "intro widened"
+
+
+def _record_own_intro(ep, intros) -> None:
+    """Note Curatarr's own intro (footage.own_intro) beside Intro Skipper's,
+    for Enhance → Skip markers → Intro comparison. Nothing changes in
+    Jellyfin."""
+    from . import footage
+
+    theirs = [[round(i["Start"], 1), round(i["End"], 1)] for i in intros]
+    try:
+        if ep.season_prints() is None:
+            found = {"unknown": f"fewer than {footage.MIN_SIBLINGS} other episodes"}
+        else:
+            ours = ep.own_intro()
+            found = {"ours": list(ours) if ours else None}
+    except (ImportError, MediaToolError, RuntimeError, OSError, ValueError) as exc:
+        found = {"unknown": str(exc)[:200]}
+    found["theirs"] = theirs
+    found["verdict"] = intro_verdict(found)
+    ep.state.intro_found = found
+
+
+def intro_verdict(found: dict) -> str | None:
+    """How Curatarr's own intro compares with Intro Skipper's: "agree",
+    "missed" (Intro Skipper has none), "extra" (Curatarr finds none),
+    "edges" (both, an edge INTRO_DIFFERS or more apart), "elsewhere", or
+    None (neither has one, or Curatarr couldn't tell)."""
+    if "unknown" in found:
+        return None
+    ours, theirs = found.get("ours"), found.get("theirs") or []
+    if not ours:
+        return "extra" if theirs else None
+    if not theirs:
+        return "missed"
+    best = max(theirs, key=lambda t: min(t[1], ours[1]) - max(t[0], ours[0]))
+    if min(best[1], ours[1]) <= max(best[0], ours[0]):
+        return "elsewhere"
+    if (
+        abs(best[0] - ours[0]) < INTRO_DIFFERS
+        and abs(best[1] - ours[1]) < INTRO_DIFFERS
+    ):
+        return "agree"
+    return "edges"
 
 
 def _placed_credits(h) -> bool:
@@ -5097,6 +5167,37 @@ def marker_review(kind=None, limit=200) -> list[dict]:
                     }
                 )
     return rows[:limit]
+
+
+INTRO_VERDICTS = {
+    "missed": "Intro Skipper has none",
+    "extra": "Only Intro Skipper's",
+    "edges": "Edges differ",
+    "elsewhere": "Somewhere else",
+    "agree": "Agree",
+}
+
+
+def intro_comparison(verdict=None, limit=200) -> tuple[dict, list]:
+    """({verdict: episodes}, the episodes with ``verdict``, or every
+    disagreement, newest first): Curatarr's own intro beside Intro
+    Skipper's, from the episodes checked so far."""
+    counts = dict.fromkeys(INTRO_VERDICTS, 0)
+    rows = []
+    query = (
+        db.session.query(ChapterState)
+        .filter(ChapterState.intro_found.isnot(None))
+        .order_by(ChapterState.markers_checked_at.desc().nullslast())
+    )
+    for state in query:
+        found = state.intro_found or {}
+        v = found.get("verdict")
+        if v not in counts:
+            continue
+        counts[v] += 1
+        if len(rows) < limit and (v == verdict or (verdict is None and v != "agree")):
+            rows.append({"state": state, "verdict": v, **found})
+    return counts, rows
 
 
 def undo_marker(state: ChapterState, kind: str, segment_id: str | None = None) -> str:

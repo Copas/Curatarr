@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from curatarr import credits, footage
-from curatarr.enrichment import INTRO_RULE, _place_intro
+from curatarr.enrichment import INTRO_RULE, _place_intro, intro_verdict
 
 
 def _print(seconds, seed):
@@ -80,11 +80,13 @@ class FakePlugin:
         self.restored.append(segment_id)
 
 
-def _ep(block, rule=None):
+def _ep(block, rule=None, ours=None):
     return SimpleNamespace(
         info=SimpleNamespace(duration=2600.0, path="file"),
-        state=SimpleNamespace(id="state", intro_rule=rule),
+        state=SimpleNamespace(id="state", intro_rule=rule, intro_found=None),
         intro_block=lambda near=None: block,
+        season_prints=lambda: ("mine", ["others"]),
+        own_intro=lambda: ours,
     )
 
 
@@ -115,3 +117,123 @@ def test_intro_skippers_intro_is_replaced_by_a_wider_one(monkeypatch):
         plugin = FakePlugin()
         assert _place_intro(_ep(block), plugin, "item", intros, []) is None
         assert plugin.added == []
+
+
+PER_SECOND = 8  # Chromaprint values a second, near enough
+
+
+def _sounds(seconds, seed):
+    return np.random.default_rng(seed).integers(
+        0, 2**32, seconds * PER_SECOND, dtype=np.uint32
+    )
+
+
+def _noisy(values, seed, bits=2):
+    """``values`` with ``bits`` random bits of each flipped (encoded again)."""
+    rng = np.random.default_rng(seed)
+    out = values.copy()
+    for _ in range(bits):
+        out ^= np.left_shift(
+            np.uint32(1), rng.integers(0, 32, len(out)).astype(np.uint32)
+        )
+    return out
+
+
+def _heard(sound, seconds):
+    """A fingerprint with blank pictures (no evidence) and this sound."""
+    thumbs = np.zeros((seconds, footage.H, footage.W), np.uint8)
+    hashes, flat = footage.picture_hashes(thumbs)
+    return footage.Print(hashes, flat, sound)
+
+
+def test_sound_alike_but_not_identical_is_shared():
+    titles = _sounds(40, 1)
+    here, there = _sounds(600, 2), _sounds(600, 3)
+    here[60 * PER_SECOND : 100 * PER_SECOND] = titles
+    there[200 * PER_SECOND : 240 * PER_SECOND] = _noisy(titles, 4)
+    shared = footage._sound_seconds(_heard(here, 600), _heard(there, 600), range(600))
+    assert set(range(61, 99)) <= shared
+    assert not shared - set(range(58, 101))  # unrelated sound isn't
+
+
+def test_curatarrs_own_intro_is_the_sound_most_of_the_season_shares():
+    titles, cue = _sounds(45, 10), _sounds(25, 11)
+    episodes = []
+    for n, at in enumerate((60, 75, 50, 90, 65, 80)):
+        sound = _sounds(1200, 20 + n)
+        sound[at * PER_SECOND : (at + 45) * PER_SECOND] = _noisy(titles, 30 + n)
+        sound[5 * PER_SECOND : 13 * PER_SECOND] = titles[: 8 * PER_SECOND]  # a sting
+        if n < 3:  # a music cue in some episodes, longer than the titles' sting
+            sound[600 * PER_SECOND : 625 * PER_SECOND] = cue
+        episodes.append(_heard(sound, 1200))
+    found = footage.own_intro(episodes[0], episodes[1:], 1200.0)
+    assert found and abs(found[0] - 60) <= 2 and abs(found[1] - 105) <= 2
+    assert footage.own_intro(episodes[0], episodes[1:3], 1200.0) is None  # too few
+    # no titles: the cue (2 of 5 others) and the sting (too short) aren't intros
+    plain = [_heard(_sounds(1200, 50 + n), 1200) for n in range(4)]
+    cued = episodes[0].sound.copy()
+    cued[60 * PER_SECOND : 105 * PER_SECOND] = _sounds(45, 99)
+    assert footage.own_intro(_heard(cued, 1200), episodes[1:3] + plain, 1200.0) is None
+
+
+def test_how_curatarrs_intro_compares_with_intro_skippers():
+    assert intro_verdict({"ours": [37, 72], "theirs": [[34.4, 72.4]]}) == "agree"
+    assert intro_verdict({"ours": [50, 132], "theirs": [[44.0, 123.1]]}) == "edges"
+    assert intro_verdict({"ours": [436, 557], "theirs": []}) == "missed"
+    assert intro_verdict({"ours": None, "theirs": [[350.1, 386.6]]}) == "extra"
+    assert intro_verdict({"ours": [1097, 1118], "theirs": [[40, 70]]}) == "elsewhere"
+    assert intro_verdict({"ours": None, "theirs": []}) is None
+    assert intro_verdict({"unknown": "too few", "theirs": [[40, 70]]}) is None
+
+
+def test_curatarrs_own_intro_is_noted_without_changing_markers():
+    plugin = FakePlugin()
+    ep = _ep(None, ours=(436, 557))
+    assert _place_intro(ep, plugin, "item", [], []) is None
+    assert ep.state.intro_found == {
+        "ours": [436, 557],
+        "theirs": [],
+        "verdict": "missed",
+    }
+    assert plugin.added == [] and plugin.hidden == []
+
+
+def test_the_intro_comparison_lists_where_the_two_disagree(app, client):
+    from curatarr import db
+    from curatarr.models import ChapterState, Library, MediaIdentity, MediaPart
+
+    library = Library(jellyfin_library_id="tv", name="TV", media_type="tv")
+    db.session.add(library)
+    db.session.flush()
+    show = MediaIdentity(library_id=library.id, media_type="series", title="Show")
+    db.session.add(show)
+    db.session.flush()
+    found = (
+        {"ours": [37, 72], "theirs": [[34.4, 72.4]], "verdict": "agree"},
+        {"ours": [436, 557], "theirs": [], "verdict": "missed"},
+        {"ours": None, "theirs": [[350.1, 386.6]], "verdict": "extra"},
+    )
+    for number, intro in enumerate(found, 1):
+        part = MediaPart(
+            media_identity_id=show.id,
+            kind="episode",
+            season_number=1,
+            episode_number=number,
+            has_file=True,
+            file_path=f"/tv/Show/S01E0{number}.mkv",
+        )
+        db.session.add(part)
+        db.session.flush()
+        state = ChapterState(media_part_id=part.id, media_identity_id=show.id)
+        state.intro_found = intro
+        db.session.add(state)
+    db.session.commit()
+    page = client.get("/chapters/markers?kind=intros").get_data(as_text=True)
+    assert "Every disagreement · 2" in page and "Agree · 1" in page
+    assert "7:16" in page and "9:17" in page  # Curatarr's, where Intro Skipper has none
+    assert "0:37" not in page  # agreeing isn't listed…
+    page = client.get("/chapters/markers?kind=intros&verdict=agree").get_data(
+        as_text=True
+    )
+    assert "0:37" in page  # …unless asked for
+    assert client.get("/chapters/markers?kind=intros&verdict=nope").status_code == 404
