@@ -4440,10 +4440,12 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
-INTRO_RULE = 5  # how intros are widened (footage.py); raising it checks again
+INTRO_RULE = 6  # how intros are widened (footage.py); raising it checks again
 # 4: the marker starts skip_lead_seconds early, so the button shows in time
 # 5: sound alike, not only identical, counts as shared; and Curatarr's own
 #    intro (footage.own_intro) is recorded beside Intro Skipper's
+# 6: Curatarr's own intro is added where Intro Skipper found none, and sets
+#    the end of one it found in the same place
 INTRO_DIFFERS = 5.0  # seconds an edge may differ and still agree
 
 
@@ -4464,11 +4466,19 @@ def skip_lead(start: float) -> float:
 
 
 def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
-    """Widen Intro Skipper's intro to the footage the season shares
-    (footage.py): its marker is replaced by one from where the shared footage
-    starts to where it ends, each edge moved out by at most footage.WIDEN
-    seconds. Listed with the hidden markers, so it can be undone."""
-    from . import credits as pictures
+    """Place the intro marker from the sound the season shares (footage.py).
+
+    - Intro Skipper found none: Curatarr's own intro (footage.own_intro) is
+      added.
+    - It found one where Curatarr's own is too: its marker is replaced by one
+      starting at the earlier of the two starts (by at most footage.WIDEN
+      seconds) and ending at Curatarr's end (by at most footage.OWN_WIDEN
+      seconds later).
+    - Otherwise its intro is widened to the footage the season shares, each
+      edge moved out by at most footage.WIDEN seconds.
+
+    Two intros are left to Intro Skipper. Each change is listed with the
+    hidden markers, so it can be undone."""
     from . import footage
     from .markers import _clock
 
@@ -4476,43 +4486,40 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
     placed = [h for h in hidden if h.get("type") == "Introduction" and h.get("placed")]
     if placed:
         if ep.state.intro_rule == INTRO_RULE:
-            return None  # widened by these rules already
+            return None  # placed by these rules already
         try:
             for h in placed:
-                plugin.hide(item_id, h["replaced_by"])
-                plugin.restore(item_id, h["id"])
-                intros.append(
-                    {"Id": h["id"], "Start": h["start"], "End": h["end"]}
-                    | {"Source": h.get("source")}
-                )
+                if h.get("added"):
+                    plugin.hide(item_id, h["id"])
+                else:
+                    plugin.hide(item_id, h["replaced_by"])
+                    plugin.restore(item_id, h["id"])
+                    intros.append(
+                        {"Id": h["id"], "Start": h["start"], "End": h["end"]}
+                        | {"Source": h.get("source")}
+                    )
                 hidden.remove(h)
         except IntegrationError as exc:
             _log("intro_redo_failed", state_id=ep.state.id, error=str(exc))
             return None
-    _record_own_intro(ep, intros)
+    own = _record_own_intro(ep, intros)
+    if not intros:
+        return _add_intro(ep, plugin, item_id, own, hidden) if own else None
     if len(intros) != 1:
-        return None  # none to widen, or two: left to Intro Skipper
+        return None  # two: left to Intro Skipper
     current = intros[0]
+    theirs = (current["Start"], current["End"])
+    by_sound = own is not None and footage.overlap(own, theirs) > 0
     try:
-        found = ep.intro_block((current["Start"], current["End"]))
+        found = own if by_sound else ep.intro_block(theirs)
         if found is None:
             return None
-        edges = []
-        for t in found:
-            start = max(t - footage.SNAP, 0.0)
-            pics = pictures.frames(
-                ep.info.path,
-                start,
-                2 * footage.SNAP,
-                pictures.BREAK_RATE,
-                pictures.BREAK_W,
-                pictures.BREAK_H,
-            )
-            edges.append(footage.snap(t, pictures.find_breaks(pics, start)))
+        edges = _snapped(ep, found)
     except (ImportError, MediaToolError, RuntimeError, OSError) as exc:
         _log("intro_unread", state_id=ep.state.id, error=str(exc))
         return None
-    wider = footage.widened((current["Start"], current["End"]), tuple(edges))
+    later = footage.OWN_WIDEN if by_sound else footage.WIDEN
+    wider = footage.widened(theirs, edges, later=later)
     if wider is None:
         return None
     try:
@@ -4538,7 +4545,11 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
             "new_end": round(wider[1], 1),
             "source": current.get("Source"),
             "reason": f"Intro widened to {_clock(wider[0])}–{_clock(wider[1])}, "
-            "where the footage the season shares starts and ends",
+            + (
+                "where the sound the season shares starts and ends"
+                if by_sound
+                else "where the footage the season shares starts and ends"
+            ),
             "at": utcnow().isoformat(),
         }
     )
@@ -4546,10 +4557,62 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
     return "intro widened"
 
 
-def _record_own_intro(ep, intros) -> None:
+def _snapped(ep, found) -> tuple[float, float]:
+    """``found``'s (start, end), each moved to a cut or fade within
+    footage.SNAP seconds."""
+    from . import credits as pictures
+    from . import footage
+
+    edges = []
+    for t in found:
+        start = max(t - footage.SNAP, 0.0)
+        pics = pictures.frames(
+            ep.info.path,
+            start,
+            2 * footage.SNAP,
+            pictures.BREAK_RATE,
+            pictures.BREAK_W,
+            pictures.BREAK_H,
+        )
+        edges.append(footage.snap(t, pictures.find_breaks(pics, start)))
+    return edges[0], edges[1]
+
+
+def _add_intro(ep, plugin, item_id, own, hidden) -> str | None:
+    """Add Curatarr's own intro where Intro Skipper found none."""
+    from .markers import _clock
+
+    try:
+        start, end = _snapped(ep, own)
+    except (ImportError, MediaToolError, RuntimeError, OSError) as exc:
+        _log("intro_unread", state_id=ep.state.id, error=str(exc))
+        return None
+    try:
+        ours = plugin.add(item_id, "Introduction", skip_lead(start), end)
+    except IntegrationError as exc:
+        _log("intro_add_failed", state_id=ep.state.id, error=str(exc))
+        return None
+    hidden.append(
+        {
+            "id": ours,
+            "type": "Introduction",
+            "placed": True,
+            "added": True,
+            "start": round(start, 1),
+            "end": round(end, 1),
+            "source": "Curatarr",
+            "reason": f"Added an intro {_clock(start)}–{_clock(end)}, where the "
+            "sound the season shares starts and ends (Intro Skipper found none)",
+            "at": utcnow().isoformat(),
+        }
+    )
+    _log("intro_added", state_id=ep.state.id, start=start, end=end)
+    return "intro added"
+
+
+def _record_own_intro(ep, intros) -> tuple | None:
     """Note Curatarr's own intro (footage.own_intro) beside Intro Skipper's,
-    for Enhance → Skip markers → Intro comparison. Nothing changes in
-    Jellyfin."""
+    for Enhance → Skip markers → Intro comparison, and return it (or None)."""
     from . import footage
 
     theirs = [[round(i["Start"], 1), round(i["End"], 1)] for i in intros]
@@ -4564,6 +4627,8 @@ def _record_own_intro(ep, intros) -> None:
     found["theirs"] = theirs
     found["verdict"] = intro_verdict(found)
     ep.state.intro_found = found
+    ours = found.get("ours")
+    return tuple(ours) if ours else None
 
 
 def intro_verdict(found: dict) -> str | None:
@@ -5227,7 +5292,8 @@ def undo_marker(state: ChapterState, kind: str, segment_id: str | None = None) -
             h for h in state.markers_hidden if h["id"] != segment_id
         ] or None
         message = (
-            "Removed the credits marker Curatarr added."
+            f"Removed the {'intro' if hidden[0].get('type') == 'Introduction' else 'credits'} "
+            "marker Curatarr added."
             if hidden[0].get("added")
             else f"Restored Intro Skipper's {hidden[0]['type'].lower()} marker."
         )

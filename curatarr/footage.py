@@ -32,7 +32,12 @@ and a music cue the score repeats is shared by fewer of the season than the
 titles are. On 64 episodes of 24 shows, it found all 38 title sequences
 (Intro Skipper: 32) and none where there wasn't one, each checked by eye or
 by agreeing with Intro Skipper. It's recorded
-beside Intro Skipper's for comparison; it doesn't change markers yet.
+beside Intro Skipper's for comparison. Where Intro Skipper found no intro,
+it's added; where both found one, Intro Skipper's ends where Curatarr's does
+(by at most OWN_WIDEN seconds later; titles that close on credits over black
+run on past its end), and starts at the earlier of the two (by at most
+WIDEN). On 14 intros checked by eye on the live library, it was right on all
+(Intro Skipper ended 6-9 seconds early on the 9 both found).
 """
 
 import hashlib
@@ -61,6 +66,7 @@ EARLY = 0.4  # the intro starts in this first part of the episode…
 PRINTED = 0.45  # …so only this first part is fingerprinted
 SNAP = 3.0  # an edge moves to the nearest cut this close
 WIDEN = 10.0  # Intro Skipper's edges move out at most this far…
+OWN_WIDEN = 30.0  # …its end, to the end of Curatarr's own intro, this far
 MIN_MOVE = 1.0  # …and at least this far, or they're left as they are
 SIBLINGS = 10  # other episodes of the season compared (the nearest)
 MIN_SIBLINGS = 3
@@ -295,16 +301,21 @@ def snap(t: float, breaks) -> float:
     return min(near, key=lambda b: abs(b - t)) if near else t
 
 
-def widened(theirs, ours) -> tuple[float, float] | None:
+def overlap(a, b) -> float:
+    """Seconds two (start, end) spans share (negative: apart)."""
+    return min(a[1], b[1]) - max(a[0], b[0])
+
+
+def widened(theirs, ours, later=WIDEN) -> tuple[float, float] | None:
     """Intro Skipper's intro (start, end) with each edge moved out to ours,
-    by MIN_MOVE to WIDEN seconds; None when neither moves (or they don't
-    overlap)."""
-    if ours[1] <= theirs[0] or ours[0] >= theirs[1]:
+    by MIN_MOVE to WIDEN seconds earlier and ``later`` seconds later; None
+    when neither moves (or they don't overlap)."""
+    if overlap(theirs, ours) <= 0:
         return None
     start = (
         ours[0] if theirs[0] - WIDEN <= ours[0] <= theirs[0] - MIN_MOVE else theirs[0]
     )
-    end = ours[1] if theirs[1] + MIN_MOVE <= ours[1] <= theirs[1] + WIDEN else theirs[1]
+    end = ours[1] if theirs[1] + MIN_MOVE <= ours[1] <= theirs[1] + later else theirs[1]
     if (start, end) == (theirs[0], theirs[1]):
         return None
     return start, end

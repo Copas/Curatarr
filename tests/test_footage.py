@@ -186,16 +186,56 @@ def test_how_curatarrs_intro_compares_with_intro_skippers():
     assert intro_verdict({"unknown": "too few", "theirs": [[40, 70]]}) is None
 
 
-def test_curatarrs_own_intro_is_noted_without_changing_markers():
-    plugin = FakePlugin()
+def test_curatarrs_own_intro_is_added_where_intro_skipper_has_none(monkeypatch):
+    monkeypatch.setattr(credits, "frames", lambda *_a: np.zeros((1, 1, 1)))
+    monkeypatch.setattr(credits, "find_breaks", lambda _p, start: [])
+    plugin, hidden = FakePlugin(), []
     ep = _ep(None, ours=(436, 557))
-    assert _place_intro(ep, plugin, "item", [], []) is None
+    assert _place_intro(ep, plugin, "item", [], hidden) == "intro added"
     assert ep.state.intro_found == {
         "ours": [436, 557],
         "theirs": [],
         "verdict": "missed",
     }
-    assert plugin.added == [] and plugin.hidden == []
+    assert plugin.added == [("Introduction", 436, 557)] and plugin.hidden == []
+    assert hidden[0]["id"] == "ours-1" and hidden[0]["added"]
+    assert hidden[0]["type"] == "Introduction" and "found none" in hidden[0]["reason"]
+    # checked again by newer rules: taken away, then added again
+    again = FakePlugin()
+    assert _place_intro(_ep(None, 0, (436, 557)), again, "item", [], hidden)
+    assert again.hidden == ["ours-1"] and again.added == [("Introduction", 436, 557)]
+    assert len(hidden) == 1
+    # none found by either: nothing added
+    plugin = FakePlugin()
+    assert _place_intro(_ep(None), plugin, "item", [], []) is None
+    assert plugin.added == []
+
+
+def test_intro_skippers_intro_ends_where_curatarrs_does(monkeypatch):
+    monkeypatch.setattr(credits, "frames", lambda *_a: np.zeros((1, 1, 1)))
+    monkeypatch.setattr(credits, "find_breaks", lambda _p, start: [])
+    theirs = {"Id": "theirs", "Start": 127.0, "End": 211.3, "Source": "Chromaprint"}
+    plugin, hidden = FakePlugin(), []
+    # the footage alone would widen it less: Curatarr's own intro goes first
+    ep = _ep((125, 214), ours=(124, 220))
+    assert _place_intro(ep, plugin, "item", [theirs], hidden) == "intro widened"
+    assert plugin.added == [("Introduction", 124, 220)] and plugin.hidden == ["theirs"]
+    assert "sound the season shares" in hidden[0]["reason"]
+    # an end more than OWN_WIDEN later, or earlier, stays Intro Skipper's
+    plugin = FakePlugin()
+    late = theirs["End"] + footage.OWN_WIDEN + 5
+    ep = _ep(None, ours=(127, late))
+    assert _place_intro(ep, plugin, "item", [theirs], []) is None
+    assert plugin.added == []
+    plugin = FakePlugin()
+    assert (
+        _place_intro(_ep(None, ours=(127, 190)), plugin, "item", [theirs], []) is None
+    )
+    # Curatarr's own somewhere else: the footage widens it as before
+    plugin = FakePlugin()
+    ep = _ep((125, 214), ours=(600, 650))
+    assert _place_intro(ep, plugin, "item", [theirs], [])
+    assert plugin.added == [("Introduction", 125, 214)]
 
 
 def test_the_intro_comparison_lists_where_the_two_disagree(app, client):
