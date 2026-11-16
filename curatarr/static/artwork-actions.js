@@ -1,5 +1,6 @@
-// Buttons that work in place, without reloading the page: Review and a job's
-// page (Approve, Turn down, Make it again, the job's own buttons), so going
+// Buttons that work in place, without reloading the page: Review (each
+// picture's buttons, and Approve all on this page) and a job's page
+// (Approve, Turn down, Make it again, the job's own buttons), so going
 // through many pictures is quick, Jobs (Cancel, Cancel all waiting) and
 // Enhance → Subtitles. On Review, a picture that's dealt with folds to a
 // one-line note and the next moves up, and when none are left the next
@@ -61,8 +62,49 @@
     });
   }
 
+  // Review → Approve all on this page: each picture goes on for the
+  // accounts ticked under it, then the next pictures load in their place.
+  function approveAll(event, form) {
+    var data = new FormData(form);
+    form.querySelectorAll('input[name="image"]').forEach(function (input) {
+      var panel = document.getElementById("image-" + input.value);
+      var decide = panel && panel.querySelector("form.artwork-decide");
+      if (!decide) return;
+      var id = input.value;
+      data.append("audience-" + id, "1");
+      var everyone = decide.querySelector('input[name="everyone"]');
+      if (everyone && everyone.checked) data.append("everyone-" + id, "on");
+      decide.querySelectorAll('input[name="who"]:checked').forEach(function (box) {
+        data.append("who-" + id, box.value);
+      });
+    });
+    event.preventDefault();
+    var buttons = form.querySelectorAll("button");
+    buttons.forEach(function (b) { b.disabled = true; });
+    fetch(form.action, { method: "POST", body: data, headers: { "X-Curatarr-Async": "1" } })
+      .then(function (response) {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json();
+      })
+      .then(function (answer) {
+        (answer.messages || []).forEach(function (m) { note(m.text, m.category); });
+        reviewCount(answer.review);
+        var list = document.querySelector("[data-review-list]");
+        return redraw(list).then(function () {
+          var fresh = document.querySelector("[data-review-list]");
+          if (fresh) fresh.scrollIntoView({ block: "start" });
+        });
+      })
+      .catch(function () {
+        // The background request failed: send it the usual way (each
+        // picture then goes to whom it would be ticked for).
+        HTMLFormElement.prototype.submit.call(form);
+      });
+  }
+
   document.addEventListener("submit", function (event) {
     var form = event.target;
+    if (form.matches("form[data-approve-all]")) return approveAll(event, form);
     if (!form.matches("form[data-async]")) return;
     var button = event.submitter;
     var action = (button && button.getAttribute("formaction")) || form.action;

@@ -2,7 +2,8 @@
    shown has been dealt with, so the next ones load without a click. #}
 <div data-review-list data-live-url="{{ url_for('main.artwork_review', page=page, fragment=1) }}">
 {% set back = url_for('main.artwork_review', page=page) %}
-{% if images %}<p class="small text-secondary">{{ total }} waiting{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}.</p>
+{% if images %}{% set ready = images|selectattr('state', 'equalto', 'review')|list %}<div class="d-flex flex-wrap justify-content-between align-items-center gap-2"><p class="small text-secondary mb-0">{{ total }} waiting{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}.</p>
+{% if ready|length > 1 %}{% from '_confirm.html' import confirm_submit %}<form method="post" action="{{ url_for('main.artwork_review_approve_all') }}" class="artwork-approve-all" data-approve-all><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% for image in ready %}<input type="hidden" name="image" value="{{ image.id }}">{% endfor %}{{ confirm_submit('Approve all ' ~ ready|length ~ ' on this page', 'Put all ' ~ ready|length ~ ' pictures on this page on in Jellyfin, each for the accounts ticked under it?', 'Approve all ' ~ ready|length, style='btn-outline-success', confirm_style='btn-success', tip='Only the pictures shown here, not later pages.') }}</form>{% endif %}</div>
 <div id="artwork-review">{% for image in images %}{% set existing = existing_by_image.get(image.id) %}
 <div class="artwork-review-item" data-review-item>
 <h2 class="h5 mt-4"><a href="{{ url_for('main.artwork_job', job_id=image.job_id) }}">{{ image.job.media.title if image.job.media else 'Untitled' }}</a>{% if image.job.options and image.job.options.original_take %} <span class="badge text-bg-info">Original take, after a safety refusal</span>{% endif %}</h2>

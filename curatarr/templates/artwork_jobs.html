@@ -16,5 +16,5 @@
 {% include '_artwork_jobs.html' %}
 {% if pages > 1 %}<nav class="d-flex justify-content-between mt-3" aria-label="Pages">{% if page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_jobs', state=state, page=page - 1) }}">Previous</a>{% else %}<span></span>{% endif %}<span class="small text-secondary">Page {{ page }} of {{ pages }}</span>{% if page < pages %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.artwork_jobs', state=state, page=page + 1) }}">Next</a>{% else %}<span></span>{% endif %}</nav>{% endif %}
 <script src="{{ url_for('static', filename='artwork-live.js', v='3') }}"></script>
-<script src="{{ url_for('static', filename='artwork-actions.js', v='4') }}"></script>
+<script src="{{ url_for('static', filename='artwork-actions.js', v='6') }}"></script>
 {% endblock %}

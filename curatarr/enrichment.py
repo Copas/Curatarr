@@ -1853,6 +1853,12 @@ def recheck_credits(now=None) -> int:
         or_(
             ChapterState.recap_source.in_(RECAP_FOUND),
             ChapterState.recap_source.like("unclear:%"),
+            # None found: looked at again only from a saved transcript, so a
+            # recheck never transcribes.
+            and_(
+                ChapterState.recap_source.in_(RECAP_NONE),
+                ChapterState.transcript_key.isnot(None),
+            ),
         ),
         or_(ChapterState.recap_rule.is_(None), ChapterState.recap_rule < RECAP_RULE),
     )
@@ -1906,6 +1912,7 @@ def recheck_credits(now=None) -> int:
         if (state.recap_rule or 1) < RECAP_RULE and (
             state.recap_source in RECAP_FOUND
             or (state.recap_source or "").startswith("unclear:")
+            or (state.recap_source in RECAP_NONE and state.transcript_key)
         ):
             state.recap_checked_at = None
         state.job_state = "queued"
@@ -3602,7 +3609,10 @@ RECAP_EARLIER = 60  # earlier episodes whose clips a recap may quote (any season
 # are checked again (recheck_credits).
 #   2: stock phrases don't count as quotes; the end moves past wordless clips
 #      to the intro or a fade to black (recaps.settled_end)
-RECAP_RULE = 2
+#   3: a montage of clips nobody announces is a recap (recaps.find_montage),
+#      so episodes found to have none are looked at again, from their
+#      saved transcripts
+RECAP_RULE = 3
 RECAP_SKIP_AFTER = 4  # a series whose first episodes never say "previously on"
 
 
@@ -3713,6 +3723,7 @@ def _recap_finder(state, part, media=None, path=None):
             segments,
             series_openings=openings,
             earlier=recaps.earlier_grams(earlier),
+            earlier_transcripts=earlier,
             scenes=scenes,
             settle=_recap_settle(part, media, path) if path else None,
         )
@@ -3742,7 +3753,8 @@ def _record_recap(state, part, media, recap: dict | None, *, no_opener=False):
 
 
 SEGMENT_FIELDS = {"Recap": "recap", "Preview": "preview"}
-RECAP_FOUND = ("closing line", "earlier episodes", "model")
+RECAP_FOUND = ("closing line", "earlier episodes", "model", "montage")
+RECAP_NONE = ("no opener", "none", "rechecked")
 
 
 def _mark_segment(state, part, media, kind, *, clear_guesses=False):
@@ -4037,9 +4049,15 @@ def _check_recap(ep: _Episode, fields) -> str:
 
     state = ep.state
     no_recap = ep.full() is None and _series_without_recaps(state)
+    found = None
     if not no_recap:
         segments = ep.span(0, recaps.OPENER_WITHIN + recaps.SEARCH_SECONDS)
-        no_recap = recaps.opener(segments) is None
+        finder = _recap_finder(state, ep.part, ep.media, ep.info.path)
+        if recaps.opener(segments) is None:
+            # Nobody says "previously on": a montage of clips may still be
+            # one (recaps.find_montage); else there's no recap.
+            found = finder(segments, ep.scenes(), ep.model())
+            no_recap = found is None
     if no_recap:
         # No "previously on": a recap Intro Skipper guessed is a cold open.
         state.recap_checked_at = utcnow()
@@ -4051,9 +4069,8 @@ def _check_recap(ep: _Episode, fields) -> str:
         except IntegrationError:
             pass
         return "recap: none"
-    found = _recap_finder(state, ep.part, ep.media, ep.info.path)(
-        segments, ep.scenes(), ep.model()
-    )
+    if found is None:
+        found = finder(segments, ep.scenes(), ep.model())
     state.recap_rule = RECAP_RULE
     previously = state.recap_source
     _record_recap(state, ep.part, ep.media, found.as_dict() if found else None)

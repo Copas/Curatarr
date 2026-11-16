@@ -636,6 +636,44 @@ def artwork_review():
     )
 
 
+@bp.post("/library/posters/review/approve-all")
+def artwork_review_approve_all():
+    """Approve every picture on a page of Review at once (``image`` ids),
+    each for whom it's ticked for (``everyone-<id>``, ``who-<id>``, sent by
+    the page), else whom it would be ticked for."""
+    approved, problems = 0, []
+    for image_id in request.form.getlist("image"):
+        image = db.session.get(ArtworkImage, image_id)
+        if image is None or image.state != "review":
+            continue  # dealt with meanwhile
+        waiting = [c for c in image.candidates if c.decision is None and c.path]
+        if not waiting:
+            continue
+        if f"audience-{image.id}" in request.form:
+            everyone = request.form.get(f"everyone-{image.id}") in {"on", "1"}
+            accounts = _scope_list(request.form.getlist(f"who-{image.id}"))
+        else:
+            everyone, accounts = artwork_jobs.default_audience(image)
+        title = image.job.media.title if image.job.media else "Untitled"
+        try:
+            artwork_jobs.approve(waiting[-1], _who(), everyone, accounts)
+            approved += 1
+        except (ValueError, IntegrationError, OSError) as exc:
+            db.session.rollback()
+            problems.append(f"{title}, its {custom_posters._noun(image.kind)}: {exc}")
+    if approved:
+        _say(
+            f"Approved {approved} picture{'' if approved == 1 else 's'}; "
+            f"{'it is' if approved == 1 else 'they are'} on in Jellyfin.",
+            "success",
+        )
+    for problem in problems:
+        _say(f"Not approved: {problem}", "warning")
+    if not approved and not problems:
+        _say("Nothing on the page was waiting for review.", "success")
+    return _done(url_for("main.artwork_review"))
+
+
 @bp.get("/library/posters/candidates/<candidate_id>.<ext>")
 def artwork_candidate_image(candidate_id, ext):
     candidate = db.session.get(ArtworkCandidate, candidate_id)

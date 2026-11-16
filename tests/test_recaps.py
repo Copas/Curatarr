@@ -247,3 +247,77 @@ def test_a_recap_runs_on_to_the_intro_or_a_fade():
         settle=lambda end: None,
     )
     assert found.end == 97.5
+
+
+def episode_body(said, theme=()):
+    """An earlier episode: its theme song in the opening, then ``said`` in its
+    body, then plenty more so nothing falls in the preview at the end."""
+    rows = [(5.0 + 5 * i, 9.0 + 5 * i, text) for i, text in enumerate(theme)]
+    rows += [(200.0 + 10 * i, 205.0 + 10 * i, text) for i, text in enumerate(said)]
+    rows += [
+        (900.0 + 10 * i, 905.0 + 10 * i, f"Filler line number {i} here")
+        for i in range(30)
+    ]
+    return lines(*rows)
+
+
+CLIPS = (
+    "This person or thing that came out of our basement",
+    "that is what killed our friend Jason last night",
+    "Somehow I think I created him or invited him in",
+    "When your father left this figure became real to you",
+)
+
+
+def test_a_montage_nobody_announces_is_a_recap():
+    """Channel Zero's recaps are clips from earlier episodes, with no
+    "previously on": every one was missed, and Intro Skipper's guess hidden."""
+    earlier = [
+        episode_body(CLIPS),
+        episode_body(("Something else entirely was said here",)),
+    ]
+    episode = lines(
+        (1.4, 5.0, CLIPS[0]),
+        (6.4, 10.0, CLIPS[1]),
+        (11.1, 15.0, CLIPS[2]),
+        (15.6, 19.0, CLIPS[3]),
+        (45.0, 50.0, "Detective Hughes, do you have any more information?"),
+        (52.0, 56.0, "Nothing yet, but we are looking into the neighbours."),
+    )
+    found = recaps.find_recap(episode, earlier_transcripts=earlier)
+    assert found.source == "montage" and found.start == 0.0
+    assert 19.0 <= found.end <= 21.0  # where the last clip's words stop
+    assert recaps.find_recap(episode) is None  # nothing to compare with
+
+
+def test_a_theme_song_or_a_few_chance_matches_are_not_a_montage():
+    lyrics = (
+        "Come and listen to my story about a man named Jed",
+        "a poor mountaineer barely kept his family fed",
+        "then one day he was shooting at some food",
+        "and up through the ground come a bubbling crude",
+    )
+    # The song opens every episode (and once ran over the end of a scene).
+    earlier = [
+        episode_body((), theme=lyrics),
+        episode_body((), theme=lyrics),
+        episode_body(lyrics),
+    ]
+    sung = lines(*((5.0 * i, 5.0 * i + 4, text) for i, text in enumerate(lyrics)))
+    assert recaps.find_montage(sung, earlier) is None
+    # Three lines that happen to match, among plenty of new dialogue.
+    said = (
+        "It's all about the tongue, man",
+        "No no no no what is that",
+        "Slow one at a time okay",
+    )
+    cold_open = lines(
+        (2.9, 4.5, said[0]),
+        (4.9, 7.0, "You stick it right in their mouth then"),
+        (8.5, 10.0, said[1]),
+        (11.8, 14.0, "Dude they really love it every time"),
+        (16.9, 19.0, "Just deep enough to lick her teeth"),
+        (22.9, 24.5, said[2]),
+        (24.8, 26.0, "Like you are painting them one by one"),
+    )
+    assert recaps.find_montage(cold_open, [episode_body(said)]) is None

@@ -570,6 +570,45 @@ def _waiting_on_poster(image: ArtworkImage) -> bool:
     return not poster.candidates
 
 
+SUPERSEDED = "A newer one was made for this title since it was asked for, so it isn't made again."
+
+
+def _superseded(image: ArtworkImage) -> bool:
+    """Whether a newer picture of this type has been made for the title since
+    this one was asked for: by a later job, or put on by hand. A job that
+    waited (a usage limit, a batch held up) would otherwise make again what
+    was already made and approved."""
+    job = image.job
+    if job.purpose != "library" or not job.media_identity_id or not job.created_at:
+        return False
+    newer_job = (
+        db.session.query(ArtworkImage.id)
+        .join(ArtworkJob, ArtworkImage.job_id == ArtworkJob.id)
+        .filter(
+            ArtworkJob.media_identity_id == job.media_identity_id,
+            ArtworkJob.purpose == "library",
+            ArtworkJob.id != job.id,
+            ArtworkJob.created_at > job.created_at,
+            ArtworkImage.kind == image.kind,
+            ArtworkImage.state.in_(("review", "completed")),
+        )
+        .first()
+    )
+    if newer_job:
+        return True
+    return (
+        db.session.query(CustomPoster.id)
+        .filter(
+            CustomPoster.media_identity_id == job.media_identity_id,
+            CustomPoster.image_type == image.kind,
+            CustomPoster.active.is_(True),
+            CustomPoster.applied_at > job.created_at,
+        )
+        .first()
+        is not None
+    )
+
+
 def _pick_engine(image: ArtworkImage, worker: ArtworkWorker, ready: set) -> str | None:
     """The engine this worker would make ``image`` with, or None."""
     job = image.job
@@ -823,7 +862,10 @@ def claim(worker: ArtworkWorker, slots: int, ready) -> list[dict]:
             ArtworkImage.state == "pending",
             (ArtworkImage.not_before.is_(None)) | (ArtworkImage.not_before <= now),
             (ArtworkJob.worker_id.is_(None)) | (ArtworkJob.worker_id == worker.id),
-            (ArtworkBatch.id.is_(None)) | (ArtworkBatch.state == "active"),
+            # Only a paused batch holds its pictures back. One already done
+            # can have pictures tried again (a failed job retried after a
+            # usage limit), and those were left waiting for ever.
+            (ArtworkBatch.id.is_(None)) | (ArtworkBatch.state != "paused"),
         )
         .order_by(
             ArtworkJob.priority.desc(),
@@ -837,6 +879,11 @@ def claim(worker: ArtworkWorker, slots: int, ready) -> list[dict]:
     for image in waiting:
         if len(tasks) >= room:
             break
+        if _superseded(image):
+            image.state, image.message = "cancelled", SUPERSEDED
+            image.finished_at = now
+            _refresh(image.job)
+            continue
         if _waiting_on_poster(image):
             continue
         engine = _pick_engine(image, worker, ready)
@@ -1900,8 +1947,28 @@ def overview() -> dict:
     }
 
 
+def drop_superseded() -> int:
+    """Waiting pictures a newer one has replaced since they were asked for
+    (_superseded): dropped all at once, so Jobs doesn't list as waiting what
+    will never be made. Returns how many."""
+    now = utcnow()
+    dropped, jobs = 0, set()
+    for image in db.session.query(ArtworkImage).filter(ArtworkImage.state == "pending"):
+        if _superseded(image):
+            image.state, image.message = "cancelled", SUPERSEDED
+            image.finished_at = now
+            jobs.add(image.job)
+            dropped += 1
+    for job in jobs:
+        _refresh(job)
+    db.session.commit()
+    return dropped
+
+
 def tick() -> None:
-    """Worker cycle: recover abandoned pictures, top up batches, tidy up."""
+    """Worker cycle: recover abandoned pictures, drop those replaced since,
+    top up batches, tidy up."""
     recover()
+    drop_superseded()
     fill_batches()
     prune()

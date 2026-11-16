@@ -58,5 +58,5 @@
 <pre class="mt-2 overflow-auto"><code>{{ preview.write.command|join(' ') }}</code></pre><pre class="overflow-auto"><code>{{ preview.write.chapter_file }}</code></pre>
 <p class="small text-secondary">In place with mkvpropedit; nothing is re-encoded or remuxed. Streams, duration, and the chapters are verified afterwards.{% if preview.writable != 'yes' %} Right now it could not be written: {{ preview.writable }}{% endif %}</p></details>{% endif %}
 {% endif %}
-{% if state and entries(state) %}<script src="{{ url_for('static', filename='artwork-actions.js', v='4') }}"></script>{% endif %}
+{% if state and entries(state) %}<script src="{{ url_for('static', filename='artwork-actions.js', v='6') }}"></script>{% endif %}
 {% endblock %}

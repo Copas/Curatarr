@@ -661,6 +661,23 @@ def test_a_batch_queues_a_few_titles_at_a_time_and_skips_done_ones(
     assert {j.state for j in batch.jobs} == {"review", "cancelled"}
 
 
+def test_pictures_tried_again_after_their_batch_finished_are_made(app, client):
+    """A batch is done once its titles are queued and its jobs closed; a job
+    of it retried afterwards (after a usage limit, say) used to wait for
+    ever, listed as Waiting with nothing to say why."""
+    _movie()
+    spec = {"titles": "movies", "kinds": ["Primary"], "skip_done": False}
+    batch = artwork_jobs.create_batch(spec | {"options": {}})
+    [job] = batch.jobs
+    job.images[0].state = "failed"
+    batch.state, batch.finished_at = "done", utcnow()
+    db.session.commit()
+    assert artwork_jobs.retry_job(job) == 1
+    worker_row, _token = artwork_jobs.create_worker("W", 1)
+    [task] = _claim(worker_row)
+    assert task["image"] == job.images[0].id
+
+
 # --- Prompts, pictures and checks ---------------------------------------------
 
 
@@ -1763,6 +1780,78 @@ def test_review_actions_answer_without_a_page_reload(
     more = client.get("/library/posters/review?page=3&fragment=1").text
     assert "<html" not in more and "data-review-list" in more
     assert more.count("data-review-item") == 1  # the logo, on the only page
+
+
+def test_a_picture_made_since_it_was_asked_for_isnt_made_again(app, client):
+    """A job held up for days (a usage limit, a stuck batch) made again,
+    once released, what a later job had already made and you'd approved."""
+    from datetime import timedelta
+
+    _library, media, _part = _movie()
+    old = artwork_jobs.create_job(media, ["Primary"], details={"title": "Film"})
+    old.created_at = utcnow() - timedelta(days=5)
+    newer = artwork_jobs.create_job(media, ["Primary"], details={"title": "Film"})
+    newer.images[0].state = "completed"
+    db.session.commit()
+    # The worker cycle drops it, without waiting for it to come up in line.
+    assert artwork_jobs.drop_superseded() == 1
+    db.session.expire_all()
+    assert old.images[0].state == "cancelled" and old.state == "cancelled"
+    worker_row, _token = artwork_jobs.create_worker("W", 1)
+    assert _claim(worker_row) == []
+    assert "A newer one was made" in old.images[0].message
+    # Nothing newer: made as usual.
+    other = _second(_library, "Second", "jf-2")
+    job = artwork_jobs.create_job(other, ["Primary"], details={"title": "Second"})
+    [task] = _claim(worker_row)
+    assert task["image"] == job.images[0].id
+
+
+def test_review_approves_everything_on_the_page_at_once(
+    app, client, tmp_path, monkeypatch
+):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    jellyfin = _jellyfin(monkeypatch, _picture("#223344"))
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex"})
+    db.session.commit()
+    _row, _token, worker = _worker(app, client, tmp_path)
+    job = artwork_jobs.create_job(media, ["Primary", "Thumb", "Logo"])
+    _drain(worker)
+    page = client.get("/library/posters/review").text
+    assert "Approve all 3 on this page" in page and "data-approve-all" in page
+    poster, tile, logo = job.images
+    answer = client.post(
+        "/library/posters/review/approve-all",
+        data={
+            "image": [poster.id, tile.id, logo.id],
+            # As ticked on the page: the poster for everyone, the tile for
+            # Sam only, the logo for nobody (so it's left waiting).
+            f"audience-{poster.id}": "1",
+            f"everyone-{poster.id}": "on",
+            f"audience-{tile.id}": "1",
+            f"who-{tile.id}": ["u1"],
+            f"audience-{logo.id}": "1",
+        },
+        headers={"X-Curatarr-Async": "1"},
+    ).get_json()
+    texts = [m["text"] for m in answer["messages"]]
+    assert texts[0] == "Approved 2 pictures; they are on in Jellyfin."
+    assert "Not approved" in texts[1] and "Choose who sees it" in texts[1]
+    assert answer["review"] == 1  # the logo
+    db.session.expire_all()
+    assert jellyfin.uploads == 1  # the poster, Jellyfin's own
+    assert custom_posters.active(media.id, "u1", "Thumb") is not None
+    assert custom_posters.active(media.id, "u2", "Thumb") is None
+    # Sent without the page's script: each goes to whom it's ticked for.
+    plain = client.post(
+        "/library/posters/review/approve-all", data={"image": [logo.id]}
+    )
+    assert plain.status_code == 302
+    db.session.expire_all()
+    assert logo.state != "review"
+    assert "Approve all" not in client.get("/library/posters/review").text
 
 
 def test_chatgpt_works_from_the_films_own_art_not_its_plot():

@@ -21,7 +21,14 @@ Recaps often run on past their last line with wordless clips. When the intro
 starts soon after, the recap runs up to it; otherwise it ends on the longest
 fade to black in the half minute after (settled_end).
 
-Nothing is marked when neither applies: a wrong recap skips part of the
+Some recaps are announced by nobody: a montage of clips straight away, as on
+Channel Zero (find_montage). Without an opener, a recap is marked only when the
+episode opens with a dense run of lines each quoted from exactly one earlier
+episode's body: not their openings, where theme songs and their own recaps
+are, and not a line their openings share (a theme song, however speech
+recognition spelled it each time).
+
+Nothing is marked when none of this applies: a wrong recap skips part of the
 episode, which is worse than having no skip button.
 """
 
@@ -56,13 +63,24 @@ BLACK, MIN_BLACK = 20, 1.0
 CLOSER_WITHIN = 180.0  # seconds after the opener's next line
 CLOSER_SPREAD = 120.0  # a closing line lands at about the same point each week
 CLOSER_MIN_RUNS = 3  # shared 4-word runs in one line: a 6+ word shared sentence
+# A recap nobody announces (find_montage): its first quoted clip this soon,
+# at least MONTAGE_CLIPS of them, making up MONTAGE_DENSITY of the lines long
+# enough to tell, quoted from the MONTAGE_EARLIER nearest earlier episodes'
+# bodies (from MONTAGE_SKIP_OPENING on: their theme songs and own recaps come
+# before). Tried on 1,300 episodes of 60 shows: it found the montage recaps of
+# Channel Zero, Paradise, See and Slasher, and passed over theme songs.
+MONTAGE_FIRST_WITHIN = 10.0
+MONTAGE_CLIPS = 3
+MONTAGE_DENSITY = 0.6
+MONTAGE_EARLIER = 6
+MONTAGE_SKIP_OPENING = 120.0
 
 
 @dataclass(frozen=True)
 class Recap:
     start: float
     end: float
-    source: str  # "closing line" | "earlier episodes" | "model"
+    source: str  # "closing line" | "earlier episodes" | "model" | "montage"
 
     def as_dict(self):
         return {"start": self.start, "end": self.end, "source": self.source}
@@ -196,6 +214,7 @@ def find_recap(
     *,
     series_openings=(),
     earlier=frozenset(),
+    earlier_transcripts=(),
     choose_last_line=None,
     confirm=None,
     scenes=(),
@@ -209,7 +228,13 @@ def find_recap(
     ``confirm(lines)`` asks it whether lines are a recap (True/False, or None
     when it can't say). ``settle(end)`` moves the end past the clips after the
     last line (settled_end), or returns None to snap it to a scene change.
+    Without an opener, ``earlier_transcripts`` (the nearest earlier episodes
+    first) are looked in for a montage nobody announces (find_montage).
     """
+    if opener(segments) is None:
+        if not earlier_transcripts:
+            return None
+        return find_montage(segments, earlier_transcripts, scenes=scenes, settle=settle)
     lines = opening_lines(segments)
     if not lines:
         return None
@@ -225,6 +250,61 @@ def find_recap(
         return found
     span = [s for s in segments if found.start <= s.start < found.end]
     return found if confirm(span) is True else None
+
+
+def montage_sources(transcripts: list[list]) -> tuple[list, list]:
+    """(what each earlier episode said in its body, what each said in its
+    opening), for find_montage. Bodies leave out the opening and the "next
+    time on" preview at the end."""
+    bodies, openings = [], []
+    for segments in transcripts[:MONTAGE_EARLIER]:
+        if not segments:
+            continue
+        tail = segments[-1].end - EARLIER_TAIL_SKIPPED
+        bodies.append(
+            said_in([[s for s in segments if MONTAGE_SKIP_OPENING <= s.start < tail]])
+        )
+        openings.append(
+            said_in([[s for s in segments if s.start < MONTAGE_SKIP_OPENING]])
+        )
+    return bodies, openings
+
+
+def montage_clip(line, bodies, openings) -> bool:
+    """A clip of one earlier episode: quoted from exactly one body, and not
+    a line the openings share (a theme song)."""
+    if sum(quoted(line, said) for said in openings) >= 2:
+        return False
+    return sum(quoted(line, said) for said in bodies) == 1
+
+
+def find_montage(segments, earlier_transcripts, *, scenes=(), settle=None):
+    """A recap nobody announces: the episode opens with a dense run of clips
+    from earlier episodes. None unless it plainly does."""
+    bodies, openings = montage_sources(list(earlier_transcripts))
+    if not bodies:
+        return None
+    lines = [s for s in segments if s.start <= SEARCH_SECONDS]
+    clips = [s for s in lines if montage_clip(s, bodies, openings)]
+    if not clips or clips[0].start > MONTAGE_FIRST_WITHIN:
+        return None
+    run = [clips[0]]
+    for clip in clips[1:]:
+        if clip.start - run[-1].end > QUOTE_RUN_GAP:
+            break
+        run.append(clip)
+    if len(run) < MONTAGE_CLIPS:
+        return None
+    # Mostly clips: a few chance matches among new dialogue are a cold open.
+    worded = [
+        s
+        for s in lines
+        if run[0].start <= s.start <= run[-1].start
+        and len(words(s.text)) >= MIN_QUOTE_WORDS
+    ]
+    if len(run) < MONTAGE_DENSITY * len(worded):
+        return None
+    return _bounded(0.0, spoken_end(run[-1]), "montage", scenes, settle)
 
 
 def _find_end(

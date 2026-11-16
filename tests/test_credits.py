@@ -211,7 +211,7 @@ def test_episodes_checked_under_older_rules_are_checked_again(app, monkeypatch):
     assert enrichment.recheck_credits() == 0  # checked the current way
     # a recap found by older rules: only the recap is checked again
     states[0].recap_source, states[0].recap_rule = "earlier episodes", 1
-    states[1].recap_source = "no opener"  # nothing to find: left alone
+    states[1].recap_source = "no opener"  # no transcript to look in: left alone
     db.session.commit()
     assert enrichment.recheck_credits() == 1
     assert states[0].recap_checked_at is None
@@ -219,6 +219,13 @@ def test_episodes_checked_under_older_rules_are_checked_again(app, monkeypatch):
     states[0].job_state, states[0].recap_rule = "idle", enrichment.RECAP_RULE
     db.session.commit()
     assert enrichment.recheck_credits() == 0
+    # None found by older rules, with a saved transcript: a montage nobody
+    # announces may be there (recaps.find_montage), so it's looked at again.
+    states[1].transcript_key = "saved"
+    db.session.commit()
+    assert enrichment.recheck_credits() == 1
+    assert states[1].recap_checked_at is None
+    assert states[1].markers_checked_at is not None
 
 
 def test_a_marker_already_gone_counts_as_hidden():
