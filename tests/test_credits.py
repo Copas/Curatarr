@@ -359,3 +359,51 @@ def test_recaps_intro_skipper_guessed_again_are_hidden_again(monkeypatch):
     # Curatarr's own recap: put back in place of any guess
     assert enrichment._settle_recap_guesses(episode("closing line", end=80.0)) is None
     assert marked == [("Recap", False)]
+
+
+def test_credits_pictures_are_not_read_again_for_an_intro_recheck(app, monkeypatch):
+    from types import SimpleNamespace
+
+    from curatarr import enrichment, integrations
+
+    class Plugin:
+        def __init__(self, _client):
+            pass
+
+        def segments(self, _item_id):
+            return []
+
+    read = []
+    monkeypatch.setattr(enrichment, "jellyfin_item_id", lambda _p, _m: "item")
+    monkeypatch.setattr(enrichment, "client", lambda _name: None)
+    monkeypatch.setattr(integrations, "IntroSkipper", Plugin)
+    monkeypatch.setattr(
+        enrichment, "_place_credits", lambda *_a: read.append(1) or "credits added"
+    )
+    monkeypatch.setattr(enrichment, "_place_intro", lambda *_a: None)
+    monkeypatch.setattr(enrichment, "_settle_recap_guesses", lambda _ep: None)
+
+    def episode(credits_rule):
+        state = SimpleNamespace(
+            id="state",
+            markers_hidden=None,
+            preview_start=None,
+            preview_end=None,
+            credits_rule=credits_rule,
+            intro_rule=1,
+        )
+        return SimpleNamespace(
+            state=state, part=None, media=None, info=SimpleNamespace(duration=2600.0)
+        )
+
+    # only the intro rules changed: the credits' half minute of pictures is
+    # skipped…
+    assert enrichment._check_markers(episode(enrichment.CREDITS_RULE)) == "markers: ok"
+    assert read == []
+    # …but read when the credits rules changed, or it was never checked
+    ep = episode(None)
+    assert enrichment._check_markers(ep) == "markers: credits added"
+    assert read == [1] and ep.state.credits_rule == enrichment.CREDITS_RULE
+    # a new copy of the file has its credits looked for again
+    enrichment._forget_old_file(ep.state)
+    assert ep.state.credits_rule is None

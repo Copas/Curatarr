@@ -692,7 +692,7 @@ def request(part: MediaPart, action: str) -> ChapterState:
         # Asked for from the episode's page: redo everything, ahead of any
         # library-wide backlog of checks.
         state.recap_checked_at = state.preview_checked_at = None
-        state.markers_checked_at = None
+        state.markers_checked_at = state.credits_rule = None
         state.requested_at = utcnow() - timedelta(days=3650)
     db.session.commit()
     return state
@@ -948,6 +948,7 @@ def _forget_old_file(state) -> None:
     state.recap_checked_at = state.preview_checked_at = None
     state.markers_checked_at = state.identity_checked_at = None
     state.transcript_key = state.opening_key = None
+    state.credits_rule = None  # its credits are looked for again too
 
 
 def _due_automatically(state, part, now) -> bool:
@@ -4272,7 +4273,14 @@ def _check_markers(ep: _Episode) -> str:
         _log("marker_trimmed", state_id=state.id, segment=segment["Id"])
     trimmed = {id(segment) for segment, _start, _reason in trims}
     left = [c for c in credits if id(c) not in flagged and id(c) not in trimmed]
-    moved = _place_credits(ep, plugin, item_id, left, hidden)
+    # Reading the credits' pictures takes half a minute an episode: skipped
+    # when only the intro rules changed. A new copy of the file, or a check
+    # asked for from the episode's page, clears credits_rule.
+    moved = (
+        _place_credits(ep, plugin, item_id, left, hidden)
+        if state.credits_rule != CREDITS_RULE
+        else None
+    )
     state.credits_rule = CREDITS_RULE
     bad_ids = {id(segment) for segment, _reason in bad}
     widened = _place_intro(
