@@ -249,13 +249,14 @@ def test_a_recap_runs_on_to_the_intro_or_a_fade():
     assert found.end == 97.5
 
 
-def episode_body(said, theme=()):
+def episode_body(said, theme=(), step=10.0):
     """An earlier episode: its theme song in the opening, then ``said`` in its
     body, then plenty more so nothing falls in the preview at the end."""
     rows = [(5.0 + 5 * i, 9.0 + 5 * i, text) for i, text in enumerate(theme)]
-    rows += [(200.0 + 10 * i, 205.0 + 10 * i, text) for i, text in enumerate(said)]
+    rows += [(200.0 + step * i, 205.0 + step * i, text) for i, text in enumerate(said)]
+    after = max(900.0, 300.0 + step * len(said))
     rows += [
-        (900.0 + 10 * i, 905.0 + 10 * i, f"Filler line number {i} here")
+        (after + 10 * i, after + 5 + 10 * i, f"Filler line number {i} here")
         for i in range(30)
     ]
     return lines(*rows)
@@ -273,7 +274,7 @@ def test_a_montage_nobody_announces_is_a_recap():
     """Channel Zero's recaps are clips from earlier episodes, with no
     "previously on": every one was missed, and Intro Skipper's guess hidden."""
     earlier = [
-        episode_body(CLIPS),
+        episode_body(CLIPS, step=600.0),  # moments far apart, as recaps cut
         episode_body(("Something else entirely was said here",)),
     ]
     episode = lines(
@@ -321,3 +322,39 @@ def test_a_theme_song_or_a_few_chance_matches_are_not_a_montage():
         (24.8, 26.0, "Like you are painting them one by one"),
     )
     assert recaps.find_montage(cold_open, [episode_body(said)]) is None
+
+
+def test_one_earlier_scene_shown_again_is_not_a_montage():
+    """A cold open the earlier episode also has (as a flashback, say) quotes
+    one scene in order: that's the scene again, not a recap of the story."""
+    scene = (
+        "There was the first wave of guys who were accused",
+        "and then there was a second wave of them afterwards",
+        "and we could talk about the nuance between the two",
+        "Well the first wave was really bad you have to admit",
+    )
+    rows = [(1900.0 + 6 * i, 1904.0 + 6 * i, text) for i, text in enumerate(scene)]
+    earlier = [
+        episode_body(()),
+        lines(
+            *rows,
+            *(
+                (3000.0 + i, 3001.0 + i, f"Filler {i} here and there")
+                for i in range(60)
+            ),
+        ),
+    ]
+    opening = lines(*((5.0 * i, 5.0 * i + 4, text) for i, text in enumerate(scene)))
+    assert recaps.find_montage(opening, earlier) is None
+    # The same lines from moments far apart: a recap.
+    far = [(400.0 + 700 * i, 404.0 + 700 * i, text) for i, text in enumerate(scene)]
+    earlier = [
+        lines(
+            *far,
+            *(
+                (3500.0 + i, 3501.0 + i, f"Filler {i} here and there")
+                for i in range(60)
+            ),
+        )
+    ]
+    assert recaps.find_montage(opening, earlier) is not None

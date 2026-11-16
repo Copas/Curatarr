@@ -26,7 +26,8 @@ Channel Zero (find_montage). Without an opener, a recap is marked only when the
 episode opens with a dense run of lines each quoted from exactly one earlier
 episode's body: not their openings, where theme songs and their own recaps
 are, and not a line their openings share (a theme song, however speech
-recognition spelled it each time).
+recognition spelled it each time). Lines that replay one earlier scene
+straight through, in order, are that scene shown again, not a recap.
 
 Nothing is marked when none of this applies: a wrong recap skips part of the
 episode, which is worse than having no skip button.
@@ -34,6 +35,7 @@ episode, which is worse than having no skip button.
 
 import re
 from dataclasses import dataclass
+from itertools import pairwise
 
 OPENER = re.compile(
     r"\b(previously,?\s+on|last (time|week|season),?\s+on|"
@@ -74,6 +76,9 @@ MONTAGE_CLIPS = 3
 MONTAGE_DENSITY = 0.6
 MONTAGE_EARLIER = 6
 MONTAGE_SKIP_OPENING = 120.0
+# Clips from one earlier episode, in order, spanning no more of it than this
+# times as long as they take here, plus this, are one scene shown again.
+ONE_SCENE_STRETCH, ONE_SCENE_SLACK = 2.0, 30.0
 
 
 @dataclass(frozen=True)
@@ -304,7 +309,38 @@ def find_montage(segments, earlier_transcripts, *, scenes=(), settle=None):
     ]
     if len(run) < MONTAGE_DENSITY * len(worded):
         return None
+    if _one_scene(run, list(earlier_transcripts)):
+        return None
     return _bounded(0.0, spoken_end(run[-1]), "montage", scenes, settle)
+
+
+def _source(line, transcripts):
+    """(episode, time) of the earlier body line ``line`` was quoted from."""
+    said = grams(line.text) | grams(line.text, FUZZY_GRAM)
+    best = None
+    for number, segments in enumerate(transcripts[:MONTAGE_EARLIER]):
+        for s in segments or ():
+            if s.start < MONTAGE_SKIP_OPENING:
+                continue
+            shared = len(said & (grams(s.text) | grams(s.text, FUZZY_GRAM)))
+            if shared and (best is None or shared > best[0]):
+                best = (shared, number, s.start)
+    return best[1:] if best else None
+
+
+def _one_scene(run, transcripts) -> bool:
+    """Whether the clips replay one earlier scene straight through: all from
+    one episode, in order, over about as long as they take here. A recap cuts
+    between moments; one scene shown again (a cold open that episode also
+    has, as a flashback) isn't one."""
+    sources = [_source(line, transcripts) for line in run]
+    if any(s is None for s in sources) or len({e for e, _t in sources}) > 1:
+        return False
+    times = [t for _e, t in sources]
+    if any(b < a for a, b in pairwise(times)):
+        return False
+    here = run[-1].start - run[0].start
+    return times[-1] - times[0] <= ONE_SCENE_STRETCH * here + ONE_SCENE_SLACK
 
 
 def _find_end(
