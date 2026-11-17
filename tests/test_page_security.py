@@ -94,3 +94,24 @@ def test_bootstrap_system_css_is_generated_from_bootstrap():
     written = module.system_css((static / "bootstrap.min.css").read_text())
     assert (static / "bootstrap-system.css").read_text() == written
     assert ":root:not([data-bs-theme]){color-scheme:dark;" in written
+
+
+def test_pages_fetch_links_early_and_a_post_clears_them(app):
+    from curatarr.routes import SPECULATION_RULES
+
+    client = app.test_client()
+    app.config["ALLOW_UNAUTHENTICATED"] = False
+    page = client.get("/login")
+    assert page.headers["Speculation-Rules"] == '"/speculation-rules.json"'
+    rules = client.get("/speculation-rules.json")  # signed out too
+    assert rules.status_code == 200
+    assert rules.mimetype == "application/speculationrules+json"
+    assert rules.get_json() == SPECULATION_RULES
+    # only fetched, and only once a link is pointed at
+    (rule,) = rules.get_json()["prefetch"]
+    assert "prerender" not in rules.get_json() and rule["eagerness"] == "moderate"
+    assert "Speculation-Rules" not in client.get("/static/logo.svg").headers
+    # anything posted clears what was fetched early
+    posted = client.post("/preferences/theme", data={"theme": "dark"})
+    assert posted.headers["Clear-Site-Data"] == '"prefetchCache"'
+    assert "Clear-Site-Data" not in page.headers

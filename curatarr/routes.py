@@ -127,6 +127,52 @@ def security_headers(response):
     # on the same machine or home domain (a dashboard showing a poster).
     response.headers["Cross-Origin-Resource-Policy"] = "same-site"
     response.vary.update(("Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site"))
+    if response.mimetype == "text/html":
+        # Pages fetch the page a link leads to while it's being pointed at
+        # (speculation_rules), so it opens at once when clicked.
+        response.headers["Speculation-Rules"] = f'"{url_for("main.speculation_rules")}"'
+    if request.method == "POST":
+        # Something changed: pages fetched early would show it as it was.
+        response.headers["Clear-Site-Data"] = '"prefetchCache"'
+    return response
+
+
+# The browser fetches a page while its link is pointed at (hovered, or
+# pressed on a touch screen), only fetching: nothing on it runs until it's
+# opened. Every page opened by a link only shows something (an action is
+# always a form posted), and a post clears what was fetched early. Left out:
+# files and pictures, the API, and links marked download, opening a new tab
+# or .no-prefetch.
+SPECULATION_RULES = {
+    "prefetch": [
+        {
+            "source": "document",
+            "where": {
+                "and": [
+                    {"href_matches": "/*"},
+                    {"not": {"href_matches": "/static/*"}},
+                    {"not": {"href_matches": "/api/*"}},
+                    {"not": {"href_matches": "/library/posters/candidates/*"}},
+                    {"not": {"href_matches": "/library/posters/images/*"}},
+                    {"not": {"href_matches": "/library/posters/now/*"}},
+                    {
+                        "not": {
+                            "selector_matches": "[download], [target=_blank], .no-prefetch"
+                        }
+                    },
+                ]
+            },
+            "eagerness": "moderate",
+        }
+    ]
+}
+
+
+@bp.get("/speculation-rules.json")
+def speculation_rules():
+    response = jsonify(SPECULATION_RULES)
+    response.mimetype = "application/speculationrules+json"
+    response.cache_control.max_age = 3600
     return response
 
 
@@ -185,6 +231,7 @@ PUBLIC_ENDPOINTS = {
     "main.api_status",
     "main.webhook",
     "main.jellyfin_delete",
+    "main.speculation_rules",  # the same for everyone; the sign-in page uses it
     "static",
 }
 
