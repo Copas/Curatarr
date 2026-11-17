@@ -20,7 +20,7 @@
 <form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
   <input type="hidden" name="library" value="{{ library_id or '' }}">
   <label class="form-label mb-0">Skip shows added in the last
-    <div class="input-group"><input class="form-control" type="number" min="0" max="3650" name="skip_days" value="{{ skip_days }}" style="max-width: 7rem"><span class="input-group-text">days</span></div>
+    <div class="input-group"><input class="form-control input-max-7" type="number" min="0" max="3650" name="skip_days" value="{{ skip_days }}"><span class="input-group-text">days</span></div>
   </label>
   <button class="btn btn-outline-secondary">Update list</button>
 </form>
@@ -47,7 +47,7 @@
   <input type="hidden" name="skip_days" value="{{ skip_days }}">
   <input type="hidden" name="library" value="{{ library_id or '' }}">
   <label class="form-label">To confirm, type <strong>{{ phrase }}</strong>
-    <input class="form-control mt-1" name="confirm" autocomplete="off" required style="max-width: 20rem">
+    <input class="form-control mt-1 input-max-20" name="confirm" autocomplete="off" required>
   </label>
   <div class="d-flex gap-2 mt-2">
     <a class="btn btn-outline-secondary" href="{{ url_for('main.shows', library=library_id) }}">Cancel</a>

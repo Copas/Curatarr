@@ -36,7 +36,7 @@
   {{ confirm_submit('Mark ticked Leaving Soon', 'Mark the ticked titles Leaving Soon? Nothing is deleted until their notice period ends.', 'Mark Leaving Soon', tip='Starts each one’s notice period and badges its poster.') }}
 </form>
 <div class="table-responsive"><table class="table align-middle">
-<thead><tr><th class="text-center" style="width:2.5rem"><span class="visually-hidden">Select</span></th><th>Title</th><th class="text-end">Frees</th><th>Added</th><th>Last watched</th><th>Status</th></tr></thead>
+<thead><tr><th class="text-center col-w-select"><span class="visually-hidden">Select</span></th><th>Title</th><th class="text-end">Frees</th><th>Added</th><th>Last watched</th><th>Status</th></tr></thead>
 <tbody>
 {% for row in rows %}{% set c = row.candidate %}{% set leaving = c and c.state in ('LEAVING_SOON', 'APPROVED', 'EXECUTING') %}<tr>
   <td class="text-center">{% if not leaving and not row.never_purge and not row.held %}<input class="form-check-input" type="checkbox" name="media_id" value="{{ row.media.id }}" form="leaving-form" aria-label="Mark {{ row.media|labelled }}">{% endif %}</td>

@@ -6,8 +6,8 @@
   --app-surface: light-dark(#fff, #172431);
   --app-border: light-dark(#d4dfe7, #314357);
   --app-muted: light-dark(#536273, #b5c3d1);
-  --app-accent: light-dark(#087aaa, #62c5ef);
-  --app-success: light-dark(#1e7d4a, #5fd08f);
+  --app-accent: light-dark(#0774a2, #62c5ef);
+  --app-success: light-dark(#197243, #5fd08f);
   --app-before: light-dark(#9fb1c1, #4f6478);
   --app-warning: light-dark(#8a5a00, #f2c14e);
   --app-warning-bg: light-dark(#fff3d6, rgba(242, 193, 78, .14));
@@ -29,6 +29,23 @@ body { background: var(--app-bg); color: var(--bs-body-color); }
 .card, .list-group-item { background: var(--app-surface); border: 1px solid var(--app-border); }
 .card { border-radius: .85rem; }
 .text-secondary, .form-text { color: var(--app-muted) !important; }
+/* Bootstrap's own text colours are made for a white page: its yellow is 1.6:1
+   on it, its blue, green and red about 4.2:1, under the 4.5:1 text needs to
+   be readable. Curatarr's colours pass in both schemes, so its text uses those. */
+.text-warning { color: var(--app-warning) !important; }
+.text-success { color: var(--app-success) !important; }
+.text-danger { color: var(--app-danger) !important; }
+.text-primary { color: var(--app-accent) !important; }
+.link-secondary { color: var(--app-muted) !important; }
+.btn-outline-danger { --bs-btn-color: var(--app-danger); --bs-btn-border-color: var(--app-danger); }
+.btn-outline-warning { --bs-btn-color: var(--app-warning); --bs-btn-border-color: var(--app-warning); }
+.btn-outline-success { --bs-btn-color: var(--app-success); --bs-btn-border-color: var(--app-success); }
+/* Links: a shade darker than Bootstrap's blue in light (5.4:1 on the page,
+   not 4.2:1). Its dark-scheme blue already passes. */
+:root[data-bs-theme="light"] { --bs-link-color: #0b5ed7; --bs-link-color-rgb: 11, 94, 215; --bs-link-hover-color: #0a4fb3; --bs-link-hover-color-rgb: 10, 79, 179; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-bs-theme]) { --bs-link-color: #0b5ed7; --bs-link-color-rgb: 11, 94, 215; --bs-link-hover-color: #0a4fb3; --bs-link-hover-color-rgb: 10, 79, 179; }
+}
 .btn-outline-secondary { --bs-btn-color: var(--bs-emphasis-color); --bs-btn-border-color: var(--app-border); --bs-btn-hover-color: var(--bs-emphasis-color); --bs-btn-hover-bg: var(--app-border); --bs-btn-hover-border-color: var(--app-border); }
 a { text-underline-offset: .18em; }
 :focus-visible { outline: 3px solid var(--app-accent); outline-offset: 3px; }
@@ -91,7 +108,7 @@ progress { height: .75rem; accent-color: var(--app-accent); }
 .review-actions form { margin: 0; }
 .curatarr-wordmark { display: block; width: 6.875rem; height: auto; overflow: visible; }
 .curatarr-logo .curatarr-arrow { transform-box: view-box; transform-origin: 50% 50%; animation: curatarr-spin 1.2s cubic-bezier(.4,0,.2,1) 100ms 1; }
-.curatarr-arrow-top { fill: light-dark(#087aaa, #48b8ef); }
+.curatarr-arrow-top { fill: light-dark(#0774a2, #48b8ef); }
 .curatarr-arrow-bottom { fill: light-dark(#b46208, #ffb85c); }
 /* Moving between pages cross-fades instead of flashing (browsers without
    it change pages as before), unless motion is turned down. */
@@ -150,7 +167,7 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .chip-accent { color: var(--app-accent); border-color: color-mix(in srgb, var(--app-accent) 40%, transparent); }
 .chip-star { color: #d4a017; border-color: color-mix(in srgb, #d4a017 45%, transparent); background: color-mix(in srgb, #d4a017 12%, transparent); }
 .chip-star .icon, .fav-star .icon { fill: currentColor; }
-.fav-star { color: #d4a017; font-size: .8125rem; white-space: nowrap; }
+.fav-star { color: light-dark(#876200, #d4a017); font-size: .8125rem; white-space: nowrap; }
 .chip-danger { color: var(--app-danger); border-color: color-mix(in srgb, var(--app-danger) 40%, transparent); }
 .chip-row { display: flex; gap: .4rem; overflow-x: auto; scrollbar-width: none; padding-bottom: .1rem; }
 .chip-row::-webkit-scrollbar { display: none; }
@@ -412,6 +429,13 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 .lightbox { max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; margin: 0; padding: 0; border: 0; background: rgba(0, 0, 0, .92); cursor: zoom-out; }
 .lightbox[open] { display: flex; align-items: center; justify-content: center; }
 .lightbox::backdrop { background: rgba(0, 0, 0, .6); }
+/* Scrolling on an open picture (or the dimmed page around it) doesn't
+   scroll the page underneath. overscroll-behavior only works on a scroll
+   container, which ::backdrop isn't until it has overflow: hidden. No
+   overflow: hidden on <body>: that jumps the page and drops its scrollbar.
+   Where a browser doesn't apply this yet, the page scrolls as before. */
+dialog:modal { overscroll-behavior: contain; }
+dialog::backdrop { overflow: hidden; overscroll-behavior: contain; }
 .lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .poster-extras { display: flex; flex-wrap: wrap; gap: .4rem; }
 .poster-extras figure { margin: 0; display: flex; flex-direction: column; gap: .15rem; font-size: .75rem; color: var(--bs-secondary-color); }
@@ -632,3 +656,11 @@ summary.section-title { display: list-item; cursor: pointer; }
 .cast-person img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: .4rem; background: var(--app-bg); }
 .cast-name { font-weight: 600; font-size: .9rem; }
 .cast-count { color: var(--app-muted); font-size: .75rem; }
+
+/* Widths for small inputs and columns. These used to be style="" attributes,
+   which the page's security policy refuses. */
+.input-w-days { width: 4.5rem; }
+.col-w-select { width: 2.5rem; }
+.input-max-7 { max-width: 7rem; }
+.input-max-12 { max-width: 12rem; }
+.input-max-20 { max-width: 20rem; }

@@ -23,13 +23,15 @@
     return window.curatarrSwap.redraw(el);
   }
 
+  // Low priority: a check in the background, so a page someone clicks to
+  // loads first on a slow connection.
   function check() {
     var images = [], jobs = [];
     parts().forEach(function (el) {
       (el.dataset.live === "image" ? images : jobs).push(el.dataset.liveId);
     });
     var url = root.dataset.statusUrl + "?images=" + images.join(",") + "&jobs=" + jobs.join(",");
-    return fetch(url)
+    return fetch(url, { priority: "low" })
       .then(function (response) { return response.ok ? response.json() : null; })
       .then(function (status) {
         if (!status) return true;

@@ -7,9 +7,11 @@
   var last = null;  // the last line fetched (the page's own has local times)
   if (!line || !line.dataset.active) return;
 
+  // Low priority: a check in the background, so a page someone clicks to
+  // loads first on a slow connection.
   function check() {
     window.curatarrSwap.visible()
-      .then(function () { return fetch(line.dataset.statusUrl); })
+      .then(function () { return fetch(line.dataset.statusUrl, { priority: "low" }); })
       .then(function (response) { return response.ok ? response.text() : null; })
       .then(function (html) {
         if (!html) return true;

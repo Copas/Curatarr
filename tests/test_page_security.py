@@ -50,6 +50,20 @@ def test_pages_pass_the_inline_script_check(app, client):
     assert looked > 20
 
 
+def test_templates_have_no_inline_styles():
+    """The security policy refuses style="" attributes (no 'unsafe-inline'),
+    so one would silently do nothing: sizes go in style.css as classes."""
+    from pathlib import Path
+
+    templates = Path(__file__).parents[1] / "curatarr" / "templates"
+    found = [
+        f"{path.name}: {match.group(0)}"
+        for path in templates.rglob("*.html")
+        for match in re.finditer(r'\sstyle="[^"]*"', path.read_text())
+    ]
+    assert not found, found
+
+
 def test_other_sites_can_link_but_not_post(client):
     page = client.get("/titles")
     assert (
