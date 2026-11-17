@@ -40,6 +40,7 @@
   }
 
   document.addEventListener("mouseover", function (event) {
+    if (tip && tip.contains(event.target)) return;  // reading the tip itself
     var el = target(event);
     if (el) show(el);
     else if (owner) hide();

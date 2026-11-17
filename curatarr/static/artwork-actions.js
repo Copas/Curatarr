@@ -8,17 +8,8 @@
 // (and the top of the page) is redrawn. If the background request fails,
 // the form is sent the usual way, so nothing's lost.
 (function () {
-  var notes = document.createElement("div");
-  notes.className = "artwork-notes";
-  notes.setAttribute("aria-live", "polite");
-  document.body.appendChild(notes);
-
   function note(text, category) {
-    var item = document.createElement("div");
-    item.className = "artwork-note artwork-note-" + (category || "success");
-    item.textContent = text;
-    notes.appendChild(item);
-    setTimeout(function () { item.remove(); }, 6000);
+    window.curatarrNote(text, category, 6000);
   }
 
   function redraw(el) {

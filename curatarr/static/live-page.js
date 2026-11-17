@@ -6,20 +6,8 @@
 // the form is sent the usual way, so nothing's lost.
 (function () {
   var pending = {}; // form key → true while its request is out
-  var notes = document.querySelector(".artwork-notes");
-  if (!notes) {
-    notes = document.createElement("div");
-    notes.className = "artwork-notes";
-    notes.setAttribute("aria-live", "polite");
-    document.body.appendChild(notes);
-  }
-
   function note(text, category) {
-    var item = document.createElement("div");
-    item.className = "artwork-note artwork-note-" + (category || "success");
-    item.textContent = text;
-    notes.appendChild(item);
-    setTimeout(function () { item.remove(); }, 8000);
+    window.curatarrNote(text, category, 8000);
   }
 
   function key(form, button) {

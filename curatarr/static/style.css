@@ -341,7 +341,7 @@ h1 { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem); font-weight: 600; letter
 @media (max-width: 575.98px) {
   .chip-row { flex-wrap: wrap; overflow: visible; }
 }
-.app-tip { position: absolute; z-index: 1080; max-width: min(20rem, calc(100vw - 16px)); padding: .45rem .65rem; border-radius: .5rem; background: var(--bs-emphasis-color); color: var(--app-bg); font-size: .82rem; line-height: 1.35; box-shadow: var(--app-shadow); pointer-events: none; }
+.app-tip { position: absolute; z-index: 1080; max-width: min(20rem, calc(100vw - 16px)); padding: .45rem .65rem; border-radius: .5rem; background: var(--bs-emphasis-color); color: var(--app-bg); font-size: .82rem; line-height: 1.35; box-shadow: var(--app-shadow); }
 [data-tip] { -webkit-touch-callout: none; }
 .pick-list { border: 1px solid var(--app-border); border-radius: .85rem; overflow: hidden; background: var(--app-surface); }
 .pick-row { display: flex; align-items: flex-start; gap: .85rem; padding: .75rem 1rem; }
@@ -589,8 +589,12 @@ body:has(.title-show) { overflow-x: clip; }
 .artwork-fold summary { cursor: pointer; color: var(--app-muted); }
 .artwork-fold[open] summary { color: var(--bs-body-color); }
 .artwork-refs .artwork-ref { width: 7rem; }
-.artwork-notes { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: .5rem; z-index: 1080; max-width: min(28rem, calc(100vw - 2rem)); }
-.artwork-note { padding: .6rem .9rem; border-radius: .6rem; background: var(--app-raised); border: 1px solid var(--app-border); box-shadow: var(--app-shadow); font-size: .9rem; }
+/* A manual popover in the top layer (notes.js): the browser's own popover
+   styles (centred, bordered) are undone, and it's laid out only while open. */
+.artwork-notes { position: fixed; inset: auto 1rem 1rem auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; flex-direction: column; gap: .5rem; z-index: 1080; max-width: min(28rem, calc(100vw - 2rem)); }
+.artwork-notes:popover-open, .artwork-notes:not([popover]) { display: flex; }
+.artwork-note { display: flex; align-items: flex-start; gap: .75rem; padding: .6rem .9rem; border-radius: .6rem; background: var(--app-raised); border: 1px solid var(--app-border); box-shadow: var(--app-shadow); font-size: .9rem; }
+.artwork-note-close { flex: none; margin-left: auto; width: .6rem; height: .6rem; }
 .artwork-note-success { border-color: var(--app-success); }
 .artwork-note-warning, .artwork-note-danger { border-color: var(--app-danger); }
 .artwork-reviewed { margin: .75rem 0; }

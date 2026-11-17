@@ -118,7 +118,7 @@
   {% if aside %}<h3 class="h6 mt-3">Subtitles set aside</h3><p class="small text-secondary mb-2">English subtitles Curatarr judged out of sync and moved aside. Bring back puts them back for good.</p>
   {% set back_to = request.path %}{% for part, c in aside %}{% set state = c.state %}{% include '_subtitle_card.html' %}{% endfor %}{% endif %}
 </section>
-{% if aside %}<script src="{{ url_for('static', filename='artwork-actions.js', v='7') }}"></script>{% endif %}
+{% if aside %}<script src="{{ url_for('static', filename='artwork-actions.js', v='8') }}"></script>{% endif %}
 {% endif %}
 {% if is_admin and actions %}<h2 class="section-title">Recent activity</h2><ul>{% for action in actions %}<li><a href="{{ url_for('main.history_detail', action_id=action.id) }}">{{ action_name(action) }}</a> · {{ action.state }} · {{ action.reason_text }}</li>{% endfor %}</ul>{% endif %}
 {% if is_admin %}<details class="mt-4"><summary class="section-title">Advanced: this title's own cleanup rules</summary><div class="pt-3">
