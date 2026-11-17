@@ -22,6 +22,11 @@
     tip.setAttribute("role", "tooltip");
     tip.textContent = el.dataset.tip;
     document.body.appendChild(tip);
+    // In the top layer, so it shows over an open menu or dialog too.
+    if ("popover" in HTMLElement.prototype) {
+      tip.popover = "manual";
+      tip.showPopover();
+    }
     el.setAttribute("aria-describedby", tip.id);
     var box = el.getBoundingClientRect();
     var width = tip.offsetWidth;

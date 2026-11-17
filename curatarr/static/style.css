@@ -53,7 +53,7 @@
   /* Short tab names exist for phones; tabs there share the width rather than
      scroll sideways (a tap on a strip still gliding only stops it on iOS). */
   .tab-short { display: none; }
-  .app-tip { position: absolute; z-index: 1080; max-width: min(20rem, calc(100vw - 16px)); padding: .45rem .65rem; border-radius: .5rem; background: var(--app-strong); color: var(--app-bg); font-size: .82rem; line-height: 1.35; box-shadow: var(--app-shadow); }
+  .app-tip { position: absolute; inset: auto; margin: 0; border: 0; overflow: visible; z-index: 1080; max-width: min(20rem, calc(100vw - 16px)); padding: .45rem .65rem; border-radius: .5rem; background: var(--app-strong); color: var(--app-bg); font-size: .82rem; line-height: 1.35; box-shadow: var(--app-shadow); }
   @media (prefers-color-scheme: dark) {
     html:not([data-theme]) .theme-to-light { display: inline-flex; }
     html:not([data-theme]) .theme-to-dark { display: none; }
@@ -470,16 +470,12 @@
   }
 
   /* Action menus */
-  /* A small menu of less-used actions (Review cards). */
-  .action-menu {
-    position: relative;
-    > summary { list-style: none; display: inline-flex; align-items: center; gap: .3rem; }
-    > summary::-webkit-details-marker { display: none; }
-  }
+  /* A small menu of actions (Review cards, Pause all work): templates/_menu.html. */
+  .action-menu > .btn { display: inline-flex; align-items: center; gap: .3rem; }
   .action-menu-items {
-    position: absolute; z-index: 20; top: calc(100% + .3rem); left: 0; min-width: 11rem; padding: .3rem; background: var(--app-raised); border: 1px solid var(--app-border); border-radius: .6rem; box-shadow: var(--app-shadow);
+    min-width: 11rem; padding: .3rem;
     button { display: block; width: 100%; text-align: left; padding: .5rem .7rem; border: 0; border-radius: .4rem; background: none; color: var(--app-text); }
-    button:hover { background: var(--app-bg); }
+    button:hover, button:focus-visible { background: var(--app-bg); }
     form { margin: 0; }
   }
   /* A card row with something to do: what it is on the left, its buttons on the
@@ -621,21 +617,48 @@
   .fun-phrases li { flex-direction: column; align-items: stretch; gap: .1rem; }
   .fun-phrases .fun-value { white-space: normal; text-align: left; }
 
-  /* Pause menu */
-  .pause-menu .action-menu-items { left: auto; right: 0; }
 
   /* Confirm in place */
-  /* A button that asks first, in place (templates/_confirm.html). */
-  .confirm-inline {
-    display: inline-block;
-    > summary { list-style: none; }
-    > summary::-webkit-details-marker { display: none; }
+  /* A button that asks first, in a small box beside it (templates/_confirm.html). */
+  .confirm-inline { display: inline-block; }
+  .confirm-pop { max-width: min(22rem, calc(100vw - 1rem)); padding: .75rem; font-size: .875rem; }
+  .confirm-pop-question { display: block; margin-bottom: .6rem; }
+  .confirm-pop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+
+  /* Popups: menus and confirm boxes, in the top layer beside their button.
+     Anchor positioning places them (flipping to stay on screen); where a
+     browser has none, static/popups.js does. */
+  .action-menu-items, .confirm-pop {
+    color: var(--app-text); background: var(--app-raised);
+    border: 1px solid var(--app-border); border-radius: .6rem; box-shadow: var(--app-shadow);
   }
-  .confirm-inline .when-open, .confirm-inline[open] .when-closed { display: none; }
-  .confirm-inline[open] .when-open { display: inline; }
-  .confirm-inline[open] { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-  .confirm-inline-body { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .875rem; }
-  .confirm-inline[open] > summary { --btn-fg: var(--app-muted); --btn-line: var(--app-border); --btn-bg: transparent; --btn-hover-fg: var(--app-text); --btn-hover-bg: transparent; --btn-hover-line: var(--app-muted); }
+  @supports (position-area: block-end) {
+    .action-menu-items, .confirm-pop {
+      inset: auto; margin: .3rem 0 0;
+      position-area: block-end span-inline-end;
+      position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    }
+  }
+  @supports not (position-area: block-end) {
+    .action-menu-items, .confirm-pop { inset: auto; margin: 0; }
+  }
+  /* Without popovers at all (older browsers): shown by popups.js. */
+  .no-popover :is(.action-menu-items, .confirm-pop) { position: fixed; z-index: 1070; }
+  .no-popover :is(.action-menu-items, .confirm-pop):not(.is-open) { display: none; }
+  .no-popover :is(.action-menu-items, .confirm-pop).is-open { opacity: 1; translate: none; }
+  .btn[aria-expanded="true"] { color: var(--btn-hover-fg); background: var(--btn-hover-bg); border-color: var(--btn-hover-line); }
+  @media (prefers-reduced-motion: no-preference) {
+    .action-menu-items, .confirm-pop {
+      opacity: 0; translate: 0 -.25rem;
+      transition: opacity, translate, display, overlay;
+      transition-duration: .15s;
+      transition-behavior: allow-discrete;
+      &:popover-open {
+        opacity: 1; translate: 0 0; transition-duration: .1s;
+        @starting-style { opacity: 0; translate: 0 -.25rem; }
+      }
+    }
+  }
 
   /* Picture wall */
   .picture-open {
@@ -663,6 +686,19 @@
   .lightbox[open] { display: flex; align-items: center; justify-content: center; }
   .lightbox::backdrop { background: rgba(0, 0, 0, .6); }
   .lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  /* The picture viewers fade in and out, the dimmed page behind them too
+     (display and overlay keep a closing one on screen until it has faded). */
+  .lightbox, .lightbox::backdrop {
+    transition-property: opacity, display, overlay;
+    transition-duration: .2s;
+    transition-behavior: allow-discrete;
+    @media (prefers-reduced-motion: reduce) { transition-duration: .1s; }
+  }
+  .lightbox:not([open]), .lightbox:not([open])::backdrop { opacity: 0; }
+  .lightbox[open], .lightbox[open]::backdrop {
+    opacity: 1;
+    @starting-style { opacity: 0; }
+  }
 
   /* Gallery showcase */
   /* Posters → Gallery: each title's pictures as a streaming app's hero card. */

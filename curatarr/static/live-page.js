@@ -48,14 +48,10 @@
     var here = document.querySelector("[data-live-page]");
     if (!fresh || !here) return false;
     var open = {};
-    here.querySelectorAll("details[open]").forEach(function (d, n) {
-      if (!d.classList.contains("confirm-inline")) open[n] = true;
-    });
+    here.querySelectorAll("details[open]").forEach(function (d, n) { open[n] = true; });
     var x = window.scrollX, y = window.scrollY;
     here.replaceWith(fresh);
-    fresh.querySelectorAll("details").forEach(function (d, n) {
-      if (open[n] && !d.classList.contains("confirm-inline")) d.open = true;
-    });
+    fresh.querySelectorAll("details").forEach(function (d, n) { if (open[n]) d.open = true; });
     ["nav.section-nav", ".app-nav"].forEach(function (selector) {
       var a = document.querySelector(selector), b = doc.querySelector(selector);
       if (a && b) a.replaceWith(b);

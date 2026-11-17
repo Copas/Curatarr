@@ -82,5 +82,7 @@ def test_wrong_episodes_reach_overview_and_get_a_tab(app, client, monkeypatch):
 def test_token_buttons_ask_before_breaking_what_uses_them(app, client):
     client.post("/settings", data={"kind": "api_key"})
     page = client.get("/settings").text
-    assert "Revoke…</span>" in page and "Revoke the key</button>" in page
+    assert "Revoke…</button>" in page and "Revoke the key</button>" in page
+    # the question opens beside the button, from the button itself
+    assert 'command="toggle-popover"' in page and 'class="confirm-pop" popover' in page
     assert "Make a new key</button>" in page

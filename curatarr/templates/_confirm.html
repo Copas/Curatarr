@@ -1,4 +1,6 @@
-{# A button that asks first, in place: the first click opens the question, the
-   second does it. For one-click actions that break something elsewhere (a token
-   another tool uses). Put it inside the form; the confirm button submits it. #}
-{% macro confirm_submit(label, question, confirm_label, style='btn-outline-danger', tip='', confirm_style='btn-danger') %}<details class="confirm-inline"><summary class="btn btn-sm {{ style }}"{% if tip %} data-tip="{{ tip }}"{% endif %}><span class="when-closed">{{ label }}…</span><span class="when-open">Cancel</span></summary><div class="confirm-inline-body"><span>{{ question }}</span><button class="btn btn-sm {{ confirm_style }}">{{ confirm_label }}</button></div></details>{% endmacro %}
+{# A button that asks first, in place: it opens a small box beside it with
+   the question, Cancel, and the button that does it. For one-click actions
+   that break something elsewhere (a token another tool uses). Put it inside
+   the form; the confirm button submits it. The box is a popover (Escape or a
+   click elsewhere closes it); static/popups.js covers browsers without one. #}
+{% macro confirm_submit(label, question, confirm_label, style='btn-outline-danger', tip='', confirm_style='btn-danger') %}{% set pid = 'confirm-' ~ (range(1, 1000000000)|random) %}<span class="confirm-inline"><button type="button" class="btn btn-sm {{ style }}" commandfor="{{ pid }}" command="toggle-popover" aria-expanded="false"{% if tip %} data-tip="{{ tip }}"{% endif %}>{{ label }}…</button><span id="{{ pid }}" class="confirm-pop" popover role="group" aria-label="{{ label }}"><span class="confirm-pop-question">{{ question }}</span><span class="confirm-pop-actions"><button type="button" class="btn btn-sm btn-outline-secondary" commandfor="{{ pid }}" command="hide-popover">Cancel</button><button class="btn btn-sm {{ confirm_style }}">{{ confirm_label }}</button></span></span></span>{% endmacro %}

@@ -1,0 +1,6 @@
+{# A small menu of actions: a button that opens a popover menu beside it
+   (arrow keys move between the items, Escape or a click elsewhere closes it,
+   focus goes back to the button). Each item is a form's button. The caller
+   gives the items; static/popups.js covers browsers without popovers, invoker
+   buttons, anchor positioning or focusgroup. #}
+{% macro action_menu(id, label, button_class='btn btn-sm btn-outline-secondary', tip='', aria_label='', extra='') %}<span class="action-menu {{ extra }}"><button type="button" id="{{ id }}-button" class="{{ button_class }}" commandfor="{{ id }}" command="toggle-popover" aria-haspopup="menu" aria-expanded="false"{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if tip %} data-tip="{{ tip }}"{% endif %}>{{ label }}</button><div id="{{ id }}" class="action-menu-items" popover><div focusgroup="menu nomemory" aria-labelledby="{{ id }}-button">{{ caller() }}</div></div></span>{% endmacro %}
