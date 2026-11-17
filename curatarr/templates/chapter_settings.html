@@ -152,7 +152,7 @@
     <li class="{{ 'ok' if environment.ollama else 'missing' }}"><strong>Ollama</strong> {% if environment.ollama %}reachable, {{ environment.ollama_models|length }} model{{ '' if environment.ollama_models|length == 1 else 's' }}{% else %}not reachable{% endif %}</li>
   </ul>
   <div class="setting-grid">
-    <div class="setting"><label class="form-label w-100">Ollama URL<input class="form-control" name="ollama_url" value="{{ opts.ollama_url }}"></label></div>
+    <div class="setting"><label class="form-label w-100">Ollama URL<input class="form-control" type="url" name="ollama_url" placeholder="http://localhost:11434" value="{{ opts.ollama_url }}"></label></div>
     <div class="setting"><label class="form-label w-100">Transcription device<select class="form-select" name="whisper_device">{% for device in ['auto', 'cuda', 'cpu'] %}<option{% if opts.whisper_device == device %} selected{% endif %}>{{ device }}</option>{% endfor %}</select></label></div>
     <div class="setting setting-wide"><label class="form-label w-100">Path mappings<textarea class="form-control font-monospace" rows="2" name="path_mappings" placeholder="/tv => /mnt/media/tv">{% for m in opts.path_mappings %}{{ m.arr }} => {{ m.local }}
 {% endfor %}</textarea></label><div class="form-text">Only when Sonarr and Radarr see the files at a different path than Curatarr does (for example in Docker).</div></div>

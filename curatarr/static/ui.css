@@ -282,6 +282,18 @@
   .form-control-sm { padding: .25rem .5rem; font-size: .875rem; border-radius: var(--app-radius-sm); }
   .form-control-sm::file-selector-button { padding: .25rem .5rem; margin: -.25rem .5rem -.25rem -.5rem; }
   textarea.form-control { min-height: calc(1.5em + .75rem + 2px); }
+  /* Text boxes you type in grow with what's in them, up to 15 lines (then
+     scroll). A browser without field-sizing keeps the rows they were given. */
+  textarea.form-control:not([readonly]) { field-sizing: content; min-block-size: calc(2lh + .75rem + 2px); max-block-size: calc(15lh + .75rem + 2px); }
+  /* A field that's wrong once someone has left it or tried to send the form
+     (not while they're typing): a red border and, under it, what's wrong
+     (static/forms.js writes the words); its label turns red too. */
+  .form-control:user-invalid, .form-select:user-invalid { border-color: var(--app-danger); }
+  .form-control:user-invalid:focus, .form-select:user-invalid:focus { box-shadow: 0 0 0 .25rem color-mix(in srgb, var(--app-danger) 30%, transparent); }
+  .field-error { display: block; margin-top: .25rem; font-size: .875em; color: var(--app-danger); }
+  .field-error::before { content: "\26A0\FE0E  "; }
+  :has(> :user-invalid, > .input-group > :user-invalid) > :is(.form-label, label:not(.form-check)) { color: var(--app-danger); }
+  label.form-label:has(> :user-invalid, > .input-group > :user-invalid) { color: var(--app-danger); }
   .form-control::-webkit-date-and-time-value { min-width: 85px; height: 1.5em; margin: 0; }
   /* The arrow: a chevron in the text colour of each scheme (an image can't
      take currentColor, so --select-arrow is set with the scheme below). */
