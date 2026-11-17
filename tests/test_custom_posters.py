@@ -3,6 +3,7 @@
 import os
 import time
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image
 from test_enrichment import _movie, media_env  # noqa: F401
@@ -917,3 +918,58 @@ def test_the_gallery_sorts_as_chosen_and_remembers_it(app, client, monkeypatch):
     zebra, apple = shown("/library/posters?sort=bogus")  # ignored
     assert zebra < apple
     assert 'aria-current="true">Title Z–A' in client.get("/library/posters").text
+
+
+def test_pictures_shown_small_get_a_small_copy(app, client, monkeypatch):
+    """A background is kept at up to 3840 wide; a gallery tile asks for
+    ?w=480 and gets a WebP that wide, made once; without ?w the original."""
+    _library, media, _part = _movie()
+    _fake(monkeypatch, _picture("#223344"))
+    custom_posters.apply(media, _picture("#cc2222", (1200, 1800)), "Uploaded")
+    poster = custom_posters.active(media.id)
+    whole = client.get(f"/library/posters/{poster.id}.jpg")
+    assert whole.mimetype == "image/jpeg"
+    assert Image.open(BytesIO(whole.data)).size == (1200, 1800)
+    small = client.get(f"/library/posters/{poster.id}.jpg?w=480")
+    assert small.mimetype == "image/webp"
+    assert Image.open(BytesIO(small.data)).size == (480, 720)
+    assert len(small.data) < len(whole.data)
+    # made once: asked again, the same copy from disk
+    copies = list(
+        (app.instance_path and Path(app.instance_path) / "sized").glob(
+            f"{poster.id}-480-*.webp"
+        )
+    )
+    assert len(copies) == 1
+    assert client.get(f"/library/posters/{poster.id}.jpg?w=480").data == small.data
+    # only the listed widths, never larger than the picture
+    assert client.get(f"/library/posters/{poster.id}.jpg?w=500").status_code == 404
+    # the file changes: a new copy, and the old one goes
+    later = time.time() + 5
+    os.utime(poster.image_path, (later, later))
+    client.get(f"/library/posters/{poster.id}.jpg?w=480")
+    assert (
+        len(list((Path(app.instance_path) / "sized").glob(f"{poster.id}-480-*.webp")))
+        == 1
+    )
+    big = client.get(f"/library/posters/{poster.id}.jpg?w=1440")
+    assert Image.open(BytesIO(big.data)).size == (1200, 1800)
+    # The title page offers the copies to the browser, the original full screen.
+    page = client.get(f"/titles/{media.id}").text
+    assert f"/library/posters/{poster.id}.jpg?w=240 240w" in page
+    assert f'data-full="/library/posters/{poster.id}.jpg"' in page
+
+
+def test_a_logo_keeps_its_transparency_when_made_small(app, client, monkeypatch):
+    from curatarr import sized
+
+    clear = BytesIO()
+    Image.new("RGBA", (800, 400), (255, 0, 0, 0)).save(clear, format="PNG")
+    path = Path(app.instance_path) / "logo.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(clear.getvalue())
+    with app.test_request_context():
+        copy = sized.copy(str(path), "logo", 240)
+    small = Image.open(copy)
+    assert small.size == (240, 120) and small.mode == "RGBA"
+    assert small.getpixel((10, 10))[3] == 0

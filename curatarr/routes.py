@@ -393,6 +393,15 @@ def when(value, style="datetime"):
     )
 
 
+@bp.app_template_global("sized")
+def sized_picture(url, sizes, width=480):
+    """src, srcset and sizes for one of Curatarr's own pictures shown small
+    (sized.py): <img {{ sized(url, '(max-width: 575px) 50vw, 210px') }}>."""
+    from . import sized
+
+    return sized.attrs(url, sizes, width)
+
+
 @bp.app_template_filter("labelled")
 def labelled(media):
     """A title with its year, "Carrie (1976)" (MediaIdentity.label); anything

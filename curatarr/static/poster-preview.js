@@ -6,6 +6,7 @@ document.addEventListener("change", (event) => {
   if (!target) return;
   const reader = new FileReader();
   reader.onload = () => {
+    target.removeAttribute("srcset");  // a smaller copy's list would win over src
     target.src = reader.result;
     const opener = target.closest("[data-full]");  // full screen shows the preview too
     if (opener) opener.dataset.full = reader.result;

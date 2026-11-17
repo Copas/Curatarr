@@ -679,7 +679,9 @@ def artwork_candidate_image(candidate_id, ext):
     candidate = db.session.get(ArtworkCandidate, candidate_id)
     if candidate is None or not candidate.path or not Path(candidate.path).is_file():
         abort(404)
-    return send_file(candidate.path, max_age=3600)
+    from . import sized
+
+    return sized.send(candidate.path, f"c-{candidate_id}")
 
 
 @bp.get("/library/posters/images/<image_id>/references/<int:number>")

@@ -88,7 +88,9 @@ def custom_poster_original(media_id, kind):
         found = None
     if found is None or not found.is_file():
         abort(404)
-    return send_file(found, mimetype=custom_posters.mimetype(kind), max_age=3600)
+    from . import sized
+
+    return sized.send(str(found), f"o-{media_id}-{kind}", custom_posters.mimetype(kind))
 
 
 @bp.get("/library/posters/gallery/<media_id>")
@@ -304,10 +306,10 @@ def custom_poster_image(poster_id):
     poster = db.session.get(CustomPoster, poster_id)
     if not poster or not Path(poster.image_path).exists():
         abort(404)
-    return send_file(
-        poster.image_path,
-        mimetype=custom_posters.mimetype(poster.image_type),
-        max_age=3600,
+    from . import sized
+
+    return sized.send(
+        poster.image_path, poster_id, custom_posters.mimetype(poster.image_type)
     )
 
 
