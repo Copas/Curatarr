@@ -83,6 +83,30 @@ from .services import (
 bp = Blueprint("main", __name__)
 
 
+@bp.before_app_request
+def refuse_cross_site():
+    """Another site's page can link to Curatarr, but not make the visitor's
+    browser send it anything else: a form posted to it, a fetch, a picture
+    or script pulled from it (the browser says where a request came from in
+    Sec-Fetch-*; asked before sign-in, so the answer doesn't show whether
+    anyone is signed in). Requests without those headers (Jellyfin and its
+    plugin, scripts, older browsers) aren't affected, and other services on
+    the same machine or home domain count as the same site."""
+    if request.headers.get("Sec-Fetch-Site", "same-origin") in (
+        "same-origin",
+        "same-site",
+        "none",  # typed in, a bookmark
+    ):
+        return
+    if (
+        request.method in ("GET", "HEAD")
+        and request.headers.get("Sec-Fetch-Mode") == "navigate"
+        and request.headers.get("Sec-Fetch-Dest") == "document"
+    ):
+        return  # a link from another site
+    abort(403)
+
+
 @bp.after_app_request
 def security_headers(response):
     response.headers["Content-Security-Policy"] = (
@@ -90,9 +114,19 @@ def security_headers(response):
         # 5.3.3 unchanged): every page works without the internet, and
         # nothing is loaded from anywhere else.
         "default-src 'self'; "
-        "img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"
+        "img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; "
+        # HTML only becomes page content through static/swap.js's policy,
+        # which refuses inline script.
+        "require-trusted-types-for 'script'; trusted-types curatarr-html"
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
+    # A window Curatarr opens (Jellyfin, a release page) can't reach back
+    # into it, nor can a page that opened Curatarr.
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    # Its pictures and files load only on its own pages and other services
+    # on the same machine or home domain (a dashboard showing a poster).
+    response.headers["Cross-Origin-Resource-Policy"] = "same-site"
+    response.vary.update(("Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site"))
     return response
 
 

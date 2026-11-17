@@ -53,7 +53,8 @@
   }
 
   function loop() {
-    check()
+    window.curatarrSwap.visible()
+      .then(check)
       .catch(function () { return true; })
       .then(function (again) {
         if (again !== false) setTimeout(loop, INTERVAL_MS);

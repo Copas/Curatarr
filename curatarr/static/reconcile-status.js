@@ -8,7 +8,8 @@
   if (!line || !line.dataset.active) return;
 
   function check() {
-    fetch(line.dataset.statusUrl)
+    window.curatarrSwap.visible()
+      .then(function () { return fetch(line.dataset.statusUrl); })
       .then(function (response) { return response.ok ? response.text() : null; })
       .then(function (html) {
         if (!html) return true;

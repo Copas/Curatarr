@@ -10,7 +10,8 @@
     if (!el) return;
     var url = el.dataset.refreshUrl;
     if (!url) return;
-    fetch(url)
+    window.curatarrSwap.visible()
+      .then(function () { return fetch(url); })
       .then(function (response) { return response.ok ? response.text() : null; })
       .then(function (html) {
         if (!html || html === last) return;  // nothing new

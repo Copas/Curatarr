@@ -48,3 +48,30 @@ def test_pages_pass_the_inline_script_check(app, client):
             f"{rule.rule}: {html[max(found.start() - 80, 0) : found.end() + 40]}"
         )
     assert looked > 20
+
+
+def test_other_sites_can_link_but_not_post(client):
+    page = client.get("/titles")
+    assert (
+        "require-trusted-types-for 'script'" in page.headers["Content-Security-Policy"]
+    )
+    assert page.headers["Cross-Origin-Opener-Policy"] == "same-origin-allow-popups"
+    assert page.headers["Cross-Origin-Resource-Policy"] == "same-site"
+    assert "Sec-Fetch-Site" in page.headers["Vary"]
+    elsewhere = {"Sec-Fetch-Site": "cross-site"}
+    # a link from another site opens the page…
+    link = elsewhere | {"Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}
+    assert client.get("/titles", headers=link).status_code == 200
+    # …but its forms, fetches and pictures are turned away
+    form = elsewhere | {"Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}
+    assert client.post("/preferences/theme", headers=form).status_code == 403
+    fetched = elsewhere | {"Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty"}
+    assert client.get("/titles", headers=fetched).status_code == 403
+    assert client.get("/static/logo.svg", headers=elsewhere).status_code == 403
+    # the same machine, a bookmark, and callers that don't say (Jellyfin's
+    # plugin) are let through
+    for site in ("same-origin", "same-site", "none"):
+        assert (
+            client.get("/titles", headers={"Sec-Fetch-Site": site}).status_code == 200
+        )
+    assert client.get("/titles").status_code == 200

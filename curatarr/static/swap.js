@@ -96,7 +96,22 @@
       .then(function (html) { return html.trim() ? replace(el, element(html, el), keep) : null; });
   }
 
+  // Resolves at once while the tab is in view; otherwise when it next is.
+  // Pages that check for news every few seconds wait on this, so a tab left
+  // in the background asks nothing, and catches up as soon as it's looked at.
+  function visible() {
+    if (!document.hidden) return Promise.resolve();
+    return new Promise(function (resolve) {
+      document.addEventListener("visibilitychange", function shown() {
+        if (document.hidden) return;
+        document.removeEventListener("visibilitychange", shown);
+        resolve();
+      });
+    });
+  }
+
   window.curatarrSwap = {
+    visible: visible,
     page: page,
     element: element,
     carryOver: carryOver,
