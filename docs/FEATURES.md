@@ -15,7 +15,7 @@
 - [Sharing the machine with playback](#sharing-the-machine-with-playback)
 - [Playing smoothly on every device](#playing-smoothly-on-every-device): audio every device plays, seeking on Roku
 
-The interface groups daily decisions under **Overview** and **Review**, title browsing under **Library**, and file improvements under **Enhance**, and administrator controls under **Activity** and **Settings**. The theme button in the header switches between dark and light for that browser.
+The interface groups daily decisions under **Overview** and **Review**, title browsing under **Library**, and file improvements under **Enhance**, and administrator controls under **Activity** and **Settings**. Pages follow the device's light or dark setting; the theme button in the header picks the other one for that browser, and switching back to the device's own clears the choice.
 
 ---
 

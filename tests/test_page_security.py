@@ -75,3 +75,22 @@ def test_other_sites_can_link_but_not_post(client):
             client.get("/titles", headers={"Sec-Fetch-Site": site}).status_code == 200
         )
     assert client.get("/titles").status_code == 200
+
+
+def test_bootstrap_system_css_is_generated_from_bootstrap():
+    """static/bootstrap-system.css (Bootstrap's dark colours for a page that
+    follows the device) is what scripts/bootstrap_system_theme.py writes
+    from the Bootstrap that ships, so the two never drift apart."""
+    import importlib.util
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "bootstrap_system_theme", root / "scripts" / "bootstrap_system_theme.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    static = root / "curatarr" / "static"
+    written = module.system_css((static / "bootstrap.min.css").read_text())
+    assert (static / "bootstrap-system.css").read_text() == written
+    assert ":root:not([data-bs-theme]){color-scheme:dark;" in written

@@ -1,30 +1,29 @@
-:root, html[data-bs-theme="dark"] {
-  --app-bg: #101923;
-  --app-surface: #172431;
-  --app-border: #314357;
-  --app-muted: #b5c3d1;
-  --app-accent: #62c5ef;
-  --app-success: #5fd08f;
-  --app-before: #4f6478;
-  --app-warning: #f2c14e;
-  --app-warning-bg: rgba(242, 193, 78, .14);
-  --app-danger: #f07178;
-  --app-raised: #1d2c3b;
-  --app-shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 8px 24px rgba(0, 0, 0, .18);
+/* Colours for both schemes, light first: light-dark() follows the page's
+   color-scheme, which Bootstrap sets (light, dark, or following the device
+   through bootstrap-system.css when nobody picked one). */
+:root {
+  --app-bg: light-dark(#f4f7fa, #101923);
+  --app-surface: light-dark(#fff, #172431);
+  --app-border: light-dark(#d4dfe7, #314357);
+  --app-muted: light-dark(#536273, #b5c3d1);
+  --app-accent: light-dark(#087aaa, #62c5ef);
+  --app-success: light-dark(#1e7d4a, #5fd08f);
+  --app-before: light-dark(#9fb1c1, #4f6478);
+  --app-warning: light-dark(#8a5a00, #f2c14e);
+  --app-warning-bg: light-dark(#fff3d6, rgba(242, 193, 78, .14));
+  --app-danger: light-dark(#b42318, #f07178);
+  --app-raised: light-dark(#f9fbfc, #1d2c3b);
+  --app-shadow: 0 1px 2px light-dark(rgba(16, 24, 40, .06), rgba(0, 0, 0, .25)),
+    0 8px 24px light-dark(rgba(16, 24, 40, .06), rgba(0, 0, 0, .18));
 }
-html[data-bs-theme="light"] {
-  --app-bg: #f4f7fa;
-  --app-surface: #fff;
-  --app-border: #d4dfe7;
-  --app-muted: #536273;
-  --app-accent: #087aaa;
-  --app-success: #1e7d4a;
-  --app-before: #9fb1c1;
-  --app-warning: #8a5a00;
-  --app-warning-bg: #fff3d6;
-  --app-danger: #b42318;
-  --app-raised: #f9fbfc;
-  --app-shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .06);
+/* The header's switch shows the scheme it switches to: the opposite of
+   what's on screen, worked out here so it's right before any script runs. */
+button.theme-to-light { display: none; }
+html[data-bs-theme="dark"] .theme-to-light { display: inline-flex; }
+html[data-bs-theme="dark"] .theme-to-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-bs-theme]) .theme-to-light { display: inline-flex; }
+  html:not([data-bs-theme]) .theme-to-dark { display: none; }
 }
 body { background: var(--app-bg); color: var(--bs-body-color); }
 .card, .list-group-item { background: var(--app-surface); border: 1px solid var(--app-border); }
@@ -92,12 +91,10 @@ progress { height: .75rem; accent-color: var(--app-accent); }
 .review-actions form { margin: 0; }
 .curatarr-wordmark { display: block; width: 6.875rem; height: auto; overflow: visible; }
 .curatarr-logo .curatarr-arrow { transform-box: view-box; transform-origin: 50% 50%; animation: curatarr-spin 1.2s cubic-bezier(.4,0,.2,1) 100ms 1; }
-.curatarr-arrow-top { fill: #48b8ef; }
-.curatarr-arrow-bottom { fill: #ffb85c; }
+.curatarr-arrow-top { fill: light-dark(#087aaa, #48b8ef); }
+.curatarr-arrow-bottom { fill: light-dark(#b46208, #ffb85c); }
 @keyframes curatarr-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .curatarr-logo .curatarr-arrow { animation: none; } }
-html[data-bs-theme="light"] .curatarr-arrow-top { fill: #087aaa; }
-html[data-bs-theme="light"] .curatarr-arrow-bottom { fill: #b46208; }
 @media (max-width: 575.98px) {
   .app-header-inner { gap: .45rem; padding-top: .6rem; }
   .app-header-actions { gap: .3rem; }

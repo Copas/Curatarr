@@ -1,12 +1,14 @@
 <!doctype html>
-<html lang="en" data-bs-theme="{{ theme }}">
+<html lang="en"{% if theme %} data-bs-theme="{{ theme }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="{{ theme or 'light dark' }}">
   <title>{% block title %}Curatarr{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg', v='3') }}">
   <link href="{{ url_for('static', filename='bootstrap.min.css', v='5.3.3') }}" rel="stylesheet">
-  <link href="{{ url_for('static', filename='style.css', v='50') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='bootstrap-system.css', v='1') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='style.css', v='51') }}" rel="stylesheet">
   <script src="{{ url_for('static', filename='swap.js', v='2') }}"></script>
 </head>
 <body>
@@ -37,7 +39,7 @@
       <form class="header-search" method="get" action="{{ url_for('main.search') }}" role="search"><label class="visually-hidden" for="header-q">Search titles and what was said</label>{{ icon('search', 16) }}<input id="header-q" name="q" placeholder="Search" value="{{ request.args.get('q', '') if request.endpoint == 'main.search' else '' }}"></form>
       <a class="header-icon-button header-search-link" href="{{ url_for('main.search') }}" aria-label="Search">{{ icon('search') }}</a>
       {% if dry_run_split.dry_run %}{% set dry_text = 'Dry run' if not dry_run_split.deleting else 'Dry run · ' ~ dry_run_split.dry_run|length %}{% set dry_title = 'Nothing is deleted in: ' ~ dry_run_split.dry_run|join(', ') %}{% if is_admin %}<a class="status-pill status-pill-warning" href="{{ url_for('main.rules', section='retention') }}" title="{{ dry_title }}">{{ icon('shield', 14) }}<span>{{ dry_text }}</span></a>{% else %}<span class="status-pill status-pill-warning" title="{{ dry_title }}">{{ icon('shield', 14) }}<span>{{ dry_text }}</span></span>{% endif %}{% endif %}
-      <form method="post" action="{{ url_for('main.theme_preference') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="theme" value="{{ 'light' if theme == 'dark' else 'dark' }}"><button class="header-icon-button theme-toggle" aria-label="Switch to {{ 'light' if theme == 'dark' else 'dark' }} theme" title="Switch to {{ 'light' if theme == 'dark' else 'dark' }} theme">{{ icon('sun' if theme == 'dark' else 'moon', 18) }}</button></form>
+      <form method="post" action="{{ url_for('main.theme_preference') }}" data-theme-switch><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="back" value="{{ request.full_path.rstrip('?') }}"><input type="hidden" name="system" value=""><button class="header-icon-button theme-toggle theme-to-light" name="theme" value="light" aria-label="Switch to light theme" title="Switch to light theme">{{ icon('sun', 18) }}</button><button class="header-icon-button theme-toggle theme-to-dark" name="theme" value="dark" aria-label="Switch to dark theme" title="Switch to dark theme">{{ icon('moon', 18) }}</button></form>
       {% if signed_in_user %}<form method="post" action="{{ url_for('main.sign_out_page') }}" class="header-user"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><span class="user-name">{{ signed_in_user.name }}</span><button class="btn btn-sm btn-outline-secondary">Sign out</button></form>{% endif %}
     </div>
     {% endif %}
@@ -71,5 +73,6 @@
 <script src="{{ url_for('static', filename='local-time.js', v='4') }}"></script>
 <script src="{{ url_for('static', filename='tooltips.js', v='1') }}"></script>
 <script src="{{ url_for('static', filename='busy.js', v='1') }}"></script>
+<script src="{{ url_for('static', filename='theme.js', v='1') }}"></script>
 </body>
 </html>

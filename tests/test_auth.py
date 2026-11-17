@@ -245,10 +245,21 @@ def test_theme_preference_persists_in_cookie(secured, client):
     )
     assert response.status_code == 303
     assert response.headers["Location"] == "/review"
-    assert b'data-bs-theme="light"' in client.get("/login").data
+    page = client.get("/login").data
+    assert b'data-bs-theme="light"' in page
+    assert b'<meta name="color-scheme" content="light">' in page
     assert (
         client.post("/preferences/theme", data={"theme": "unknown"}).status_code == 400
     )
+    # Switching to the scheme the device itself uses clears the choice: the
+    # page follows the device again, with no theme pinned.
+    client.post("/preferences/theme", data={"theme": "dark", "system": "dark"})
+    page = client.get("/login").data
+    assert b"data-bs-theme" not in page
+    assert b'<meta name="color-scheme" content="light dark">' in page
+    # a scheme the device doesn't use is kept
+    client.post("/preferences/theme", data={"theme": "dark", "system": "light"})
+    assert b'data-bs-theme="dark"' in client.get("/login").data
 
 
 def test_api_key_reads_history_and_nothing_else(secured, client):

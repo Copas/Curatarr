@@ -288,11 +288,18 @@ def sign_out_page():
 
 @bp.post("/preferences/theme")
 def theme_preference():
+    """The header's switch: the scheme opposite to what's on screen. Picking
+    the one the device itself uses (the page says which, when its script
+    runs) clears the choice, so the page follows the device again, rather
+    than pinning it there for good."""
     theme = request.form.get("theme")
     if theme not in {"light", "dark"}:
         abort(400)
     response = redirect(_safe_next(request.form.get("back")), 303)
-    response.set_cookie("curatarr_theme", theme, max_age=31536000, samesite="Lax")
+    if request.form.get("system") == theme:
+        response.delete_cookie("curatarr_theme", samesite="Lax")
+    else:
+        response.set_cookie("curatarr_theme", theme, max_age=31536000, samesite="Lax")
     return response
 
 
@@ -568,9 +575,10 @@ def template_values():
             and (request.view_args or {}).get("section") == "retention"
         ),
         "nav_counts": _nav_counts(signed_in_user, is_admin),
+        # light or dark when someone picked one; None follows the device
         "theme": request.cookies.get("curatarr_theme")
         if request.cookies.get("curatarr_theme") in {"light", "dark"}
-        else "dark",
+        else None,
     }
 
 
