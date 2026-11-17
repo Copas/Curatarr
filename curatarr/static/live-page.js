@@ -57,7 +57,6 @@
       if (a && b) a.replaceWith(b);
     });
     window.scrollTo(x, y);
-    window.curatarrSwap.settle(fresh);
     remark(fresh);
     return true;
   }

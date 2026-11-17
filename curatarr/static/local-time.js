@@ -1,7 +1,9 @@
-// Show times in the viewer's own time zone, the way people say them: "today
-// at 5:55 PM", "tomorrow at 4 PM", "Wednesday at 3:21 AM", "Oct 31". The
-// server renders UTC as a fallback inside <time datetime="..."> elements (see
-// the "when" filter); hovering shows the full date and time.
+// <local-time>: a time in the viewer's own time zone, the way people say it:
+// "today at 5:55 PM", "tomorrow at 4 PM", "Wednesday at 3:21 AM", "Oct 31".
+// The server renders <local-time><time datetime="..." data-style="...">UTC
+// fallback</time></local-time> (the "when" filter); the element rewrites the
+// text whenever it's put on a page, so parts redrawn in place are covered
+// with nothing to call. Hovering shows the full date and time.
 (function () {
   var DAY = 86400000;
   var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -59,7 +61,8 @@
   }
 
   // "the first on today" reads wrong: drop a preceding "on" before today,
-  // tomorrow, yesterday and "last Monday".
+  // tomorrow, yesterday and "last Monday". (el is the <local-time>: what's
+  // before it in the sentence.)
   function dropOn(el) {
     var before = el.previousSibling;
     if (before && before.nodeType === 3 && /\bon\s+$/.test(before.nodeValue)) {
@@ -75,26 +78,43 @@
     return true;
   }
 
-  function apply(root) {
-    var now = new Date();
-    (root || document).querySelectorAll("time[data-style]").forEach(function (el) {
-      var d = new Date(el.getAttribute("datetime"));
+  var countdowns = new Set();
+  var timer = null;
+
+  class LocalTime extends HTMLElement {
+    connectedCallback() {
+      this.render();
+      // Countdowns ("in 5 min") move on by themselves, every 30 seconds,
+      // and only while one is on the page.
+      if (this.querySelector('time[data-style="in"]')) {
+        countdowns.add(this);
+        if (!timer) {
+          timer = setInterval(function () { countdowns.forEach(function (el) { el.render(); }); }, 30000);
+        }
+      }
+    }
+
+    disconnectedCallback() {
+      countdowns.delete(this);
+      if (!countdowns.size && timer) { clearInterval(timer); timer = null; }
+    }
+
+    render() {
+      var time = this.querySelector("time[data-style]");
+      if (!time) return;
+      var d = new Date(time.getAttribute("datetime"));
       if (isNaN(d)) return;
-      var said = phrase(d, el.dataset.style, now);
-      if (said.relative) dropOn(el);
-      el.textContent = startsLine(el)
+      var said = phrase(d, time.dataset.style, new Date());
+      if (said.relative) dropOn(this);
+      time.textContent = startsLine(this)
         ? said.text.charAt(0).toUpperCase() + said.text.slice(1)
         : said.text;
-      el.title = d.toLocaleString([], {
+      time.title = d.toLocaleString([], {
         weekday: "long", year: "numeric", month: "long", day: "numeric",
         hour: "numeric", minute: "2-digit", timeZoneName: "short",
       });
-    });
+    }
   }
-  window.curatarrLocalTime = apply;
-  apply();
-  // Countdowns move on by themselves.
-  setInterval(function () {
-    if (document.querySelector('time[data-style="in"]')) apply();
-  }, 30000);
+
+  if (!customElements.get("local-time")) customElements.define("local-time", LocalTime);
 })();

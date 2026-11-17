@@ -6,8 +6,8 @@ from curatarr.routes import when
 def test_times_render_for_the_browser_with_a_utc_fallback():
     moment = datetime(2026, 10, 12, 10, 40, 58, tzinfo=UTC)
     assert str(when(moment, "seconds")) == (
-        '<time datetime="2026-10-12T10:40:58+00:00" data-style="seconds">'
-        "10:40:58 UTC</time>"
+        '<local-time><time datetime="2026-10-12T10:40:58+00:00" data-style="seconds">'
+        "10:40:58 UTC</time></local-time>"
     )
     assert "2026-10-12</time>" in str(when(moment, "date"))
     # Naive values from SQLite are UTC; ISO strings from JSON work too.

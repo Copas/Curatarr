@@ -55,13 +55,6 @@
     });
   }
 
-  // After new content arrives: local times, and anything else a script
-  // draws into the page (the recent-additions reel).
-  function settle(root) {
-    if (window.curatarrLocalTime) window.curatarrLocalTime(root);
-    if (window.curatarrReel) window.curatarrReel(root);
-  }
-
   // Put `fresh` (an element) where `old` is, keeping the scroll position and
   // (unless `keep` is false: redrawn after an action, it shows what the
   // server now has) what was open, ticked or typed.
@@ -71,7 +64,6 @@
     var x = window.scrollX, y = window.scrollY;
     old.replaceWith(fresh);
     window.scrollTo(x, y);
-    settle(fresh);
     return fresh;
   }
 
@@ -81,7 +73,6 @@
     var x = window.scrollX, y = window.scrollY;
     target.replaceChildren.apply(target, Array.prototype.slice.call(source.childNodes));
     window.scrollTo(x, y);
-    settle(target);
     return target;
   }
 
@@ -118,6 +109,5 @@
     replace: replace,
     fill: fill,
     redraw: redraw,
-    settle: settle,
   };
 })();

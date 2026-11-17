@@ -378,7 +378,8 @@ WHEN_FORMATS = {
 
 @bp.app_template_filter("when")
 def when(value, style="datetime"):
-    """A stored UTC time, shown in the viewer's time zone by local-time.js.
+    """A stored UTC time, shown in the viewer's time zone by <local-time>
+    (static/local-time.js).
 
     The UTC text inside the element is what shows if scripts do not run.
     """
@@ -387,7 +388,8 @@ def when(value, style="datetime"):
         return ""
     text = moment.strftime(WHEN_FORMATS[style]) + ("" if style == "date" else " UTC")
     return Markup(
-        f'<time datetime="{moment.isoformat()}" data-style="{style}">{text}</time>'
+        f'<local-time><time datetime="{moment.isoformat()}" data-style="{style}">'
+        f"{text}</time></local-time>"
     )
 
 
