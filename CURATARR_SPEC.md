@@ -144,7 +144,7 @@ Prefer the existing development ecosystem:
 - Alembic
 - PostgreSQL for production
 - SQLite permitted for development/testing
-- Bootstrap 5
+- Curatarr's own stylesheets (static/ui.css and static/style.css; Bootstrap 5 until 0.2.x)
 - Minimal JavaScript; use lightweight vanilla JS or jQuery where useful
 - Background scheduler appropriate for a single-node deployment initially
 - REST-style internal API boundaries
@@ -1395,7 +1395,7 @@ Implement:
 - Database
 - Alembic
 - Base templates
-- Bootstrap UI shell
+- UI shell
 - Health endpoint
 - Test framework
 - `.env.example`
@@ -2822,7 +2822,7 @@ Do not hard-code brand colors into policy logic.
 
 # 87. UI Wireframes
 
-Use Bootstrap 5 and server-rendered pages initially. JavaScript may progressively
+Use server-rendered pages, styled by Curatarr's own stylesheets (they keep Bootstrap 5's class names). JavaScript may progressively
 enhance interactions.
 
 ## 87.1 Overview

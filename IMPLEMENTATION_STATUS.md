@@ -144,7 +144,7 @@ Phase 9 — Playback on every device and household polish, running live; prepari
 - v0.2.0rc3 release candidate: Docker Desktop installation steps for Windows, LF shell entrypoints, and Windows Arr disk-path matching are included. The Docker image was built and served HTTP on Linux; a Windows host smoke test is still pending. The rc2 native upgrade is running on the owner's host. Live lifecycle validation remains pending before v0.2.0.
 - UI/UX pass: grouped navigation, responsive review cards, browsable title list, clearer policy sections, a dedicated Operations page, light/dark theme choice, and deletion confirmation. Admins can allowlist non-admin Jellyfin household accounts for focused viewing and Keep/Snooze/Never Purge decisions; route-level checks keep administration and deletion approval with admins.
 - v0.1.0 tagged 2026-10-04 after the Section 92 release checks: tests and lint, migration upgrade/check/downgrade/re-upgrade on a fresh database, and fresh-install and demo-mode startup with all main pages and API endpoints returning 200.
-- Flask app, database schema and migrations, health/status API, Bootstrap shell, branding, and container skeleton.
+- Flask app, database schema and migrations, health/status API, page shell, branding, and container skeleton.
 - Jellyfin/Sonarr/Radarr clients and read-only discovery with stable provider-ID matching.
 - Durable webhook ingestion, duplicate-event suppression, playback rescue, and episode completion state; missed-webhook reconciliation handles changed episode IDs, pagination without a reported total, and separate users.
 - TV current/next-season plan generation and durable Sonarr actions.

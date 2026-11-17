@@ -13,7 +13,8 @@ Notes for anyone changing this repository, people and coding agents alike (Codex
 
 - Pages work in current Chrome, Edge, Firefox and Safari. Use what's Baseline *widely available* freely. Anything newer (Baseline *newly available*, or in only some browsers) only as an extra: the page works without it, either through a small fallback written here or by simply behaving as before (Safari scrolling the page under the picture viewer, say). No polyfill libraries, and nothing loaded from another site: Curatarr ships everything it uses.
 - Keep within the security policy: no inline `<script>`, `on…=` handlers or `style=""` attributes (the browser refuses them); put HTML into a page only through `static/swap.js`.
-- Text meets 4.5:1 contrast in both light and dark (3:1 for large text); use the colours in `style.css`, not Bootstrap's own text colours.
+- Styles: `static/ui.css` has the base styles, components and helper classes (Bootstrap's class names, Curatarr's own CSS) and every colour as a `light-dark()` token; `static/style.css` is Curatarr's pages, in the `app` layer. Use the tokens, not new colours, and layers, not `!important`. A Bootstrap class that isn't in `ui.css` does nothing: add it there.
+- Text meets 4.5:1 contrast in both light and dark (3:1 for large text); the browser checks measure it.
 - Agents with Google's modern-web-guidance skill: look up its guide before writing page code, and follow it within the rules above.
 - After changing a template, `style.css` or a script, run the browser checks (`CURATARR_BROWSER_CHECKS=1 .venv/bin/pytest tests/test_browser.py`, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#tests)), and add a check for anything new a page does.
 

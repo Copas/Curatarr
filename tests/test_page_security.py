@@ -12,9 +12,9 @@ def test_pages_load_nothing_from_other_sites(client):
     html = response.get_data(as_text=True)
     sources = re.findall(r'(?:href|src)="(https?://[^"]+)"', html)
     assert not [s for s in sources if not s.startswith("http://localhost")], sources
-    stylesheet = client.get("/static/bootstrap.min.css")
+    stylesheet = client.get("/static/ui.css")
     assert stylesheet.status_code == 200
-    assert b"Bootstrap  v5.3.3" in stylesheet.data
+    assert b"@layer reset, base, layout, components, app, utilities;" in stylesheet.data
 
 
 def _swap_check():
@@ -91,23 +91,25 @@ def test_other_sites_can_link_but_not_post(client):
     assert client.get("/titles").status_code == 200
 
 
-def test_bootstrap_system_css_is_generated_from_bootstrap():
-    """static/bootstrap-system.css (Bootstrap's dark colours for a page that
-    follows the device) is what scripts/bootstrap_system_theme.py writes
-    from the Bootstrap that ships, so the two never drift apart."""
-    import importlib.util
+def test_the_stylesheets_are_layered_not_forced():
+    """ui.css (base styles, components, helper classes) and style.css
+    (Curatarr's pages) win over each other by layer, not by !important:
+    style.css is the "app" layer, helper classes come after it."""
     from pathlib import Path
 
-    root = Path(__file__).parents[1]
-    spec = importlib.util.spec_from_file_location(
-        "bootstrap_system_theme", root / "scripts" / "bootstrap_system_theme.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    static = root / "curatarr" / "static"
-    written = module.system_css((static / "bootstrap.min.css").read_text())
-    assert (static / "bootstrap-system.css").read_text() == written
-    assert ":root:not([data-bs-theme]){color-scheme:dark;" in written
+    static = Path(__file__).parents[1] / "curatarr" / "static"
+    import re
+
+    def code(name):  # without comments
+        return re.sub(r"/\*.*?\*/", "", (static / name).read_text(), flags=re.DOTALL)
+
+    ui, app = code("ui.css"), code("style.css")
+    assert "@layer reset, base, layout, components, app, utilities;" in ui
+    assert "@layer app {" in app and "!important" not in app
+    # only the reset may force (hidden stays hidden whatever else applies)
+    reset = ui[ui.index("@layer reset {") : ui.index("@layer base {")]
+    assert ui.count("!important") == reset.count("!important")
+    assert not list(static.glob("bootstrap*"))
 
 
 def test_pages_fetch_links_early_and_a_post_clears_them(app):

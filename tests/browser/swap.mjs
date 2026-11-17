@@ -11,11 +11,11 @@ export default {
     return true;
   },
 
-  async "Bootstrap comes from Curatarr itself"({ go, js }) {
+  async "the stylesheets come from Curatarr itself, in layers"({ go, js }) {
     await go("/");
     const hrefs = await js("[...document.querySelectorAll('link[rel=stylesheet]')].map(l => new URL(l.href).origin === location.origin)");
     if (!hrefs.length || hrefs.includes(false)) return hrefs;
-    return await js("[...document.styleSheets].some(s => s.href && s.href.includes('bootstrap.min.css') && s.cssRules.length > 100)");
+    return await js("[...document.styleSheets].some(s => s.href && s.href.includes('ui.css') && [...s.cssRules].some(r => r instanceof CSSLayerStatementRule))");
   },
 
   async "the check refuses inline script, passes plain HTML"({ go, js }) {

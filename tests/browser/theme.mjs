@@ -2,11 +2,10 @@ const state = `(() => {
   const html = document.documentElement;
   const shown = [...document.querySelectorAll('.theme-toggle')].filter(b => getComputedStyle(b).display !== 'none').map(b => b.value);
   return {
-    attr: html.getAttribute('data-bs-theme'),
+    attr: html.getAttribute('data-theme'),
     meta: document.querySelector('meta[name=color-scheme]').content,
     scheme: getComputedStyle(html).colorScheme,
     bg: getComputedStyle(document.body).backgroundColor,
-    bsBg: getComputedStyle(html).getPropertyValue('--bs-body-bg').trim(),
     card: getComputedStyle(document.querySelector('.card') || document.body).backgroundColor,
     switchTo: shown,
   };
@@ -27,14 +26,14 @@ export default {
     await device(send, "light");
     await go("/");
     const s = await js(state);
-    return s.attr === null && s.meta === "light dark" && s.bg === LIGHT_BG && s.bsBg === "#fff" &&
+    return s.attr === null && s.meta === "light dark" && s.bg === LIGHT_BG && s.card === "rgb(255, 255, 255)" &&
       s.switchTo.join() === "dark" ? true : s;
   },
-  async "no choice saved: follows a dark device, Bootstrap included"({ go, js, send }) {
+  async "no choice saved: follows a dark device, cards included"({ go, js, send }) {
     await device(send, "dark");
     await go("/");
     const s = await js(state);
-    return s.attr === null && s.scheme === "dark" && s.bg === DARK_BG && s.bsBg === "#212529" &&
+    return s.attr === null && s.bg === DARK_BG && s.card === "rgb(23, 36, 49)" &&
       s.switchTo.join() === "light" ? true : s;
   },
   async "on a dark device, switching to light is kept; switching back follows the device again"({ go, js, send, sleep }) {

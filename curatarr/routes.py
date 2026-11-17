@@ -110,9 +110,9 @@ def refuse_cross_site():
 @bp.after_app_request
 def security_headers(response):
     response.headers["Content-Security-Policy"] = (
-        # Bootstrap's CSS ships with Curatarr (static/bootstrap.min.css,
-        # 5.3.3 unchanged): every page works without the internet, and
-        # nothing is loaded from anywhere else.
+        # Every stylesheet and script is Curatarr's own (static/): pages
+        # work without the internet, and nothing is loaded from anywhere
+        # else. data: images are the select arrow and close icon in ui.css.
         "default-src 'self'; "
         "img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; "
         # HTML only becomes page content through static/swap.js's policy,
