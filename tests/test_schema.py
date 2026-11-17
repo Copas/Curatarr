@@ -178,3 +178,58 @@ def test_a_secret_key_that_doesnt_match_says_so(tmp_path):
     assert response.status_code == 503
     assert "secret key doesn't match" in response.json["error"]
     assert "CURATARR_SECRET_KEY" in response.json["action"]
+
+
+def test_only_episodes_with_an_added_intro_are_checked_again_for_rule_7(tmp_path):
+    from flask_migrate import upgrade
+
+    from curatarr import db
+    from curatarr.models import ChapterState, Library, MediaIdentity, MediaPart
+
+    with _app(tmp_path, "old.db").app_context():
+        upgrade(revision="a8c4e2f7b519")
+        library = Library(jellyfin_library_id="tv", name="TV", media_type="tv")
+        db.session.add(library)
+        db.session.flush()
+        show = MediaIdentity(library_id=library.id, media_type="series", title="Show")
+        db.session.add(show)
+        db.session.flush()
+        hidden = (
+            [{"id": "a", "type": "Introduction", "added": True, "start": 1, "end": 30}],
+            [
+                {
+                    "id": "b",
+                    "type": "Introduction",
+                    "replaced_by": "c",
+                    "start": 1,
+                    "end": 9,
+                }
+            ],
+            [{"id": "d", "type": "Credits", "added": True, "start": 1, "end": 9}],
+            None,
+        )
+        ids = []
+        for number, markers in enumerate(hidden, 1):
+            part = MediaPart(
+                media_identity_id=show.id,
+                kind="episode",
+                season_number=1,
+                episode_number=number,
+                file_path=f"/mnt/media/Show/S01E0{number}.mkv",
+            )
+            db.session.add(part)
+            db.session.flush()
+            state = ChapterState(
+                media_part_id=part.id,
+                media_identity_id=show.id,
+                intro_rule=6,
+                markers_hidden=markers,
+            )
+            db.session.add(state)
+            db.session.flush()
+            ids.append(state.id)
+        db.session.commit()
+        upgrade()
+        db.session.expire_all()
+        rules = [db.session.get(ChapterState, i).intro_rule for i in ids]
+        assert rules == [6, 7, 7, 7]  # only the one with an added intro waits

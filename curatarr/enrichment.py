@@ -4001,6 +4001,45 @@ class _Episode:
             return None
         return footage.own_intro(*prints, self.info.duration)
 
+    def titles_evidence(self, block) -> str | None:
+        """Why Curatarr's own intro ``block`` is a title sequence, or None
+        when it looks like a music cue under the story (footage.titles_evidence)."""
+        from . import credits as pictures
+        from . import footage
+
+        prints = self.season_prints()
+        if prints is None:
+            return None
+        here, others = prints
+        theirs = {}
+        for state in db.session.query(ChapterState).filter(
+            ChapterState.media_part_id.in_(self._season_parts)
+        ):
+            intros = [tuple(t) for t in (state.intro_found or {}).get("theirs") or []]
+            intros += [
+                (h["start"], h["end"])
+                for h in state.markers_hidden or []
+                if h.get("type") == "Introduction" and not h.get("added")
+            ]
+            theirs[state.media_part_id] = intros
+        paired = [
+            (other, theirs.get(part_id, []))
+            for other, part_id in zip(others, self._season_parts, strict=True)
+        ]
+
+        def lettered():
+            frames = pictures.frames(
+                self.info.path, block[0], block[1] - block[0], 1,
+                pictures.TEXT_W, pictures.TEXT_H,
+            )  # fmt: skip
+            return sum(pictures.credit_score(f) >= pictures.CARD_TEXT for f in frames)
+
+        return footage.titles_evidence(
+            footage.picture_share(here, others, block),
+            footage.sound_in_intros(here, paired, block),
+            lettered,
+        )
+
     def season_prints(self):
         """(this episode's fingerprint, the nearest episodes'), made the first
         time, or None with too few of them."""
@@ -4024,13 +4063,14 @@ class _Episode:
         here = self.part.episode_number or 0
         rows.sort(key=lambda p: abs((p.episode_number or 0) - here))
         db.session.commit()  # fingerprinting takes a while: no write lock held
-        others = []
+        others, self._season_parts = [], []
         for sibling in rows[: footage.SIBLINGS]:
             path = local_path(sibling.file_path, self.opts["path_mappings"])
             if not path or not os.path.exists(path):
                 continue
             try:
                 others.append(footage.fingerprint(path, probe(path).duration, cache))
+                self._season_parts.append(sibling.id)
             except (MediaToolError, OSError, ValueError) as exc:
                 _log("fingerprint_failed", file=path, error=str(exc))
         if len(others) < footage.MIN_SIBLINGS:
@@ -4451,12 +4491,14 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
-INTRO_RULE = 6  # how intros are widened (footage.py); raising it checks again
+INTRO_RULE = 7  # how intros are widened (footage.py); raising it checks again
 # 4: the marker starts skip_lead_seconds early, so the button shows in time
 # 5: sound alike, not only identical, counts as shared; and Curatarr's own
 #    intro (footage.own_intro) is recorded beside Intro Skipper's
 # 6: Curatarr's own intro is added where Intro Skipper found none, and sets
 #    the end of one it found in the same place
+# 7: …only when it looks like a title sequence, not music under the story
+#    (a migration moves episodes it can't change straight to 7)
 INTRO_DIFFERS = 5.0  # seconds an edge may differ and still agree
 
 
@@ -4495,6 +4537,7 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
 
     intros = list(intros)
     placed = [h for h in hidden if h.get("type") == "Introduction" and h.get("placed")]
+    had_own = any(h.get("added") for h in placed)
     if placed:
         if ep.state.intro_rule == INTRO_RULE:
             return None  # placed by these rules already
@@ -4515,7 +4558,8 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
             return None
     own = _record_own_intro(ep, intros)
     if not intros:
-        return _add_intro(ep, plugin, item_id, own, hidden) if own else None
+        added = _add_intro(ep, plugin, item_id, own, hidden) if own else None
+        return added or ("intro removed" if had_own else None)
     if len(intros) != 1:
         return None  # two: left to Intro Skipper
     current = intros[0]
@@ -4590,9 +4634,22 @@ def _snapped(ep, found) -> tuple[float, float]:
 
 
 def _add_intro(ep, plugin, item_id, own, hidden) -> str | None:
-    """Add Curatarr's own intro where Intro Skipper found none."""
+    """Add Curatarr's own intro where Intro Skipper found none, if it looks
+    like a title sequence (footage.titles_evidence): music the score repeats
+    under a different scene each week is shared too, and isn't one."""
     from .markers import _clock
 
+    try:
+        why = ep.titles_evidence(own)
+    except (ImportError, MediaToolError, RuntimeError, OSError) as exc:
+        _log("intro_unread", state_id=ep.state.id, error=str(exc))
+        return None
+    if why is None:
+        # Kept beside Intro Skipper's for Enhance → Skip markers → Intro
+        # comparison, which says why it wasn't added.
+        ep.state.intro_found = {**(ep.state.intro_found or {}), "not_titles": True}
+        _log("intro_not_titles", state_id=ep.state.id, start=own[0], end=own[1])
+        return None
     try:
         start, end = _snapped(ep, own)
     except (ImportError, MediaToolError, RuntimeError, OSError) as exc:

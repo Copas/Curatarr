@@ -38,6 +38,17 @@ it's added; where both found one, Intro Skipper's ends where Curatarr's does
 run on past its end), and starts at the earlier of the two (by at most
 WIDEN). On 14 intros checked by eye on the live library, it was right on all
 (Intro Skipper ended 6-9 seconds early on the 9 both found).
+
+Before one is added, it has to look like a title sequence (titles_evidence):
+a music cue the score repeats can be shared by most of a season too, under
+different scenes each time, and Skip Intro would skip the story. On the live
+library, 16 of 359 added intros were that. A title sequence shows itself one
+of three ways: the season shows the same pictures there (TITLE_PICTURES), its
+sound is where the other episodes' Intro Skipper intros are
+(TITLE_IN_INTROS), or it has lettering on screen, a name or a title
+(TITLE_LETTERING). On 24 added intros checked by eye, this kept all 15 title
+sequences and refused 8 of the 9 story scenes (in the ninth, sunlit leaves
+read as lettering).
 """
 
 import hashlib
@@ -73,6 +84,10 @@ MIN_SIBLINGS = 3
 OWN_SHARE = 0.5  # of the season, typically, has Curatarr's own intro's sound
 OWN_MIN = 15  # seconds; bumpers and stings are shorter
 OWN_BRIDGE = 6  # seconds not shared allowed inside it
+TITLE_PICTURES = 0.1  # of the other episodes show the same pictures there…
+TITLE_IN_INTROS = 0.7  # …or have its sound inside their Intro Skipper intro…
+TITLE_LETTERING = 3  # …or seconds of it show lettering: it's a title sequence
+INTRO_NEAR = 10  # seconds either side of an intro that still count as in it
 
 
 @dataclass
@@ -319,3 +334,53 @@ def widened(theirs, ours, later=WIDEN) -> tuple[float, float] | None:
     if (start, end) == (theirs[0], theirs[1]):
         return None
     return start, end
+
+
+def picture_share(here: Print, others: list, block) -> float:
+    """The share of ``others`` showing each second of ``block``'s picture,
+    averaged over its seconds (dark and blank seconds count as not shown)."""
+    seconds = range(int(block[0]), int(block[1]))
+    if not others or not len(seconds):
+        return 0.0
+    shown = 0
+    for other in others:
+        found = _supported(_picture_matches(here, other, seconds))
+        shown += sum(1 for i in found if i in seconds)
+    return shown / (len(others) * len(seconds))
+
+
+def sound_in_intros(here: Print, others: list, block) -> tuple[int, int]:
+    """(inside, of): of the other episodes, given as (fingerprint, their
+    Intro Skipper intros), that have an intro and ``block``'s sound, how many
+    have that sound inside their intro."""
+    import numpy as np
+
+    seconds = range(int(block[0]), int(block[1]))
+    inside = of = 0
+    for other, intros in others:
+        if not intros:
+            continue
+        found = _sound_found(here, other, seconds)
+        if not found:
+            continue
+        at = float(np.median(np.concatenate(list(found.values()))))
+        of += 1
+        inside += any(a - INTRO_NEAR <= at <= b + INTRO_NEAR for a, b in intros)
+    return inside, of
+
+
+def titles_evidence(
+    pictures: float, in_intros: tuple[int, int], lettered
+) -> str | None:
+    """Why a stretch of shared sound is a title sequence ("pictures",
+    "intros" or "lettering"), or None: a music cue under the story.
+    ``lettered`` is the seconds with lettering, or a function giving them
+    (it reads the file, so it's only called when the rest isn't enough)."""
+    if pictures >= TITLE_PICTURES:
+        return "pictures"
+    inside, of = in_intros
+    if of and inside / of >= TITLE_IN_INTROS:
+        return "intros"
+    if (lettered() if callable(lettered) else lettered) >= TITLE_LETTERING:
+        return "lettering"
+    return None

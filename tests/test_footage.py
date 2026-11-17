@@ -80,13 +80,14 @@ class FakePlugin:
         self.restored.append(segment_id)
 
 
-def _ep(block, rule=None, ours=None):
+def _ep(block, rule=None, ours=None, titles="pictures"):
     return SimpleNamespace(
         info=SimpleNamespace(duration=2600.0, path="file"),
         state=SimpleNamespace(id="state", intro_rule=rule, intro_found=None),
         intro_block=lambda near=None: block,
         season_prints=lambda: ("mine", ["others"]),
         own_intro=lambda: ours,
+        titles_evidence=lambda block: titles,
     )
 
 
@@ -209,6 +210,59 @@ def test_curatarrs_own_intro_is_added_where_intro_skipper_has_none(monkeypatch):
     plugin = FakePlugin()
     assert _place_intro(_ep(None), plugin, "item", [], []) is None
     assert plugin.added == []
+    # shared sound that doesn't look like titles (music under the story): not
+    # added, and the comparison says so
+    plugin = FakePlugin()
+    ep = _ep(None, ours=(1229, 1250), titles=None)
+    assert _place_intro(ep, plugin, "item", [], []) is None
+    assert plugin.added == [] and ep.state.intro_found["not_titles"]
+    # one added under older rules that isn't titles: taken away, and said so
+    again, earlier = FakePlugin(), [{**hidden[0]}]
+    ep = _ep(None, 0, (436, 557), titles=None)
+    assert _place_intro(ep, again, "item", [], earlier) == "intro removed"
+    assert again.hidden == ["ours-1"] and again.added == [] and earlier == []
+
+
+def test_a_title_sequence_shows_itself_a_music_cue_doesnt():
+    rng = np.random.default_rng(5)
+    titles = rng.integers(0, 255, (30, footage.H, footage.W), dtype=np.uint8)
+    music = _sounds(30, 6)
+    episodes, scenes = [], []
+    for n, at in enumerate((60, 80, 70, 90, 75)):
+        _unused, thumbs = _print(600, 40 + n)
+        thumbs[at : at + 30] = titles
+        sound = _sounds(600, 60 + n)
+        sound[at * PER_SECOND : (at + 30) * PER_SECOND] = _noisy(music, 70 + n)
+        hashes, flat = footage.picture_hashes(thumbs)
+        episodes.append(footage.Print(hashes, flat, sound))
+        # the same music, but under a different scene each time
+        _unused, plain = _print(600, 80 + n)
+        hashes, flat = footage.picture_hashes(plain)
+        scenes.append(footage.Print(hashes, flat, sound))
+    here, others = episodes[0], episodes[1:]
+    assert footage.picture_share(here, others, (60, 90)) > 0.8
+    assert footage.picture_share(scenes[0], scenes[1:], (60, 90)) == 0.0
+    # in the others, the sound is where Intro Skipper found their intros
+    theirs = [[(80, 110)], [(70, 100)], [(90, 120)], [(75, 105)]]
+    assert footage.sound_in_intros(here, list(zip(others, theirs)), (60, 90)) == (4, 4)
+    elsewhere = [[(400, 430)]] * 4
+    assert footage.sound_in_intros(here, list(zip(others, elsewhere)), (60, 90)) == (
+        0,
+        4,
+    )
+    assert footage.sound_in_intros(here, [(o, []) for o in others], (60, 90)) == (0, 0)
+    # any one is enough; lettering is only read when the rest isn't
+    read = []
+
+    def lettered():
+        read.append(1)
+        return 0
+
+    assert footage.titles_evidence(0.5, (0, 0), lettered) == "pictures"
+    assert footage.titles_evidence(0.0, (3, 4), lettered) == "intros"
+    assert read == []
+    assert footage.titles_evidence(0.0, (1, 4), 5) == "lettering"
+    assert footage.titles_evidence(0.02, (2, 4), lettered) is None and read
 
 
 def test_intro_skippers_intro_ends_where_curatarrs_does(monkeypatch):
@@ -252,6 +306,7 @@ def test_the_intro_comparison_lists_where_the_two_disagree(app, client):
         {"ours": [37, 72], "theirs": [[34.4, 72.4]], "verdict": "agree"},
         {"ours": [436, 557], "theirs": [], "verdict": "missed"},
         {"ours": None, "theirs": [[350.1, 386.6]], "verdict": "extra"},
+        {"ours": [1229, 1250], "theirs": [], "verdict": "missed", "not_titles": True},
     )
     for number, intro in enumerate(found, 1):
         part = MediaPart(
@@ -269,7 +324,8 @@ def test_the_intro_comparison_lists_where_the_two_disagree(app, client):
         db.session.add(state)
     db.session.commit()
     page = client.get("/chapters/markers?kind=intros").get_data(as_text=True)
-    assert "Every disagreement · 2" in page and "Agree · 1" in page
+    assert "Every disagreement · 3" in page and "Agree · 1" in page
+    assert page.count("Not added: shared music") == 1  # a cue under the story
     assert "7:16" in page and "9:17" in page  # Curatarr's, where Intro Skipper has none
     assert "0:37" not in page  # agreeing isn't listed…
     page = client.get("/chapters/markers?kind=intros&verdict=agree").get_data(

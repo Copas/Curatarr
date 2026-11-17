@@ -20,7 +20,7 @@
   <td><a href="{{ url_for('main.chapter_part', part_id=state.media_part_id) }}">{{ file_label(state) }}</a>{{ jellyfin_part_link(state.part, state.media) }}</td>
   <td class="text-nowrap">{% if row.ours %}{{ row.ours[0]|chapter_time }} – {{ row.ours[1]|chapter_time }}{% else %}<span class="text-secondary">none</span>{% endif %}</td>
   <td class="text-nowrap">{% for t in row.theirs %}{{ t[0]|chapter_time }} – {{ t[1]|chapter_time }}{% if not loop.last %}<br>{% endif %}{% else %}<span class="text-secondary">none</span>{% endfor %}</td>
-  <td><small>{{ verdicts[row.verdict] }}</small></td>
+  <td><small>{{ verdicts[row.verdict] }}{% if row.not_titles %}<span class="d-block text-secondary">Not added: shared music, but no title sequence (no shared pictures or lettering)</span>{% endif %}</small></td>
 </tr>{% endfor %}
 </tbody></table></div>
 {% else %}<div class="empty-state"><h2 class="h5">Nothing yet</h2><p class="mb-0">No episodes{{ ' like this' if verdict else ' where the two disagree' }} among those checked so far. Episodes are compared as their skip markers are checked.</p></div>{% endif %}
