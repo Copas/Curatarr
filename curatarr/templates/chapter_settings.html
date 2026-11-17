@@ -4,12 +4,12 @@
   {% set current = values[name] %}
   <div class="setting">
   {% if library %}<label class="form-label w-100">{{ label }}<select class="form-select" name="{{ name }}"><option value="inherit">Inherit ({{ 'Yes' if inherited_values[name] else 'No' }})</option><option value="true"{% if current is sameas true %} selected{% endif %}>Yes</option><option value="false"{% if current is sameas false %} selected{% endif %}>No</option></select></label>
-  {% else %}<label class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="{{ name }}" value="true"{% if current %} checked{% endif %}><span class="form-check-label">{{ label }}</span></label>{% endif %}
+  {% else %}<label class="form-check form-switch"><input class="form-check-input" type="checkbox" switch role="switch" name="{{ name }}" value="true"{% if current %} checked{% endif %}><span class="form-check-label">{{ label }}</span></label>{% endif %}
   {% if help %}<div class="form-text">{{ help }}</div>{% endif %}
   </div>
 {% endmacro %}
 {% macro option(name, label, help=none) %}
-  <div class="setting"><label class="form-check form-switch"><input type="hidden" name="{{ name }}_shown" value="1"><input class="form-check-input" type="checkbox" role="switch" name="{{ name }}" value="true"{% if opts[name] %} checked{% endif %}><span class="form-check-label">{{ label }}</span></label>{% if help %}<div class="form-text">{{ help }}</div>{% endif %}</div>
+  <div class="setting"><label class="form-check form-switch"><input type="hidden" name="{{ name }}_shown" value="1"><input class="form-check-input" type="checkbox" switch role="switch" name="{{ name }}" value="true"{% if opts[name] %} checked{% endif %}><span class="form-check-label">{{ label }}</span></label>{% if help %}<div class="form-text">{{ help }}</div>{% endif %}</div>
 {% endmacro %}
 {% macro number(name, label, unit='minutes') %}
   <div class="setting"><label class="form-label w-100">{{ label }}<div class="input-group"><input class="form-control" type="number" min="1" name="{{ name }}" value="{{ values[name] if values[name] is not none else '' }}"{% if library %} placeholder="Inherit ({{ inherited_values[name] }})"{% endif %}><span class="input-group-text">{{ unit }}</span></div></label></div>

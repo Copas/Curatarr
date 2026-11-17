@@ -37,6 +37,9 @@ body { background: var(--app-bg); color: var(--bs-body-color); }
 .text-danger { color: var(--app-danger) !important; }
 .text-primary { color: var(--app-accent) !important; }
 .link-secondary { color: var(--app-muted) !important; }
+/* Code in a notice: Bootstrap's pink is 3.9:1 on the light-blue info notice; the
+   notice's own text colour passes on every notice. */
+.alert code { color: inherit; }
 .btn-outline-danger { --bs-btn-color: var(--app-danger); --bs-btn-border-color: var(--app-danger); }
 .btn-outline-warning { --bs-btn-color: var(--app-warning); --bs-btn-border-color: var(--app-warning); }
 .btn-outline-success { --bs-btn-color: var(--app-success); --bs-btn-border-color: var(--app-success); }

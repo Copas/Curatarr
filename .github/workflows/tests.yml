@@ -18,3 +18,11 @@ jobs:
       - run: pip install -e ".[dev]" "ruff==0.16.10"
       - run: ruff check . && ruff format --check .
       - run: pytest -q
+      # Page checks in headless Chrome (tests/browser): the runner has Chrome;
+      # the driver needs Node 22's built-in WebSocket.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pytest -q tests/test_browser.py
+        env:
+          CURATARR_BROWSER_CHECKS: "1"

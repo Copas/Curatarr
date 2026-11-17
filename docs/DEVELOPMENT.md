@@ -46,6 +46,8 @@ Demo mode uses synthetic adapters and never contacts private services. After cre
 
 Tests use synthetic media names and mocked integration boundaries. A few use real FFmpeg and MKVToolNix on generated files when those are installed, and skip otherwise. No real credentials or private media data belong in this repository.
 
+Page checks in a real browser are opt-in locally: `CURATARR_BROWSER_CHECKS=1 .venv/bin/pytest tests/test_browser.py` starts a demo Curatarr on a scratch database and runs `tests/browser/*.mjs` in headless Chrome (about two minutes; needs Chrome or Chromium and Node 22 or newer). They check text contrast in light and dark, the theme following the device, parts of pages redrawn in place, notes, the picture viewer, background checks and the security headers' effect. GitHub runs them on every push. Run them after changing a template, `style.css` or a script, and add a check for anything new a page does.
+
 PostgreSQL contention tests are opt-in: point `CURATARR_TEST_POSTGRES_URL` at an isolated, migrated test database and run `pytest tests/test_postgres_concurrency.py`. They skip during the normal SQLite run.
 
 `tests/test_repository_hygiene.py` keeps the repository publishable (spec section 99). It fails if a tracked file is an `.env`, database, log, key or `instance/` file, is larger than 1 MB, or contains a private IPv4 address or 32-hex-character key. Run the full suite before every push.
