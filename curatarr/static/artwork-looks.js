@@ -18,8 +18,8 @@
     return fetch(window.location.pathname, { headers: { Accept: "text/html" } })
       .then(function (response) { return response.text(); })
       .then(function (html) {
-        var fresh = new DOMParser().parseFromString(html, "text/html").getElementById("looks-page");
-        if (fresh) page.innerHTML = fresh.innerHTML;
+        var fresh = window.curatarrSwap.page(html).getElementById("looks-page");
+        if (fresh) window.curatarrSwap.fill(page, fresh);
       });
   }
 

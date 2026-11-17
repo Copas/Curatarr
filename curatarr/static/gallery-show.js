@@ -18,7 +18,7 @@
   const viewer = document.createElement("dialog");
   viewer.className = "lightbox gallery-viewer";
   viewer.setAttribute("aria-label", "Pictures, full screen");
-  viewer.innerHTML = `
+  viewer.append(...window.curatarrSwap.page(`
     <img alt="">
     <p class="gallery-viewer-caption"></p>
     <button type="button" class="gallery-viewer-nav gallery-viewer-prev" aria-label="Previous picture">‹</button>
@@ -26,7 +26,7 @@
     <div class="gallery-viewer-bar">
       <button type="button" class="btn btn-sm btn-outline-secondary" data-play>Slideshow</button>
       <button type="button" class="btn btn-sm btn-outline-secondary" data-close>Close</button>
-    </div>`;
+    </div>`).body.childNodes);
   document.body.append(viewer);
   const big = viewer.querySelector("img");
   const caption = viewer.querySelector(".gallery-viewer-caption");

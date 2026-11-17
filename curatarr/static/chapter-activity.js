@@ -15,18 +15,7 @@
       .then(function (html) {
         if (!html || html === last) return;  // nothing new
         last = html;
-        var wrapper = document.createElement("div");
-        wrapper.innerHTML = html.trim();
-        var next = wrapper.firstElementChild;
-        if (!next) return;
-        el.querySelectorAll("details[id]").forEach(function (old) {
-          var match = next.querySelector("#" + CSS.escape(old.id));
-          if (match) match.open = old.open;
-        });
-        var x = window.scrollX, y = window.scrollY;
-        el.replaceWith(next);
-        window.scrollTo(x, y);
-        if (window.curatarrLocalTime) window.curatarrLocalTime(next);
+        window.curatarrSwap.replace(el, window.curatarrSwap.element(html));
       })
       .catch(function () {})
       .finally(function () { setTimeout(poll, INTERVAL_MS); });

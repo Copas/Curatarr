@@ -17,11 +17,11 @@
     try {
       const response = await fetch(url, { headers: { "X-Requested-With": "fetch" } });
       if (!response.ok || mine !== asked) return;
-      const page = new DOMParser().parseFromString(await response.text(), "text/html");
+      const page = window.curatarrSwap.page(await response.text());
       const fresh = page.getElementById("title-results");
       const count = page.querySelector(".page-heading .status-pill");
       if (!fresh || mine !== asked) return;
-      results.innerHTML = fresh.innerHTML;
+      window.curatarrSwap.fill(results, fresh);
       const shown = document.querySelector(".page-heading .status-pill");
       if (count && shown) shown.textContent = count.textContent;
       history.replaceState(null, "", url);

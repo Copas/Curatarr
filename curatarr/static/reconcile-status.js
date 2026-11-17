@@ -12,16 +12,13 @@
       .then(function (response) { return response.ok ? response.text() : null; })
       .then(function (html) {
         if (!html) return true;
-        var holder = document.createElement("div");
-        holder.innerHTML = html.trim();
-        var next = holder.firstElementChild;
+        var next = window.curatarrSwap.element(html);
         if (!next) return true;
         var running = Boolean(next.dataset.active);
         if (html !== last) {
           last = html;
           line.className = next.className;
-          line.innerHTML = next.innerHTML;
-          if (window.curatarrLocalTime) window.curatarrLocalTime(line);
+          window.curatarrSwap.fill(line, next);
         }
         if (!running) {
           var link = document.createElement("a");

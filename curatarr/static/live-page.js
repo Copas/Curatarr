@@ -45,7 +45,7 @@
   }
 
   function parse(html) {
-    return new DOMParser().parseFromString(html, "text/html");
+    return window.curatarrSwap.page(html);
   }
 
   function notesFrom(doc) {
@@ -73,8 +73,7 @@
       if (a && b) a.replaceWith(b);
     });
     window.scrollTo(x, y);
-    if (window.curatarrLocalTime) window.curatarrLocalTime(fresh);
-    if (window.curatarrReel) window.curatarrReel(fresh);
+    window.curatarrSwap.settle(fresh);
     remark(fresh);
     return true;
   }

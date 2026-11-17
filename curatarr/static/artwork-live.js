@@ -13,19 +13,6 @@
     return Array.prototype.slice.call(root.querySelectorAll("[data-live]"));
   }
 
-  function carryOver(from, to) {
-    from.querySelectorAll("details[id]").forEach(function (old) {
-      var match = to.querySelector("#" + CSS.escape(old.id));
-      if (match) match.open = old.open;
-    });
-    from.querySelectorAll("input[id], textarea[id], select[id]").forEach(function (old) {
-      var match = to.querySelector("#" + CSS.escape(old.id));
-      if (!match || match.type === "hidden") return;
-      if (old.type === "checkbox" || old.type === "radio") match.checked = old.checked;
-      else match.value = old.value;
-    });
-  }
-
   function busy(el) {
     // Someone's in the middle of something in it: redraw it later.
     var focused = document.activeElement;
@@ -33,18 +20,7 @@
   }
 
   function redraw(el) {
-    return fetch(el.dataset.liveUrl)
-      .then(function (response) { return response.ok ? response.text() : null; })
-      .then(function (html) {
-        if (!html) return;
-        var holder = document.createElement(el.tagName === "TR" ? "tbody" : "div");
-        holder.innerHTML = html.trim();
-        var next = holder.firstElementChild;
-        if (!next) return;
-        carryOver(el, next);
-        el.replaceWith(next);
-        if (window.curatarrLocalTime) window.curatarrLocalTime(next);
-      });
+    return window.curatarrSwap.redraw(el);
   }
 
   function check() {

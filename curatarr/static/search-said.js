@@ -7,8 +7,11 @@ if (said) {
       if (!response.ok) throw new Error(response.status);
       return response.text();
     })
-    .then((html) => { said.innerHTML = html; })
+    .then((html) => { window.curatarrSwap.fill(said, window.curatarrSwap.page(html).body); })
     .catch(() => {
-      said.innerHTML = '<p class="text-warning small">Couldn\'t search what was said. Try again in a moment.</p>';
+      const failed = document.createElement("p");
+      failed.className = "text-warning small";
+      failed.textContent = "Couldn't search what was said. Try again in a moment.";
+      said.replaceChildren(failed);
     });
 }

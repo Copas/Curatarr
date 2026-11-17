@@ -22,19 +22,8 @@
   }
 
   function redraw(el) {
-    if (!el || !el.dataset.liveUrl) return Promise.resolve();
-    return fetch(el.dataset.liveUrl)
-      .then(function (response) { return response.ok ? response.text() : null; })
-      .then(function (html) {
-        if (!html) return;
-        // A table row only survives being parsed inside a table body.
-        var holder = document.createElement(el.tagName === "TR" ? "tbody" : "div");
-        holder.innerHTML = html.trim();
-        var next = holder.firstElementChild;
-        if (!next) return;
-        el.replaceWith(next);
-        if (window.curatarrLocalTime) window.curatarrLocalTime(next);
-      });
+    // Redrawn after an action: it shows what the server now has.
+    return window.curatarrSwap.redraw(el, null, false);
   }
 
   function reviewCount(count) {

@@ -28,5 +28,5 @@
     {% for kind, noun in [('Backdrop', 'background'), ('Primary', 'poster'), ('Thumb', 'wide tile'), ('Logo', 'logo'), ('Banner', 'banner')] %}{% if pics[kind] %}<span hidden data-full="{{ url_for('main.custom_poster_image', poster_id=pics[kind].id) }}" data-alt="{{ title }}, its {{ noun }}"></span>{% endif %}{% endfor %}
   </figure>{% endfor %}</div>
 {% else %}<div class="empty-state"><h2 class="h6">Nothing to show yet</h2><p class="mb-0">Pictures made for titles show here once they're put on, from a title's page or the import folder (see <a href="{{ url_for('main.custom_posters_page') }}">Posters</a>).</p></div>{% endif %}
-<script src="{{ url_for('static', filename='gallery-show.js', v='4') }}"></script>
+<script src="{{ url_for('static', filename='gallery-show.js', v='5') }}"></script>
 {% endblock %}

@@ -86,7 +86,10 @@ bp = Blueprint("main", __name__)
 @bp.after_app_request
 def security_headers(response):
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; style-src 'self' https://cdn.jsdelivr.net; "
+        # Bootstrap's CSS ships with Curatarr (static/bootstrap.min.css,
+        # 5.3.3 unchanged): every page works without the internet, and
+        # nothing is loaded from anywhere else.
+        "default-src 'self'; "
         "img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"
     )
     response.headers["X-Content-Type-Options"] = "nosniff"

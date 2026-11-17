@@ -20,5 +20,5 @@
   </section>{% endif %}
   {% if after %}<a class="title-show-next" href="{{ url_for('main.custom_posters_gallery_title', media_id=after.media.id) }}"><span class="title-show-next-label">Next</span>{% if after.pictures.Logo %}<img src="{{ picture_url(after.pictures.Logo) }}" alt="{{ after.media|labelled }}" loading="lazy">{% else %}<span class="title-show-next-name">{{ after.media|labelled }}</span>{% endif %}</a>{% endif %}
 </article>
-<script src="{{ url_for('static', filename='gallery-show.js', v='4') }}"></script>
+<script src="{{ url_for('static', filename='gallery-show.js', v='5') }}"></script>
 {% endblock %}
