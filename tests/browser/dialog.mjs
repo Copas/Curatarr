@@ -24,8 +24,17 @@ export default {
       const d = document.createElement('dialog'); d.className = 'lightbox'; document.body.append(d);
       d.showModal(); await ${frames}; const opening = +getComputedStyle(d).opacity;
       await new Promise(r => setTimeout(r, 400)); const open = +getComputedStyle(d).opacity;
-      d.close(); await ${frames};
-      const closing = { display: getComputedStyle(d).display, opacity: +getComputedStyle(d).opacity };
+      // Closing: sampled each frame (a slow machine may still show the start
+      // value a couple of frames in), looking for it on screen and part faded.
+      d.close();
+      let closing = { display: 'none', opacity: 1 };
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => requestAnimationFrame(r));
+        const now = { display: getComputedStyle(d).display, opacity: +getComputedStyle(d).opacity };
+        if (now.display === 'none') break;
+        closing = now;
+        if (now.opacity < 1) break;
+      }
       await new Promise(r => setTimeout(r, 400)); const gone = getComputedStyle(d).display;
       d.remove(); return { opening, open, closing, gone };
     })()`);
