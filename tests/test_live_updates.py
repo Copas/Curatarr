@@ -22,10 +22,10 @@ def test_the_overview_updates_its_status_line_in_place(app, client):
     set_setting("last_reconcile_attempt_at", utcnow().isoformat())
     db.session.commit()
     page = client.get("/").text
-    assert 'id="reconcile-status"' in page and 'data-active="1"' in page
+    assert '<reconcile-status class="status-line' in page and 'data-active="1"' in page
     assert "reconcile-status.js" in page and "This line updates on its own" in page
     line = client.get("/overview/reconcile-status").text
-    assert line.lstrip().startswith("<div") and "running" in line
+    assert line.lstrip().startswith("<reconcile-status") and "running" in line
     set_setting("last_reconcile_at", utcnow().isoformat())
     db.session.commit()
     finished = client.get("/overview/reconcile-status").text

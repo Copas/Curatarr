@@ -39,4 +39,22 @@ export default {
     })()`);
     return r.defined && r.doubled === 60 && r.again === 60 && r.copiesHidden === 30 && r.moved > 5 ? true : r;
   },
+  async "a running sync line put on the page by a redraw updates itself"({ go, js, sleep }) {
+    await go("/");
+    // What Overview's redraw after Sync now does: a running line replaces the old one.
+    await js(`(() => {
+      window.__asks = 0;
+      const real = window.fetch;
+      window.fetch = (...a) => { if (String(a[0]).includes('/overview/reconcile-status')) window.__asks++; return real(...a); };
+      const old = document.querySelector('reconcile-status');
+      const running = old.outerHTML.replace('<reconcile-status ', '<reconcile-status data-active="1" ').replace(/status-[a-z]+"/, 'status-running"');
+      old.replaceWith(curatarrSwap.element(running));
+    })()`);
+    await sleep(11500);
+    const r = await js(`(() => { const l = document.querySelector('reconcile-status');
+      return { asks: window.__asks, active: l.dataset.active, cls: l.className, link: (l.querySelector('a') || {}).textContent }; })()`);
+    // The demo has no sync running: one check, then it settles and offers the new numbers.
+    return r.asks === 1 && !r.active && !/status-running/.test(r.cls) && r.link === "Show the new numbers" ? true : r;
+  },
 };
+

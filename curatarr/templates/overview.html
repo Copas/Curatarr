@@ -110,7 +110,7 @@
 {% endif %}
 {% if is_admin and demo_mode %}<div class="card p-3 mt-4"><h2 class="h5">Demo controls</h2><form class="d-flex flex-wrap gap-2" method="post" action="{{ url_for('main.demo_simulate') }}" data-reload><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><select class="form-select w-auto" name="choice">{% for value in ['complete_episode','start_playback','favorite','unfavorite','advance_30_days','add_movie','increase_movie_size','outage_sonarr','outage_radarr','outage_jellyfin','restore_integrations'] %}<option value="{{ value }}">{{ value.replace('_',' ')|title }}</option>{% endfor %}</select><button class="btn btn-outline-secondary">Simulate</button></form></div>{% endif %}
 </div>
-<script src="{{ url_for('static', filename='reconcile-status.js', v='4') }}" defer></script>
+<script src="{{ url_for('static', filename='reconcile-status.js', v='5') }}" defer></script>
 <script src="{{ url_for('static', filename='live-page.js', v='8') }}"></script>
 <script src="{{ url_for('static', filename='recent-reel.js', v='3') }}"></script>
 {% endblock %}

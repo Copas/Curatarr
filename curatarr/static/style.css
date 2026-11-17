@@ -196,6 +196,7 @@
   .status-pill-warning { display: inline-flex; align-items: center; gap: .3rem; color: var(--app-warning); background: var(--app-warning-bg); border-color: transparent; text-decoration: none; white-space: nowrap; }
   a.status-pill-warning:hover { color: var(--app-warning); filter: brightness(1.1); }
   .status-line {
+    display: block;
     font-size: .875rem; color: var(--app-muted); padding: .55rem .9rem; border-radius: .6rem; background: var(--app-surface); border: 1px solid var(--app-border); margin-bottom: 1rem;
     &.status-failed { color: var(--app-danger); border-color: color-mix(in srgb, var(--app-danger) 45%, transparent); }
     &.status-interrupted { color: var(--app-warning); }
