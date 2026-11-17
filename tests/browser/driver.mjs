@@ -23,9 +23,10 @@ const chrome = spawn(CHROME, [
   "--no-first-run", "--no-default-browser-check", "--window-size=1280,900", "about:blank",
 ], { stdio: "ignore" });
 
-// Chrome writes the port it picked here.
+// Chrome writes the port it picked here (a first, cold start on a CI
+// machine can take well over ten seconds).
 let port;
-for (let i = 0; i < 100 && !port; i++) {
+for (let i = 0; i < 600 && !port; i++) {
   const file = join(profile, "DevToolsActivePort");
   if (existsSync(file)) port = readFileSync(file, "utf8").split("\n")[0];
   else await sleep(100);
