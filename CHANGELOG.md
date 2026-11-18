@@ -38,9 +38,9 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
-## Unreleased
+## 0.2.0rc141 (2026-11-18)
 
-The sweep continued, this time starting from what the running services' own logs said.
+A week of polish: the pages rebuilt on the browser's own features without Bootstrap, intros that start and end where the titles do, title pages that say what a title is and who's watched it, and a sweep through the running services' own logs.
 
 - **An intro no longer runs on over a show's studio set.** Since intros were extended to where the titles' pictures stop being the season's, a show set in the same studio every episode (The Ricky Gervais Show) had its intro run on 15 to 40 seconds into the episode itself. A picture seen all through the other episodes, not once, now stops it; episodes with an intro are checked again.
 - **Foreign posters on older titles are swapped too.** Posters in your language were checked only for titles released in the last year, and only once: an older show, or a poster Jellyfin changed after the check (a refresh, a new season), kept its Polish or Chinese poster for good. Every film and show is now checked, and checked again whenever its poster changes; a foreign poster further down TMDB's list than its 15 most liked is recognised too.
