@@ -266,12 +266,26 @@ systemctl enable --now curatarr-web curatarr-worker
 say "Curatarr is running. Open http://<this-host>:8787 and sign in with a Jellyfin administrator."
 fi
 
-# A poster worker on this machine (curatarr-artwork-worker, set up from
-# Posters → Workers) runs the same release: restart it too, or it keeps the
-# code it started with until the machine reboots. Only if it's running.
-if [ "$NO_SYSTEMD" != 1 ] && systemctl is-active --quiet curatarr-artwork-worker 2>/dev/null; then
-    systemctl restart curatarr-artwork-worker || true
-    say "Restarted the poster worker on this machine, so it runs this release too."
+# A poster worker on this machine runs the same release: restart it too, or
+# it keeps the code it started with until the machine reboots. Its setup
+# (Posters → Workers, `setup --service`) makes it a systemd user service of
+# whoever ran it; a system service of that name is restarted as well. Only
+# ones that are running, and only ones running this install's release.
+if [ "$NO_SYSTEMD" != 1 ]; then
+    if systemctl is-active --quiet curatarr-artwork-worker 2>/dev/null; then
+        systemctl restart curatarr-artwork-worker || true
+        say "Restarted the poster worker on this machine, so it runs this release too."
+    fi
+    for unit in /home/*/.config/systemd/user/curatarr-artwork-worker.service \
+                /root/.config/systemd/user/curatarr-artwork-worker.service; do
+        [ -f "$unit" ] || continue
+        grep -q "$PREFIX/current/" "$unit" || continue
+        owner=$(stat -c %U "$unit")
+        if systemctl --machine="$owner@.host" --user is-active --quiet curatarr-artwork-worker 2>/dev/null; then
+            systemctl --machine="$owner@.host" --user restart curatarr-artwork-worker || true
+            say "Restarted $owner's poster worker, so it runs this release too."
+        fi
+    done
 fi
 
 completed=1
