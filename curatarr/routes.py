@@ -168,6 +168,56 @@ SPECULATION_RULES = {
 }
 
 
+# The web app manifest: a phone or computer can add Curatarr to its home
+# screen or app list, opening it in its own window (static/icons/, drawn by
+# scripts/app_icons.py; the dark tile keeps the mark within a round mask).
+WEB_APP = {
+    "id": "/",
+    "name": "Curatarr",
+    "short_name": "Curatarr",
+    "description": "Keeps a Jellyfin library tidy: what to keep, what can go, and better files.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#101923",
+    "theme_color": "#172431",
+    "icons": [
+        {
+            "src": "/static/icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any",
+        },
+        {
+            "src": "/static/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any",
+        },
+        {
+            "src": "/static/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable",
+        },
+    ],
+}
+
+
+@bp.get("/manifest.webmanifest")
+def web_app_manifest():
+    response = jsonify(WEB_APP)
+    response.mimetype = "application/manifest+json"
+    response.cache_control.max_age = 86400
+    return response
+
+
+@bp.get("/favicon.ico")
+def favicon():
+    """For browsers and tools that ask for it by name (the pages name the SVG)."""
+    return current_app.send_static_file("icons/favicon.ico")
+
+
 @bp.get("/speculation-rules.json")
 def speculation_rules():
     response = jsonify(SPECULATION_RULES)
@@ -232,6 +282,8 @@ PUBLIC_ENDPOINTS = {
     "main.webhook",
     "main.jellyfin_delete",
     "main.speculation_rules",  # the same for everyone; the sign-in page uses it
+    "main.web_app_manifest",  # fetched without the sign-in cookie
+    "main.favicon",
     "static",
 }
 

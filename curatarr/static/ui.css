@@ -389,6 +389,31 @@
   .table > thead { vertical-align: bottom; }
   .table-sm > :not(caption) > * > * { padding: .25rem; }
   .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* A table wider than its space scrolls sideways (a phone, say): a soft
+     shadow at an edge says there's more that way. The wrapper's own
+     ::before and ::after, kept at its edges (sticky), so the markup is
+     unchanged; they take no room (a negative margin as wide as they are).
+     Shown by scroll-state queries, else by a scroll-driven animation; a
+     browser with neither shows the scrollbar alone, as before. */
+  .table-responsive {
+    --edge-shadow: light-dark(rgb(0 0 0 / .22), rgb(0 0 0 / .7));
+    display: flex;
+    container-type: scroll-state;
+    &::before, &::after {
+      content: ""; flex: none; align-self: stretch; position: sticky; z-index: 2;
+      width: 1rem; pointer-events: none; opacity: 0; transition: opacity .2s;
+    }
+    &::before { left: 0; margin-right: -1rem; background: linear-gradient(to right, var(--edge-shadow), transparent); }
+    &::after { right: 0; margin-left: -1rem; background: linear-gradient(to left, var(--edge-shadow), transparent); }
+  }
+  @container scroll-state(scrollable: inline-start) { .table-responsive::before { opacity: 1; } }
+  @container scroll-state(scrollable: inline-end) { .table-responsive::after { opacity: 1; } }
+  @supports not (container-type: scroll-state) {
+    .table-responsive::before, .table-responsive::after { animation: edge-shadow linear both; animation-timeline: scroll(nearest inline); }
+    .table-responsive::before { animation-range: 0 2rem; }
+    .table-responsive::after { animation-direction: reverse; animation-range: calc(100% - 2rem) 100%; }
+  }
+  @keyframes edge-shadow { to { opacity: 1; } }
 
   /* Pills (a row of links, the chosen one filled). */
   .nav { display: flex; flex-wrap: wrap; padding-left: 0; margin-bottom: 0; list-style: none; }

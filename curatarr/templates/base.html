@@ -6,8 +6,13 @@
   <meta name="color-scheme" content="{{ theme or 'light dark' }}">
   <title>{% block title %}Curatarr{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg', v='3') }}">
-  <link href="{{ url_for('static', filename='ui.css', v='4') }}" rel="stylesheet">
-  <link href="{{ url_for('static', filename='style.css', v='61') }}" rel="stylesheet">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('main.web_app_manifest') }}">
+  {# The browser's own bar matches the header: the chosen scheme's, or the device's. #}
+  {% if theme %}<meta name="theme-color" content="{{ '#172431' if theme == 'dark' else '#ffffff' }}">{% else %}<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#172431" media="(prefers-color-scheme: dark)">{% endif %}
+  <link href="{{ url_for('static', filename='ui.css', v='5') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='style.css', v='62') }}" rel="stylesheet">
   <script src="{{ url_for('static', filename='swap.js', v='3') }}"></script>
   <script src="{{ url_for('static', filename='notes.js', v='2') }}"></script>
 </head>

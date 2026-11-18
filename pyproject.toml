@@ -43,6 +43,7 @@ include = ["curatarr*"]
 curatarr = [
   "templates/*.html",
   "static/*",
+  "static/icons/*",
   "migrations/alembic.ini",
   "migrations/README",
   "migrations/script.py.mako",

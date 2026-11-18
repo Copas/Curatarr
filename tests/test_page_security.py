@@ -131,3 +131,24 @@ def test_pages_fetch_links_early_and_a_post_clears_them(app):
     posted = client.post("/preferences/theme", data={"theme": "dark"})
     assert posted.headers["Clear-Site-Data"] == '"prefetchCache"'
     assert "Clear-Site-Data" not in page.headers
+
+
+def test_curatarr_can_be_added_to_a_home_screen(client):
+    """A web app manifest with icons, fetched without the sign-in cookie (as
+    browsers do), so it's public; /favicon.ico for those who ask by name."""
+    from curatarr.routes import PUBLIC_ENDPOINTS
+
+    assert {"main.web_app_manifest", "main.favicon"} <= PUBLIC_ENDPOINTS
+    response = client.get("/manifest.webmanifest")
+    assert response.mimetype == "application/manifest+json"
+    app = response.get_json()
+    assert app["start_url"] == "/" and app["display"] == "standalone"
+    sizes = {i["sizes"] for i in app["icons"]}
+    assert {"192x192", "512x512"} <= sizes
+    assert any(i["purpose"] == "maskable" for i in app["icons"])
+    for icon in app["icons"]:
+        assert client.get(icon["src"]).status_code == 200
+    assert client.get("/favicon.ico").status_code == 200
+    page = client.get("/login").get_data(as_text=True)
+    assert 'rel="manifest"' in page and 'rel="apple-touch-icon"' in page
+    assert page.count('name="theme-color"') == 2  # light and dark, following the device
