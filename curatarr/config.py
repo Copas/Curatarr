@@ -17,12 +17,19 @@ def configure_app(app, overrides: dict) -> None:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=_bool("CURATARR_SESSION_COOKIE_SECURE", False),
+        SESSION_COOKIE_PATH="/",
         PERMANENT_SESSION_LIFETIME=timedelta(days=7),
         CSRF_ENABLED=_bool("CURATARR_CSRF_ENABLED", True),
         DEMO_MODE=_bool("CURATARR_DEMO_MODE", False),
         ALLOW_UNAUTHENTICATED=_bool("CURATARR_ALLOW_UNAUTHENTICATED", False),
     )
     app.config.update(overrides)
+    if app.config["SESSION_COOKIE_SECURE"] and "SESSION_COOKIE_NAME" not in overrides:
+        # Over HTTPS the cookie's name carries the __Host- prefix: browsers then
+        # accept it only from this exact host, sent securely, for the whole
+        # site, so another service on the same domain can't set or replace it.
+        # (Changing it signs everyone out once.)
+        app.config["SESSION_COOKIE_NAME"] = "__Host-curatarr_session"
     if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
         # The worker's background chapter jobs write while discovery holds a
         # long transaction; wait for the lock instead of failing after 5 s.

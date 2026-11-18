@@ -165,3 +165,28 @@ def test_pages_say_what_they_share_and_allow(client):
     for feature in ("camera", "microphone", "geolocation", "payment", "usb"):
         assert f"{feature}=()" in allowed
     assert "clipboard-write" not in allowed  # Settings copies keys
+
+
+def test_over_https_the_session_cookie_is_host_only():
+    from curatarr import create_app
+
+    plain = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": "sqlite://"})
+    assert plain.config["SESSION_COOKIE_NAME"] == "session"
+    secure = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite://",
+            "SESSION_COOKIE_SECURE": True,
+        }
+    )
+    assert secure.config["SESSION_COOKIE_NAME"] == "__Host-curatarr_session"
+    # __Host- needs Secure, Path=/ and no Domain, or browsers refuse it
+    with secure.app_context():
+        from curatarr import db
+
+        db.create_all()
+    client = secure.test_client()
+    page = client.get("/login", base_url="https://curatarr.example")
+    cookie = page.headers.get("Set-Cookie", "")
+    assert cookie.startswith("__Host-curatarr_session="), cookie
+    assert "Secure" in cookie and "Path=/" in cookie and "Domain" not in cookie

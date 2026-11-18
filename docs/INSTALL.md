@@ -113,7 +113,7 @@ sudo systemctl restart curatarr-web curatarr-worker
 | `CURATARR_BIND` | `0.0.0.0:8787` | Address and port the interface listens on |
 | `CURATARR_JELLYFIN_URL` | unset | Fix the Jellyfin server instead of entering it at first sign-in |
 | `DATABASE_URL` | SQLite in `/var/lib/curatarr` | Use PostgreSQL instead (`postgresql+psycopg://…`) |
-| `CURATARR_SESSION_COOKIE_SECURE` | `false` | Set `true` behind HTTPS |
+| `CURATARR_SESSION_COOKIE_SECURE` | `false` | Set `true` behind HTTPS (the sign-in cookie is then `__Host-curatarr_session`, sent only over HTTPS to this exact host; turning it on signs everyone out once) |
 | `CURATARR_LOG_LEVEL` | `INFO` | `DEBUG` to log every outgoing request |
 
 [`.env.example`](../.env.example) lists every variable.
@@ -328,7 +328,7 @@ Logs: `docker compose logs --tail=100 web worker`. Don't use `docker compose dow
 
 ## HTTPS and remote access
 
-Curatarr serves plain HTTP. To reach it from outside your home network, put it behind a reverse proxy that terminates TLS (Caddy, nginx, Traefik, or your NAS's built-in one) and set `CURATARR_SESSION_COOKIE_SECURE=true`. Sign-in is checked against Jellyfin and repeated failures are rate-limited, but a VPN is still the safer way in.
+Curatarr serves plain HTTP. To reach it from outside your home network, put it behind a reverse proxy that terminates TLS (Caddy, nginx, Traefik, or your NAS's built-in one) and set `CURATARR_SESSION_COOKIE_SECURE=true`. Have the proxy send HSTS (`Strict-Transport-Security`), starting with a short `max-age` such as 300 and raising it to a year once everything works over HTTPS; Curatarr doesn't send it itself, since a plain-HTTP install mustn't. Sign-in is checked against Jellyfin and repeated failures are rate-limited, but a VPN is still the safer way in.
 
 ---
 
