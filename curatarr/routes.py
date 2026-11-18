@@ -107,6 +107,18 @@ def refuse_cross_site():
     abort(403)
 
 
+PERMISSIONS_POLICY = ", ".join(
+    f"{feature}=()"
+    for feature in (
+        # (only features Chrome knows: an unknown one is logged as an error)
+        "accelerometer", "autoplay", "browsing-topics", "camera",
+        "display-capture", "geolocation",
+        "gyroscope", "hid", "magnetometer", "microphone", "midi", "payment",
+        "publickey-credentials-get", "serial", "usb", "xr-spatial-tracking",
+    )
+)  # fmt: skip
+
+
 @bp.after_app_request
 def security_headers(response):
     response.headers["Content-Security-Policy"] = (
@@ -115,11 +127,20 @@ def security_headers(response):
         # else. data: images are the select arrow and close icon in ui.css.
         "default-src 'self'; "
         "img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; "
+        # No <base> to redirect relative links, and forms post only here.
+        "base-uri 'none'; form-action 'self'; "
         # HTML only becomes page content through static/swap.js's policy,
         # which refuses inline script.
         "require-trusted-types-for 'script'; trusted-types curatarr-html"
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"  # frame-ancestors, for older browsers
+    # A link to another site (Jellyfin, a release page) doesn't tell it which
+    # Curatarr page it came from, or Curatarr's address.
+    response.headers["Referrer-Policy"] = "same-origin"
+    # Powerful features no page uses are off, here and in anything it embeds
+    # (copying to the clipboard, which Settings uses, stays as it is).
+    response.headers["Permissions-Policy"] = PERMISSIONS_POLICY
     # A window Curatarr opens (Jellyfin, a release page) can't reach back
     # into it, nor can a page that opened Curatarr.
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"

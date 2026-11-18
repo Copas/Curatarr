@@ -152,3 +152,16 @@ def test_curatarr_can_be_added_to_a_home_screen(client):
     page = client.get("/login").get_data(as_text=True)
     assert 'rel="manifest"' in page and 'rel="apple-touch-icon"' in page
     assert page.count('name="theme-color"') == 2  # light and dark, following the device
+
+
+def test_pages_say_what_they_share_and_allow(client):
+    headers = client.get("/login").headers
+    policy = headers["Content-Security-Policy"]
+    assert "base-uri 'none'" in policy and "form-action 'self'" in policy
+    assert headers["X-Frame-Options"] == "DENY"
+    # links out don't carry the page or Curatarr's address
+    assert headers["Referrer-Policy"] == "same-origin"
+    allowed = headers["Permissions-Policy"]
+    for feature in ("camera", "microphone", "geolocation", "payment", "usb"):
+        assert f"{feature}=()" in allowed
+    assert "clipboard-write" not in allowed  # Settings copies keys
