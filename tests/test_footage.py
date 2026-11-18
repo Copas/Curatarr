@@ -80,7 +80,7 @@ class FakePlugin:
         self.restored.append(segment_id)
 
 
-def _ep(block, rule=None, ours=None, titles="pictures"):
+def _ep(block, rule=None, ours=None, titles="pictures", run_on=0):
     return SimpleNamespace(
         info=SimpleNamespace(duration=2600.0, path="file"),
         state=SimpleNamespace(id="state", intro_rule=rule, intro_found=None),
@@ -88,6 +88,7 @@ def _ep(block, rule=None, ours=None, titles="pictures"):
         season_prints=lambda: ("mine", ["others"]),
         own_intro=lambda: ours,
         titles_evidence=lambda block: titles,
+        run_on=lambda end: run_on,
     )
 
 
@@ -333,3 +334,57 @@ def test_the_intro_comparison_lists_where_the_two_disagree(app, client):
     )
     assert "0:37" in page  # …unless asked for
     assert client.get("/chapters/markers?kind=intros&verdict=nope").status_code == 404
+
+
+def test_an_intro_runs_on_while_the_titles_pictures_are_the_seasons(monkeypatch):
+    """Taskmaster: the shared music stops at 0:26 while every episode still
+    shows the same last shots to 0:30; the intro ends there, before the
+    episode's own title card."""
+    monkeypatch.setattr(credits, "frames", lambda *_a: np.zeros((1, 1, 1)))
+    monkeypatch.setattr(credits, "find_breaks", lambda _p, start: [])
+    theirs = {"Id": "theirs", "Start": 0.0, "End": 24.0, "Source": "Chromaprint"}
+    # Curatarr's own agrees (0-25): nothing to widen, but the titles run on
+    plugin, hidden = FakePlugin(), []
+    ep = _ep(None, ours=(0, 25), run_on=4)
+    assert _place_intro(ep, plugin, "item", [theirs], hidden) == "intro widened"
+    assert plugin.added == [("Introduction", 0.0, 29)]
+    assert "stop showing the same pictures" in hidden[0]["reason"]
+    # a second or less isn't worth a change
+    plugin = FakePlugin()
+    assert (
+        _place_intro(_ep(None, ours=(0, 24), run_on=0), plugin, "item", [theirs], [])
+        is None
+    )
+    # an intro Curatarr adds runs on too
+    plugin = FakePlugin()
+    assert _place_intro(_ep(None, ours=(436, 557), run_on=6), plugin, "item", [], [])
+    assert plugin.added == [("Introduction", 436, 563)]
+
+
+def test_run_on_counts_only_new_keyframes_the_season_shares():
+    rng = np.random.default_rng(3)
+    shots = rng.integers(0, 255, (6, footage.H, footage.W), dtype=np.uint8)
+    scene = rng.integers(0, 255, (40, footage.H, footage.W), dtype=np.uint8)
+
+    def episode(seed, own_scene):
+        _unused, thumbs = _print(120, seed)
+        thumbs[30:36] = shots  # the titles' last shots, the same everywhere
+        if own_scene:
+            # the last shot's keyframe repeats over the next scene (no new
+            # keyframe until 46), then the scene
+            thumbs[36:46] = shots[-1]
+            thumbs[46:86] = scene
+        hashes, flat = footage.picture_hashes(thumbs)
+        return footage.Print(hashes, flat, None, footage.dark_and_plain(thumbs))
+
+    here = episode(1, True)
+    others = [episode(10 + n, False) for n in range(5)]
+    # shared from 30 to 35; the repeated keyframe after it doesn't count
+    assert footage.run_on(here, others, 30) == 6
+    # nothing shared past the end: no run-on
+    assert footage.run_on(here, others, 60) == 0
+    # a dark, plain picture stops it (it would match the like anywhere)
+    shots[3] = 8
+    here = episode(1, True)
+    others = [episode(10 + n, False) for n in range(5)]
+    assert footage.run_on(here, others, 30) == 3

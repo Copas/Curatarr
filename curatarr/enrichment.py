@@ -4040,6 +4040,15 @@ class _Episode:
             lettered,
         )
 
+    def run_on(self, end) -> int:
+        """Seconds the season's titles carry on past ``end`` (footage.run_on)."""
+        from . import footage
+
+        prints = self.season_prints()
+        if prints is None:
+            return 0
+        return footage.run_on(*prints, end)
+
     def season_prints(self):
         """(this episode's fingerprint, the nearest episodes'), made the first
         time, or None with too few of them."""
@@ -4491,7 +4500,7 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
-INTRO_RULE = 7  # how intros are widened (footage.py); raising it checks again
+INTRO_RULE = 8  # how intros are widened (footage.py); raising it checks again
 # 4: the marker starts skip_lead_seconds early, so the button shows in time
 # 5: sound alike, not only identical, counts as shared; and Curatarr's own
 #    intro (footage.own_intro) is recorded beside Intro Skipper's
@@ -4499,6 +4508,8 @@ INTRO_RULE = 7  # how intros are widened (footage.py); raising it checks again
 #    the end of one it found in the same place
 # 7: …only when it looks like a title sequence, not music under the story
 #    (a migration moves episodes it can't change straight to 7)
+# 8: an intro runs on while the season's titles show the same pictures after
+#    the shared sound stops (footage.run_on); episodes with no intro skip it
 INTRO_DIFFERS = 5.0  # seconds an edge may differ and still agree
 
 
@@ -4567,14 +4578,19 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
     by_sound = own is not None and footage.overlap(own, theirs) > 0
     try:
         found = own if by_sound else ep.intro_block(theirs)
-        if found is None:
-            return None
-        edges = _snapped(ep, found)
+        edges = _snapped(ep, found) if found is not None else None
     except (ImportError, MediaToolError, RuntimeError, OSError) as exc:
         _log("intro_unread", state_id=ep.state.id, error=str(exc))
         return None
     later = footage.OWN_WIDEN if by_sound else footage.WIDEN
-    wider = footage.widened(theirs, edges, later=later)
+    wider = footage.widened(theirs, edges, later=later) if edges else None
+    # Then on while the season's titles show the same pictures (rule 8),
+    # whether or not the edges moved.
+    target = wider or theirs
+    end = _ran_on(ep, target[1])
+    ran_on = end > target[1]
+    if ran_on:
+        wider = (target[0], end)
     if wider is None:
         return None
     try:
@@ -4601,7 +4617,9 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
             "source": current.get("Source"),
             "reason": f"Intro widened to {_clock(wider[0])}–{_clock(wider[1])}, "
             + (
-                "where the sound the season shares starts and ends"
+                "where the season's titles stop showing the same pictures"
+                if ran_on
+                else "where the sound the season shares starts and ends"
                 if by_sound
                 else "where the footage the season shares starts and ends"
             ),
@@ -4633,6 +4651,22 @@ def _snapped(ep, found) -> tuple[float, float]:
     return edges[0], edges[1]
 
 
+def _ran_on(ep, end: float) -> float:
+    """``end``, or later where the season's titles carry on with the same
+    pictures after the sound it shares stops (footage.run_on), moved to the
+    cut there. An episode's own title card or couch gag after them stays."""
+    from . import footage
+
+    try:
+        extra = ep.run_on(end)
+        if extra < footage.MIN_MOVE:
+            return end
+        return _snapped(ep, (round(end) + extra,) * 2)[1]
+    except (ImportError, MediaToolError, RuntimeError, OSError) as exc:
+        _log("intro_unread", state_id=ep.state.id, error=str(exc))
+        return end
+
+
 def _add_intro(ep, plugin, item_id, own, hidden) -> str | None:
     """Add Curatarr's own intro where Intro Skipper found none, if it looks
     like a title sequence (footage.titles_evidence): music the score repeats
@@ -4655,6 +4689,7 @@ def _add_intro(ep, plugin, item_id, own, hidden) -> str | None:
     except (ImportError, MediaToolError, RuntimeError, OSError) as exc:
         _log("intro_unread", state_id=ep.state.id, error=str(exc))
         return None
+    end = _ran_on(ep, end)
     try:
         ours = plugin.add(item_id, "Introduction", skip_lead(start), end)
     except IntegrationError as exc:

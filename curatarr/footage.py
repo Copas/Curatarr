@@ -88,6 +88,9 @@ TITLE_PICTURES = 0.1  # of the other episodes show the same pictures there…
 TITLE_IN_INTROS = 0.7  # …or have its sound inside their Intro Skipper intro…
 TITLE_LETTERING = 3  # …or seconds of it show lettering: it's a title sequence
 INTRO_NEAR = 10  # seconds either side of an intro that still count as in it
+RUN_ON_SHARE = 0.3  # of the other episodes show the same picture past the end…
+RUN_ON_MAX = 30  # …for up to this long, and the intro runs on to there
+DIM_MEAN, DIM_STD = 40, 25  # a dark, plain thumbnail (brightness, variation)
 
 
 @dataclass
@@ -95,6 +98,7 @@ class Print:
     hashes: object  # uint64 per second
     flat: object  # bool per second
     sound: object  # uint32 Chromaprint values, or None
+    dim: object = None  # bool per second: dark and plain (matches by chance)
 
     @property
     def sound_step(self) -> float:
@@ -159,7 +163,18 @@ def fingerprint(path: str, duration: float, cache: Path) -> Print:
         np.savez(partial, pics=thumbnails, sound=sound)
         os.replace(partial, target)
     hashes, flat = picture_hashes(thumbnails)
-    return Print(hashes, flat, sound if len(sound) else None)
+    return Print(
+        hashes, flat, sound if len(sound) else None, dark_and_plain(thumbnails)
+    )
+
+
+def dark_and_plain(thumbnails):
+    """Per second: a dark, plain picture (mean below DIM_MEAN and little
+    variation): a night scene or a fade matches the like in any episode."""
+    import numpy as np
+
+    t = thumbnails.reshape(len(thumbnails), -1).astype(np.float32)
+    return (t.mean(axis=1) < DIM_MEAN) & (t.std(axis=1) < DIM_STD)
 
 
 def _picture_matches(here: Print, other: Print, seconds):
@@ -384,3 +399,37 @@ def titles_evidence(
     if (lettered() if callable(lettered) else lettered) >= TITLE_LETTERING:
         return "lettering"
     return None
+
+
+def run_on(here: Print, others: list, end: float) -> int:
+    """Seconds the season's titles carry on past ``end`` with the sound no
+    longer shared: the same pictures in RUN_ON_SHARE or more of the others
+    (Taskmaster's last shots, the end of The Simpsons' titles before the
+    couch gag), up to RUN_ON_MAX. Only a new keyframe counts: these are
+    keyframes, and the last one of the titles stands for every second until
+    the next, ten seconds into the next scene in some files. A dark, plain
+    picture stops it (it matches the like anywhere). What comes after the
+    shared pictures, an episode's own title card or couch gag, isn't skipped."""
+    import numpy as np
+
+    lo = round(end)
+    hi = min(len(here.hashes) - 1, lo + RUN_ON_MAX + 1)
+    if hi - lo < 2 or not others:
+        return 0
+    seconds = range(lo, hi)
+    shown = np.zeros(len(seconds))
+    for other in others:
+        for i in _supported(_picture_matches(here, other, seconds)):
+            if lo <= i < hi:
+                shown[i - lo] += 1
+    shown /= len(others)
+    last = 0
+    for at in range(len(seconds)):
+        i = lo + at
+        if shown[at] < RUN_ON_SHARE:
+            break
+        if here.dim is not None and i < len(here.dim) and here.dim[i]:
+            break
+        if here.hashes[i] != here.hashes[i - 1]:
+            last = at + 1  # a new keyframe the season shares
+    return last
