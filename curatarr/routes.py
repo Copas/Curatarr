@@ -2287,6 +2287,8 @@ def library_policy(library_id):
 
 @bp.route("/titles/<media_id>", methods=["GET", "POST"])
 def title(media_id):
+    from . import title_info
+
     media = db.session.get(MediaIdentity, media_id)
     if not media:
         abort(404)
@@ -2309,6 +2311,8 @@ def title(media_id):
     return render_template(
         "title.html",
         origin=origin.describe(media),
+        about=title_info.about(media),
+        watching=title_info.watching(media),
         entries=outside_subtitles.entries,
         file_label=file_label,
         media=media,

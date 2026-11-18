@@ -276,6 +276,9 @@
   }
 
   /* Title page */
+  .title-tagline { font-style: italic; color: var(--app-muted); }
+  .title-overview { max-width: 70ch; }
+  .watching-people li + li { margin-top: .25rem; }
   /* Link to the same item in Jellyfin, shown beside a title. */
   .jf-link { display: inline-flex; align-items: center; vertical-align: -.1em; margin-left: .35rem; color: var(--app-muted); position: relative; z-index: 2; }
   .jf-link:hover, .jf-link:focus-visible { color: var(--app-link-hover); }

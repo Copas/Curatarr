@@ -385,6 +385,22 @@ class JellyfinClient(Client):
             found.extend((data or {}).get("Items") or [])
         return found
 
+    def item_about(self, item_id) -> dict:
+        """What a title is: its plot, genres, ratings, length, tagline and
+        studios, for its page in Curatarr."""
+        data = self.request(
+            "GET",
+            "/Items",
+            params={
+                "Ids": item_id,
+                "Fields": "Overview,Genres,ProductionYear,OfficialRating,"
+                "CommunityRating,RunTimeTicks,Taglines,Studios,PremiereDate,"
+                "EndDate,Status,ChildCount",
+            },
+        )
+        items = (data or {}).get("Items") if isinstance(data, dict) else None
+        return items[0] if items else {}
+
     def user_data(self, user_id, item_id) -> dict:
         """One account's play state for an item (Played, LastPlayedDate…)."""
         data = self.request(

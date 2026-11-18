@@ -3,6 +3,20 @@
 {% from '_signals.html' import household_notes with context %}{% from '_shrink.html' import shrink_actions with context %}{% from '_confirm.html' import confirm_submit %}
 <div class="eyebrow">{{ 'TV show' if media.media_type == 'series' else 'Movie' }} · {{ media.library.name }}</div><div class="d-flex flex-wrap align-items-center justify-content-between gap-2"><h1 class="mb-0">{{ media|labelled }}</h1>{% if jellyfin_url(media.jellyfin_id) %}<a class="btn btn-sm btn-outline-secondary" href="{{ jellyfin_url(media.jellyfin_id) }}" target="_blank" rel="noopener">Open in Jellyfin</a>{% endif %}</div><p class="text-secondary mt-2">Decisions{% if is_admin %}, recent activity,{% endif %} and options for this title.</p>
 {% set notes = household_notes(signals)|trim %}{% if notes %}<div class="d-flex flex-wrap gap-1 mb-4">{{ notes }}</div>{% endif %}
+{% set a = about %}<section class="card p-3 mb-4" aria-labelledby="about-heading">
+  <h2 class="h5 mb-2" id="about-heading">About</h2>
+  {% if a.tagline %}<p class="title-tagline mb-2">{{ a.tagline }}</p>{% endif %}
+  {% set facts = [] %}{% if a.years or a.year %}{% set _ = facts.append(a.years or a.year) %}{% endif %}{% if a.rating %}{% set _ = facts.append(a.rating) %}{% endif %}{% if a.score %}{% set _ = facts.append('★ ' ~ '%.1f'|format(a.score)) %}{% endif %}{% if a.minutes %}{% set _ = facts.append(a.minutes ~ ' min' ~ (' an episode' if media.media_type == 'series' else '')) %}{% endif %}{% if a.status == 'Continuing' %}{% set _ = facts.append('Still running') %}{% elif a.status == 'Ended' %}{% set _ = facts.append('Ended') %}{% endif %}{% if a.studios %}{% set _ = facts.append(a.studios[:2]|join(', ')) %}{% endif %}
+  {% if facts %}<p class="text-secondary small mb-2">{{ facts|join(' · ') }}</p>{% endif %}
+  {% if a.overview %}<p class="mb-2 title-overview">{{ a.overview }}</p>{% elif a.reached %}<p class="text-secondary mb-2">Jellyfin has no summary for it.</p>{% else %}<p class="text-secondary mb-2">Couldn't reach Jellyfin for its summary just now.</p>{% endif %}
+  {% if a.genres %}<div class="d-flex flex-wrap gap-1" aria-label="Genres">{% for g in a.genres %}<span class="chip">{{ g }}</span>{% endfor %}</div>{% endif %}
+</section>
+{% set w = watching %}<section class="card p-3 mb-4" aria-labelledby="watching-heading">
+  <h2 class="h5 mb-2" id="watching-heading">Watching</h2>
+  {% if w.people %}<ul class="list-unstyled mb-0 watching-people">{% for p in w.people %}<li><strong>{{ p.name }}</strong>{% if media.media_type == 'series' %} · {{ p.played }} of {{ p.of }} episode{{ '' if p.of == 1 else 's' }}{% if p.of and p.played == p.of %} (all){% endif %}{% elif p.played %} · watched{% if p.times > 1 %} {{ p.times }} times{% endif %}{% else %} · not watched{% endif %}{% if p.last %} · last {{ p.last|when }}{% endif %}{% if p.favorite %} · <span class="fav-star">{{ icon('star', 12) }} favourite</span>{% endif %}{% if media.media_type == 'series' and p.times %} · rewatched {{ p.times }} episode{{ '' if p.times == 1 else 's' }}{% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="text-secondary mb-0">Nobody has played it yet.</p>{% endif %}
+  {% if w.recent %}<h3 class="h6 mt-3 mb-2">Recently watched episodes</h3><div class="table-responsive"><table class="table table-sm small mb-0"><thead><tr><th scope="col">Episode</th><th scope="col">Who</th><th scope="col">When</th></tr></thead><tbody>{% for r in w.recent %}<tr><td>S{{ '%02d'|format(r.season or 0) }}E{{ '%02d'|format(r.episode or 0) }}</td><td>{{ r.name }}</td><td>{{ r.at|when }}{% if not r.finished %} <span class="text-secondary">(part way)</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</section>
 {% set o = origin %}<section class="card p-3 mb-4" aria-labelledby="origin-heading">
   <h2 class="h5 mb-2" id="origin-heading">Where it came from</h2>
   {% if o.added %}<p class="mb-1">Added to {{ o.app }} {{ o.added|when('date') }}.</p>{% endif %}
