@@ -266,6 +266,14 @@ systemctl enable --now curatarr-web curatarr-worker
 say "Curatarr is running. Open http://<this-host>:8787 and sign in with a Jellyfin administrator."
 fi
 
+# A poster worker on this machine (curatarr-artwork-worker, set up from
+# Posters → Workers) runs the same release: restart it too, or it keeps the
+# code it started with until the machine reboots. Only if it's running.
+if [ "$NO_SYSTEMD" != 1 ] && systemctl is-active --quiet curatarr-artwork-worker 2>/dev/null; then
+    systemctl restart curatarr-artwork-worker || true
+    say "Restarted the poster worker on this machine, so it runs this release too."
+fi
+
 completed=1
 # Smart Chapters transcribes several times faster on an NVIDIA card, but only
 # with the CUDA libraries of the chapters-gpu extra.

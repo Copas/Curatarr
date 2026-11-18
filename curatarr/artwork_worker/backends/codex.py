@@ -54,12 +54,43 @@ LIMIT = re.compile(
 # was reached. It resets in about 14 minutes."
 LIMIT_SAID = re.compile(r"usage limit|rate limit", re.IGNORECASE)
 LIMIT_AT = re.compile(r"try again at (\d{1,2}):(\d{2})\s*([AP]M)?", re.IGNORECASE)
+# …or with the day, when it's not today: "try again at Nov 18th, 2026 2:31 PM".
+LIMIT_ON = re.compile(
+    r"try again at ([A-Za-z]{3,9})\.? (\d{1,2})(?:st|nd|rd|th)?,? (?:(\d{4}),? )?"
+    r"(\d{1,2}):(\d{2})\s*([AP]M)?",
+    re.IGNORECASE,
+)
+MONTHS = (
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "may",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
+)
 LIMIT_IN = re.compile(
     r"(?:resets|try again) in (?:about )?(\d+)\s*(minute|hour|day)", re.IGNORECASE
 )
 LIMIT_GUESS = 3600  # seconds to wait when it doesn't say when
 LIMIT_SOON = 120  # the least wait, when the time it named has just passed
 LIMIT_GRACE = 3 * 3600  # a time named this far in the past means tomorrow's
+
+
+def _hour(hour: int, half: str | None) -> int:
+    """A clock hour, 12-hour ("2" with "PM") or 24-hour, as 0-23."""
+    hour %= 24
+    half = (half or "").upper()
+    if half == "PM" and hour < 12:
+        return hour + 12
+    if half == "AM" and hour == 12:
+        return 0
+    return hour
 
 
 def _reset_in(said: str, now: float | None = None) -> int:
@@ -69,14 +100,19 @@ def _reset_in(said: str, now: float | None = None) -> int:
     if found:
         unit = {"minute": 60, "hour": 3600, "day": 86400}[found.group(2).lower()]
         return int(found.group(1)) * unit
+    found = LIMIT_ON.search(said)
+    if found and found.group(1)[:3].lower() in MONTHS:
+        local = time.localtime(now)
+        month = MONTHS.index(found.group(1)[:3].lower()) + 1
+        year = int(found.group(3) or local.tm_year)
+        hour = _hour(int(found.group(4)), found.group(6))
+        at = time.mktime(
+            (year, month, int(found.group(2)), hour, int(found.group(5)), 0, 0, 0, -1)
+        )
+        return max(LIMIT_SOON, int(at - now))
     found = LIMIT_AT.search(said)
     if found:
-        hour, minute = int(found.group(1)) % 24, int(found.group(2))
-        half = (found.group(3) or "").upper()
-        if half == "PM" and hour < 12:
-            hour += 12
-        elif half == "AM" and hour == 12:
-            hour = 0
+        hour, minute = _hour(int(found.group(1)), found.group(3)), int(found.group(2))
         local = time.localtime(now)
         at = time.mktime(
             (*local[:3], hour, minute, 0, local.tm_wday, local.tm_yday, -1)

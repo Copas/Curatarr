@@ -921,6 +921,17 @@ def test_codex_reset_times_are_read_as_its_words_put_them():
     assert _reset_in("try again at 5:00 PM.", now + 16) == 120
     assert _reset_in("try again at 4:30 PM.", now) == 120
     assert _reset_in("You've hit your usage limit.") == LIMIT_GUESS
+    # Not today: the day is named too. Read as a guess of an hour, it was
+    # tried (and refused) every hour until the next afternoon.
+    said = (
+        "You\u2019ve hit your usage limit. Upgrade to Pro, visit the usage "
+        "page to purchase more credits or try again at Nov 18th, 2026 2:31 PM."
+    )
+    assert _reset_in(said, now) == 4 * 86400 + (21 * 60 + 31) * 60  # the 13th at 5 PM
+    assert _reset_in("try again at Nov 14th 9:05 AM", now) == (16 * 60 + 5) * 60
+    assert _reset_in("try again at December 1, 2026 12:00 AM", now) == (
+        17 * 86400 + 7 * 3600
+    )
 
 
 CODEX_SILENT = """import sys, time
