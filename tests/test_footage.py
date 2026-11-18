@@ -388,3 +388,22 @@ def test_run_on_counts_only_new_keyframes_the_season_shares():
     here = episode(1, True)
     others = [episode(10 + n, False) for n in range(5)]
     assert footage.run_on(here, others, 30) == 3
+
+
+def test_run_on_stops_at_a_set_seen_all_through_the_episodes():
+    """The Ricky Gervais Show: after its titles, the animated studio every
+    episode is set in. Its pictures match the season's, but everywhere in
+    each episode, not once: that's the show, not titles."""
+    rng = np.random.default_rng(4)
+    poses = rng.integers(0, 255, (3, footage.H, footage.W), dtype=np.uint8)
+
+    def episode(seed):
+        _unused, thumbs = _print(200, seed)
+        for second in range(30, 190):  # the set, its characters moving
+            thumbs[second] = poses[second % 3]
+        hashes, flat = footage.picture_hashes(thumbs)
+        return footage.Print(hashes, flat, None, footage.dark_and_plain(thumbs))
+
+    here = episode(1)
+    others = [episode(20 + n) for n in range(5)]
+    assert footage.run_on(here, others, 30) == 0

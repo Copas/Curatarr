@@ -44,10 +44,20 @@ class Jellyfin:
     def configuration(self):
         return {"PreferredMetadataLanguage": "en"}
 
-    def released_since(self, _since, start=0, limit=200):
-        items = [{"Id": i, "Name": f"Film {i}"} for i in sorted(self.posters)]
+    premiered = "2026-01-01"
+
+    def titles_with_posters(self, start=0, limit=200):
+        items = [
+            {
+                "Id": i,
+                "Name": f"Film {i}",
+                "ImageTags": {"Primary": self.posters[i].rsplit("/", 1)[-1]},
+                "PremiereDate": self.premiered,
+            }
+            for i in sorted(self.posters)
+        ]
         page = items[start : start + limit]
-        return {"Items": page, "Returned": len(page), "TotalRecordCount": len(items)}
+        return {"Items": page, "TotalRecordCount": len(items)}
 
     def remote_images(self, item_id, _kind="Primary"):
         self.remote_calls += 1
@@ -129,3 +139,44 @@ def test_runs_once_a_day_and_can_be_turned_off(app, monkeypatch):
         set_setting(poster_language.KEY, {})
         assert poster_language.sweep(now=now + timedelta(days=2), fetch=fetch) == 0
         assert jellyfin.posters[item] == "https://img/zh.jpg"
+
+
+def test_a_poster_jellyfin_changes_later_is_looked_at_again(app, monkeypatch):
+    """Found fine once, then a refresh (or a new season) brought a foreign
+    one: its tag changed, so the next pass looks again, however old the
+    title is."""
+    with app.app_context():
+        item = "a" * 32
+        jellyfin = _setup(monkeypatch, {item: "https://img/en.jpg"}, {item: BOTH})
+        jellyfin.premiered = "2019-05-01"  # long out of the first year
+        now = utcnow()
+        assert poster_language.sweep(now=now, fetch=fetch) == 0
+        poster_language.sweep(now=now + timedelta(days=1), fetch=fetch)
+        assert jellyfin.remote_calls == 1  # unchanged: not fetched again
+        jellyfin.posters[item] = "https://img/zh.jpg"
+        assert poster_language.sweep(now=now + timedelta(days=2), fetch=fetch) == 1
+        assert jellyfin.posters[item] == "https://img/en.jpg"
+
+
+def test_a_foreign_poster_below_the_most_liked_is_still_recognised(app, monkeypatch):
+    """Ours was offered 20th: past the first 15, so it used to count as hand
+    picked and stay."""
+    with app.app_context():
+        item = "a" * 32
+        filler = [image(f"https://img/none{n}.jpg", "fr") for n in range(19)]
+        _setup(
+            monkeypatch,
+            {item: "https://img/zh.jpg"},
+            {item: [image("https://img/en.jpg", "en"), *filler, BOTH[1]]},
+        )
+        assert poster_language.sweep(fetch=fetch) == 1
+
+
+def test_titles_kept_before_tags_are_looked_at_once_more(app, monkeypatch):
+    with app.app_context():
+        item = "a" * 32
+        jellyfin = _setup(monkeypatch, {item: "https://img/zh.jpg"}, {item: BOTH})
+        set_setting(poster_language.KEY, {"kept": {item: "2026-10-23T11:43:11"}})
+        db.session.commit()
+        assert poster_language.sweep(fetch=fetch) == 1
+        assert jellyfin.posters[item] == "https://img/en.jpg"

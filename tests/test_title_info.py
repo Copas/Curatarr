@@ -94,3 +94,71 @@ def test_without_jellyfin_the_page_still_shows_the_genres_it_knows(
     assert "Couldn't reach Jellyfin for its summary just now." in page
     assert '<span class="chip">Drama</span>' in page
     assert "Nobody has played it yet." in page
+
+
+def _played(media, who, at, *, finished=False, position=0, key):
+    from curatarr.models import LifecycleAction, LifecycleEvent
+
+    event = LifecycleEvent(
+        external_event_id=key,
+        source="jellyfin",
+        event_type="item_played" if finished else "playback_stopped",
+        occurred_at=at,
+        media_identity_id=media.id,
+        jellyfin_user_id=who,
+        payload_hash=key,
+        normalized_json={"played": finished, "position_ticks": position * 10_000_000},
+    )
+    db.session.add(event)
+    db.session.flush()
+    db.session.add(
+        LifecycleAction(
+            idempotency_key=f"playback:{key}",
+            action_type="playback_received",
+            state="SUCCEEDED",
+            media_identity_id=media.id,
+            event_id=event.id,
+            reason_text="Playback reset the inactivity timer.",
+        )
+    )
+
+
+def test_a_films_page_says_who_finished_it_and_how_far_they_got(
+    app, client, monkeypatch
+):
+    """Watched over two evenings: the first says where they stopped, the
+    second that they finished (its earlier stop folded in), not a row of
+    identical "Playback received" lines."""
+    from test_enrichment import _movie
+
+    item = {"RunTimeTicks": 120 * 600_000_000, "Overview": "A bodybuilder's story."}
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: FakeJellyfin(item))
+    set_setting("jellyfin_user_names", {"u1": "Alex"})
+    _library, media, _part = _movie()
+    yesterday, today = utcnow() - timedelta(days=1), utcnow()
+    _played(media, "u1", yesterday, position=37 * 60, key="a")
+    _played(media, "u1", today - timedelta(hours=1), position=90 * 60, key="b")
+    _played(media, "u1", today, finished=True, key="c")
+    db.session.add(
+        UserMediaState(
+            media_identity_id=media.id,
+            jellyfin_user_id="u1",
+            last_played_at=today,
+            play_count=1,
+        )
+    )
+    db.session.commit()
+    page = client.get(f"/titles/{media.id}").text
+    watching = page[
+        page.index('id="watching-heading"') : page.index('id="origin-heading"')
+    ]
+    assert "<strong>Alex</strong> · finished it" in watching
+    recent = page[page.index("Recent activity") :]
+    assert "Alex finished it" in recent and "Alex stopped it at 37:00 (31%)" in recent
+    assert "1:30:00" not in recent  # today's stop is folded into the finish
+    assert "Playback reset the inactivity timer." not in recent
+    # the poster sits in the About card
+    about = page[page.index("title-about") : page.index('id="about-heading"')]
+    assert (
+        "picture-open title-about-poster" in about and f"/posters/{media.id}" in about
+    )

@@ -280,7 +280,53 @@ def test_only_episodes_with_an_intro_are_checked_again_for_rule_8(tmp_path):
             db.session.flush()
             ids.append(state.id)
         db.session.commit()
-        upgrade()
+        upgrade(revision="c8e2a6d4f913")  # rule 8's own
         db.session.expire_all()
         rules = [db.session.get(ChapterState, i).intro_rule for i in ids]
         assert rules == [7, 7, 8, 8]  # only those with an intro wait
+
+
+def test_rule_9_checks_again_what_rule_8_ran_on(tmp_path):
+    from flask_migrate import upgrade
+
+    from curatarr import db
+    from curatarr.models import ChapterState, Library, MediaIdentity, MediaPart
+
+    with _app(tmp_path, "old.db").app_context():
+        upgrade(revision="c8e2a6d4f913")
+        library = Library(jellyfin_library_id="tv", name="TV", media_type="tv")
+        db.session.add(library)
+        db.session.flush()
+        show = MediaIdentity(library_id=library.id, media_type="series", title="Show")
+        db.session.add(show)
+        db.session.flush()
+        cases = (
+            (8, {"theirs": [[0, 40]]}),  # run on under rule 8: check again
+            (7, {"theirs": [[0, 24]]}),  # not reached yet: check
+            (8, {"ours": None, "theirs": []}),  # no intro: nothing to redo
+        )
+        ids = []
+        for number, (rule, found) in enumerate(cases, 1):
+            part = MediaPart(
+                media_identity_id=show.id,
+                kind="episode",
+                season_number=1,
+                episode_number=number,
+                file_path=f"/mnt/media/Show/S01E0{number}.mkv",
+            )
+            db.session.add(part)
+            db.session.flush()
+            state = ChapterState(
+                media_part_id=part.id,
+                media_identity_id=show.id,
+                intro_rule=rule,
+                intro_found=found,
+            )
+            db.session.add(state)
+            db.session.flush()
+            ids.append(state.id)
+        db.session.commit()
+        upgrade()
+        db.session.expire_all()
+        rules = [db.session.get(ChapterState, i).intro_rule for i in ids]
+        assert rules == [8, 7, 9]

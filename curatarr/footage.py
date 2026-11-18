@@ -91,6 +91,7 @@ INTRO_NEAR = 10  # seconds either side of an intro that still count as in it
 RUN_ON_SHARE = 0.3  # of the other episodes show the same picture past the end…
 RUN_ON_MAX = 30  # …for up to this long, and the intro runs on to there
 DIM_MEAN, DIM_STD = 40, 25  # a dark, plain thumbnail (brightness, variation)
+RUN_ON_PLACES = 30  # a picture found more often than this in an episode is a set
 
 
 @dataclass
@@ -408,7 +409,9 @@ def run_on(here: Print, others: list, end: float) -> int:
     couch gag), up to RUN_ON_MAX. Only a new keyframe counts: these are
     keyframes, and the last one of the titles stands for every second until
     the next, ten seconds into the next scene in some files. A dark, plain
-    picture stops it (it matches the like anywhere). What comes after the
+    picture stops it (it matches the like anywhere), and so does one found
+    all through the other episodes (a studio set, as on The Ricky Gervais
+    Show, where the show itself follows the titles). What comes after the
     shared pictures, an episode's own title card or couch gag, isn't skipped."""
     import numpy as np
 
@@ -418,15 +421,22 @@ def run_on(here: Print, others: list, end: float) -> int:
         return 0
     seconds = range(lo, hi)
     shown = np.zeros(len(seconds))
+    places = [[] for _ in seconds]
     for other in others:
-        for i in _supported(_picture_matches(here, other, seconds)):
+        matches = _picture_matches(here, other, seconds)
+        for i in _supported(matches):
             if lo <= i < hi:
                 shown[i - lo] += 1
+                places[i - lo].append(len(matches[i]))
     shown /= len(others)
     last = 0
     for at in range(len(seconds)):
         i = lo + at
         if shown[at] < RUN_ON_SHARE:
+            break
+        # A title shot is in each episode once (a few times where its
+        # keyframe repeats); a studio set or background is all through it.
+        if np.median(places[at]) > RUN_ON_PLACES:
             break
         if here.dim is not None and i < len(here.dim) and here.dim[i]:
             break

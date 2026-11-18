@@ -2308,11 +2308,13 @@ def title(media_id):
     from . import custom_posters, origin, outside_subtitles
     from .enrichment import file_label
 
+    about = title_info.about(media)
     return render_template(
         "title.html",
         origin=origin.describe(media),
-        about=title_info.about(media),
-        watching=title_info.watching(media),
+        about=about,
+        watching=title_info.watching(media, about["minutes"]),
+        activity=title_info.activity(media, about["minutes"]),
         entries=outside_subtitles.entries,
         file_label=file_label,
         media=media,

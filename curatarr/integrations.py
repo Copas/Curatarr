@@ -320,32 +320,22 @@ class JellyfinClient(Client):
     def configuration(self):
         return self.request("GET", "/System/Configuration")
 
-    def released_since(self, since, start=0, limit=200):
-        """Films and shows first released on or after ``since`` (a date).
-
-        Jellyfin's MinPremiereDate filter misses most titles (and returns
-        collections), so this asks by year and compares the dates here."""
-        years = ",".join(str(y) for y in range(since.year, since.year + 3))
+    def titles_with_posters(self, start=0, limit=200):
+        """Every film and show, with ImageTags (a poster's tag changes when
+        the poster does) and PremiereDate."""
         data = self.request(
             "GET",
             "/Items",
             params={
                 "Recursive": "true",
                 "IncludeItemTypes": "Movie,Series",
-                "Years": years,
-                "Fields": "ProviderIds,PremiereDate",
+                "Fields": "PremiereDate",
+                "EnableImageTypes": "Primary",
                 "StartIndex": start,
                 "Limit": limit,
             },
         )
-        data = data or {}
-        data["Returned"] = len(data.get("Items") or [])  # before the filter
-        data["Items"] = [
-            item
-            for item in data.get("Items") or []
-            if (item.get("PremiereDate") or "")[:10] >= since.isoformat()
-        ]
-        return data
+        return data or {}
 
     def remote_images(self, item_id, kind="Primary"):
         """The pictures its metadata providers offer, in every language, in

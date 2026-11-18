@@ -5,13 +5,16 @@ metadata language. A new release often has only foreign posters on TMDB at
 first (a Chinese one, a Persian one); Jellyfin takes one of those and keeps
 it, even after an English one appears.
 
-So once a day Curatarr looks at the films and shows released in the last
-year. It compares each poster with the ones TMDB offers to find which it is:
-when that's one in another language and there is one in the metadata
-language now, Jellyfin is told to use that instead. A poster that matches
-none of them (one chosen by hand, or from another source) is left alone, as
-are posters with a Leaving Soon badge. A title without a poster in the
-metadata language yet is looked at again every few days.
+So Curatarr looks at every film and show's poster, and again whenever
+Jellyfin changes it (a refresh or a new season can bring a foreign one to an
+old show): it remembers the poster's tag, which changes with the picture. It
+compares the poster with the ones TMDB offers to find which it is: when
+that's one in another language and there is one in the metadata language
+now, Jellyfin is told to use that instead. A poster that matches none of
+them (one chosen by hand, or from another source) is left alone, as are
+posters with a Leaving Soon badge. A title without a poster in the metadata
+language yet is looked at again every few days (every month once it's over
+a year old).
 """
 
 import time
@@ -26,11 +29,13 @@ from .integrations import IntegrationError
 from .models import MediaIdentity, PosterSnapshot, utcnow
 
 KEY = "poster_languages"
-WINDOW = timedelta(days=365)
+WINDOW = timedelta(days=365)  # released within it: new posters come often
 EVERY = timedelta(hours=24)
 RECHECK = timedelta(days=3)
+RECHECK_OLDER = timedelta(days=30)
 RUN_SECONDS = 20
 CANDIDATES = 15  # of the provider's posters, the first (most liked) this many
+MORE = 60  # …and when it's none of those, the rest up to this many
 SAME = 2.0  # mean grey-level difference below which two posters are one
 SIZE = (24, 36)
 
@@ -74,7 +79,9 @@ def which(current: bytes, offered: list[dict], fetch=_fetch) -> dict | None:
     """The offered poster the current one is, or None when it's none of them."""
     mine = _pixels(current)
     best, nearest = None, SAME
-    for image in offered[:CANDIDATES]:
+    for n, image in enumerate(offered[:MORE]):
+        if n == CANDIDATES and best is not None:
+            break  # found among the most liked; the rest needn't be fetched
         data = fetch(image.get("Url") or "")
         if not data:
             continue
@@ -115,17 +122,30 @@ def _language(jellyfin) -> str:
     return (configured or "en").split("-")[0].lower()
 
 
-def _titles(jellyfin, now) -> dict[str, str]:
+def _titles(jellyfin) -> dict[str, dict]:
+    """{item: {"name", "tag" (its poster's, None without one), "premiered"}}."""
     titles, start = {}, 0
     while True:
-        page = jellyfin.released_since((now - WINDOW).date(), start=start) or {}
+        page = jellyfin.titles_with_posters(start=start) or {}
         items = page.get("Items") or []
         for item in items:
-            titles[_norm(item["Id"])] = item.get("Name") or ""
-        returned = page.get("Returned", len(items))
-        start += returned
-        if not returned or start >= (page.get("TotalRecordCount") or 0):
+            titles[_norm(item["Id"])] = {
+                "name": item.get("Name") or "",
+                "tag": (item.get("ImageTags") or {}).get("Primary"),
+                "premiered": (item.get("PremiereDate") or "")[:10],
+            }
+        start += len(items)
+        if not items or start >= (page.get("TotalRecordCount") or 0):
             return titles
+
+
+def _due(waiting_since, premiered: str, now) -> bool:
+    """A title waiting for a poster in our language: looked at again after a
+    few days, or a month when it's over a year old (new posters are rarer)."""
+    if waiting_since is None:
+        return True
+    recent = premiered >= (now - WINDOW).date().isoformat()
+    return now - waiting_since >= (RECHECK if recent else RECHECK_OLDER)
 
 
 def _badged() -> set[str]:
@@ -151,20 +171,22 @@ def sweep(now=None, fetch=_fetch) -> int:
     started = time.monotonic()
     try:
         language = _language(jellyfin)
-        titles = _titles(jellyfin, now)
+        titles = _titles(jellyfin)
     except IntegrationError:
         return 0
-    # Only titles still in the window are remembered.
-    kept = {i: at for i, at in (state.get("kept") or {}).items() if i in titles}
+    # kept: {item: the tag of the poster found fine}; a new poster (another
+    # tag) is looked at again. (Before tags, it held a time: looked at again.)
+    kept = {i: tag for i, tag in (state.get("kept") or {}).items() if i in titles}
     waiting = {i: at for i, at in (state.get("waiting") or {}).items() if i in titles}
     badged = _badged()
     replaced = 0
     todo = [
         item
-        for item in sorted(titles)
-        if item not in kept
+        for item, info in sorted(titles.items())
+        if info["tag"]
+        and kept.get(item) != info["tag"]
         and item not in badged
-        and now - (_as_datetime(waiting.get(item)) or now - RECHECK) >= RECHECK
+        and _due(_as_datetime(waiting.get(item)), info["premiered"], now)
     ]
     for item in todo:
         if time.monotonic() - started > RUN_SECONDS:
@@ -177,7 +199,8 @@ def sweep(now=None, fetch=_fetch) -> int:
             waiting[item] = now.isoformat()
             continue
         waiting.pop(item, None)
-        kept[item] = now.isoformat()
+        # A replaced poster has a new tag: the next pass confirms it.
+        kept[item] = titles[item]["tag"] if outcome == "kept" else None
         if outcome == "replaced":
             replaced += 1
             media = (
@@ -188,7 +211,7 @@ def sweep(now=None, fetch=_fetch) -> int:
             audit(
                 "poster_language",
                 media,
-                f"The poster of {titles[item]} was in another language; "
+                f"The poster of {titles[item]['name']} was in another language; "
                 "it now has one in the metadata language.",
                 f"poster-language:{item}:{now.date().isoformat()}",
             )

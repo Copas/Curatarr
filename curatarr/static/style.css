@@ -277,6 +277,11 @@
 
   /* Title page */
   .title-tagline { font-style: italic; color: var(--app-muted); }
+  /* About: the poster beside what it is (smaller, still beside it, on a phone) */
+  .title-about { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1rem; align-items: start; }
+  .title-about-poster { padding: 0; border: 0; background: none; cursor: zoom-in; }
+  @media (max-width: 575.98px) { .title-about .poster-large { width: 96px; height: 144px; } }
+  .title-activity li + li { margin-top: .2rem; }
   .title-overview { max-width: 70ch; }
   .watching-people li + li { margin-top: .25rem; }
   /* Link to the same item in Jellyfin, shown beside a title. */
