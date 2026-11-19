@@ -91,7 +91,10 @@ INTRO_NEAR = 10  # seconds either side of an intro that still count as in it
 RUN_ON_SHARE = 0.3  # of the other episodes show the same picture past the end…
 RUN_ON_MAX = 30  # …for up to this long, and the intro runs on to there
 DIM_MEAN, DIM_STD = 40, 25  # a dark, plain thumbnail (brightness, variation)
-RUN_ON_PLACES = 30  # a picture found more often than this in an episode is a set
+# A picture found more often than this in an episode is a set, not titles.
+# Measured: title sequences 1-12 (The Simpsons 6-12, Alone 11-12, Yellowjackets
+# 1-8), The Ricky Gervais Show's studio 16-27 (30 let it run 10 s on).
+RUN_ON_PLACES = 15
 
 
 @dataclass

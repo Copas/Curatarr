@@ -4543,7 +4543,7 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
-INTRO_RULE = 9  # how intros are widened (footage.py); raising it checks again
+INTRO_RULE = 10  # how intros are widened (footage.py); raising it checks again
 # 4: the marker starts skip_lead_seconds early, so the button shows in time
 # 5: sound alike, not only identical, counts as shared; and Curatarr's own
 #    intro (footage.own_intro) is recorded beside Intro Skipper's
@@ -4554,6 +4554,7 @@ INTRO_RULE = 9  # how intros are widened (footage.py); raising it checks again
 # 8: an intro runs on while the season's titles show the same pictures after
 #    the shared sound stops (footage.run_on); episodes with no intro skip it
 # 9: …but not over a set seen all through the episodes (footage.RUN_ON_PLACES)
+# 10: …a set found 16+ times an episode counts (it was 30+)
 INTRO_DIFFERS = 5.0  # seconds an edge may differ and still agree
 
 

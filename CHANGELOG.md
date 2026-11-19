@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- **Intros stop at the title card on studio shows.** The check that keeps an intro from running on over a studio set counted a picture as a set only when it turned up 30 or more times an episode; The Ricky Gervais Show's studio turns up 16 to 27 times, so some of its intros still ran 10 seconds into the show. Title sequences measured turn up at most 12 times, so the line is 15 now; episodes with an intro are checked again.
 - **Picks playlists update again on Jellyfin 12.4.** Jellyfin 12.4 refuses the call that replaces a playlist's contents when it comes with an API key, so each person's Picks playlist stopped changing, and Curatarr retried every few minutes. Playlists are now updated entry by entry, which Jellyfin accepts.
 - **Old subtitles are remade again.** Subtitles made with older settings are remade one at a time, but the first in line was an episode whose file had gone: it was queued, closed as missing, and queued again every 20 seconds, so no other subtitles were remade behind it. Episodes without a file are left out now.
 - **Forms behave on phones.** Compact fields and the header search were under 16px, so Safari on an iPhone zoomed in every time one was tapped; on touch screens they're 16px now. The sign-in username, server addresses, paths and folders no longer get capitalised or spell-corrected by phone keyboards. And the webhook token field told password managers nothing, so one could fill in your saved Jellyfin password and save it as the token; it's marked as a new secret now, like the API key field.

@@ -326,7 +326,49 @@ def test_rule_9_checks_again_what_rule_8_ran_on(tmp_path):
             db.session.flush()
             ids.append(state.id)
         db.session.commit()
-        upgrade()
+        upgrade(revision="d4a9e1c7b235")  # rule 9's own
         db.session.expire_all()
         rules = [db.session.get(ChapterState, i).intro_rule for i in ids]
         assert rules == [8, 7, 9]
+
+
+def test_rule_10_checks_again_episodes_with_an_intro(tmp_path):
+    from flask_migrate import upgrade
+
+    from curatarr import db
+    from curatarr.models import ChapterState, Library, MediaIdentity, MediaPart
+
+    with _app(tmp_path, "old.db").app_context():
+        upgrade(revision="d4a9e1c7b235")
+        library = Library(jellyfin_library_id="tv", name="TV", media_type="tv")
+        db.session.add(library)
+        db.session.flush()
+        show = MediaIdentity(library_id=library.id, media_type="series", title="Show")
+        db.session.add(show)
+        db.session.flush()
+        ids = []
+        for number, found in enumerate(
+            ({"theirs": [[0, 40]]}, {"ours": None, "theirs": []}), 1
+        ):
+            part = MediaPart(
+                media_identity_id=show.id,
+                kind="episode",
+                season_number=1,
+                episode_number=number,
+                file_path=f"/mnt/media/Show/S01E0{number}.mkv",
+            )
+            db.session.add(part)
+            db.session.flush()
+            state = ChapterState(
+                media_part_id=part.id,
+                media_identity_id=show.id,
+                intro_rule=9,
+                intro_found=found,
+            )
+            db.session.add(state)
+            db.session.flush()
+            ids.append(state.id)
+        db.session.commit()
+        upgrade()
+        db.session.expire_all()
+        assert [db.session.get(ChapterState, i).intro_rule for i in ids] == [9, 10]
