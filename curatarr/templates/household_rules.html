@@ -77,8 +77,12 @@
   <p class="text-secondary">Besides the countdown on their pictures, titles Leaving Soon can be gathered in a Jellyfin collection everyone sees (it's created as "Leaving Soon"; rename it in Jellyfin if you like).</p>
   {{ switch('leaving_collection', 'Keep a Leaving Soon collection in Jellyfin', options.leaving_collection) }}
 {% endcall %}
+{% call card('playlists', 'list', 'Titles in playlists', 'Kept from automatic cleanup' if options.playlist_keeps else 'Cleaned up like any other', options.playlist_keeps, toggles='playlist_keeps') %}
+  <p class="text-secondary">Someone who puts a film or show in a Jellyfin playlist means to watch it, so space-saving and inactivity cleanup skip it while it's there (a show counts when any of its episodes is in one). You can still remove it yourself. Curatarr's own Picks playlists don't count.</p>
+  {{ switch('playlist_keeps', 'Keep titles in playlists from automatic cleanup', options.playlist_keeps) }}
+{% endcall %}
 {% call card('posters', 'library', 'Posters in your language', 'Foreign posters swapped once a day' if options.poster_language else 'Posters left as Jellyfin chose them', options.poster_language, toggles='poster_language') %}
-  <p class="text-secondary">A new release often has only foreign posters at first, and Jellyfin keeps the one it took. Once a day, titles released in the last year whose poster is in another language get one in Jellyfin's metadata language when TMDB has one. Posters chosen by hand are left alone.</p>
+  <p class="text-secondary">A new release often has only foreign posters at first, and Jellyfin keeps the one it took. Each title's poster is checked, and checked again when Jellyfin changes it; one in another language is swapped for one in Jellyfin's metadata language when TMDB has one. Posters chosen by hand are left alone.</p>
   {{ switch('poster_language', 'Swap posters in another language', options.poster_language) }}
 {% endcall %}
 </div>

@@ -33,6 +33,7 @@ DEFAULTS = {
     "season_lead_days": 14,
     "leaving_collection": True,
     "poster_language": True,
+    "playlist_keeps": True,  # playlist_keep.py: titles in a playlist skip automatic cleanup
     "picks": False,  # picks.py: a playlist of films for each account
     "picks_skip": [],  # account ids left out of picks
     "picks_hidden": False,  # picks for accounts hidden from sign-in too
@@ -109,6 +110,7 @@ def save_options(form):
     values["seasonal_return"] = form.get("seasonal_return") == "on"
     values["leaving_collection"] = form.get("leaving_collection") == "on"
     values["poster_language"] = form.get("poster_language") == "on"
+    values["playlist_keeps"] = form.get("playlist_keeps") == "on"
     values["picks"] = form.get("picks") == "on"
     values["picks_hidden"] = form.get("picks_hidden") == "on"
     values["last_call"] = form.get("last_call") == "on"
@@ -487,6 +489,7 @@ def _load_context():
         "episodes": episodes,
         "lists": set(setting(LISTS_KEY, []) or []),
         "requests": setting(REQUESTS_KEY, {}) or {},
+        "playlists": (setting("playlist_titles", {}) or {}).get("titles") or {},
     }
 
 
@@ -527,4 +530,8 @@ def signals(media, states=None, now=None):
         "requests": requests,
         "favorites": _favorite_names(states),
         "list_grace_days": opts["list_grace_days"],
+        # In someone's Jellyfin playlist: automatic cleanup leaves it alone.
+        "playlists": (ctx["playlists"].get(media.id) or [])
+        if opts.get("playlist_keeps", True)
+        else [],
     }

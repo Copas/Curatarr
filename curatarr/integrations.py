@@ -528,6 +528,15 @@ class JellyfinClient(Client):
         )
         return (data or {}).get("Id")
 
+    def playlists(self):
+        """Every playlist in the library, whoever owns it (Id, Name)."""
+        data = self.request(
+            "GET",
+            "/Items",
+            params={"IncludeItemTypes": "Playlist", "Recursive": "true"},
+        )
+        return (data or {}).get("Items") or []
+
     def playlist_items(self, playlist_id, user_id):
         """The playlist's items with this user's play state, or None when the
         playlist no longer exists."""

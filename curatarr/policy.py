@@ -233,6 +233,9 @@ class CandidateInput:
     rewatched: bool = False
     from_list: bool = False
     list_grace_days: int | None = None
+    # In someone's Jellyfin playlist (playlist_keep.py): never cleaned up
+    # automatically. Removing it by hand doesn't go through eligible().
+    in_playlist: bool = False
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -247,6 +250,8 @@ def eligible(
     added = _aware(item.added_at)
     now = _aware(now)
     if not healthy or not item.mapped or item.never_purge or item.active_queue:
+        return False
+    if item.in_playlist:
         return False
     if item.snoozed_until and _aware(item.snoozed_until) > now:
         return False

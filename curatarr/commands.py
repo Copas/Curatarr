@@ -382,6 +382,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Updating picks playlists failed")
     try:
+        from . import playlist_keep
+
+        playlist_keep.sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Reading which titles are in playlists failed")
+    try:
         from . import poster_language
 
         poster_language.sweep()

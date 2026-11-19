@@ -98,6 +98,7 @@ def _candidate_input(media, active_queue=False):
         rewatched=signals["rewatched"],
         from_list=signals["from_list"],
         list_grace_days=signals["list_grace_days"],
+        in_playlist=bool(signals["playlists"]),
     )
 
 

@@ -38,6 +38,10 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## Unreleased
+
+- **Titles in a playlist are kept from automatic cleanup.** A film in someone's Jellyfin playlist, or a show with an episode in one, is skipped by space-saving and inactivity cleanup while it's there, and its page says so. Removing it yourself still works. Curatarr's own Picks playlists don't count. A new household choice, on by default.
+
 ## 0.2.0rc142 (2026-11-18)
 
 Fixes from a day of watching: recap skips that stopped short, foreign posters Jellyfin kept in another shape, Picks playlists on Jellyfin 12.4, forms on phones, and intros on studio shows.

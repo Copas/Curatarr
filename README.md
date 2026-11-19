@@ -52,6 +52,7 @@ It knows what your household cares about, too:
 - **Asked for it in Seerr?** It stays until whoever asked has watched it.
 - **The comfort rewatches** go to the back of the line without anyone pressing Keep.
 - **What an import list dragged in** and nobody played goes first.
+- **In someone's playlist?** Automatic cleanup leaves it alone (you can still remove it yourself).
 - **Halloween films stay through October** (and Christmas ones through December), and can even come back before their season.
 - **Shrink instead of delete:** swap a 25 GB copy of a film you keep for a 6 GB one, only if one exists.
 - **A disk forecast** says when you'll run low at this week's pace, and what would go first.
