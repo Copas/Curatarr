@@ -29,6 +29,12 @@ from .integrations import IntegrationError
 from .models import MediaIdentity, PosterSnapshot, utcnow
 
 KEY = "poster_languages"
+# How posters are matched. Raised when that changes: every title is looked at
+# again at once, since "kept" is only rechecked when its poster changes.
+#   2: Jellyfin's copies in another shape are cut to fit (_fitted), and every
+#      offer is compared (the first pass with tags ran before this and kept
+#      foreign posters it couldn't recognise)
+RULE = 2
 WINDOW = timedelta(days=365)  # released within it: new posters come often
 EVERY = timedelta(hours=24)
 RECHECK = timedelta(days=3)
@@ -190,6 +196,8 @@ def sweep(now=None, fetch=_fetch) -> int:
         return 0
     now = now or utcnow()
     state = dict(setting(KEY, {}) or {})
+    if state.get("rule") != RULE:
+        state = {"waiting": state.get("waiting") or {}, "rule": RULE}
     finished = _as_datetime(state.get("finished_at"))
     if finished and now - finished < EVERY:
         return 0
@@ -244,6 +252,9 @@ def sweep(now=None, fetch=_fetch) -> int:
     else:
         state["finished_at"] = now.isoformat()
     state["kept"], state["waiting"] = kept, waiting
+    # What Jellyfin listed, for checking the pass sees the whole library.
+    state["titles"] = len(titles)
+    state["with_poster"] = sum(1 for info in titles.values() if info["tag"])
     set_setting(KEY, state)
     db.session.commit()
     return replaced

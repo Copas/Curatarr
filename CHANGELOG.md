@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- **Posters kept by the first check are checked again.** The first pass that remembered each poster ran before posters in Jellyfin's other shape could be recognised, so it marked foreign ones as fine, and a poster marked fine is only checked again when it changes. A change to how posters are matched now checks every title again, straight away.
 - **Titles in a playlist are kept from automatic cleanup.** A film in someone's Jellyfin playlist, or a show with an episode in one, is skipped by space-saving and inactivity cleanup while it's there, and its page says so. Removing it yourself still works. Curatarr's own Picks playlists don't count. A new household choice, on by default.
 
 ## 0.2.0rc142 (2026-11-18)

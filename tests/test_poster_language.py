@@ -219,3 +219,21 @@ def test_jellyfins_copy_in_another_shape_is_still_recognised(app, monkeypatch):
         )
         assert poster_language.sweep(fetch=fetch) == 1
         assert jellyfin.posters[item] == "https://img/s-en.jpg"
+
+
+def test_titles_kept_under_older_matching_are_looked_at_again_at_once(app, monkeypatch):
+    """The first pass with tags kept foreign posters the old matching
+    couldn't recognise, and a kept poster is only looked at again when it
+    changes: a new matching rule looks at everything again, straight away."""
+    with app.app_context():
+        item = "a" * 32
+        jellyfin = _setup(monkeypatch, {item: "https://img/zh.jpg"}, {item: BOTH})
+        now = utcnow()
+        set_setting(
+            poster_language.KEY,
+            {"kept": {item: "zh.jpg"}, "finished_at": now.isoformat()},
+        )
+        db.session.commit()
+        assert poster_language.sweep(now=now + timedelta(hours=1), fetch=fetch) == 1
+        assert jellyfin.posters[item] == "https://img/en.jpg"
+        assert setting(poster_language.KEY)["rule"] == poster_language.RULE
