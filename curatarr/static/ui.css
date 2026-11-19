@@ -304,6 +304,9 @@
   }
   .form-select[multiple], .form-select[size]:not([size="1"]) { padding-right: .75rem; background-image: none; }
   .form-select-sm { padding-top: .25rem; padding-bottom: .25rem; padding-left: .5rem; font-size: .875rem; border-radius: var(--app-radius-sm); }
+  /* A field under 16px makes Safari on an iPhone zoom in when it's tapped:
+     compact fields are compact on a desktop only. */
+  @media (pointer: coarse) { .form-control-sm, .form-select-sm { font-size: 1rem; } }
   .input-group { position: relative; display: flex; flex-wrap: wrap; align-items: stretch; width: 100%; }
   .input-group > .form-control, .input-group > .form-select { position: relative; flex: 1 1 auto; width: 1%; min-width: 0; }
   .input-group > :focus { z-index: 5; }

@@ -190,3 +190,28 @@ def test_over_https_the_session_cookie_is_host_only():
     cookie = page.headers.get("Set-Cookie", "")
     assert cookie.startswith("__Host-curatarr_session="), cookie
     assert "Secure" in cookie and "Path=/" in cookie and "Domain" not in cookie
+
+
+def test_fields_holding_names_and_addresses_arent_corrected_or_filled(app, client):
+    """A phone keyboard capitalising the username fails the sign-in; and a
+    password manager filling the saved Jellyfin password into the webhook
+    token field would save it as the token."""
+
+    def field(page, name):
+        return re.search(rf'<input[^>]*name="{name}"[^>]*>', page).group(0)
+
+    plain = 'spellcheck="false" autocapitalize="none" autocorrect="off"'
+    anonymous = app.test_client()
+    app.config["ALLOW_UNAUTHENTICATED"] = False
+    login = anonymous.get("/login").text
+    app.config["ALLOW_UNAUTHENTICATED"] = True
+    assert plain in field(login, "username") and 'autocomplete="username"' in field(
+        login, "username"
+    )
+    assert plain in field(login, "server_url") and 'autocomplete="url"' in field(
+        login, "server_url"
+    )
+    settings = client.get("/settings").text
+    token = field(settings, "webhook_token")
+    assert 'autocomplete="new-password"' in token and plain in token
+    assert plain in field(settings, "base_url")

@@ -9,11 +9,11 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% if needs_server_url %}
     <label class="form-label w-100">Jellyfin server URL
-      <input class="form-control" type="url" name="server_url" required placeholder="http://jellyfin.local:8096">
+      <input class="form-control" type="url" name="server_url" autocomplete="url" spellcheck="false" autocapitalize="none" autocorrect="off" required placeholder="http://jellyfin.local:8096">
     </label>
     <p class="form-text">First run: Curatarr will use this server for sign-in from now on. It can be changed later in Settings.</p>
     {% endif %}
-    <label class="form-label w-100">Username<input class="form-control" type="text" name="username" autocomplete="username" required autofocus></label>
+    <label class="form-label w-100">Username<input class="form-control" type="text" name="username" autocomplete="username" spellcheck="false" autocapitalize="none" autocorrect="off" required autofocus></label>
     <label class="form-label w-100">Password<input class="form-control" type="password" name="password" autocomplete="current-password"></label>
     <button class="btn btn-primary mt-2">Sign in</button>
   </form>

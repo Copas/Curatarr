@@ -40,6 +40,7 @@
     display: flex; align-items: center; gap: .4rem; background: var(--app-bg); border: 1px solid var(--app-border); border-radius: 999px; padding: .3rem .8rem; color: var(--app-muted); width: 13rem; transition: width .15s, border-color .15s;
     &:focus-within { border-color: var(--app-accent); width: 17rem; }
     input { border: 0; background: transparent; color: var(--app-text); outline: none; width: 100%; font-size: .9rem; }
+    @media (pointer: coarse) { input { font-size: 1rem; } }  /* under 16px, iPhones zoom on tap */
     input::placeholder { color: var(--app-muted); }
   }
   .header-icon-button {
