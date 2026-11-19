@@ -4,6 +4,7 @@
 Phase 9 — Playback on every device and household polish, running live; preparing v0.2.0
 
 ## Completed
+- v0.2.0rc142 (2026-11-18): recaps quote untranscribed episodes from subtitles (throttled), transcripts in the track's tagged language, RECAP_RULE 4; poster language matches Jellyfin's 1000x1426 crops and all offers; Picks playlists replaced entry by entry (Jellyfin 12.4); forms 16px on touch, no corrections on identifiers; remake_subtitles skips file-less episodes; INTRO_RULE 10 (RUN_ON_PLACES 15).
 - v0.2.0rc141 (2026-11-18): pages without Bootstrap (own ui.css, popovers, self-starting elements, small gallery copies, manifest, security headers); intro rules 6-9 (edges at cuts, run-on through the titles' pictures, stopping at dark frames and studio sets); title page About/Watching/activity; poster language for the whole library, rechecked on change; Codex dated usage-limit resets.
 - v0.2.0rc140 (2026-11-11): bug sweep: Pillow>=13, __main__ binds 127.0.0.1, write_watch filters by package dir, sha1 usedforsecurity=False, and/or parenthesised.
 - v0.2.0rc139 (2026-11-11): chapters skip_lead_seconds (default 3), enrichment.skip_lead on recap/preview/intro markers, INTRO_RULE 4.

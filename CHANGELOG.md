@@ -38,7 +38,9 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
-## Unreleased
+## 0.2.0rc142 (2026-11-18)
+
+Fixes from a day of watching: recap skips that stopped short, foreign posters Jellyfin kept in another shape, Picks playlists on Jellyfin 12.4, forms on phones, and intros on studio shows.
 
 - **Intros stop at the title card on studio shows.** The check that keeps an intro from running on over a studio set counted a picture as a set only when it turned up 30 or more times an episode; The Ricky Gervais Show's studio turns up 16 to 27 times, so some of its intros still ran 10 seconds into the show. Title sequences measured turn up at most 12 times, so the line is 15 now; episodes with an intro are checked again.
 - **Picks playlists update again on Jellyfin 12.4.** Jellyfin 12.4 refuses the call that replaces a playlist's contents when it comes with an API key, so each person's Picks playlist stopped changing, and Curatarr retried every few minutes. Playlists are now updated entry by entry, which Jellyfin accepts.
