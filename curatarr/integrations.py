@@ -543,11 +543,36 @@ class JellyfinClient(Client):
             raise
         return (data or {}).get("Items") or []
 
-    def set_playlist(self, playlist_id, item_ids):
-        """Replace what a playlist holds."""
-        return self.request(
-            "POST", f"/Playlists/{playlist_id}", json={"Ids": list(item_ids)}
-        )
+    PLAYLIST_BATCH = 100  # ids per request: they go in the address
+
+    def set_playlist(self, playlist_id, item_ids, user_id):
+        """Replace what a playlist holds: its entries removed, then these
+        added in order.
+
+        Not POST /Playlists/{id}, which takes the whole list at once: Jellyfin
+        12.4 answers 400 to it (and to reading the playlist) for an API key,
+        with or without the user named, so the playlists stopped updating.
+        Its item calls work with a key."""
+        items = self.playlist_items(playlist_id, user_id) or []
+        entries = [i["PlaylistItemId"] for i in items if i.get("PlaylistItemId")]
+        for start in range(0, len(entries), self.PLAYLIST_BATCH):
+            self.request(
+                "DELETE",
+                f"/Playlists/{playlist_id}/Items",
+                params={
+                    "entryIds": ",".join(entries[start : start + self.PLAYLIST_BATCH])
+                },
+            )
+        ids = list(item_ids)
+        for start in range(0, len(ids), self.PLAYLIST_BATCH):
+            self.request(
+                "POST",
+                f"/Playlists/{playlist_id}/Items",
+                params={
+                    "ids": ",".join(ids[start : start + self.PLAYLIST_BATCH]),
+                    "userId": user_id,
+                },
+            )
 
     def delete_item(self, item_id):
         return self.request("DELETE", f"/Items/{item_id}", destructive=True)

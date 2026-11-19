@@ -320,7 +320,7 @@ def _keep(jellyfin, user, entry: dict, now) -> int:
             i["Id"] for i in items if not (i.get("UserData") or {}).get("Played")
         ]
         if len(unplayed) < len(items):
-            jellyfin.set_playlist(playlist, unplayed)
+            jellyfin.set_playlist(playlist, unplayed, user_id)
             entry["items"] = [_norm(i) for i in unplayed]
     built = _as_datetime(entry.get("built_at"))
     if playlist and built and now - built < REBUILD:
@@ -331,12 +331,12 @@ def _keep(jellyfin, user, entry: dict, now) -> int:
     entry["built_at"] = now.isoformat()
     if not picks:
         if playlist:
-            jellyfin.set_playlist(playlist, [])
+            jellyfin.set_playlist(playlist, [], user_id)
         entry["items"], entry["because"] = [], {}
         return 0
     ids = [jellyfin_id for jellyfin_id, _s, _b in picks]
     if playlist:
-        jellyfin.set_playlist(playlist, ids)
+        jellyfin.set_playlist(playlist, ids, user_id)
     else:
         entry["playlist"] = jellyfin.create_playlist(
             NAME.format(name=user["Name"]), user_id, ids

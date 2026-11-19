@@ -140,3 +140,38 @@ def test_jellyfin_item_missing_is_an_integration_error():
 
     with pytest.raises(IntegrationError):
         EmptyJellyfin("http://jellyfin.example.local:8096", "dummy").item("gone")
+
+
+def test_a_playlist_is_replaced_entry_by_entry():
+    """Jellyfin 12.4 answers 400 to POST /Playlists/{id} (and to reading the
+    playlist) from an API key, so the Picks playlists stopped updating; its
+    item calls work: the old entries are removed, the new films added."""
+    from curatarr.integrations import JellyfinClient
+
+    class Session(FakeSession):
+        def request(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            response = FakeResponse()
+            if args[0] == "GET":
+                body = {
+                    "Items": [
+                        {"Id": "a", "PlaylistItemId": "e1"},
+                        {"Id": "b", "PlaylistItemId": "e2"},
+                    ]
+                }
+                response.json = lambda: body
+            return response
+
+    session = Session()
+    JellyfinClient("http://jellyfin.example.local:8096", "dummy", session).set_playlist(
+        "pl", ["c", "d"], "u1"
+    )
+    sent = [
+        (args[0], args[1].split("8096")[1], kwargs.get("params"))
+        for args, kwargs in session.calls
+    ]
+    assert sent[1:] == [
+        ("DELETE", "/Playlists/pl/Items", {"entryIds": "e1,e2"}),
+        ("POST", "/Playlists/pl/Items", {"ids": "c,d", "userId": "u1"}),
+    ]
+    assert not any(path == "/Playlists/pl" for _m, path, _p in sent)

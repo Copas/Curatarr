@@ -79,7 +79,7 @@ class FakeJellyfin:
             for i in self.playlists[playlist_id]["ids"]
         ]
 
-    def set_playlist(self, playlist_id, ids):
+    def set_playlist(self, playlist_id, ids, user_id):
         self.playlists[playlist_id]["ids"] = list(ids)
 
     def delete_item(self, item_id):
