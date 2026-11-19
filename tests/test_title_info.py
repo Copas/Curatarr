@@ -135,7 +135,10 @@ def test_a_films_page_says_who_finished_it_and_how_far_they_got(
     monkeypatch.setattr("curatarr.services.client", lambda _kind: FakeJellyfin(item))
     set_setting("jellyfin_user_names", {"u1": "Alex"})
     _library, media, _part = _movie()
-    yesterday, today = utcnow() - timedelta(days=1), utcnow()
+    # Midday where the server is, so "an hour earlier" is the same day
+    # whatever time the tests run.
+    noon = utcnow().astimezone().replace(hour=12, minute=0, second=0, microsecond=0)
+    yesterday, today = noon - timedelta(days=1), noon
     _played(media, "u1", yesterday, position=37 * 60, key="a")
     _played(media, "u1", today - timedelta(hours=1), position=90 * 60, key="b")
     _played(media, "u1", today, finished=True, key="c")
