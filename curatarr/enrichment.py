@@ -1797,11 +1797,16 @@ def remake_subtitles(now=None) -> int:
             ChapterState.id, ChapterState.media_part_id, ChapterState.subtitle_made_with
         )
         .join(MediaIdentity, ChapterState.media_identity_id == MediaIdentity.id)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
         .add_columns(MediaIdentity.library_id)
         .filter(
             ChapterState.subtitle_status == "generated",
             ChapterState.subtitle_fingerprint.isnot(None),
             ChapterState.job_state == "idle",
+            # An episode whose file is gone can't be remade: queued, it closed
+            # as missing and was queued again every cycle, first in line, so
+            # no other subtitles were remade behind it.
+            MediaPart.has_file.is_(True),
         )
     )
     soon = set(up_next.part_ids())

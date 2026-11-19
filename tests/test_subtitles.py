@@ -603,3 +603,24 @@ def test_a_new_reading_speed_retimes_files_in_a_batch(subtitle_env, monkeypatch)
     enrichment.dispatch(synchronous=True)
     assert _state(part).subtitle_made_with["reading"] == "slow"
     assert enrichment.remake_subtitles() == 0
+
+
+def test_an_episode_whose_file_is_gone_isnt_remade_again_and_again(
+    subtitle_env, monkeypatch
+):
+    """Its subtitles were made the old way, but its file is gone: queued, it
+    closed as missing and was queued again every cycle, first in line, so
+    no other subtitles were remade behind it."""
+    from curatarr import up_next
+
+    _files, _arr, _library, _media, part, _calls = subtitle_env
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
+    enrichment.request(part, "subtitles")
+    enrichment.dispatch(synchronous=True)
+    state = _state(part)
+    state.subtitle_made_with = None  # made the old way
+    part.has_file = False  # and its file is gone
+    set_setting(enrichment.REMADE_KEY, None)
+    db.session.commit()
+    assert enrichment.remake_subtitles() == 0
+    assert _state(part).job_state == "idle"
