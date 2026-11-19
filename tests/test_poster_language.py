@@ -180,3 +180,42 @@ def test_titles_kept_before_tags_are_looked_at_once_more(app, monkeypatch):
         db.session.commit()
         assert poster_language.sweep(fetch=fetch) == 1
         assert jellyfin.posters[item] == "https://img/en.jpg"
+
+
+def _striped(text):
+    """A poster with detail all the way down, as real ones have."""
+    image = Image.new("RGB", (200, 300), "#eeeeee")
+    draw = ImageDraw.Draw(image)
+    for top in range(0, 300, 24):
+        draw.rectangle((0, top, 200, top + 11), fill="#202020")
+    draw.rectangle((20, 40, 180, 80), fill=text)  # the title, in its language
+    return image
+
+
+def _jpeg(image):
+    out = BytesIO()
+    image.save(out, format="JPEG")
+    return out.getvalue()
+
+
+def test_jellyfins_copy_in_another_shape_is_still_recognised(app, monkeypatch):
+    """Jellyfin keeps some posters at 1000x1426, a crop of TMDB's 2:3: the
+    same picture squeezed into one grid looked like no poster offered, so a
+    Polish one stayed as if picked by hand."""
+    with app.app_context():
+        item = "a" * 32
+        ART["https://img/s-en.jpg"] = _jpeg(_striped("#ffffff"))
+        ART["https://img/s-pl.jpg"] = _jpeg(_striped("#cc0000"))
+        # Jellyfin's copy: the Polish one, cut to 200x285 near its middle
+        ART["https://img/s-jellyfin.jpg"] = _jpeg(
+            _striped("#cc0000").crop((0, 9, 200, 294))
+        )
+        offered = [
+            image("https://img/s-en.jpg", "en"),
+            image("https://img/s-pl.jpg", "pl"),
+        ]
+        jellyfin = _setup(
+            monkeypatch, {item: "https://img/s-jellyfin.jpg"}, {item: offered}
+        )
+        assert poster_language.sweep(fetch=fetch) == 1
+        assert jellyfin.posters[item] == "https://img/s-en.jpg"

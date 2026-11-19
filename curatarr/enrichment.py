@@ -3609,6 +3609,7 @@ def environment_status() -> dict:
 
 RECAP_SIBLINGS = 60  # other episodes read for the series' closing line
 RECAP_EARLIER = 60  # earlier episodes whose clips a recap may quote (any season)
+RECAP_FROM_SUBTITLES = 6  # earlier episodes without a transcript read from subtitles
 # How recaps are found. Raised when that changes, so episodes checked before
 # are checked again (recheck_credits).
 #   2: stock phrases don't count as quotes; the end moves past wordless clips
@@ -3616,7 +3617,10 @@ RECAP_EARLIER = 60  # earlier episodes whose clips a recap may quote (any season
 #   3: a montage of clips nobody announces is a recap (recaps.find_montage),
 #      so episodes found to have none are looked at again, from their
 #      saved transcripts
-RECAP_RULE = 3
+#   4: earlier episodes without a transcript are read from their subtitles,
+#      and transcripts made in the wrong language (Whisper's guess, not the
+#      track's tag) are made again
+RECAP_RULE = 4
 RECAP_SKIP_AFTER = 4  # a series whose first episodes never say "previously on"
 
 
@@ -3625,12 +3629,21 @@ def _episode_order(part):
 
 
 def _transcript(key):
+    hit = _transcript_and_details(key)
+    return hit[0] if hit else None
+
+
+def _transcript_and_details(key):
     from .transcribe import load
 
     if not key:
         return None
-    hit = load(cache_dir() / "transcripts" / f"{key}.json")
-    return hit[0] if hit else None
+    return load(cache_dir() / "transcripts" / f"{key}.json")
+
+
+def _language_of(key) -> str | None:
+    hit = _transcript_and_details(key)
+    return (hit[1] or {}).get("language") if hit else None
 
 
 def _sibling_transcripts(state, part):
@@ -3644,10 +3657,6 @@ def _sibling_transcripts(state, part):
         .filter(
             ChapterState.media_identity_id == state.media_identity_id,
             ChapterState.id != state.id,
-            or_(
-                ChapterState.transcript_key.isnot(None),
-                ChapterState.opening_key.isnot(None),
-            ),
         )
         .all()
     )
@@ -3657,19 +3666,42 @@ def _sibling_transcripts(state, part):
         return (abs(season - here[0]), abs(episode - here[1]))
 
     rows.sort(key=distance)
-    openings, earlier = [], []
+    # A sibling transcribed in another language than this episode (Whisper
+    # guessed wrong) can't be quoted from: its subtitles stand in.
+    language = _language_of(state.transcript_key) or _language_of(state.opening_key)
+    openings, earlier, untranscribed = [], [], []
     for sibling, sibling_part in rows[:RECAP_SIBLINGS]:
-        full = _transcript(sibling.transcript_key)
+        hit = _transcript_and_details(sibling.transcript_key)
+        full = hit[0] if hit else None
+        if hit and language and (hit[1] or {}).get("language") not in (None, language):
+            full = None
         segments = full or _transcript(sibling.opening_key)
         if segments:
             openings.append(recaps.opening_lines(segments))
-        if (
-            full
-            and _episode_order(sibling_part) < here
-            and len(earlier) < RECAP_EARLIER
-        ):
-            earlier.append(full)
+        if _episode_order(sibling_part) < here and len(earlier) < RECAP_EARLIER:
+            if full:
+                earlier.append(full)
+            else:
+                untranscribed.append(sibling_part)
+    # An episode that came with good subtitles has only its opening
+    # transcribed; its subtitles say the same words (subtitle_text). The
+    # latest ones first: a recap is mostly of the episodes just before.
+    untranscribed.sort(key=_episode_order, reverse=True)
+    for sibling_part in untranscribed[:RECAP_FROM_SUBTITLES]:
+        if len(earlier) >= RECAP_EARLIER:
+            break
+        words = _subtitle_transcript(sibling_part)
+        if words:
+            earlier.append(words)
     return openings, earlier
+
+
+def _subtitle_transcript(part):
+    from . import subtitle_text
+
+    return subtitle_text.transcript(
+        local_path(part.file_path), cache_dir() / "transcripts"
+    )
 
 
 def _intro_start(part, media) -> float | None:
@@ -3895,13 +3927,17 @@ class _Episode:
         from .transcribe import cache_key
 
         if self._full is False:
-            segments = _transcript(self.state.transcript_key)
-            if segments is None:
+            from .transcribe import wrong_language
+
+            hit = _transcript_and_details(self.state.transcript_key)
+            if hit is None:
                 key = cache_key(self.info, self.model_name)
-                segments = _transcript(key)
-                if segments is not None:
+                hit = _transcript_and_details(key)
+                if hit is not None:
                     self.state.transcript_key = key
-            self._full = segments
+            if hit is not None and wrong_language(hit[1], self.info):
+                hit = None  # made in the wrong language: the opening is made again
+            self._full = hit[0] if hit else None
         return self._full
 
     def span(self, start, end, *, transcribe_missing=True):
@@ -3914,9 +3950,11 @@ class _Episode:
         if full is not None:
             return [s for s in full if start <= s.start < end]
         if end <= OPENING_SECONDS:
-            opening = _transcript(self.state.opening_key)
-            if opening is not None:
-                return [s for s in opening if start <= s.start < end]
+            from .transcribe import wrong_language
+
+            hit = _transcript_and_details(self.state.opening_key)
+            if hit is not None and not wrong_language(hit[1], self.info):
+                return [s for s in hit[0] if start <= s.start < end]
             window, opening_only = None, True
         else:
             window, opening_only = (int(start), int(end) + 1), False

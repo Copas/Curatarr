@@ -75,6 +75,37 @@ OPENING_SECONDS = 300  # enough to find a "previously on" recap
 #      skipping silences where Whisper starts inventing words
 RULE = 2
 HALLUCINATION_SILENCE = 2.0  # seconds
+# A track's language tag (ISO 639-2) as Whisper names it. Whisper's own guess
+# is used only for an untagged track: it heard French in an English episode
+# of FROM that opens on a studio logo and music, and wrote the whole episode
+# out in French.
+WHISPER_CODES = {
+    "eng": "en", "fre": "fr", "fra": "fr", "spa": "es", "ger": "de", "deu": "de",
+    "ita": "it", "jpn": "ja", "kor": "ko", "chi": "zh", "zho": "zh", "rus": "ru",
+    "por": "pt", "tur": "tr", "wel": "cy", "cym": "cy", "dut": "nl", "nld": "nl",
+    "swe": "sv", "nor": "no", "nob": "no", "dan": "da", "fin": "fi", "pol": "pl",
+    "hin": "hi", "ara": "ar", "heb": "he", "gre": "el", "ell": "el", "cze": "cs",
+    "ces": "cs", "hun": "hu", "ice": "is", "isl": "is", "tha": "th", "vie": "vi",
+    "ind": "id", "ukr": "uk", "rum": "ro", "ron": "ro", "tam": "ta", "tel": "te",
+}  # fmt: skip
+
+
+def track_language(info: MediaInfo) -> str | None:
+    """The language the transcribed track is tagged with, as Whisper names
+    it, or None (untagged, "und", or a language Whisper isn't told about)."""
+    index = speech_stream(info)
+    stream = next((s for s in info.streams if s.get("index") == index), None)
+    tag = ((stream or {}).get("language") or "").lower()
+    if len(tag) == 2:
+        return tag
+    return WHISPER_CODES.get(tag)
+
+
+def wrong_language(details: dict, info: MediaInfo) -> bool:
+    """Whether a transcript was made in another language than its track is
+    tagged with (Whisper guessed wrong): it's made again."""
+    made, tagged = (details or {}).get("language"), track_language(info)
+    return bool(made and tagged and made != tagged)
 
 
 def current(details: dict) -> bool:
@@ -111,6 +142,19 @@ def cache_key(info: MediaInfo, model: str, opening=False, window=None) -> str:
 
 
 def cached(info: MediaInfo, model: str, cache_dir: Path, opening=False, window=None):
+    """(segments, details) from the cache, or None. A transcript made in the
+    wrong language (wrong_language) counts as none.
+
+    With ``opening`` or a ``window`` (start, end seconds) a full transcript
+    serves too, trimmed to that part.
+    """
+    hit = _cached(info, model, cache_dir, opening, window)
+    if hit is not None and wrong_language(hit[1], info):
+        return None
+    return hit
+
+
+def _cached(info: MediaInfo, model: str, cache_dir: Path, opening=False, window=None):
     """(segments, details) from the cache, or None.
 
     With ``opening`` or a ``window`` (start, end seconds) a full transcript
@@ -229,7 +273,14 @@ def transcribe(
                 if make_room and device != "cpu":
                     make_room()
                 result = _run_transcriber(
-                    audio, partial, model, device, env, info, offset=start
+                    audio,
+                    partial,
+                    model,
+                    device,
+                    env,
+                    info,
+                    offset=start,
+                    language=track_language(info),
                 )
         except subprocess.TimeoutExpired as exc:
             raise MediaToolError("Transcription timed out") from exc
@@ -244,7 +295,7 @@ def transcribe(
     return segments, {**details, "cached": False}
 
 
-def _run_transcriber(audio, partial, model, device, env, info, offset=0):
+def _run_transcriber(audio, partial, model, device, env, info, offset=0, language=None):
     return throttle.run(
         [
             sys.executable,
@@ -260,6 +311,7 @@ def _run_transcriber(audio, partial, model, device, env, info, offset=0):
             device,
             "--offset",
             str(offset),
+            *(["--language", language] if language else []),
         ],
         env=env,
         timeout=max(1800, int(info.duration * 3)),
@@ -280,7 +332,7 @@ def _spoken_language(model, audio) -> str | None:
     return language
 
 
-def _run_model(audio, model_name, device):
+def _run_model(audio, model_name, device, language=None):
     """Transcribe in two steps. The speech filter decides the language, where
     leaving out music and silence helps; it would also drop lines said quietly
     or over music, so the transcription itself runs on the whole track, in that
@@ -302,7 +354,8 @@ def _run_model(audio, model_name, device):
     for name, compute in attempts:
         try:
             model = WhisperModel(model_name, device=name, compute_type=compute)
-            language = _spoken_language(model, sound)
+            if language is None:
+                language = _spoken_language(model, sound)
             if language is None:
                 segments, info = model.transcribe(sound, vad_filter=True, **common)
             else:
@@ -345,13 +398,16 @@ def main(argv=None):
     parser.add_argument("--model", default="turbo")
     parser.add_argument("--device", default="auto", choices=("auto", "cuda", "cpu"))
     parser.add_argument(
+        "--language", help="the track's language (else found from the speech)"
+    )
+    parser.add_argument(
         "--offset",
         type=float,
         default=0.0,
         help="seconds the audio starts into the file",
     )
     args = parser.parse_args(argv)
-    rows, details = _run_model(args.audio, args.model, args.device)
+    rows, details = _run_model(args.audio, args.model, args.device, args.language)
     for row in rows:
         row["start"] = round(row["start"] + args.offset, 2)
         row["end"] = round(row["end"] + args.offset, 2)

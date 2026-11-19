@@ -35,9 +35,10 @@ RECHECK = timedelta(days=3)
 RECHECK_OLDER = timedelta(days=30)
 RUN_SECONDS = 20
 CANDIDATES = 15  # of the provider's posters, the first (most liked) this many
-MORE = 60  # …and when it's none of those, the rest up to this many
-SAME = 2.0  # mean grey-level difference below which two posters are one
+MORE = 200  # …and when it's none of those, the rest (a show can have 100+)
+SAME = 2.5  # mean grey-level difference below which two posters are one
 SIZE = (24, 36)
+STEPS = 20  # positions tried when one poster is a crop of the other's shape
 
 
 def enabled() -> bool:
@@ -50,13 +51,38 @@ def _norm(item_id: str) -> str:
     return item_id.replace("-", "").lower()
 
 
-def _pixels(image_bytes: bytes) -> list[int]:
-    image = Image.open(BytesIO(image_bytes)).convert("L").resize(SIZE)
-    return list(image.tobytes())
+def _picture(image_bytes: bytes) -> Image.Image:
+    image = Image.open(BytesIO(image_bytes)).convert("L")
+    image.thumbnail((240, 360))  # plenty to compare; keeps the shape
+    return image
+
+
+def _grid(image) -> list[int]:
+    return list(image.resize(SIZE).tobytes())
 
 
 def _distance(a, b) -> float:
     return sum(abs(x - y) for x, y in zip(a, b, strict=True)) / len(a)
+
+
+def _fitted(mine: Image.Image, theirs: Image.Image) -> float:
+    """How far apart two posters are, allowing for Jellyfin keeping a copy
+    of another shape (1000x1426 of TMDB's 2:3, cropped where it chose):
+    the taller is cut to the other's shape at several heights, the best
+    kept. Same shape: compared as they are."""
+    ratio_mine = mine.height / mine.width
+    ratio_theirs = theirs.height / theirs.width
+    if abs(ratio_mine - ratio_theirs) < 0.01:
+        return _distance(_grid(mine), _grid(theirs))
+    fixed, cut = (mine, theirs) if ratio_theirs > ratio_mine else (theirs, mine)
+    target = _grid(fixed)
+    height = round(cut.width * fixed.height / fixed.width)
+    best = float("inf")
+    for step in range(STEPS + 1):
+        top = round((cut.height - height) * step / STEPS)
+        part = cut.crop((0, top, cut.width, top + height))
+        best = min(best, _distance(target, _grid(part)))
+    return best
 
 
 def _small(url: str) -> str:
@@ -77,7 +103,7 @@ def _fetch(url: str) -> bytes | None:
 
 def which(current: bytes, offered: list[dict], fetch=_fetch) -> dict | None:
     """The offered poster the current one is, or None when it's none of them."""
-    mine = _pixels(current)
+    mine = _picture(current)
     best, nearest = None, SAME
     for n, image in enumerate(offered[:MORE]):
         if n == CANDIDATES and best is not None:
@@ -85,7 +111,7 @@ def which(current: bytes, offered: list[dict], fetch=_fetch) -> dict | None:
         data = fetch(image.get("Url") or "")
         if not data:
             continue
-        image["_distance"] = distance = _distance(mine, _pixels(data))
+        image["_distance"] = distance = _fitted(mine, _picture(data))
         if distance < nearest:
             best, nearest = image, distance
     return best
