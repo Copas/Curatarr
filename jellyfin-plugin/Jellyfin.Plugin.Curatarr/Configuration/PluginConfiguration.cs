@@ -49,6 +49,14 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool CustomPosters { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether Jellyfin gets its skip segments
+    /// (intros, credits, recaps, previews) from Curatarr. Off until switching
+    /// over from Intro Skipper; the Curatarr provider must also be turned on in
+    /// each library's settings.
+    /// </summary>
+    public bool SkipSegments { get; set; }
+
+    /// <summary>
     /// The default for <see cref="LargePosterWidth"/>.
     /// </summary>
     public const int DefaultLargePosterWidth = 300;

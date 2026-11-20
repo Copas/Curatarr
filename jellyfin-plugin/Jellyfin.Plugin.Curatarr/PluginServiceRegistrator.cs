@@ -1,7 +1,9 @@
 using Jellyfin.Plugin.Curatarr.Deletes;
 using Jellyfin.Plugin.Curatarr.Playback;
 using Jellyfin.Plugin.Curatarr.Posters;
+using Jellyfin.Plugin.Curatarr.Segments;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.MediaSegments;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,5 +28,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.Configure<MvcOptions>(options => options.Filters.AddService<PosterFilter>());
         serviceCollection.AddHostedService<PosterSync>();
         serviceCollection.AddHostedService<WebMenu>();
+        serviceCollection.AddSingleton(_ => new SegmentStore(SegmentSync.File));
+        serviceCollection.AddSingleton<IMediaSegmentProvider, CuratarrSegmentProvider>();
+        serviceCollection.AddHostedService<SegmentSync>();
     }
 }

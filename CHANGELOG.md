@@ -877,6 +877,10 @@ Found by end-to-end testing: every page and form, odd input to every route, a co
 
 The Curatarr plugin for Jellyfin has releases of its own (tagged `plugin-v…`), installed and updated from Jellyfin's plugin catalogue once Curatarr adds its repository. Each version's notes below are what Jellyfin shows as its changelog, and the release page's notes.
 
+### 0.11.0.0 (2026-11-19)
+
+- **Skip segments from Curatarr**, a first step to retiring Intro Skipper. A new setting, **Serve Curatarr's skip segments** (off by default), makes the plugin a Jellyfin segment provider named Curatarr: intros, credits, recaps and previews as Curatarr keeps them (with Curatarr 0.2.0rc143 or later). Turn the Curatarr provider on in each library's settings (and Intro Skipper's off), and the skip buttons in Jellyfin's apps come from Curatarr. Changes reach Jellyfin within a minute.
+
 ### 0.10.0.0 (2026-11-10)
 
 - On a show, the web menu's item is **Reset to minimum** (trim it to its first episodes) instead of Leaving Soon, since Delete removes a show (with Curatarr 0.2.0rc128).
