@@ -358,3 +358,24 @@ def test_one_earlier_scene_shown_again_is_not_a_montage():
         )
     ]
     assert recaps.find_montage(opening, earlier) is not None
+
+
+def test_studio_logos_before_previously_on_are_skipped_with_it():
+    """FROM S4E6: MGM logos for 15 s, then "Previously on From…": the skip
+    started after the logos. Nothing is said before it, so it starts at the
+    beginning; a cold open someone speaks in is still kept."""
+    said = [
+        "We have to find the way out of this town now.",
+        "You will have two seizures in two days, believe me.",
+        "Show him what he did to all of us last night.",
+    ]
+    earlier = [Segment(300.0 + 5 * n, 303.0 + 5 * n, t) for n, t in enumerate(said)]
+    earlier.append(Segment(2400.0, 2403.0, "The end of that episode."))  # its tail
+    clips = [Segment(19.0 + 8 * n, 22.0 + 8 * n, t) for n, t in enumerate(said)]
+    opener = Segment(17.0, 18.5, "Previously on From...")
+    grams = recaps.earlier_grams([earlier])
+    found = recaps.find_recap([opener, *clips], earlier=grams)
+    assert found and found.start == 0.0
+    cold = Segment(5.0, 8.0, "Morning, did you sleep at all last night?")
+    found = recaps.find_recap([cold, opener, *clips], earlier=grams)
+    assert found and found.start == 16.5

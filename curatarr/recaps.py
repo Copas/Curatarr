@@ -43,6 +43,7 @@ OPENER = re.compile(
     re.IGNORECASE,
 )
 OPENER_WITHIN = 60.0  # the opener must be spoken this early
+LOGOS_WITHIN = 30.0  # wordless logos before the opener are skipped with it
 SEARCH_SECONDS = 240.0  # recaps are looked for this far after the opener
 MIN_RECAP = 10.0
 MAX_RECAP = 300.0
@@ -244,7 +245,17 @@ def find_recap(
     if not lines:
         return None
     first = opener(segments)
-    start = 0.0 if first.start <= 10 else max(first.start - 0.5, 0.0)
+    # Studio logos before "Previously on" go with it: nothing said before
+    # it, early on, the skip starts at the beginning (FROM S4E6's started
+    # after 15 s of logos). A cold open someone speaks in is kept.
+    said_before = any(
+        s.start < first.start and words(s.text) for s in segments if s is not first
+    )
+    start = (
+        0.0
+        if first.start <= 10 or (first.start <= LOGOS_WITHIN and not said_before)
+        else max(first.start - 0.5, 0.0)
+    )
     found = _find_end(
         start, lines, series_openings, earlier, choose_last_line, scenes, settle
     )
