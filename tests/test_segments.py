@@ -119,3 +119,22 @@ def test_without_intro_skipper_the_store_stands_alone(app):
     assert store.segments("ep1") == []
     store.restore("ep1", sid)
     assert [s["Id"] for s in store.segments("ep1")] == [sid]
+
+
+def test_an_episode_intro_skipper_doesnt_know_doesnt_stop_the_import(app, monkeypatch):
+    """Intro Skipper answers "not found" for an episode it never analysed:
+    the import stopped there for good, taking it for "not installed"."""
+    _media, parts = _show("Tasks", [(1, 1, True), (1, 2, True)])
+    for n, part in enumerate(parts.values(), 1):
+        part.jellyfin_id = f"ep{n}"
+    db.session.commit()
+    plugin = Plugin()
+    unknown = {"ep1"}
+    real = plugin.segments
+    plugin.segments = lambda item_id: None if item_id in unknown else real(item_id)
+    plugin.live["ep2"] = [{"Id": "is-9", "Type": "Credits", "Start": 1.0, "End": 2.0}]
+    monkeypatch.setattr("curatarr.integrations.IntroSkipper", lambda _j: plugin)
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: object())
+    assert segments.import_sweep() == 1
+    assert setting(segments.IMPORT_KEY)["finished_at"]
+    assert {r.id for r in db.session.query(MediaSegment)} == {"is-9"}

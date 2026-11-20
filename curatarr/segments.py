@@ -209,11 +209,13 @@ def import_sweep(now=None) -> int:
         item_id = jellyfin_item_id(part, media)
         if item_id:
             try:
-                if segments.segments(item_id) is None:
-                    return read  # Intro Skipper isn't installed: nothing to import
+                # None: Intro Skipper has nothing for this item (it answers "not
+                # found" for one it never analysed). Treating that as "not
+                # installed" stopped the import at the first such episode.
+                if segments.segments(item_id) is not None:
+                    read += 1
             except IntegrationError:
                 break  # Jellyfin unreachable: carry on next cycle
-            read += 1
         state["after"] = part.id
         db.session.commit()
     else:
