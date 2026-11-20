@@ -382,6 +382,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Updating picks playlists failed")
     try:
+        from . import segments
+
+        segments.import_sweep()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Reading Intro Skipper's segments failed")
+    try:
         from . import origin
 
         origin.sweep()

@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- **Curatarr keeps every skip segment itself** (a first step to retiring Intro Skipper). Intros, credits, recaps and previews still go to Intro Skipper as before, and are now recorded by Curatarr too; a one-time background pass reads every episode's segments from Intro Skipper, including the intros only it found. Nothing you see changes yet: Curatarr's Jellyfin plugin will give Jellyfin these segments next.
 - **The poster check and Picks see the whole library.** Asked for every film, Jellyfin folds the films in a collection into the collection unless told not to, so the poster check saw 851 of 1,981 titles, and Picks never suggested a film that's in a collection. Both now ask for every film.
 - **Where each title came from is recorded.** The title page worked out where a title came from each time it opened, so the answer changed as import lists did and never said when. Now it's noted once, soon after the title arrives (which import list, who requested it, what Curatarr did, or added by hand), leads the page's "Where it came from", and shows under each poster in Overview's Recently added. Titles already in the library are filled in once, marked as worked out afterwards.
 - **Posters kept by the first check are checked again.** The first pass that remembered each poster ran before posters in Jellyfin's other shape could be recognised, so it marked foreign ones as fine, and a poster marked fine is only checked again when it changes. A change to how posters are matched now checks every title again, straight away.

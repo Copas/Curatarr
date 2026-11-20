@@ -299,6 +299,25 @@ class PosterSnapshot(db.Model, Timed):
     restored_at = db.Column(db.DateTime(timezone=True))
 
 
+class MediaSegment(db.Model, Timed):
+    """One skip segment of an episode or film, as Curatarr keeps them
+    (segments.py): an intro, credits, recap or preview, by Jellyfin item id.
+    ``id`` is Intro Skipper's id for the segment while that plugin is in use.
+    ``version`` grows with every change, so Curatarr's Jellyfin plugin fetches
+    only what changed."""
+
+    __tablename__ = "media_segments"
+    id = db.Column(db.String(64), primary_key=True, default=uuid)
+    item_id = db.Column(db.String(64), nullable=False, index=True)
+    kind = db.Column(
+        db.String(20), nullable=False
+    )  # Introduction, Credits, Recap, Preview
+    start = db.Column(db.Float, nullable=False)
+    end = db.Column(db.Float, nullable=False)
+    hidden = db.Column(db.Boolean, default=False, nullable=False)
+    version = db.Column(db.Integer, nullable=False, default=0, index=True)
+
+
 class CustomPoster(db.Model, Timed):
     """A picture someone chose for a title (custom_posters.py): its poster or
     another of its pictures (``image_type``, Jellyfin's: Primary, Thumb,

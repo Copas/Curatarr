@@ -24,7 +24,9 @@ from .routes import NAV_SECTIONS, PUBLIC_ENDPOINTS, UPLOAD_ENDPOINTS, bp
 NAV_SECTIONS["main.custom_posters_page"] = "library"
 UPLOAD_ENDPOINTS.update({"main.title_poster_upload", "main.custom_posters_avatar"})
 # The plugin signs these with the webhook token instead of a sign-in.
-PUBLIC_ENDPOINTS.update({"main.jellyfin_posters", "main.jellyfin_poster_image"})
+PUBLIC_ENDPOINTS.update(
+    {"main.jellyfin_posters", "main.jellyfin_poster_image", "main.jellyfin_segments"}
+)
 
 
 def _sort():
@@ -417,6 +419,21 @@ def jellyfin_posters():
         version = 1
     posters = custom_posters.plugin_list(version)
     return jsonify({"posters": posters, "version": min(version, 2)})
+
+
+@bp.get("/api/v1/jellyfin/segments")
+def jellyfin_segments():
+    """Skip segments changed since ``after`` (segments.changed_since), for
+    Curatarr's Jellyfin plugin to give Jellyfin."""
+    from . import segments
+
+    if not _plugin_allowed():
+        abort(403)
+    try:
+        after = max(0, int(request.args.get("after") or 0))
+    except ValueError:
+        after = 0
+    return jsonify(segments.changed_since(after))
 
 
 @bp.get("/api/v1/jellyfin/posters/<path:poster_id>.jpg")

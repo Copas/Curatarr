@@ -3711,13 +3711,13 @@ def _subtitle_transcript(part):
 
 def _intro_start(part, media) -> float | None:
     """Where Intro Skipper's intro starts, or None (best effort)."""
-    from .integrations import IntroSkipper
+    from .segments import SegmentStore
 
     db.session.commit()  # never ask Jellyfin holding SQLite's write lock
     try:
         item_id = jellyfin_item_id(part, media)
         segments = (
-            IntroSkipper(client("jellyfin")).segments(item_id) if item_id else None
+            SegmentStore(client("jellyfin")).segments(item_id) if item_id else None
         )
     except IntegrationError:
         return None
@@ -3805,7 +3805,7 @@ def _mark_segment(state, part, media, kind, *, clear_guesses=False):
     With nothing found, a segment Curatarr added earlier is removed, and the
     plugin's guesses too when ``clear_guesses`` (the episode plainly has none).
     """
-    from .integrations import IntroSkipper
+    from .segments import SegmentStore
 
     if part.kind != "episode":
         return  # films get no skip markers from Curatarr
@@ -3816,7 +3816,7 @@ def _mark_segment(state, part, media, kind, *, clear_guesses=False):
     item_id = jellyfin_item_id(part, media)
     if not item_id:
         return
-    plugin = IntroSkipper(client("jellyfin"))
+    plugin = SegmentStore(client("jellyfin"))
     _save_before_slow_work()
     segments = plugin.segments(item_id)
     if segments is None:
@@ -4251,7 +4251,7 @@ def _check_preview(ep: _Episode) -> str:
 def _check_markers(ep: _Episode) -> str:
     """Hide Intro Skipper's credits and intros that are plainly wrong."""
     from . import markers, recaps
-    from .integrations import IntroSkipper
+    from .segments import SegmentStore
 
     state = ep.state
     item_id = jellyfin_item_id(ep.part, ep.media)
@@ -4261,7 +4261,7 @@ def _check_markers(ep: _Episode) -> str:
         # checked, or it was picked again every cycle.
         state.intro_rule = INTRO_RULE
         return "markers: no Jellyfin item"
-    plugin = IntroSkipper(client("jellyfin"))
+    plugin = SegmentStore(client("jellyfin"))
     try:
         segments = plugin.segments(item_id)
     except IntegrationError as exc:
@@ -5043,9 +5043,9 @@ def _hide_movie_markers(item_id) -> list[dict] | None:
     """Hide a movie's skip segments (intro, recap, preview, credits); what was
     hidden, or None when the Intro Skipper plugin isn't installed. Ones a
     person added by hand stay."""
-    from .integrations import IntroSkipper
+    from .segments import SegmentStore
 
-    plugin = IntroSkipper(client("jellyfin"))
+    plugin = SegmentStore(client("jellyfin"))
     segments = plugin.segments(item_id)
     if segments is None:
         return None
@@ -5420,11 +5420,11 @@ def undo_marker(state: ChapterState, kind: str, segment_id: str | None = None) -
     An undone recap or preview isn't marked again unless the episode is checked
     again from its page.
     """
-    from .integrations import IntroSkipper
+    from .segments import SegmentStore
 
     part, media = state.part, state.media
     item_id = jellyfin_item_id(part, media)
-    plugin = IntroSkipper(client("jellyfin"))
+    plugin = SegmentStore(client("jellyfin"))
     if kind == "hidden":
         hidden = [h for h in state.markers_hidden or [] if h["id"] == segment_id]
         if not hidden:
