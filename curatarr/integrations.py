@@ -322,12 +322,17 @@ class JellyfinClient(Client):
 
     def titles_with_posters(self, start=0, limit=200):
         """Every film and show, with ImageTags (a poster's tag changes when
-        the poster does) and PremiereDate."""
+        the poster does) and PremiereDate.
+
+        CollapseBoxSetItems=false: asked for everything, Jellyfin otherwise
+        folds the films in a collection into the collection; it listed 851
+        of 1,981 titles."""
         data = self.request(
             "GET",
             "/Items",
             params={
                 "Recursive": "true",
+                "CollapseBoxSetItems": "false",
                 "IncludeItemTypes": "Movie,Series",
                 "Fields": "PremiereDate",
                 "EnableImageTypes": "Primary",
@@ -500,6 +505,7 @@ class JellyfinClient(Client):
                 params={
                     "IncludeItemTypes": "Movie",
                     "Recursive": "true",
+                    "CollapseBoxSetItems": "false",  # see titles_with_posters
                     "IsPlayed": "false",
                     "Fields": "Genres,CommunityRating",
                     "EnableUserData": "true",

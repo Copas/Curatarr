@@ -175,3 +175,17 @@ def test_a_playlist_is_replaced_entry_by_entry():
         ("POST", "/Playlists/pl/Items", {"ids": "c,d", "userId": "u1"}),
     ]
     assert not any(path == "/Playlists/pl" for _m, path, _p in sent)
+
+
+def test_every_film_is_asked_for_with_collections_unfolded():
+    """Asked for every film and show, Jellyfin folds the films in a
+    collection into the collection unless told not to: the poster check saw
+    851 of 1,981 titles, and Picks never suggested a film in one."""
+    from curatarr.integrations import JellyfinClient
+
+    session = FakeSession()
+    jellyfin = JellyfinClient("http://jellyfin.example.local:8096", "dummy", session)
+    jellyfin.titles_with_posters()
+    jellyfin.unplayed_movies("u1")
+    for _args, kwargs in session.calls:
+        assert kwargs["params"]["CollapseBoxSetItems"] == "false"

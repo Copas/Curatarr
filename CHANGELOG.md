@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- **The poster check and Picks see the whole library.** Asked for every film, Jellyfin folds the films in a collection into the collection unless told not to, so the poster check saw 851 of 1,981 titles, and Picks never suggested a film that's in a collection. Both now ask for every film.
 - **Where each title came from is recorded.** The title page worked out where a title came from each time it opened, so the answer changed as import lists did and never said when. Now it's noted once, soon after the title arrives (which import list, who requested it, what Curatarr did, or added by hand), leads the page's "Where it came from", and shows under each poster in Overview's Recently added. Titles already in the library are filled in once, marked as worked out afterwards.
 - **Posters kept by the first check are checked again.** The first pass that remembered each poster ran before posters in Jellyfin's other shape could be recognised, so it marked foreign ones as fine, and a poster marked fine is only checked again when it changes. A change to how posters are matched now checks every title again, straight away.
 - **Titles in a playlist are kept from automatic cleanup.** A film in someone's Jellyfin playlist, or a show with an episode in one, is skipped by space-saving and inactivity cleanup while it's there, and its page says so. Removing it yourself still works. Curatarr's own Picks playlists don't count. A new household choice, on by default.
