@@ -22,6 +22,7 @@
 </section>
 {% set o = origin %}<section class="card p-3 mb-4" aria-labelledby="origin-heading">
   <h2 class="h5 mb-2" id="origin-heading">Where it came from</h2>
+  {% if o.recorded %}<p class="mb-2"><strong>{{ o.recorded.short }}</strong> <span class="small text-secondary">· noted {{ 'when it arrived' if o.recorded.on_arrival else 'afterwards' }}{% if o.recorded.at %}, {{ o.recorded.at|when('date') }}{% endif %}</span></p>{% endif %}
   {% if o.added %}<p class="mb-1">Added to {{ o.app }} {{ o.added|when('date') }}.</p>{% endif %}
   {% if o.reasons %}<ul class="mb-1 ps-3">{% for r in o.reasons %}<li>{{ r.text }}{% if r.at %} <span class="text-secondary small">({{ r.at|when('date') }})</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
   {% if o.guess %}<p class="mb-1">{{ o.guess }}</p>{% endif %}

@@ -29,6 +29,12 @@ REPLACED = ("file_replaced", "dub_replaced", "wrong_version_replaced")
 # A file first seen this long before the current one arrived was an earlier copy.
 SEEN_BEFORE = timedelta(hours=1)
 LISTS_FRESH_FOR = timedelta(minutes=10)
+# Recording where titles came from (record, sweep): a few each worker cycle,
+# newest first. Recorded within a day of arriving, the lists and requests
+# still say what brought it; later, it's today's best answer.
+RECORD_BATCH = 40
+RECORD_SECONDS = 20
+ON_ARRIVAL = timedelta(days=1)
 
 
 def describe(media) -> dict:
@@ -85,7 +91,84 @@ def describe(media) -> dict:
             )
     else:
         result["copy"] = _copy(media, arr, arr_item)
+    kept = media.origin or {}
+    result["recorded"] = (
+        {
+            "short": kept.get("short"),
+            "on_arrival": kept.get("on_arrival"),
+            "at": _as_datetime(kept.get("recorded_at")),
+        }
+        if kept.get("short")
+        else None
+    )
     return result
+
+
+def short(info) -> str | None:
+    """Where it came from in a few words: the import list's name, who asked,
+    what Curatarr did, or "Added by hand"."""
+    for reason in info["reasons"]:
+        text = reason["text"]
+        if "import list" in text and ": " in text:
+            return text.split(": ", 1)[1]
+        if text.startswith("Requested in Seerr by "):
+            return "Requested by " + text.removeprefix("Requested in Seerr by ")
+        if text.startswith("Added by one of"):
+            return "An import list"
+    if info["reasons"]:
+        text = info["reasons"][0]["text"]
+        return text if len(text) <= 60 else text[:57].rstrip() + "…"
+    if info["guess"]:
+        return "Added by hand"
+    return None
+
+
+def record(media, now=None) -> bool:
+    """Work out where a title came from and keep it. False (nothing kept,
+    tried again later) when Radarr or Sonarr couldn't be asked: without them
+    "added by hand" would be a guess."""
+    now = now or _now()
+    info = describe(media)
+    if info["added"] is None:
+        return False
+    media.origin = {
+        "short": short(info),
+        "reasons": [
+            {"text": r["text"], "at": r["at"].isoformat() if r.get("at") else None}
+            for r in info["reasons"]
+        ],
+        "guess": info["guess"],
+        "added": info["added"].isoformat(),
+        "recorded_at": now.isoformat(),
+        "on_arrival": now - info["added"] <= ON_ARRIVAL,
+    }
+    return True
+
+
+def sweep(now=None) -> int:
+    """Record where the titles without a record came from, newest first, a
+    few at a time; returns how many were recorded."""
+    import time
+
+    from .models import MediaIdentity
+
+    started, done = time.monotonic(), 0
+    rows = (
+        db.session.query(MediaIdentity)
+        .filter(MediaIdentity.origin.is_(None))
+        .order_by(MediaIdentity.added_at.desc())
+        .limit(RECORD_BATCH)
+        .all()
+    )
+    for media in rows:
+        if time.monotonic() - started > RECORD_SECONDS:
+            break
+        try:
+            done += record(media, now)
+        except (IntegrationError, OSError, ValueError, TypeError):
+            continue
+    db.session.commit()
+    return done
 
 
 def _arr_item(media, film):

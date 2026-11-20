@@ -212,7 +212,8 @@ def added(now=None, shown=ADDED_SHOWN) -> dict[str, list[dict]]:
         result["shows" if row["show"] else "films"].append(
             {
                 "media_id": row["media_id"],
-                "title": titles[row["media_id"]],
+                "title": titles[row["media_id"]].label,
+                "origin": (titles[row["media_id"]].origin or {}).get("short"),
                 "at": row["at"],
                 "episodes": len(episodes),
                 "first": episode_label(*episodes[0]) if episodes else None,
@@ -222,10 +223,10 @@ def added(now=None, shown=ADDED_SHOWN) -> dict[str, list[dict]]:
     return result
 
 
-def _titles(ids) -> dict[str, str]:
+def _titles(ids) -> dict:
     if not ids:
         return {}
     return {
-        media.id: media.label
+        media.id: media
         for media in db.session.query(MediaIdentity).filter(MediaIdentity.id.in_(ids))
     }

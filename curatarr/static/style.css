@@ -885,6 +885,7 @@
   .reel-art.no-art .reel-fallback { display: flex; }
   .reel-title { font-size: .85rem; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
   .reel-meta { color: var(--app-muted); font-size: .75rem; }
+  .reel-origin { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }  /* where it came from */
 
   /* Cast picker */
   /* Posters → Generate: who's in the pictures, a tick for each person. */

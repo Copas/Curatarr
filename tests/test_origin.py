@@ -203,3 +203,46 @@ def test_the_title_page_shows_it(app, client, radarr):
     page = client.get(f"/titles/{media.id}").text
     assert "Where it came from</h2>" in page and "Added to Radarr" in page
     assert "most likely added in Radarr by hand" in page
+
+
+def test_where_a_title_came_from_is_recorded_when_it_arrives(app, client, radarr):
+    """Worked out each time the page opened, the answer changed with the
+    lists and never said when; now it's noted once, soon after arrival, and
+    shows on the page (and in Overview's Recently added)."""
+    now = utcnow()
+    media = _film(now - timedelta(hours=2), seen=now - timedelta(hours=1))
+    added = (now - timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    radarr(
+        FakeRadarr(
+            {"id": 7, "tmdbId": 949, "added": added},
+            lists=[{"id": 1, "name": "Horror - TMDb Popular"}],
+            listed=[{"tmdbId": 949, "lists": [1]}],
+        )
+    )
+    assert origin.sweep(now=now) == 1
+    db.session.expire_all()
+    kept = db.session.get(MediaIdentity, media.id).origin
+    assert kept["short"] == "Horror - TMDb Popular" and kept["on_arrival"] is True
+    assert origin.sweep(now=now) == 0  # once
+    page = client.get(f"/titles/{media.id}").text
+    assert "<strong>Horror - TMDb Popular</strong>" in page
+    assert "noted when it arrived" in page
+    from curatarr import recent
+
+    films = recent.added()["films"]
+    assert films and films[0]["origin"] == "Horror - TMDb Popular"
+    assert 'class="reel-meta reel-origin"' in client.get("/").text
+
+
+def test_with_radarr_down_nothing_is_recorded_and_older_titles_say_afterwards(
+    app, radarr
+):
+    now = utcnow()
+    media = _film(now - timedelta(days=200))
+    radarr(FakeRadarr(None, fail=True))
+    assert origin.sweep(now=now) == 0
+    assert db.session.get(MediaIdentity, media.id).origin is None
+    radarr(FakeRadarr({"id": 7, "tmdbId": 949, "added": "2026-01-05T17:21:13Z"}))
+    assert origin.sweep(now=now) == 1
+    kept = db.session.get(MediaIdentity, media.id).origin
+    assert kept["short"] == "Added by hand" and kept["on_arrival"] is False

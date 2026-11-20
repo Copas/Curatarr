@@ -108,6 +108,9 @@ class MediaIdentity(db.Model, Timed):
     viewing_reset_at = db.Column(db.DateTime(timezone=True))
     # From Sonarr/Radarr, for seasonal shelves (curation.py).
     genres = db.Column(db.JSON)
+    # Where it came from, recorded once (origin.record): {"short", "reasons",
+    # "guess", "added", "recorded_at", "on_arrival"}.
+    origin = db.Column(db.JSON)
     keywords = db.Column(db.JSON)
     library = db.relationship("Library")
     override = db.relationship("TitleOverride", backref="media", uselist=False)
