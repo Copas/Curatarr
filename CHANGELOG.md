@@ -38,7 +38,9 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
-## Unreleased
+## 0.2.0rc143 (2026-11-19)
+
+Where titles came from, titles kept for being in a playlist, the poster check and Picks seeing the whole library, and the first steps to retiring Intro Skipper.
 
 - **Curatarr keeps every skip segment itself** (a first step to retiring Intro Skipper). Intros, credits, recaps and previews still go to Intro Skipper as before, and are now recorded by Curatarr too; a one-time background pass reads every episode's segments from Intro Skipper, including the intros only it found. Nothing you see changes yet: Curatarr's Jellyfin plugin will give Jellyfin these segments next.
 - **The poster check and Picks see the whole library.** Asked for every film, Jellyfin folds the films in a collection into the collection unless told not to, so the poster check saw 851 of 1,981 titles, and Picks never suggested a film that's in a collection. Both now ask for every film.
