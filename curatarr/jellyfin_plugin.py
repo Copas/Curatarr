@@ -295,7 +295,7 @@ def _restart_if_idle() -> None:
     from datetime import timedelta
 
     from .models import utcnow
-    from .services import _as_datetime, client
+    from .services import _as_datetime, client, watching
 
     try:
         jellyfin = client("jellyfin")
@@ -303,7 +303,7 @@ def _restart_if_idle() -> None:
             _store(restart_when_idle=False, idle_since=None)  # restarted already
             _check_versions(jellyfin)
             return
-        if any(s.get("NowPlayingItem") for s in jellyfin.sessions() or []):
+        if any(watching(s) for s in jellyfin.sessions() or []):
             _store(idle_since=None)
             return
         since = _as_datetime(_stored().get("idle_since"))
@@ -448,10 +448,10 @@ def sync() -> None:
 
 def watching() -> int:
     """How many people are playing something (a restart stops them)."""
-    from .services import client
+    from .services import client, watching
 
     try:
         sessions = client("jellyfin").sessions() or []
     except IntegrationError:
         return 0
-    return sum(1 for s in sessions if s.get("NowPlayingItem"))
+    return sum(1 for s in sessions if watching(s))

@@ -24,13 +24,9 @@ def _norm(user_id) -> str:
 def note(sessions, now=None) -> None:
     """Count who's watching in which kind of app, per day."""
     from . import db
-    from .services import counted_sessions, set_setting, setting
+    from .services import counted_sessions, set_setting, setting, watching
 
-    playing = [
-        s
-        for s in counted_sessions(sessions)
-        if s.get("NowPlayingItem") and s.get("UserId")
-    ]
+    playing = [s for s in counted_sessions(sessions) if watching(s) and s.get("UserId")]
     if not playing:
         return
     now = now or utcnow()

@@ -270,7 +270,9 @@ def gpu_use() -> float | None:
 
 def viewers(sessions: list[dict]) -> tuple[int, int]:
     """(streams playing, of which transcoding) from Jellyfin's sessions."""
-    playing = [s for s in sessions if s.get("NowPlayingItem")]
+    from .services import watching
+
+    playing = [s for s in sessions if watching(s)]
     transcoding = [
         s
         for s in playing

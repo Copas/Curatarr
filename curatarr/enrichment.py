@@ -2669,7 +2669,9 @@ def playback_active() -> bool:
         sessions = client("jellyfin").sessions() or []
     except IntegrationError:
         return False  # cannot tell; do not hold work back indefinitely
-    return any(session.get("NowPlayingItem") for session in sessions)
+    from .services import watching
+
+    return any(watching(session) for session in sessions)
 
 
 def _set_paused(pause: bool):

@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- **A player left paused no longer counts as someone watching.** A paused player goes on checking in with Jellyfin, so a browser tab left paused on a film for two days counted as someone watching the whole time: the plugin update waited for nobody to be watching and never came, and Curatarr held back its heavy work. A session paused for 10 minutes is now idle. Curatarr still won't change a file that's open in a paused player.
 - **Intros and credits whose recheck gave up are placed again.** Rechecking an episode, Curatarr puts Intro Skipper's original marker back before placing its own; when Intro Skipper's own analysis had replaced that marker, putting it back failed and the recheck gave up, yet the episode counted as done. It was left with Intro Skipper's uncorrected intro (starting late, ending early: FROM S4E5 among 86 episodes) or credits. Now Intro Skipper's current marker stands in; a recheck that can't reach Jellyfin is tried again; and a marker of Curatarr's that Jellyfin no longer shows is placed again. Episodes with an intro are checked again.
 
 ## 0.2.0rc143 (2026-11-19)

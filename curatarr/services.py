@@ -3,7 +3,7 @@
 import hashlib
 import json
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from flask import current_app
 from sqlalchemy import func, or_
@@ -891,6 +891,28 @@ def ignored_user_ids() -> set[str]:
     if hidden_accounts() != "ignore":
         return set()
     return set(setting("jellyfin_hidden_user_ids", []) or [])
+
+
+PAUSED_IDLE = timedelta(minutes=10)  # paused this long, a session isn't watching
+
+
+def watching(session, now=None) -> bool:
+    """Whether a Jellyfin session is someone watching: something is playing,
+    or was paused under PAUSED_IDLE ago (they may be back). A paused player
+    goes on checking in, so a browser tab left paused counted as watching
+    for days: it held back the plugin's restart and Curatarr's heavy work.
+    (Checks that protect the file being played count a paused one too.)"""
+    if not session.get("NowPlayingItem"):
+        return False
+    state = session.get("PlayState") or {}
+    if not state.get("IsPaused"):
+        return True
+    paused = _as_datetime(session.get("LastPausedDate"))
+    if paused is None or paused.year < 2000:  # Jellyfin's "never"
+        paused = _as_datetime(session.get("LastActivityDate"))
+    if paused is None:
+        return True  # can't tell: as before
+    return (now or utcnow()) - paused < PAUSED_IDLE
 
 
 def counted_sessions(sessions) -> list[dict]:

@@ -332,3 +332,35 @@ def test_a_restart_done_outside_curatarr_clears_the_banner(app, jellyfin):
         )
         jellyfin_plugin.tick()
         assert jellyfin_plugin.notice() is None
+
+
+def test_a_player_left_paused_doesnt_count_as_watching(app):
+    """A browser tab left paused on a film for two days went on checking in,
+    so it counted as someone watching: the plugin's restart waited for it,
+    and so did Curatarr's heavy work. Paused ten minutes, it's idle."""
+    from datetime import timedelta
+
+    from curatarr.models import utcnow
+    from curatarr.services import watching
+
+    now = utcnow()
+
+    def session(paused=None, never=False, playing=True):
+        state = {"IsPaused": paused is not None}
+        return {
+            "NowPlayingItem": {"Name": "The Addams Family"} if playing else None,
+            "PlayState": state,
+            "LastPausedDate": "0001-01-01T00:00:00Z"
+            if never
+            else (now - paused).isoformat()
+            if paused
+            else None,
+            "LastActivityDate": now.isoformat(),
+        }
+
+    assert watching(session(), now)  # playing
+    assert watching(session(timedelta(minutes=3)), now)  # paused a moment
+    assert not watching(session(timedelta(days=2)), now)  # left paused
+    assert watching(session(timedelta(days=2), never=True), now)  # checks in now
+    assert not watching(session(playing=False), now)
+    assert not watching({}, now)
