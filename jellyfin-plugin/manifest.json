@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Copas/Curatarr/main/jellyfin-plugin/logo.png",
     "versions": [
       {
+        "version": "0.11.0.0",
+        "changelog": "- Skip segments from Curatarr, a first step to retiring Intro Skipper. A new setting, Serve Curatarr's skip segments (off by default), makes the plugin a Jellyfin segment provider named Curatarr: intros, credits, recaps and previews as Curatarr keeps them (with Curatarr 0.2.0rc143 or later). Turn the Curatarr provider on in each library's settings (and Intro Skipper's off), and the skip buttons in Jellyfin's apps come from Curatarr. Changes reach Jellyfin within a minute.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/Copas/Curatarr/releases/download/plugin-v0.11.0.0/curatarr-jellyfin-plugin_0.11.0.0.zip",
+        "checksum": "880a3614473a804cd101bb5402401e80",
+        "timestamp": "2026-11-20T02:06:46Z"
+      },
+      {
         "version": "0.10.0.0",
         "changelog": "- On a show, the web menu's item is Reset to minimum (trim it to its first episodes) instead of Leaving Soon, since Delete removes a show (with Curatarr 0.2.0rc128).\n- When Curatarr keeps a title (Never Purge, or a reason of its own), the web app shows Curatarr's reason, not only its own \"check write access\" error.",
         "targetAbi": "12.2.0.0",
