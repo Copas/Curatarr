@@ -407,3 +407,23 @@ def test_credits_pictures_are_not_read_again_for_an_intro_recheck(app, monkeypat
     # a new copy of the file has its credits looked for again
     enrichment._forget_old_file(ep.state)
     assert ep.state.credits_rule is None
+
+
+def test_a_marker_curatarr_placed_that_jellyfin_no_longer_shows_is_placed_again():
+    """A redo that gave up hid Curatarr's marker and couldn't put Intro
+    Skipper's back: the episode shows neither, so it's placed again."""
+    from curatarr.enrichment import _lost_markers
+
+    hidden = [
+        {"id": "is-intro", "type": "Introduction", "placed": True, "replaced_by": "ours-1"},
+        {"id": "ours-2", "type": "Credits", "placed": True, "added": True},
+    ]  # fmt: skip
+    showing = [
+        {"Id": "ours-1", "Type": "Introduction", "Source": "User"},
+        {"Id": "ours-2", "Type": "Credits", "Source": "User"},
+    ]
+    assert _lost_markers(hidden, showing) == (False, False)
+    assert _lost_markers(hidden, showing[1:]) == (True, False)
+    suppressed = [{**showing[0]}, {**showing[1], "Suppressed": True}]
+    assert _lost_markers(hidden, suppressed) == (False, True)
+    assert _lost_markers(None, []) == (False, False)

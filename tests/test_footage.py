@@ -407,3 +407,41 @@ def test_run_on_stops_at_a_set_seen_all_through_the_episodes():
     here = episode(1)
     others = [episode(20 + n) for n in range(5)]
     assert footage.run_on(here, others, 30) == 0
+
+
+def test_an_intro_whose_original_intro_skipper_replaced_is_placed_again(monkeypatch):
+    """Rechecking, Curatarr swaps its marker back for Intro Skipper's
+    original; when Intro Skipper's own analysis had replaced that, restoring
+    it failed and the redo gave up, leaving the episode with Intro Skipper's
+    uncorrected intro under the new rule for good (86 episodes, FROM S4E5
+    among them). Now its current intro stands in; only Jellyfin being
+    unreachable stops the redo, and then the episode is tried again."""
+    from curatarr.integrations import IntegrationError
+
+    monkeypatch.setattr(credits, "frames", lambda *_a: np.zeros((1, 1, 1)))
+    monkeypatch.setattr(credits, "find_breaks", lambda _p, start: [])
+    placed = {
+        "id": "gone", "type": "Introduction", "placed": True, "replaced_by": "ours-old",
+        "start": 471.0, "end": 588.6, "source": "Chromaprint",
+    }  # fmt: skip
+    fresh = {"Id": "fresh", "Start": 474.0, "End": 585.0, "Source": "Chromaprint"}
+
+    class Replaced(FakePlugin):
+        def restore(self, item_id, segment_id):
+            raise IntegrationError("Restore failed", status_code=404)
+
+    plugin, hidden = Replaced(), [dict(placed)]
+    ep = _ep((470, 592), 0)
+    assert _place_intro(ep, plugin, "item", [fresh], hidden)
+    assert "ours-old" in plugin.hidden and "fresh" in plugin.hidden
+    assert plugin.added == [("Introduction", 470, 592)]
+    assert [h["id"] for h in hidden] == ["fresh"]
+    assert not getattr(ep, "redo_failed", False)
+
+    class Down(FakePlugin):
+        def restore(self, item_id, segment_id):
+            raise IntegrationError("Jellyfin is down")
+
+    ep, hidden = _ep((470, 592), 0), [dict(placed)]
+    assert _place_intro(ep, Down(), "item", [fresh], hidden) is None
+    assert ep.redo_failed and hidden == [placed]  # tried again next time

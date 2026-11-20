@@ -38,6 +38,10 @@
 **For administrators**
 - Household accounts that can Keep, Snooze or Never Purge; History of everything done and why; one progress bar for all background work, with honest time estimates; **Pause all work**; a read-only API and webhook endpoints (docs/API.md).
 
+## Unreleased
+
+- **Intros and credits whose recheck gave up are placed again.** Rechecking an episode, Curatarr puts Intro Skipper's original marker back before placing its own; when Intro Skipper's own analysis had replaced that marker, putting it back failed and the recheck gave up, yet the episode counted as done. It was left with Intro Skipper's uncorrected intro (starting late, ending early: FROM S4E5 among 86 episodes) or credits. Now Intro Skipper's current marker stands in; a recheck that can't reach Jellyfin is tried again; and a marker of Curatarr's that Jellyfin no longer shows is placed again. Episodes with an intro are checked again.
+
 ## 0.2.0rc143 (2026-11-19)
 
 Where titles came from, titles kept for being in a playlist, the poster check and Picks seeing the whole library, and the first steps to retiring Intro Skipper.

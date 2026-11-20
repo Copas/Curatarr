@@ -4280,6 +4280,11 @@ def _check_markers(ep: _Episode) -> str:
     ]
     credits = [s for s in live if s.get("Type") == "Credits"]
     intros = [s for s in live if s.get("Type") == "Introduction"]
+    intro_lost, credits_lost = _lost_markers(state.markers_hidden, segments)
+    if intro_lost:
+        state.intro_rule = None  # placed again, whatever the rules
+    if credits_lost:
+        state.credits_rule = None
     duration = ep.info.duration
 
     def speech_after(start, end):
@@ -4376,12 +4381,14 @@ def _check_markers(ep: _Episode) -> str:
         if state.credits_rule != CREDITS_RULE
         else None
     )
-    state.credits_rule = CREDITS_RULE
+    if not getattr(ep, "redo_failed", False):
+        state.credits_rule = CREDITS_RULE
     bad_ids = {id(segment) for segment, _reason in bad}
     widened = _place_intro(
         ep, plugin, item_id, [i for i in intros if id(i) not in bad_ids], hidden
     )
-    state.intro_rule = INTRO_RULE
+    if not getattr(ep, "redo_failed", False):
+        state.intro_rule = INTRO_RULE
     state.markers_hidden = hidden or None
     try:
         recap = _settle_recap_guesses(ep)
@@ -4450,9 +4457,7 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
             for h in placed:
                 if h.get("added"):
                     plugin.hide(item_id, h["id"])
-                else:
-                    plugin.hide(item_id, h["replaced_by"])
-                    plugin.restore(item_id, h["id"])
+                elif _restored(plugin, item_id, h):
                     credits.append(
                         {"Id": h["id"], "Start": h["start"], "End": h["end"]}
                         | {"Source": h.get("source")}
@@ -4460,6 +4465,7 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
                 hidden.remove(h)
         except IntegrationError as exc:
             _log("credits_redo_failed", state_id=ep.state.id, error=str(exc))
+            ep.redo_failed = True  # not counted as checked: tried again
             return None
     elif any(h.get("type") == "Credits" and h.get("replaced_by") for h in hidden):
         # Trimmed by the talking check: Curatarr's own credits marker is
@@ -4543,7 +4549,7 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
 MIN_ADDED_CREDITS = 8.0
 
 
-INTRO_RULE = 10  # how intros are widened (footage.py); raising it checks again
+INTRO_RULE = 11  # how intros are widened (footage.py); raising it checks again
 # 4: the marker starts skip_lead_seconds early, so the button shows in time
 # 5: sound alike, not only identical, counts as shared; and Curatarr's own
 #    intro (footage.own_intro) is recorded beside Intro Skipper's
@@ -4555,6 +4561,8 @@ INTRO_RULE = 10  # how intros are widened (footage.py); raising it checks again
 #    the shared sound stops (footage.run_on); episodes with no intro skip it
 # 9: …but not over a set seen all through the episodes (footage.RUN_ON_PLACES)
 # 10: …a set found 16+ times an episode counts (it was 30+)
+# 11: no change to the rules: an intro whose redo gave up (Intro Skipper
+#     had replaced the original) is placed again (_restored)
 INTRO_DIFFERS = 5.0  # seconds an edge may differ and still agree
 
 
@@ -4572,6 +4580,23 @@ def skip_lead(start: float) -> float:
 
 # 2: an edge moves only when it moves a second or more (footage.MIN_MOVE)
 # 3: the shared stretch overlapping Intro Skipper's intro, not the longest
+
+
+def _restored(plugin, item_id, h) -> bool:
+    """Swap Curatarr's marker back for Intro Skipper's original before the
+    intro is placed again. False when Intro Skipper no longer has the
+    original: its own analysis replaced it, and the replacement (among the
+    item's current intros) stands in. That gave up before, leaving the
+    episode with Intro Skipper's own, uncorrected intro (86 episodes, FROM
+    S4E5 among them). Raises only when Jellyfin can't be reached."""
+    plugin.hide(item_id, h["replaced_by"])
+    try:
+        plugin.restore(item_id, h["id"])
+    except IntegrationError as exc:
+        if exc.status_code is None:
+            raise  # Jellyfin unreachable: tried again next time
+        return False  # it answered: the original is gone (or won't come back)
+    return True
 
 
 def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
@@ -4601,9 +4626,7 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
             for h in placed:
                 if h.get("added"):
                     plugin.hide(item_id, h["id"])
-                else:
-                    plugin.hide(item_id, h["replaced_by"])
-                    plugin.restore(item_id, h["id"])
+                elif _restored(plugin, item_id, h):
                     intros.append(
                         {"Id": h["id"], "Start": h["start"], "End": h["end"]}
                         | {"Source": h.get("source")}
@@ -4611,6 +4634,7 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
                 hidden.remove(h)
         except IntegrationError as exc:
             _log("intro_redo_failed", state_id=ep.state.id, error=str(exc))
+            ep.redo_failed = True  # not counted as checked: tried again
             return None
     own = _record_own_intro(ep, intros)
     if not intros:
@@ -4800,6 +4824,24 @@ def intro_verdict(found: dict) -> str | None:
     ):
         return "agree"
     return "edges"
+
+
+def _lost_markers(hidden, segments) -> tuple[bool, bool]:
+    """(intro lost, credits lost): a marker Curatarr placed that Jellyfin no
+    longer shows. A redo that gave up (Intro Skipper had replaced the
+    original it tried to put back) hid Curatarr's marker and left the
+    episode without it; seen this way, it's placed again."""
+    shown = {s.get("Id") for s in segments or [] if not s.get("Suppressed")}
+
+    def lost(h):
+        ours = h.get("id") if h.get("added") else h.get("replaced_by")
+        return bool(ours) and ours not in shown
+
+    hidden = hidden or []
+    intro = any(
+        lost(h) for h in hidden if h.get("type") == "Introduction" and h.get("placed")
+    )
+    return intro, any(lost(h) for h in hidden if _placed_credits(h))
 
 
 def _placed_credits(h) -> bool:
