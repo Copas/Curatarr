@@ -3628,7 +3628,9 @@ RECAP_FROM_SUBTITLES = 6  # earlier episodes without a transcript read from subt
 #      and transcripts made in the wrong language (Whisper's guess, not the
 #      track's tag) are made again
 #   5: wordless studio logos before "Previously on" are skipped with it
-RECAP_RULE = 5
+#   6: the fade that ends a recap is looked for 35 s after its last quoted line
+#      (25 s missed FROM's cliffhanger endings)
+RECAP_RULE = 6
 RECAP_SKIP_AFTER = 4  # a series whose first episodes never say "previously on"
 
 

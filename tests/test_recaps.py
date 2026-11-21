@@ -229,9 +229,12 @@ def test_a_recap_runs_on_to_the_intro_or_a_fade():
     assert recaps.settled_end(60.0, intro=75.0) == 75.0
     assert recaps.settled_end(60.0, intro=58.0) == 58.0
     # otherwise the longest black of a second or more, not too far on
-    blacks = [(62.0, 0.4), (66.0, 1.2), (70.0, 2.5), (90.0, 5.0)]
+    blacks = [(62.0, 0.4), (66.0, 1.2), (70.0, 2.5), (100.0, 5.0)]
     assert recaps.settled_end(60.0, intro=400.0, blacks=blacks) == 70.0
-    assert recaps.settled_end(60.0, blacks=[(62.0, 0.4), (90.0, 5.0)]) is None
+    assert recaps.settled_end(60.0, blacks=[(62.0, 0.4), (100.0, 5.0)]) is None
+    # FROM: the last episode's cliffhanger plays on half a minute past the last
+    # line quoted, then the fade
+    assert recaps.settled_end(86.2, blacks=[(117.0, 1.5)]) == 117.0
     # settled, the scene snap isn't used
     found = recaps.find_recap(
         narrated(12, 95),

@@ -61,7 +61,10 @@ FUZZY_GRAM, FUZZY_QUOTED = 3, 0.6
 # MIN_BLACK seconds or more up to BLACK_AFTER after it (a frame whose brightest
 # pixels are at most BLACK of 255: night scenes aren't; flashes inside a
 # montage are shorter). Further, a black was a scene's end in the new episode.
-SETTLE_BEFORE, SETTLE_AFTER, BLACK_AFTER = 3.0, 30.0, 25.0
+# BLACK_AFTER was 25: FROM's recaps end on the last episode's cliffhanger,
+# ~30 s after the last line quoted (3/67 more right on the answer key at 35,
+# none later).
+SETTLE_BEFORE, SETTLE_AFTER, BLACK_AFTER = 3.0, 30.0, 35.0
 BLACK, MIN_BLACK = 20, 1.0
 CLOSER_WITHIN = 180.0  # seconds after the opener's next line
 CLOSER_SPREAD = 120.0  # a closing line lands at about the same point each week
