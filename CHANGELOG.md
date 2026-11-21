@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- **Segments Curatarr hid stay hidden in its own store.** Intro Skipper lists the segments it hides too, and Curatarr's copy took them as shown, so once Curatarr's plugin served them, an intro or credits Curatarr had replaced would have come back beside its replacement (65 episodes). They're kept hidden now, and every episode's segments are read again.
 - **Then the first episode of each show nobody has started.** After what people are in the middle of, the likeliest thing to be watched next is the start of something new, so the first episode of each show nobody has played comes next in every queue, ahead of the rest of the library.
 - **Every kind of work does what you'll watch next first.** Replacing burned-in subtitles, checking the library's own subtitle files and checking films' dubs went through the library in their own order, so an episode you were about to watch waited until they reached it. They now take what's playing and what people will watch next first, like the rest of Curatarr's work.
 - **What you're about to watch is checked again first, for real.** A new rule's recheck goes to the episodes up next first, but one checked again in the last six hours (for an earlier rule) was left waiting, so the episode you were watching that evening was among the last. Up next, the wait is 15 minutes.

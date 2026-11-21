@@ -23,7 +23,10 @@ from . import db, integrations
 from .integrations import IntegrationError
 from .models import MediaSegment, utcnow, uuid
 
-IMPORT_KEY = "segments_import"  # {"after": last part id read, "finished_at"}
+IMPORT_KEY = "segments_import"  # {"after": last part id read, "finished_at", "rule"}
+# Raised when what's read changes, so every item is read again:
+#   2: Intro Skipper's suppressed segments are kept hidden
+IMPORT_RULE = 2
 IMPORT_BATCH = 100
 IMPORT_SECONDS = 20
 # Jellyfin's names for the segment types (MediaSegmentType).
@@ -58,11 +61,16 @@ def mirror(item_id, live: list[dict]) -> bool:
         seen.add(sid)
         start, end = float(segment.get("Start") or 0), float(segment.get("End") or 0)
         kind = segment.get("Type") or "Unknown"
+        # Intro Skipper lists the segments it hides too, flagged Suppressed
+        # (those Curatarr replaced or hid): kept, hidden. Taken as shown,
+        # they'd have come back beside their replacements.
+        hidden = bool(segment.get("Suppressed"))
         row = kept.get(sid)
-        if (
-            row
-            and not row.hidden
-            and (row.kind, row.start, row.end) == (kind, start, end)
+        if row and (row.kind, row.start, row.end, row.hidden) == (
+            kind,
+            start,
+            end,
+            hidden,
         ):
             continue
         version = version or _next_version()
@@ -73,7 +81,7 @@ def mirror(item_id, live: list[dict]) -> bool:
             kind,
             start,
             end,
-            False,
+            hidden,
             version,
         )
         changed = True
@@ -188,6 +196,8 @@ def import_sweep(now=None) -> int:
     from .services import set_setting, setting
 
     state = dict(setting(IMPORT_KEY, {}) or {})
+    if state.get("rule") != IMPORT_RULE:
+        state = {"rule": IMPORT_RULE}  # read everything again
     if state.get("finished_at"):
         return 0
     started, read = time.monotonic(), 0

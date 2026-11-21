@@ -138,3 +138,29 @@ def test_an_episode_intro_skipper_doesnt_know_doesnt_stop_the_import(app, monkey
     assert segments.import_sweep() == 1
     assert setting(segments.IMPORT_KEY)["finished_at"]
     assert {r.id for r in db.session.query(MediaSegment)} == {"is-9"}
+
+
+def test_segments_intro_skipper_hides_are_kept_hidden(app, monkeypatch):
+    """Intro Skipper lists the segments it hides, flagged Suppressed (its own
+    intro that Curatarr replaced): taken as shown, they'd have been served
+    beside their replacements (6 items with two intros, 59 with two credits)."""
+    plugin = Plugin()
+    plugin.live["ep1"] = [
+        {"Id": "is-1", "Type": "Introduction", "Start": 25.4, "End": 116.0, "Suppressed": True},
+        {"Id": "ours-1", "Type": "Introduction", "Start": 22.8, "End": 120.6},
+    ]  # fmt: skip
+    store = _store(monkeypatch, plugin)
+    store.segments("ep1")
+    db.session.commit()
+    assert segments.changed_since(0)["items"] == [
+        {"item": "ep1", "segments": [{"type": "Intro", "start": 22.8, "end": 120.6}]}
+    ]
+
+
+def test_a_new_import_rule_reads_everything_again(app, monkeypatch):
+    set_setting(segments.IMPORT_KEY, {"after": "zzz", "finished_at": "2026-11-21"})
+    db.session.commit()
+    monkeypatch.setattr("curatarr.integrations.IntroSkipper", lambda _j: Plugin())
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: object())
+    segments.import_sweep()
+    assert setting(segments.IMPORT_KEY)["rule"] == segments.IMPORT_RULE
