@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- **What you're about to watch is checked again first, for real.** A new rule's recheck goes to the episodes up next first, but one checked again in the last six hours (for an earlier rule) was left waiting, so the episode you were watching that evening was among the last. Up next, the wait is 15 minutes.
 - **Recaps that end on the last episode's cliffhanger are skipped to the end.** A recap ends at the fade to black after its last line quoted from earlier episodes, looked for up to 25 seconds on. FROM's recaps end with the previous episode's last scene, about 30 seconds past that line, so their skips stopped short (S4E2, E8, E9 by half a minute). It's looked for up to 35 seconds on now: three more of the hand-checked sample land right, none run later. Recaps are checked again.
 - **Reading Intro Skipper's segments no longer stops partway.** The one-time pass that reads every episode's skip segments stopped for good at the first episode Intro Skipper never analysed (it answers "not found"), taking that for Intro Skipper not being installed. Such episodes are now skipped.
 - **A recap's skip covers the studio logos before it.** When nothing is said before "Previously on…" and it comes within the first 30 seconds, the skip now starts at the beginning instead of after the logos (FROM S4E6's started after 15 seconds of MGM logos). A cold open someone speaks in is still kept. Recaps are checked again.

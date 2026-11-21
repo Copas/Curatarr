@@ -427,3 +427,51 @@ def test_a_marker_curatarr_placed_that_jellyfin_no_longer_shows_is_placed_again(
     suppressed = [{**showing[0]}, {**showing[1], "Suppressed": True}]
     assert _lost_markers(hidden, suppressed) == (False, True)
     assert _lost_markers(None, []) == (False, False)
+
+
+def test_an_episode_about_to_be_watched_isnt_left_resting(app, monkeypatch):
+    """FROM S4E8 and E9 were checked again for one rule in the evening; under
+    the next rule they sat out the six-hour rest while being watched. Up
+    next, the rest is a quarter of an hour."""
+    from datetime import timedelta
+
+    from curatarr import db, enrichment, up_next
+    from curatarr.models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
+
+    library = Library(jellyfin_library_id="tv", name="TV", media_type="tv")
+    db.session.add(library)
+    db.session.flush()
+    show = MediaIdentity(library_id=library.id, media_type="series", title="Show")
+    db.session.add(show)
+    db.session.flush()
+    states = []
+    for number in (8, 9):
+        part = MediaPart(
+            media_identity_id=show.id, kind="episode", season_number=4,
+            episode_number=number, has_file=True, file_path=f"/tv/Show/S04E0{number}.mkv",
+        )  # fmt: skip
+        db.session.add(part)
+        db.session.flush()
+        state = ChapterState(media_part_id=part.id, media_identity_id=show.id)
+        state.job_state = "idle"
+        state.markers_checked_at = utcnow()
+        state.credits_rule, state.intro_rule = (
+            enrichment.CREDITS_RULE,
+            enrichment.INTRO_RULE,
+        )
+        state.recap_source, state.recap_rule = (
+            "earlier episodes",
+            enrichment.RECAP_RULE - 1,
+        )
+        state.requested_at = utcnow() - timedelta(hours=2)  # an earlier rule's recheck
+        db.session.add(state)
+        states.append(state)
+    db.session.commit()
+    monkeypatch.setattr(enrichment, "RECHECK_QUEUED", 0)  # the library waits
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
+    assert enrichment.recheck_credits() == 0  # resting
+    monkeypatch.setattr(
+        up_next, "part_ids", lambda users=None: [states[1].media_part_id]
+    )
+    assert enrichment.recheck_credits() == 1  # up next: not left resting
+    assert states[1].requested_action == "recap" and states[0].requested_action is None

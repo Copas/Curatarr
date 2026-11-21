@@ -114,6 +114,9 @@ LEASE_SECONDS = 600
 RECAP_BATCH = 3
 RECHECK_QUEUED = 12  # re-checks kept queued for the skip-marker slots
 RECHECK_REST = timedelta(hours=6)  # before an episode is re-checked again
+# …or one someone's about to watch: a new rule's recheck reaches it now, not
+# hours later because an earlier rule's recheck asked for it this evening.
+RECHECK_REST_SOON = timedelta(minutes=15)
 SCAN_BATCH = 200
 IMPORT_COMMANDS = {
     "DownloadedEpisodesScan",
@@ -1880,17 +1883,27 @@ def recheck_credits(now=None) -> int:
             ChapterState.markers_checked_at.isnot(None),
             ChapterState.job_state == "idle",
             or_(credits_old, intro_old, recap_old),
-            # Not one checked again lately: one that can't move to the new
-            # rules (a check that keeps failing) is left for a while instead
-            # of being picked every cycle ahead of the rest of the library.
-            or_(
-                ChapterState.requested_at.is_(None),
-                ChapterState.requested_at < now - RECHECK_REST,
-            ),
         )
     )
+
+    def rested(rest):
+        # Not one checked again lately: one that can't move to the new rules
+        # (a check that keeps failing) is left for a while instead of being
+        # picked every cycle ahead of the rest of the library.
+        return or_(
+            ChapterState.requested_at.is_(None),
+            ChapterState.requested_at < now - rest,
+        )
+
     soon = up_next.part_ids()
-    due = rows.filter(ChapterState.media_part_id.in_(soon)).all() if soon else []
+    due = (
+        rows.filter(
+            ChapterState.media_part_id.in_(soon), rested(RECHECK_REST_SOON)
+        ).all()
+        if soon
+        else []
+    )
+    rows = rows.filter(rested(RECHECK_REST))
     # The rest of the library too, every cycle (up next going first used to
     # stop it whenever anything was up next). Skip-marker checks have a job
     # slot of their own, so chapter work waiting doesn't hold these back:
