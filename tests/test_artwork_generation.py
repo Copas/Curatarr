@@ -2429,3 +2429,28 @@ def test_the_posters_pages_say_when_the_usage_limit_resets(app, client):
     db.session.commit()
     assert artwork_jobs.usage_limit() is None
     assert 'class="artwork-limit"' not in client.get("/library/posters/jobs").text
+
+
+def test_a_title_with_no_banner_in_jellyfin_says_so_beside_the_new_one(
+    app, client, monkeypatch
+):
+    """Most titles have no banner or logo in Jellyfin: the review page's
+    "Now" asked for one anyway and showed a broken picture."""
+    from curatarr.integrations import IntegrationError
+
+    _library, media, _part = _movie()
+    jellyfin = _jellyfin(monkeypatch, _picture("#223344"))
+
+    def none_of_that_kind(_item_id, kind="Primary"):
+        if kind == "Banner":
+            raise IntegrationError("not found", status_code=404)
+        return jellyfin.current
+
+    jellyfin.image = none_of_that_kind
+    response = client.get(f"/library/posters/now/{media.id}/Banner")
+    assert response.status_code == 200
+    assert response.mimetype == "image/svg+xml"
+    assert b"No banner in Jellyfin yet" in response.data
+    assert b'viewBox="0 0 760 140"' in response.data  # a banner's shape
+    poster = client.get(f"/library/posters/now/{media.id}/Primary")
+    assert poster.status_code == 200 and poster.mimetype == "image/jpeg"

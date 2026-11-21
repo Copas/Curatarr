@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from flask import (
+    Response,
     abort,
     flash,
     jsonify,
@@ -1538,8 +1539,39 @@ def artwork_jellyfin_picture(media_id, kind):
     except IntegrationError:
         data = None
     if not data:
-        abort(404)
+        # Most titles have no banner or logo in Jellyfin: a picture saying so,
+        # in that kind's shape, not a broken one where "Now" goes.
+        return Response(
+            _none_yet(kind),
+            mimetype="image/svg+xml",
+            headers={"Cache-Control": "max-age=300"},
+        )
     return send_file(BytesIO(data), mimetype=custom_posters.mimetype(kind), max_age=300)
+
+
+# Each kind's shape (width, height), for the "none yet" picture.
+SHAPES = {
+    "Primary": (400, 600),
+    "Thumb": (640, 360),
+    "Backdrop": (640, 360),
+    "Banner": (760, 140),
+    "Logo": (640, 250),
+}
+
+
+def _none_yet(kind) -> str:
+    from markupsafe import escape
+
+    width, height = SHAPES.get(kind, (640, 360))
+    noun = escape(custom_posters.KIND_NAMES.get(kind, "picture"))
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
+        f'width="{width}" height="{height}" role="img" aria-label="No {noun} in Jellyfin">'
+        f'<rect width="100%" height="100%" rx="12" fill="#1f2733"/>'
+        f'<text x="50%" y="50%" fill="#d4dbe5" font-family="system-ui, sans-serif" '
+        f'font-size="{max(18, min(height, width) // 6)}" text-anchor="middle" '
+        f'dominant-baseline="middle">No {noun} in Jellyfin yet</text></svg>'
+    )
 
 
 # --- Live updates, without reloading the page --------------------------------
