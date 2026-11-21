@@ -122,6 +122,24 @@ def test_requests_are_matched_from_seerr(app, monkeypatch):
     assert entry["user"] == "Riley" and entry["user_id"] == "abc123"
 
 
+def test_a_request_read_late_replaces_added_by_hand(app, monkeypatch):
+    film = _film("Asked For", tmdb=55)
+    film.origin = {"short": "Added by hand", "reasons": []}
+    kept = _film("Mine", tmdb=56)
+    kept.origin = {"short": "Added by hand", "reasons": []}
+    db.session.commit()
+
+    class Seerr:
+        def requests(self):
+            return [{"type": "movie", "status": 2, "media": {"tmdbId": 55}}]
+
+    monkeypatch.setattr("curatarr.services.configured", lambda kind: True)
+    monkeypatch.setattr("curatarr.services.client", lambda kind: Seerr())
+    curation.sync_requests()
+    assert film.origin is None  # recorded again by the next sweep
+    assert kept.origin["short"] == "Added by hand"
+
+
 # --- Rewatched -----------------------------------------------------------------
 
 

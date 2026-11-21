@@ -243,6 +243,13 @@ def sync_requests():
             }
         )
     set_setting(REQUESTS_KEY, found)
+    # Requests are read once a reconcile, but where a title came from is
+    # recorded minutes after it arrives: one requested since the last read
+    # was recorded "Added by hand". Recorded again now its request is known.
+    for media_id in found:
+        media = db.session.get(MediaIdentity, media_id)
+        if media is not None and (media.origin or {}).get("short") == "Added by hand":
+            media.origin = None
     db.session.commit()
     forget()
     return len(found)

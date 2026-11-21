@@ -40,6 +40,8 @@
 
 ## Unreleased
 
+- Fix: a title requested in Seerr shortly before it arrived could be marked "Added by hand" on its page, because Curatarr reads Seerr's requests only once an hour. It now records the title again once the request has been read.
+
 - **Reviewing a banner or logo no longer shows a broken picture.** Most titles have no banner or logo in Jellyfin, so the "Now" beside a new one couldn't load and showed a broken image. It shows "No banner in Jellyfin yet" (or logo) now, in that picture's shape.
 - **Segments Curatarr hid stay hidden in its own store.** Intro Skipper lists the segments it hides too, and Curatarr's copy took them as shown, so once Curatarr's plugin served them, an intro or credits Curatarr had replaced would have come back beside its replacement (65 episodes). They're kept hidden now, and every episode's segments are read again.
 - **Then the first episode of each show nobody has started.** After what people are in the middle of, the likeliest thing to be watched next is the start of something new, so the first episode of each show nobody has played comes next in every queue, ahead of the rest of the library.
