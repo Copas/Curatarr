@@ -70,9 +70,19 @@ def _due():
                 ChapterState.dub_file_size != MediaPart.size_bytes,
             ),
         )
-        # Films whose chapter job is waiting on this check go first.
-        .order_by(case((ChapterState.job_state == "queued", 0), else_=1))
+        # What someone's watching or about to (a film stopped partway) goes
+        # first, then films whose chapter job is waiting on this check.
+        .order_by(
+            _up_next_rank(MediaPart.id),
+            case((ChapterState.job_state == "queued", 0), else_=1),
+        )
     )
+
+
+def _up_next_rank(column):
+    from . import up_next
+
+    return up_next.rank(column)
 
 
 CHAPTER_WAIT = timedelta(hours=6)

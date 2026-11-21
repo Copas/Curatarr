@@ -73,6 +73,29 @@ def _rows(status, after=None, limit=BATCH):
     return query.limit(limit).all()
 
 
+def _up_next_first(after, configs) -> int:
+    """Check the episodes people will watch next that the pass hasn't reached
+    yet, ahead of it (they're checked again when it gets there, and skipped
+    then if queued)."""
+    from . import up_next
+    from .mediafile import MediaToolError
+
+    soon = up_next.part_ids()
+    if not soon:
+        return 0
+    queued = 0
+    for state, path, library_id in _rows("existing", after=after, limit=None):
+        if state.media_part_id not in soon or not _wanted(library_id, configs):
+            continue
+        try:
+            if _only_pictures(path):
+                _queue(state)
+                queued += 1
+        except (MediaToolError, OSError):
+            continue
+    return queued
+
+
 def sweep() -> int:
     """Returns how many files were queued."""
     from .mediafile import MediaToolError
@@ -86,6 +109,8 @@ def sweep() -> int:
     progress = dict(setting(KEY, {}) or {})
     if not progress.get("finished_at"):
         started = time.monotonic()
+        # What someone's about to watch first, wherever the pass has got to.
+        queued += _up_next_first(progress.get("after"), configs)
         rows = _rows("existing", after=progress.get("after"))
         for state, path, library_id in rows:
             if time.monotonic() - started > RUN_SECONDS:

@@ -540,3 +540,27 @@ def test_no_nvidia_packages_at_all_means_no_extra_library_path(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", missing)
     monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
     assert transcribe._cuda_library_path() == ""
+
+
+def test_a_film_someone_is_watching_is_checked_first(dub_env, monkeypatch):
+    """What people are likely to watch next goes to the front of the line, for
+    this check as for every other."""
+    from curatarr import up_next
+    from curatarr.models import MediaIdentity, MediaPart
+
+    library, _first, first_part = _movie(PATH)
+    second = MediaIdentity(
+        library_id=library.id, media_type="movie", title="Watching", radarr_id=8
+    )
+    db.session.add(second)
+    db.session.flush()
+    second_part = MediaPart(
+        media_identity_id=second.id, kind="movie_file", has_file=True,
+        file_path="/movies/Watching (2021)/Watching.mkv",
+    )  # fmt: skip
+    db.session.add(second_part)
+    db.session.commit()
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [second_part.id])
+    assert dub_jobs._due().first().id == second_part.id
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
+    assert {p.id for p in dub_jobs._due().all()} == {first_part.id, second_part.id}

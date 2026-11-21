@@ -624,3 +624,26 @@ def test_an_episode_whose_file_is_gone_isnt_remade_again_and_again(
     db.session.commit()
     assert enrichment.remake_subtitles() == 0
     assert _state(part).job_state == "idle"
+
+
+def test_picture_subtitles_about_to_be_watched_are_checked_first(app, monkeypatch):
+    """The pass looking for files with only picture subtitles goes a batch at
+    a time; an episode someone's about to watch is checked first."""
+    from types import SimpleNamespace
+
+    from curatarr import picture_subtitles, up_next
+
+    ahead = SimpleNamespace(media_part_id="soon", id="z")
+    other = SimpleNamespace(media_part_id="later", id="y")
+    queued = []
+    monkeypatch.setattr(
+        picture_subtitles, "_rows",
+        lambda status, after=None, limit=None: [(ahead, "/tv/a.mkv", "lib"), (other, "/tv/b.mkv", "lib")]
+        if status == "existing" else [],
+    )  # fmt: skip
+    monkeypatch.setattr(picture_subtitles, "_wanted", lambda lib, configs: True)
+    monkeypatch.setattr(picture_subtitles, "_only_pictures", lambda path: True)
+    monkeypatch.setattr(picture_subtitles, "_queue", queued.append)
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: ["soon"])
+    assert picture_subtitles._up_next_first("a", {}) == 1
+    assert queued == [ahead]

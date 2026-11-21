@@ -552,3 +552,27 @@ def test_set_aside_subtitles_can_be_brought_back_from_the_films_pages(
         data={"next": "//elsewhere.example/"},
     )
     assert away.headers["Location"].endswith("/chapters/subtitles")
+
+
+def test_an_episode_about_to_be_watched_is_checked_ahead_of_the_pass(
+    sync_env, monkeypatch
+):
+    """The pass through the library's own subtitles goes a batch at a time;
+    an episode someone's about to watch is checked first, wherever the pass
+    has got to."""
+    from curatarr import outside_subtitles, up_next
+
+    part, sidecar, speech, _calls, _arr = sync_env
+    state = _run(part)
+    generated_path(part.file_path).unlink()
+    state.subtitle_status, state.subtitle_fingerprint = "existing", None
+    db.session.commit()
+    sidecar.write_text(_subtitles(speech, lambda t: 8.0 + t), encoding="utf-8")
+    monkeypatch.setattr(outside_subtitles, "BATCH", 0)  # the pass reads none now
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
+    set_setting(outside_subtitles.KEY, {})
+    assert outside_subtitles.sweep() == 0
+    monkeypatch.setattr(up_next, "part_ids", lambda users=None: [part.id])
+    set_setting(outside_subtitles.KEY, {})
+    assert outside_subtitles.sweep() == 1
+    assert _state(part).requested_action == "subtitles"

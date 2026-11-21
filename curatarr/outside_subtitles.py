@@ -183,8 +183,25 @@ def sweep() -> int:
     query = _candidates().filter(ChapterState.job_state == "idle")
     if progress.get("after"):
         query = query.filter(ChapterState.id > progress["after"])
-    rows = query.order_by(ChapterState.id).limit(BATCH).all()
     configs, queued, started = {}, 0, time.monotonic()
+    # What someone's about to watch first, wherever the pass has got to
+    # (checked again, and skipped, when the pass reaches it).
+    from . import up_next
+
+    soon = up_next.part_ids()
+    if soon:
+        for state, path, library_id in query.filter(
+            ChapterState.media_part_id.in_(soon)
+        ).all():
+            if queued >= room:
+                break
+            try:
+                if _wanted(library_id, configs) and unchecked(state, path):
+                    _queue(state)
+                    queued += 1
+            except OSError:
+                continue
+    rows = query.order_by(ChapterState.id).limit(BATCH).all()
     for state, path, library_id in rows:
         if queued >= room or time.monotonic() - started > RUN_SECONDS:
             break

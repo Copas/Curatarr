@@ -6,9 +6,9 @@ they stopped partway through. Every worker cycle it also looks at what's
 playing right now, so pressing play moves a file up within seconds. Each
 episode brings the few after it (into the next season too), so a binge
 doesn't catch up with the queue. Those files' jobs (chapters, subtitles,
-skip markers, TV-friendly audio, the seek index repair) go to the front of
-the queue, instead of waiting behind a backlog of the library's back
-catalogue.
+skip markers and their rechecks, TV-friendly audio, the seek index repair,
+picture and outside subtitles, dub checks) go to the front of the queue,
+instead of waiting behind a backlog of the library's back catalogue.
 """
 
 from datetime import timedelta
