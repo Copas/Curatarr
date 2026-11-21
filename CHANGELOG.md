@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- **Then the first episode of each show nobody has started.** After what people are in the middle of, the likeliest thing to be watched next is the start of something new, so the first episode of each show nobody has played comes next in every queue, ahead of the rest of the library.
 - **Every kind of work does what you'll watch next first.** Replacing burned-in subtitles, checking the library's own subtitle files and checking films' dubs went through the library in their own order, so an episode you were about to watch waited until they reached it. They now take what's playing and what people will watch next first, like the rest of Curatarr's work.
 - **What you're about to watch is checked again first, for real.** A new rule's recheck goes to the episodes up next first, but one checked again in the last six hours (for an earlier rule) was left waiting, so the episode you were watching that evening was among the last. Up next, the wait is 15 minutes.
 - **Recaps that end on the last episode's cliffhanger are skipped to the end.** A recap ends at the fade to black after its last line quoted from earlier episodes, looked for up to 25 seconds on. FROM's recaps end with the previous episode's last scene, about 30 seconds past that line, so their skips stopped short (S4E2, E8, E9 by half a minute). It's looked for up to 35 seconds on now: three more of the hand-checked sample land right, none run later. Recaps are checked again.

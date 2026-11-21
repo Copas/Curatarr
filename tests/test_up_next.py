@@ -99,3 +99,34 @@ def test_pressing_play_moves_it_and_whats_next_up_at_once(
     jellyfin.playing = []
     up_next.refresh()
     assert up_next.part_ids() == []
+
+
+def test_then_the_first_episode_of_each_show_nobody_has_started(
+    app,
+    media_env,  # noqa: F811
+    monkeypatch,
+):
+    """After what people are in the middle of, the likeliest place to start
+    is a new show's first episode: it goes ahead of the rest of the library,
+    by ordering only (it isn't counted as about to be watched)."""
+    from curatarr.models import EpisodeUserState
+
+    library, _media, _film = _movie()
+    watched = _show(library.id, 3)
+    new = _show(library.id, 3, seasons=2)
+    new[0].season_number = 0  # a special: not where anyone starts
+    db.session.add(
+        EpisodeUserState(
+            media_part_id=watched[0].id, jellyfin_user_id="u1", played=True
+        )
+    )
+    db.session.commit()
+    monkeypatch.setattr("curatarr.services.client", lambda _kind: FakeJellyfin())
+    up_next.refresh()
+    assert up_next.starters() == [new[1].id]  # season 1, its lowest episode left
+    assert up_next.part_ids() == []  # not "about to be watched"
+    for part in watched + new:
+        enrichment.request(part, "generate")
+    db.session.commit()
+    first = enrichment._due_jobs(1, scans=False)[0]
+    assert first.media_part_id == new[1].id

@@ -1921,7 +1921,10 @@ def recheck_credits(now=None) -> int:
         taken = {state.id for state in due}
         due += [
             state
-            for state in rows.order_by(ChapterState.markers_checked_at)
+            for state in rows.order_by(
+                up_next.rank(ChapterState.media_part_id),
+                ChapterState.markers_checked_at,
+            )
             .limit(room + len(taken))
             .all()
             if state.id not in taken

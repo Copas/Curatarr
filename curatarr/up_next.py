@@ -9,6 +9,12 @@ doesn't catch up with the queue. Those files' jobs (chapters, subtitles,
 skip markers and their rechecks, TV-friendly audio, the seek index repair,
 picture and outside subtitles, dub checks) go to the front of the queue,
 instead of waiting behind a backlog of the library's back catalogue.
+
+Next in line: the first episode of each show nobody has started (``starters``),
+the likeliest place for someone to begin something new. They come after
+what people are in the middle of, ahead of the rest of the library, by
+ordering only (``rank``): ``part_ids`` stays what people are about to watch,
+which some work treats as urgent.
 """
 
 from datetime import timedelta
@@ -136,10 +142,54 @@ def refresh(now=None) -> int:
             "at": now.isoformat(),
             "parts": sorted(parts),
             "by_user": {user: sorted(ids) for user, ids in by_user.items()},
+            "starters": starters(),
         },
     )
     db.session.commit()
     return len(parts)
+
+
+def starters() -> list[str]:
+    """The first episode (the lowest season from 1, its lowest episode) of
+    each show with files that nobody has played any of."""
+    from sqlalchemy import exists
+
+    from .models import EpisodeUserState, UserMediaState
+
+    played_show = exists().where(
+        UserMediaState.media_identity_id == MediaIdentity.id,
+        or_(UserMediaState.last_played_at.isnot(None), UserMediaState.play_count > 0),
+    )
+    episode = db.aliased(MediaPart)
+    played_episode = exists().where(
+        EpisodeUserState.media_part_id == episode.id,
+        episode.media_identity_id == MediaIdentity.id,
+        or_(
+            EpisodeUserState.played.is_(True),
+            EpisodeUserState.last_played_at.isnot(None),
+        ),
+    )
+    first = {}
+    for part_id, show, season, number in (
+        db.session.query(
+            MediaPart.id, MediaPart.media_identity_id, MediaPart.season_number,
+            MediaPart.episode_number,
+        )
+        .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
+        .filter(
+            MediaIdentity.media_type == "series",
+            MediaIdentity.missing_since.is_(None),
+            MediaPart.kind == "episode",
+            MediaPart.has_file.is_(True),
+            MediaPart.season_number >= 1,
+            ~played_show,
+            ~played_episode,
+        )
+    ):  # fmt: skip
+        key = (season, number if number is not None else 10**6)
+        if show not in first or key < first[show][0]:
+            first[show] = (key, part_id)
+    return sorted(part_id for _key, part_id in first.values())
 
 
 # How many of the front of the line are ordered one by one; the rest of what
@@ -149,17 +199,22 @@ RANKED = 60
 
 def rank(column):
     """For ORDER BY: a file's place in the line, what's playing first, then
-    the episodes after it and what people will watch next; everything else
-    after them."""
+    the episodes after it and what people will watch next, then the first
+    episodes of shows nobody has started; everything else after them."""
     from sqlalchemy import case, literal
 
+    from .services import setting
+
     ids = part_ids()
-    if not ids:
+    new = [p for p in (setting(KEY) or {}).get("starters") or [] if p not in ids]
+    if not ids and not new:
         return literal(0)
     whens = [(column == part_id, place) for place, part_id in enumerate(ids[:RANKED])]
     if ids[RANKED:]:
         whens.append((column.in_(ids[RANKED:]), RANKED))
-    return case(*whens, else_=RANKED + 1)
+    if new:  # then the first episodes of shows nobody has started
+        whens.append((column.in_(new), RANKED + 1))
+    return case(*whens, else_=RANKED + 2)
 
 
 def part_ids(users=None) -> list[str]:
