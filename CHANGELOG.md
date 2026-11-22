@@ -41,6 +41,7 @@
 ## Unreleased
 
 - Fix: a title requested in Seerr shortly before it arrived could be marked "Added by hand" on its page, because Curatarr reads Seerr's requests only once an hour. It now records the title again once the request has been read.
+- Fix: without a Seerr connection, a title's page said it was "Not requested in Seerr" and "Added by hand", which Curatarr couldn't know. It now says Seerr isn't connected ("Requested or added by hand"), and records it again once Seerr is connected.
 
 - **Reviewing a banner or logo no longer shows a broken picture.** Most titles have no banner or logo in Jellyfin, so the "Now" beside a new one couldn't load and showed a broken image. It shows "No banner in Jellyfin yet" (or logo) now, in that picture's shape.
 - **Segments Curatarr hid stay hidden in its own store.** Intro Skipper lists the segments it hides too, and Curatarr's copy took them as shown, so once Curatarr's plugin served them, an intro or credits Curatarr had replaced would have come back beside its replacement (65 episodes). They're kept hidden now, and every episode's segments are read again.

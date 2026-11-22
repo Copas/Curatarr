@@ -35,6 +35,8 @@ LISTS_FRESH_FOR = timedelta(minutes=10)
 RECORD_BATCH = 40
 RECORD_SECONDS = 20
 ON_ARRIVAL = timedelta(days=1)
+HAND = "Added by hand"
+UNKNOWN = "Requested or added by hand"  # Seerr not connected: can't tell
 
 
 def describe(media) -> dict:
@@ -77,7 +79,15 @@ def describe(media) -> dict:
         reasons.append(
             {"text": f"Added by one of {app_name}'s import lists", "at": None}
         )
-    if not reasons:
+    if not reasons and not configured("seerr"):
+        # Without Seerr a request can't be ruled out: "by hand" would be a guess.
+        result["guess"] = (
+            f"Not on any of {app_name}'s import lists and not added by Curatarr. "
+            "Seerr isn't connected to Curatarr, so whether someone requested it "
+            f"there can't be told; otherwise it was added in {app_name} by hand."
+        )
+        result["unknown"] = True
+    elif not reasons:
         result["guess"] = (
             f"Not requested in Seerr, not on any of {app_name}'s import lists, and "
             f"not added by Curatarr, so most likely added in {app_name} by hand "
@@ -118,8 +128,10 @@ def short(info) -> str | None:
     if info["reasons"]:
         text = info["reasons"][0]["text"]
         return text if len(text) <= 60 else text[:57].rstrip() + "…"
+    if info.get("unknown"):
+        return UNKNOWN
     if info["guess"]:
-        return "Added by hand"
+        return HAND
     return None
 
 

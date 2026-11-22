@@ -47,7 +47,9 @@ class FakeRadarr:
 def radarr(monkeypatch):
     def install(fake):
         monkeypatch.setattr(origin, "client", lambda kind: fake)
-        monkeypatch.setattr(origin, "configured", lambda kind: kind == "radarr")
+        monkeypatch.setattr(
+            origin, "configured", lambda kind: kind in ("radarr", "seerr")
+        )
         return fake
 
     return install
@@ -246,3 +248,14 @@ def test_with_radarr_down_nothing_is_recorded_and_older_titles_say_afterwards(
     assert origin.sweep(now=now) == 1
     kept = db.session.get(MediaIdentity, media.id).origin
     assert kept["short"] == "Added by hand" and kept["on_arrival"] is False
+
+
+def test_without_seerr_it_doesnt_claim_nobody_requested_it(app, radarr, monkeypatch):
+    now = utcnow()
+    media = _film(now - timedelta(days=200))
+    radarr(FakeRadarr({"id": 7, "tmdbId": 949, "added": "2026-01-05T17:21:13Z"}))
+    monkeypatch.setattr(origin, "configured", lambda kind: kind == "radarr")
+    info = origin.describe(media)
+    assert "Not requested in Seerr" not in info["guess"]
+    assert "Seerr isn't connected" in info["guess"]
+    assert origin.short(info) == origin.UNKNOWN

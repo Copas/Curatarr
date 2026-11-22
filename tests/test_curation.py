@@ -127,6 +127,8 @@ def test_a_request_read_late_replaces_added_by_hand(app, monkeypatch):
     film.origin = {"short": "Added by hand", "reasons": []}
     kept = _film("Mine", tmdb=56)
     kept.origin = {"short": "Added by hand", "reasons": []}
+    unknown = _film("Before Seerr", tmdb=57)
+    unknown.origin = {"short": "Requested or added by hand", "reasons": []}
     db.session.commit()
 
     class Seerr:
@@ -138,6 +140,7 @@ def test_a_request_read_late_replaces_added_by_hand(app, monkeypatch):
     curation.sync_requests()
     assert film.origin is None  # recorded again by the next sweep
     assert kept.origin["short"] == "Added by hand"
+    assert unknown.origin is None  # Seerr can answer now
 
 
 # --- Rewatched -----------------------------------------------------------------
