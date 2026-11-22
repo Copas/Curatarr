@@ -26,7 +26,7 @@
   {% if o.added %}<p class="mb-1">Added to {{ o.app }} {{ o.added|when('date') }}.</p>{% endif %}
   {% if o.reasons %}<ul class="mb-1 ps-3">{% for r in o.reasons %}<li>{{ r.text }}{% if r.at %} <span class="text-secondary small">({{ r.at|when('date') }})</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
   {% if o.guess %}<p class="mb-1">{{ o.guess }}</p>{% endif %}
-  {% if o.copy %}<p class="mb-0 mt-2"><strong>This copy</strong> arrived {{ o.copy.arrived|when('date') }}. {{ o.copy.why }}{% if o.copy.source %}<br><span class="small text-secondary text-break">{{ o.copy.source }}</span>{% endif %}</p>{% endif %}
+  {% set c = o.this_copy %}{% if c %}<p class="mb-0 mt-2"><strong>This copy</strong> arrived {{ c.arrived|when('date') }}.{% if c.source %} {{ c.source }}{% endif %}{% if c.why %} {{ c.why }}{% endif %}{% if c.release %}<br><span class="small text-secondary text-break">{{ c.release }}</span>{% endif %}</p>{% endif %}
 </section>
 <section class="card p-3 mb-4" aria-labelledby="title-status-heading">
   <h2 class="h5 mb-2" id="title-status-heading">Cleanup status</h2>

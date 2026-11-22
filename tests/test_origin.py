@@ -103,7 +103,7 @@ def _scanned_long_ago(media):
 def test_a_copy_from_before_curatarr_was_looking_isnt_called_first(app, radarr):
     media = _film(utcnow() - timedelta(days=10), seen=utcnow() - timedelta(days=9))
     radarr(FakeRadarr({"id": 7, "tmdbId": 949}))
-    assert origin.describe(media)["copy"]["why"] == ""
+    assert origin.describe(media)["this_copy"]["why"] == ""
 
 
 def _action(media, kind, reason, at):
@@ -141,10 +141,11 @@ def test_a_film_from_an_import_list_found_by_radarrs_search(app, radarr):
         "On Radarr's import list: Crime Classics"
     ]
     assert found["guess"] is None
-    assert found["copy"]["why"] == "The first copy in the library."
-    assert found["copy"]["source"] == (
-        "Radarr's automatic search found it on Indexer (Heat.1995.1080p.BluRay-GRP)."
+    assert found["this_copy"]["why"] == "The first copy in the library."
+    assert found["this_copy"]["source"] == (
+        "Radarr's automatic search found it on Indexer."
     )
+    assert found["this_copy"]["release"] == "Heat.1995.1080p.BluRay-GRP"
 
 
 def test_a_request_and_a_find_favorites_add_are_named(app, radarr):
@@ -181,7 +182,7 @@ def test_a_copy_curatarr_replaced_says_so(app, radarr):
         now - timedelta(hours=3),
     )
     radarr(FakeRadarr({"id": 7, "tmdbId": 949}, grab=None))
-    copy = origin.describe(media)["copy"]
+    copy = origin.describe(media)["this_copy"]
     assert (
         copy["why"]
         == "Curatarr replaced the copy before it. Replaced Heat: it was cut short."
@@ -195,8 +196,8 @@ def test_an_upgrade_is_a_later_copy_and_radarr_down_leaves_its_parts_out(app, ra
     radarr(FakeRadarr(None, fail=True))
     found = origin.describe(media)
     assert found["added"] is None
-    assert found["copy"]["why"].startswith("It replaced an earlier copy")
-    assert found["copy"]["source"] is None
+    assert found["this_copy"]["why"].startswith("It replaced an earlier copy")
+    assert found["this_copy"]["source"] is None
 
 
 def test_the_title_page_shows_it(app, client, radarr):
@@ -205,6 +206,7 @@ def test_the_title_page_shows_it(app, client, radarr):
     page = client.get(f"/titles/{media.id}").text
     assert "Where it came from</h2>" in page and "Added to Radarr" in page
     assert "most likely added in Radarr by hand" in page
+    assert "<strong>This copy</strong> arrived <local-time>" in page
 
 
 def test_where_a_title_came_from_is_recorded_when_it_arrives(app, client, radarr):

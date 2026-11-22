@@ -40,7 +40,9 @@ UNKNOWN = "Requested or added by hand"  # Seerr not connected: can't tell
 
 
 def describe(media) -> dict:
-    """{"app", "added", "reasons": [{"text", "at"}], "guess", "copy"}."""
+    """{"app", "added", "reasons": [{"text", "at"}], "guess", "this_copy"}.
+
+    Not "copy": in a template, o.copy finds the dict's copy() method."""
     film = media.media_type == "movie"
     app_name = "Radarr" if film else "Sonarr"
     result = {
@@ -48,7 +50,7 @@ def describe(media) -> dict:
         "added": None,
         "reasons": [],
         "guess": None,
-        "copy": None,
+        "this_copy": None,
     }
     arr_item, arr = _arr_item(media, film)
     if arr_item:
@@ -100,7 +102,7 @@ def describe(media) -> dict:
                 {"text": follow.reason_text, "at": _as_datetime(follow.created_at)}
             )
     else:
-        result["copy"] = _copy(media, arr, arr_item)
+        result["this_copy"] = _copy(media, arr, arr_item)
     kept = media.origin or {}
     result["recorded"] = (
         {
@@ -302,7 +304,7 @@ def _copy(media, arr, movie) -> dict | None:
         why = "The first copy in the library."
     else:
         why = ""  # arrived before Curatarr was looking: it can't tell
-    source = None
+    source = release = None
     if arr is not None and movie:
         try:
             grab = arr.current_grab(movie)
@@ -314,14 +316,15 @@ def _copy(media, arr, movie) -> dict | None:
             source = (
                 (said[0].upper() + said[1:] if said else "Downloaded")
                 + (f" on {data['indexer']}" if data.get("indexer") else "")
-                + f" ({grab.get('sourceTitle')})."
+                + "."
             )
+            release = grab.get("sourceTitle")
         elif grab is None:
             source = (
                 "No download in Radarr's history matches this file: it was "
                 "imported by hand, or arrived before that history begins."
             )
-    return {"arrived": arrived, "why": why, "source": source}
+    return {"arrived": arrived, "why": why, "source": source, "release": release}
 
 
 def _first_scan():
