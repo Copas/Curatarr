@@ -788,7 +788,17 @@ def remove_tracks(
 
 # Audio many TVs and streaming sticks (Roku, older smart TVs) can't play, so
 # Jellyfin converts it during playback, which some clients handle badly.
-HARD_AUDIO = {"dts", "truehd", "mlp", "flac", "pcm_s16le", "pcm_s24le", "pcm_bluray"}
+# Opus: Roku players take it as it is in a direct stream and keep cutting out.
+HARD_AUDIO = {
+    "dts",
+    "truehd",
+    "mlp",
+    "flac",
+    "pcm_s16le",
+    "pcm_s24le",
+    "pcm_bluray",
+    "opus",
+}
 EASY_AUDIO = {"ac3", "eac3", "aac"}
 # What web browsers play as it is (AC3, E-AC3 and DTS they can't).
 BROWSER_AUDIO = {"aac", "mp3", "opus", "flac", "vorbis"}

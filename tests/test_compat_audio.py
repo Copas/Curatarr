@@ -363,3 +363,12 @@ def test_an_ignored_hidden_account_isnt_a_browser_viewer(app):
     before = setting(viewers.KEY)["admin"]
     viewers.note(watching)
     assert setting(viewers.KEY)["admin"] == before  # and nothing new
+
+
+def test_opus_counts_as_hard_for_tvs(monkeypatch):
+    # Roku players get Opus sent as it is and the sound keeps cutting out.
+    assert compatible_audio_source(_info(("opus", "eng", True))) == 1
+    monkeypatch.setattr(compat_audio, "tv_enabled", lambda: True)
+    monkeypatch.setattr(compat_audio, "browser_enabled", lambda: False)
+    assert compat_audio._needs({"audioCodec": "Opus"}) == "tv"
+    assert compat_audio._needs({"audioCodec": "AAC"}) is None

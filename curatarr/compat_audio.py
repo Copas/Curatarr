@@ -1,7 +1,7 @@
 """TV-friendly audio: add an AC3 track to files whose audio many TVs can't play.
 
-Roku players, many smart TVs and their soundbars can't decode DTS, TrueHD or
-FLAC, so Jellyfin converts the audio while it plays. Some clients handle that
+Roku players, many smart TVs and their soundbars can't decode DTS, TrueHD,
+FLAC or Opus, so Jellyfin converts the audio while it plays. Some clients handle that
 badly: the Roku app can get stuck restarting the stream at one spot.
 
 When Settings → Enhance → TV-friendly audio is on (off by default), Curatarr
@@ -34,7 +34,7 @@ from .mediafile import compatible_audio_source as source_track
 from .models import ChapterState, Library, MediaIdentity, MediaPart, utcnow
 
 # Radarr's and Sonarr's names for audio Curatarr adds a TV-friendly track beside.
-HARD_CODECS = ("DTS", "TrueHD", "FLAC", "PCM")
+HARD_CODECS = ("DTS", "TrueHD", "FLAC", "PCM", "Opus")
 # And for audio web browsers can't play, given a stereo AAC track beside it.
 BROWSER_HARD_CODECS = ("AC3", "EAC3", "DTS", "TrueHD", "PCM")
 PER_RUN = 2  # each rewrites a whole file

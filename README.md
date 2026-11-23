@@ -95,7 +95,7 @@ Each problem is listed with a button to fix it, and once you trust a kind of fix
 - **Skip "Previously on…" and "Next time on…"** with Jellyfin's own Skip button.
 - **Better skip markers**: Intro Skipper guesses that are plainly wrong are hidden, each one undoable.
 - **The right audio first**: tracks labelled in the wrong language are relabelled, and the real English track becomes the default.
-- **Audio every TV can play**: films and episodes with DTS, TrueHD or FLAC sound get an AC3 copy beside the original, so a Roku or TV plays them directly instead of stumbling over conversion.
+- **Audio every TV can play**: films and episodes with DTS, TrueHD, FLAC or Opus sound get an AC3 copy beside the original, so a Roku or TV plays them directly instead of stumbling over conversion.
 - **Audio for web browsers**: Chrome and Firefox can't play AC3 or DTS, so files browser viewers are about to watch get a stereo AAC track, and the Curatarr plugin points browsers at it. TVs keep their surround track.
 - **The film's own soundtrack first**: when a release makes the director's commentary or the audio description the default track, the film's soundtrack becomes the default instead.
 - **English first**: when a release makes another language the default track and the file also has English, Curatarr listens to confirm it, then makes English the first and default track, with nothing re-encoded, for players that only follow the first.
@@ -194,7 +194,7 @@ Everything Curatarr does, at a glance. **On** means it works as soon as Curatarr
 |---|---|---|
 | [The right copy and track for each device](docs/FEATURES.md#playing-smoothly-on-every-device) | Each player is pointed at the copy and audio track it plays as it is, instead of having Jellyfin convert. | With the plugin |
 | [Audio for web browsers](docs/FEATURES.md#playing-smoothly-on-every-device) | A stereo AAC track beside AC3, E-AC3 and DTS, for the files browser viewers are about to watch. TVs keep their surround. | **On**, with the plugin |
-| [Audio every TV plays](docs/FEATURES.md#playing-smoothly-on-every-device) | An AC3 copy beside DTS, TrueHD or FLAC, so Rokus and TVs don't stumble over conversion. | Off |
+| [Audio every TV plays](docs/FEATURES.md#playing-smoothly-on-every-device) | An AC3 copy beside DTS, TrueHD, FLAC or Opus, so Rokus and TVs don't stumble over conversion. | Off |
 | [Seeking on Roku](docs/FEATURES.md#seeking-on-roku) | Files Roku can't seek in are rebuilt (nothing re-encoded), so skipping ahead doesn't start over. | **On** (asks first) |
 | [Subtitle tracks](docs/FEATURES.md#subtitle-tracks) | Subtitle tracks in languages you don't keep are removed from MKV files (nothing re-encoded), so players can't pick the wrong one. | Off |
 | [Makes room for viewers](docs/FEATURES.md#sharing-the-machine-with-playback) | Measures CPU, GPU and who's watching, and backs off when someone starts a stream. | **On** |
