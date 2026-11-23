@@ -318,6 +318,45 @@ class MediaSegment(db.Model, Timed):
     version = db.Column(db.Integer, nullable=False, default=0, index=True)
 
 
+class PlaybackTry(db.Model, Timed):
+    """One go at playing an episode or film on one device, from Jellyfin's
+    sessions (playback_trouble.py): how far it got and how it was played."""
+
+    __tablename__ = "playback_tries"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    session_id = db.Column(db.String(64), nullable=False)
+    item_id = db.Column(db.String(64), nullable=False, index=True)
+    media_part_id = db.Column(db.String(36), db.ForeignKey("media_parts.id"))
+    user_id = db.Column(db.String(64))
+    device = db.Column(db.String(200))
+    client = db.Column(db.String(200))
+    play_method = db.Column(db.String(40))  # DirectPlay, DirectStream, Transcode
+    video_codec = db.Column(db.String(40))
+    audio_codec = db.Column(db.String(40))
+    transcode_reasons = db.Column(db.JSON)
+    runtime = db.Column(db.Float)  # seconds
+    furthest = db.Column(db.Float, default=0, nullable=False)  # seconds
+    started_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    last_seen_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    ended = db.Column(db.Boolean, default=False, nullable=False)
+
+
+class PlaybackTrouble(db.Model, Timed):
+    """A file that a device kept giving up on early (playback_trouble.py):
+    what was found, and what's been done about it."""
+
+    __tablename__ = "playback_troubles"
+    id = db.Column(db.String(36), primary_key=True, default=uuid)
+    item_id = db.Column(db.String(64), nullable=False)
+    device = db.Column(db.String(200), nullable=False)
+    media_part_id = db.Column(db.String(36), db.ForeignKey("media_parts.id"))
+    found_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    last_try_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    details = db.Column(db.JSON, nullable=False)  # see playback_trouble.find
+    # open: listed; queued: TV-friendly audio will add a track; kept: dismissed
+    state = db.Column(db.String(20), default="open", nullable=False, index=True)
+
+
 class CustomPoster(db.Model, Timed):
     """A picture someone chose for a title (custom_posters.py): its poster or
     another of its pictures (``image_type``, Jellyfin's: Primary, Thumb,

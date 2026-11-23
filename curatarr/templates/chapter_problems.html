@@ -60,6 +60,15 @@
 {% macro audio_what(state) %}plays “{{ state.default_audio.from }}” first; would play “{{ state.default_audio.to }}”{% endmacro %}
 {{ found_files('audio', audio_found, 'Files that play a commentary, an audio description or another language first', 'Fix makes the file\'s own soundtrack, or its English track, the default, and English first: nothing re-encoded.', audio_what) }}
 {{ found_files('seek', seek_found, "Files Roku players can't seek in", 'Seeking starts these over on a Roku. Fix rebuilds the file with its tracks as they are, nothing re-encoded, one or two at a time in the background.', none) }}
+{% if playback_trouble or playback_patterns %}<h2 class="section-title" id="playback-trouble">Playback trouble</h2>
+<p class="text-secondary small">Files a TV or player was given up on a few minutes in, more than once, with nothing since getting further. When the audio is the likely cause and TV-friendly audio is on, the file gets a TV-friendly track first in line. Keep removes one from the list: someone may simply have decided against it.</p>
+{% for p in playback_patterns %}<div class="alert alert-warning small">{{ p.files }} files with {{ p.what }} had trouble on {{ p.client }}: that format may be one {{ p.client }} can't play well.</div>{% endfor %}
+{% for row in playback_trouble %}<div class="card p-3 mb-2"><div class="d-flex flex-wrap justify-content-between gap-2 align-items-center">
+  <div>{% if row.part_id %}<a href="{{ url_for('main.chapter_part', part_id=row.part_id) }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}{% if row.media %}{{ jellyfin_link_for(row.media.id) }}{% endif %}{% if row.state == 'queued' %} <span class="chip">TV-friendly track coming</span>{% endif %}
+    <div class="small text-secondary">{{ row.device }}{% if row.client %} ({{ row.client }}){% endif %} · tried {{ row.tries }} times, furthest {{ (row.furthest // 60)|int }}:{{ '%02d'|format((row.furthest % 60)|int) }} · {{ row.method }}{% if row.video or row.audio %} · {{ (row.video or '?')|upper }} video, {{ (row.audio or '?')|upper }} audio{% endif %} · last {{ row.last_try_at|when }}</div>
+    <div class="small">Likely: {{ row.words }}.{% if row.not_fixed %} A TV-friendly track couldn't be added.{% endif %}</div></div>
+  <form method="post" action="{{ url_for('main.playback_trouble_keep', trouble_id=row.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm btn-outline-secondary">Keep</button></form>
+</div></div>{% endfor %}{% endif %}
 <h2 class="section-title">Files</h2>
 {% if not enabled %}<div class="alert alert-secondary">This check is off. Turn on “Check files for problems” in <a href="{{ url_for('main.chapter_settings') }}">Settings → Enhance</a> to use it.</div>{% endif %}
 {% for state in found.to_act %}

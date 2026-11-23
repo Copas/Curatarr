@@ -75,6 +75,7 @@ def worker_cycle():
     _sync_leaving_collection()
     _finish_jellyfin_plugin()
     _rescan_segments()
+    _playback_trouble()
     _leave_after_watched()
     _dispatch_chapters()
     now = utcnow()
@@ -160,6 +161,18 @@ def _write_protected_paths():
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Writing the protected paths failed")
+
+
+def _playback_trouble():
+    """Note what's playing, and files a device keeps giving up on."""
+    try:
+        from . import playback_trouble
+        from .enrichment import playback_sessions
+
+        playback_trouble.sweep(playback_sessions())
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Looking for playback trouble failed")
 
 
 def _rescan_segments():

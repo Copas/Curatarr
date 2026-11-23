@@ -804,14 +804,21 @@ EASY_AUDIO = {"ac3", "eac3", "aac"}
 BROWSER_AUDIO = {"aac", "mp3", "opus", "flac", "vorbis"}
 
 
-def compatible_audio_source(info: MediaInfo) -> int | None:
+def compatible_audio_source(info: MediaInfo, any_not_easy=False) -> int | None:
     """The track to add a TV-friendly copy of: the default audio track when
-    it's hard to play and no easy track in its language exists."""
+    it's hard to play and no easy track in its language exists.
+    ``any_not_easy``: anything but AC3, E-AC3 and AAC counts as hard (a file
+    a TV was seen giving up on, playback_trouble.py)."""
     audio = [s for s in info.streams if s.get("codec_type") == "audio"]
     if not audio:
         return None
     main = next((s for s in audio if s.get("default")), audio[0])
-    if main.get("codec_name") not in HARD_AUDIO:
+    hard = (
+        main.get("codec_name") not in EASY_AUDIO
+        if any_not_easy
+        else main.get("codec_name") in HARD_AUDIO
+    )
+    if not hard:
         return None
     language = main.get("language")
     if any(

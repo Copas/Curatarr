@@ -768,11 +768,13 @@ def problems_count() -> int:
         filecheck_jobs,
         misfiled,
         missing_keep,
+        playback_trouble,
         wrong_version,
     )
 
     return (
         filecheck_jobs.counts()["problems_to_act"]
+        + playback_trouble.count()
         + failed_downloads.count()
         + missing_keep.count()
         + wrong_version.count()

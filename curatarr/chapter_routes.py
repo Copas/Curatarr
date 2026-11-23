@@ -794,6 +794,7 @@ def chapter_problems():
         filecheck_jobs,
         misfiled,
         missing_keep,
+        playback_trouble,
         seek_repair,
         wrong_version,
     )
@@ -805,6 +806,8 @@ def chapter_problems():
         download_errors=download_errors,
         audio_found=default_audio.found_rows(),
         seek_found=seek_repair.found_rows(),
+        playback_trouble=playback_trouble.rows(),
+        playback_patterns=playback_trouble.patterns(),
         misfiled=[r for r in misfiled.rows() if r["plan"] != "wait"],
         misfiled_waiting=[r for r in misfiled.rows() if r["plan"] == "wait"],
         misfiled_auto=autofix.automatic("misfiled"),
@@ -815,6 +818,20 @@ def chapter_problems():
         describe=filecheck_jobs.describe,
         file_label=file_label,
     )
+
+
+@bp.post("/chapters/problems/playback/<trouble_id>/keep")
+def playback_trouble_keep(trouble_id):
+    """Take a file off the playback trouble list."""
+    from . import playback_trouble
+
+    try:
+        playback_trouble.keep(trouble_id)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    else:
+        flash("Taken off the list", "success")
+    return redirect(url_for("main.chapter_problems") + "#playback-trouble")
 
 
 @bp.post("/chapters/problems/download/<service>/<int:queue_id>/retry")

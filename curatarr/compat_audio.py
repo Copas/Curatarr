@@ -152,7 +152,11 @@ def hard_files() -> tuple[set, set]:
 
 
 def _due(radarr_ids, episode_file_ids):
-    """Their files not yet looked at, or replaced since."""
+    """Their files not yet looked at, or replaced since; and files a TV was
+    seen giving up on (playback_trouble.py)."""
+    from . import playback_trouble
+
+    troubled = playback_trouble.queued_part_ids()
     return (
         db.session.query(MediaPart)
         .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)
@@ -177,16 +181,20 @@ def _due(radarr_ids, episode_file_ids):
                     ChapterState.compat_audio_size.is_(None),
                     ChapterState.default_audio["fixed"].as_boolean().is_(True),
                 ),
+                MediaPart.id.in_(troubled or {""}),
             ),
             or_(
                 ChapterState.id.is_(None),
                 ChapterState.compat_audio_size.is_(None),
                 ChapterState.compat_audio_size != MediaPart.size_bytes,
+                # Looked at before, but a TV has since been seen giving up on it.
+                MediaPart.id.in_(troubled or {""}),
             ),
         )
-        # What people watch next first; then films, where DTS and TrueHD
-        # mostly are.
+        # Files a TV gave up on first, then what people watch next; then
+        # films, where DTS and TrueHD mostly are.
         .order_by(
+            MediaPart.id.in_(troubled or {""}).desc(),
             _watching_rank(),
             MediaPart.kind.desc(),
         )
@@ -254,6 +262,9 @@ def sweep(limit=PER_RUN) -> int:
         films, episodes = hard_files()
     except IntegrationError:
         return 0
+    from . import playback_trouble
+
+    troubled = playback_trouble.queued_part_ids()
     due = _due(films, episodes)
     _remember_remaining(due)
     e = _enrichment()
@@ -272,7 +283,7 @@ def sweep(limit=PER_RUN) -> int:
         db.session.commit()  # never hold the write lock while a film is copied
         state_id, part_id = state.id, part.id
         had_thumbnails = thumbnails.has_thumbnails(part, part.media)
-        result = _add(state, part, path)
+        result = _add(state, part, path, troubled=part.id in troubled)
         if result.get("added"):
             thumbnails.note_rebuilt(part, part.media, had_thumbnails)
         synced = (state.chapter_file_size, state.chapter_file_mtime)
@@ -287,6 +298,9 @@ def sweep(limit=PER_RUN) -> int:
             if result.get("added"):
                 state.chapter_file_size, state.chapter_file_mtime = synced
             _record(state, part, result)
+        if part.id in troubled:
+            playback_trouble.done(part.id, bool(result.get("added")))
+            db.session.commit()
         if result.get("added"):
             _announce(state, part, path, result)
             done += 1
@@ -367,12 +381,12 @@ def _playing(part) -> bool:
     return False
 
 
-def _add(state, part, path) -> dict:
+def _add(state, part, path, troubled=False) -> dict:
     try:
         info = probe(path)
     except MediaToolError as exc:
         return {"error": str(exc)}
-    tv = source_track(info) if tv_enabled() else None
+    tv = source_track(info, any_not_easy=troubled) if tv_enabled() else None
     browser = browser_audio_source(info) if browser_enabled() else None
     if tv is None and browser is None:
         return {"needed": False, "size": info.size}
