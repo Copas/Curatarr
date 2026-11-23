@@ -663,6 +663,16 @@ class JellyfinClient(Client):
             json={"Updates": [{"Path": p, "UpdateType": "Deleted"} for p in paths]},
         )
 
+    def run_task(self, key) -> bool:
+        """Start one of Jellyfin's scheduled tasks now, by its key
+        ("TaskExtractMediaSegments"); False when there's no such task."""
+        for task in self.request("GET", "/ScheduledTasks") or []:
+            if task.get("Key") == key:
+                if task.get("State") != "Running":
+                    self.request("POST", f"/ScheduledTasks/Running/{task['Id']}")
+                return True
+        return False
+
     def refresh_item(self, item_id):
         """Re-read one item's file so Jellyfin picks up changed chapters.
 

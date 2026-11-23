@@ -74,6 +74,7 @@ def worker_cycle():
     reconcile_artwork()
     _sync_leaving_collection()
     _finish_jellyfin_plugin()
+    _rescan_segments()
     _leave_after_watched()
     _dispatch_chapters()
     now = utcnow()
@@ -159,6 +160,17 @@ def _write_protected_paths():
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Writing the protected paths failed")
+
+
+def _rescan_segments():
+    """Jellyfin's segment scan, soon after files were rewritten."""
+    try:
+        from . import segments
+
+        segments.rescan_due()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Starting Jellyfin's segment scan failed")
 
 
 def _finish_jellyfin_plugin():

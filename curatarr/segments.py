@@ -29,6 +29,13 @@ IMPORT_KEY = "segments_import"  # {"after": last part id read, "finished_at", "r
 IMPORT_RULE = 2
 IMPORT_BATCH = 100
 IMPORT_SECONDS = 20
+# A refresh after Curatarr rewrites a file makes Jellyfin drop that item's
+# segments, and it asks the providers again only in its Media Segment Scan
+# (every 12 hours). So the scan runs soon after, once for a run of rewrites.
+RESCAN_KEY = "segments_rescan"  # {"wanted_at", "ran_at"}
+RESCAN_TASK = "TaskExtractMediaSegments"
+RESCAN_SETTLE = 120  # seconds without another rewrite before scanning
+RESCAN_GAP = 600  # at most one scan this often
 # Jellyfin's names for the segment types (MediaSegmentType).
 JELLYFIN_TYPES = {
     "Introduction": "Intro",
@@ -234,3 +241,36 @@ def import_sweep(now=None) -> int:
     set_setting(IMPORT_KEY, state)
     db.session.commit()
     return read
+
+
+def rescan_soon(now=None):
+    """A file was rewritten and Jellyfin refreshed: scan segments shortly."""
+    from .services import set_setting, setting
+
+    state = dict(setting(RESCAN_KEY, {}) or {})
+    state["wanted_at"] = (now or utcnow()).isoformat()
+    set_setting(RESCAN_KEY, state)
+
+
+def rescan_due(now=None) -> bool:
+    """Run Jellyfin's Media Segment Scan when a rewrite asked for one and
+    things have settled (worker cycle); True when it was started."""
+    from .services import _as_datetime, client, set_setting, setting
+
+    now = now or utcnow()
+    state = dict(setting(RESCAN_KEY, {}) or {})
+    wanted = _as_datetime(state.get("wanted_at"))
+    ran = _as_datetime(state.get("ran_at"))
+    if wanted is None or (ran and ran >= wanted):
+        return False
+    if (now - wanted).total_seconds() < RESCAN_SETTLE:
+        return False
+    if ran and (now - ran).total_seconds() < RESCAN_GAP:
+        return False
+    try:
+        client("jellyfin").run_task(RESCAN_TASK)
+    except IntegrationError:
+        return False  # tried again next cycle
+    state["ran_at"] = now.isoformat()
+    set_setting(RESCAN_KEY, state)
+    return True

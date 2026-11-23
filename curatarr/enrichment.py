@@ -1583,6 +1583,9 @@ def _refresh_jellyfin(part, media):
         client("jellyfin").refresh_item(item_id)
     except IntegrationError as exc:
         return f"Jellyfin refresh failed: {exc}"
+    from . import segments
+
+    segments.rescan_soon()  # the refresh drops the item's skip segments
     return None
 
 

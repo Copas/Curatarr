@@ -164,3 +164,30 @@ def test_a_new_import_rule_reads_everything_again(app, monkeypatch):
     monkeypatch.setattr("curatarr.services.client", lambda _kind: object())
     segments.import_sweep()
     assert setting(segments.IMPORT_KEY)["rule"] == segments.IMPORT_RULE
+
+
+def test_a_rewrite_runs_jellyfins_segment_scan_once_things_settle(app, monkeypatch):
+    from datetime import timedelta
+
+    from curatarr.models import utcnow
+
+    started = []
+
+    class Jellyfin:
+        def run_task(self, key):
+            started.append(key)
+            return True
+
+    monkeypatch.setattr("curatarr.services.client", lambda kind: Jellyfin())
+    now = utcnow()
+    assert not segments.rescan_due(now)  # nothing asked for one
+    segments.rescan_soon(now)
+    segments.rescan_soon(now + timedelta(seconds=60))  # a run of rewrites
+    assert not segments.rescan_due(now + timedelta(seconds=90))  # still settling
+    assert segments.rescan_due(now + timedelta(seconds=200))
+    assert started == ["TaskExtractMediaSegments"]
+    assert not segments.rescan_due(now + timedelta(seconds=400))  # done
+    segments.rescan_soon(now + timedelta(seconds=300))
+    assert not segments.rescan_due(now + timedelta(seconds=500))  # too soon again
+    assert segments.rescan_due(now + timedelta(seconds=900))
+    assert len(started) == 2
