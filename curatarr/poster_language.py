@@ -24,7 +24,7 @@ from io import BytesIO
 import requests
 from PIL import Image
 
-from . import db
+from . import db, ignored
 from .integrations import IntegrationError
 from .models import MediaIdentity, PosterSnapshot, utcnow
 
@@ -160,7 +160,7 @@ def _titles(jellyfin) -> dict[str, dict]:
     while True:
         page = jellyfin.titles_with_posters(start=start) or {}
         items = page.get("Items") or []
-        for item in items:
+        for item in ignored.drop(items, jellyfin):
             titles[_norm(item["Id"])] = {
                 "name": item.get("Name") or "",
                 "tag": (item.get("ImageTags") or {}).get("Primary"),

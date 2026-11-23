@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from flask import current_app
 
-from . import db
+from . import db, ignored
 from .integrations import IntegrationError
 from .models import Library, MediaIdentity, MediaPart, utcnow
 from .services import _as_datetime, account_names, client, episode_label
@@ -48,7 +48,11 @@ def watched(now=None, shown=SHOWN) -> list[dict]:
         return cache["people"]
     try:
         jellyfin = client("jellyfin")
-        people = _people(jellyfin, jellyfin.activity_log(now - WINDOW), shown)
+        people = _people(
+            jellyfin,
+            ignored.drop(jellyfin.activity_log(now - WINDOW), jellyfin, key="ItemId"),
+            shown,
+        )
     except (IntegrationError, AttributeError, TypeError, ValueError, KeyError):
         return cache.get("people", [])
     cache.update(at=now, shown=shown, people=people)

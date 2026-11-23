@@ -22,7 +22,7 @@ import re
 from datetime import timedelta
 from pathlib import PurePath
 
-from . import db
+from . import db, ignored
 from .integrations import IntegrationError
 from .models import ChapterState, MediaIdentity, MediaPart, utcnow
 
@@ -179,7 +179,9 @@ def sweep(now=None) -> int:
         stopped = [
             (user, item)
             for user in users
-            for item in jellyfin.resume(user["Id"], fields="Path")
+            for item in ignored.drop(
+                jellyfin.resume(user["Id"], fields="Path"), jellyfin
+            )
         ]
     except IntegrationError:
         return 0

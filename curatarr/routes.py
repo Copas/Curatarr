@@ -49,6 +49,7 @@ from .services import (
     account_names,
     action_context,
     api_key_valid,
+    audit,
     dry_run_by_library,
     hidden_accounts,
     history_actions,
@@ -1259,7 +1260,36 @@ def setup():
         "setup.html",
         steps=setup_progress(),
         destructive=dry_run_by_library()["deleting"],
+        libraries=db.session.query(Library).order_by(Library.name).all(),
     )
+
+
+@bp.post("/libraries/<library_id>/ignore")
+def library_ignore(library_id):
+    """Ignore a Jellyfin library entirely, or take it back (Setup)."""
+    from . import ignored
+
+    library = db.session.get(Library, library_id)
+    if not library:
+        abort(404)
+    if library.managed and library.enabled:
+        abort(400)  # a Sonarr or Radarr library's titles are Curatarr's to keep
+    library.enabled = request.form.get("ignore") != "1"
+    db.session.commit()
+    ignored.forget()
+    audit(
+        "library_ignored" if not library.enabled else "library_included",
+        None,
+        f"{library.name}: "
+        + ("ignored by Curatarr." if not library.enabled else "included again."),
+        f"library-ignore:{library.id}:{utcnow().isoformat()}",
+    )
+    flash(
+        f"{library.name} is "
+        + ("ignored." if not library.enabled else "included again."),
+        "success",
+    )
+    return redirect(url_for("main.setup") + "#libraries")
 
 
 @bp.post("/demo/simulate")

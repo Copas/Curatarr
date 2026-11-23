@@ -12,6 +12,20 @@
   </li>
 {% endfor %}
 </ol>
+<div class="card p-3 mb-4" id="libraries">
+  <h2 class="h5">Libraries</h2>
+  <p class="text-secondary">Libraries Curatarr doesn't manage (home videos, a mixed or private library) can be ignored. An ignored library is left alone entirely: not read in, cleaned up or enhanced, and left out of Recently watched, Finished at the credits, playback trouble and poster languages.</p>
+  <ul class="list-group">
+  {% for library in libraries %}
+    <li class="list-group-item d-flex justify-content-between align-items-center gap-2">
+      <span>{{ library.name }} <span class="text-secondary small">{{ {'tv': 'TV', 'movies': 'Movies'}.get(library.media_type, 'Other') }}</span>{% if not library.enabled %} <span class="badge text-bg-secondary">Ignored</span>{% endif %}</span>
+      {% if not library.managed or not library.enabled %}<form method="post" action="{{ url_for('main.library_ignore', library_id=library.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="ignore" value="{{ '1' if library.enabled else '0' }}"><button class="btn btn-sm btn-outline-secondary">{{ 'Ignore' if library.enabled else 'Include' }}</button></form>{% else %}<span class="text-secondary small">Managed through {{ 'Sonarr' if library.media_type == 'tv' else 'Radarr' }}</span>{% endif %}
+    </li>
+  {% else %}
+    <li class="list-group-item text-secondary">No libraries yet: they appear after the first reconcile.</li>
+  {% endfor %}
+  </ul>
+</div>
 <div class="card p-3">
   <h2 class="h5">Dry run</h2>
   {% if destructive %}<p class="mb-0 text-warning">Deletion is enabled for: {{ destructive|join(', ') }}. Every other library stays in dry run.</p>

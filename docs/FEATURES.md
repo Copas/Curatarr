@@ -3,6 +3,7 @@
 - [Signing in and who sees what](#signing-in-and-who-sees-what)
 - [Keeping the right things on disk](#keeping-the-right-things-on-disk): retention and acquisition
 - [Policies](#policies)
+- [Ignored libraries](#ignored-libraries)
 - [Chapters and subtitles](#chapters-and-subtitles)
 - [Recaps, previews and skip markers](#recaps-previews-and-skip-markers)
 - [English dubs](#english-dubs)
@@ -156,6 +157,10 @@ Policy resolves **title override → library → global → built-in default**. 
 - Disk-pressure rules need an explicit path **as Sonarr or Radarr sees it**. When that path can't be matched to a reported volume, Curatarr doesn't select media on disk pressure alone.
 
 ---
+
+## Ignored libraries
+
+A Jellyfin library Curatarr doesn't manage (one that isn't a Sonarr or Radarr library: home videos, a mixed or private library) can be ignored, on **Setup → Libraries**. Curatarr then leaves it alone entirely: it isn't read in, its films get no skip-marker clean-up, and what's played from it is left out of Recently watched, Finished at the credits and playback trouble, and its titles out of poster languages. Which items are in it is asked of Jellyfin at most every half hour. **Include** takes it back. History records each switch.
 
 ## Chapters and subtitles
 

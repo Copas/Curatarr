@@ -24,7 +24,7 @@ from datetime import timedelta
 from flask import current_app
 from sqlalchemy import or_
 
-from . import db
+from . import db, ignored
 from .models import (
     MediaIdentity,
     MediaPart,
@@ -75,11 +75,14 @@ def record(sessions, now=None) -> int:
     in the sessions; returns how many are playing."""
     now = now or utcnow()
     seen = set()
+    skip = ignored.item_ids() if sessions else frozenset()
     for session in sessions or []:
         item = session.get("NowPlayingItem") or {}
         if item.get("Type") not in ("Episode", "Movie"):
             continue
         item_id = bare(item.get("Id"))
+        if item_id in skip:
+            continue  # in a library Curatarr leaves alone
         session_id = str(session.get("Id") or "")
         if not item_id or not session_id:
             continue
