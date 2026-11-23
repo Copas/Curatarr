@@ -4,7 +4,7 @@ import pytest
 from conftest import database_free
 from test_enrichment import _movie
 
-from curatarr import better_copy, db, dub_jobs, dubs, enrichment
+from curatarr import better_copy, db, dub_gaps, dub_jobs, dubs, enrichment
 from curatarr.integrations import RadarrClient
 from curatarr.mediafile import MediaInfo
 from curatarr.models import ChapterState
@@ -147,6 +147,14 @@ def dub_env(app, monkeypatch):
     monkeypatch.setattr(enrichment, "_refresh_jellyfin", lambda part, media: None)
     monkeypatch.setattr(enrichment, "_language_model", lambda config, opts: None)
     files["heard"] = {}
+    files["gaps"] = ([], [])
+    files["scanned"] = []
+
+    def scan(info, track, original, device, model, make_room=None):
+        files["scanned"].append((track, original))
+        return files["gaps"]
+
+    monkeypatch.setattr(dub_gaps, "scan", scan)
     monkeypatch.setattr(
         dubs,
         "listen",
@@ -161,17 +169,17 @@ def test_films_made_in_english_are_only_marked_checked(dub_env):
     radarr, files = dub_env
     radarr.original = "English"
     _library, _media, _part = _movie(PATH)
-    assert dub_jobs.sweep() == {"english": 1, "foreign": 0}
+    assert dub_jobs.sweep() == {"english": 1, "foreign": 0, "gaps": 0}
     state = db.session.query(ChapterState).one()
     assert state.dub_result == {"original": "en"} and not files["edits"]
-    assert dub_jobs.sweep() == {"english": 0, "foreign": 0}  # not again
+    assert dub_jobs.sweep() == {"english": 0, "foreign": 0, "gaps": 0}  # not again
 
 
 def test_a_fake_english_dub_is_relabelled_listed_and_replaced(app, client, dub_env):
     radarr, files = dub_env
     files["heard"] = {1: "da"}
     _library, _media, _part = _movie(PATH)
-    assert dub_jobs.sweep() == {"english": 0, "foreign": 1}
+    assert dub_jobs.sweep() == {"english": 0, "foreign": 1, "gaps": 0}
     assert files["edits"] == [("label", 1, "dan")]
     state = db.session.query(ChapterState).one()
     assert state.dub_result["verdict"] == "no_english"
@@ -255,7 +263,7 @@ def test_listening_waits_while_playback_has_priority(dub_env):
     files["heard"] = {1: "da"}
     _movie(PATH)
     set_setting("chapters_paused_since", "2026-01-01T00:00:00+00:00")
-    assert dub_jobs.sweep() == {"english": 0, "foreign": 0}
+    assert dub_jobs.sweep() == {"english": 0, "foreign": 0, "gaps": 0}
     set_setting("chapters_paused_since", None)
     assert dub_jobs.sweep()["foreign"] == 1
 
@@ -341,7 +349,7 @@ def test_english_films_with_only_english_audio_are_not_listened_to(
     radarr.original, radarr.audio = "English", "eng"
     monkeypatch.setattr(dubs, "listen", lambda *a, **k: pytest.fail("listened"))
     _movie(PATH)
-    assert dub_jobs.sweep() == {"english": 1, "foreign": 0}
+    assert dub_jobs.sweep() == {"english": 1, "foreign": 0, "gaps": 0}
 
 
 def test_remove_tracks_rewrites_a_real_file(tmp_path):
@@ -564,3 +572,88 @@ def test_a_film_someone_is_watching_is_checked_first(dub_env, monkeypatch):
     assert dub_jobs._due().first().id == second_part.id
     monkeypatch.setattr(up_next, "part_ids", lambda users=None: [])
     assert {p.id for p in dub_jobs._due().all()} == {first_part.id, second_part.id}
+
+
+def test_gaps_are_runs_of_the_films_own_language():
+    windows = [
+        (0, "en", 0.9),
+        (2160, "fr", 0.9),
+        (2190, "fr", 0.8),
+        (2250, "fr", 0.95),  # one quiet piece between: still the same gap
+        (2400, "en", 0.9),
+        (4000, "fr", 0.9),  # a lone line of French isn't a gap
+        (5000, "fr", 0.4),
+        (5030, "fr", 0.3),  # too unsure
+    ]
+    assert dub_gaps.gaps(windows, "fr") == [(2160, 2280)]
+
+
+def test_srt_numbers_and_times_the_cues():
+    text = dub_gaps.srt(
+        [
+            {"start": 2161.5, "end": 2164.25, "text": " Kneel. "},
+            {"start": 2165, "end": 2166, "text": "  "},
+            {"start": 3725.0, "end": 3727.0, "text": "Yes."},
+        ]
+    )
+    assert text == (
+        "1\n00:36:01,500 --> 00:36:04,250\nKneel.\n\n"
+        "2\n01:02:05,000 --> 01:02:07,000\nYes.\n"
+    )
+
+
+def test_a_dub_falling_back_to_the_original_gets_forced_subtitles(
+    dub_env, tmp_path, monkeypatch
+):
+    radarr, files = dub_env
+    radarr.original = "French"
+    files["streams"] = _streams(("eng", True), ("fre", False))
+    files["heard"] = {1: "en", 2: "fr"}
+    files["gaps"] = ([(2160, 2400)], [{"start": 2161, "end": 2164, "text": "Kneel."}])
+    film = tmp_path / "Film (1975).mkv"
+    film.write_bytes(b"")
+    monkeypatch.setattr(enrichment, "local_path", lambda p, mappings=None: str(film))
+    _library, _media, _part = _movie(PATH)
+    dub_jobs.sweep()
+    assert files["scanned"] == [(1, "fr")]
+    sub = tmp_path / "Film (1975).en.forced.srt"
+    assert "Kneel." in sub.read_text()
+    state = db.session.query(ChapterState).one()
+    assert state.dub_result["gaps"] == {
+        "found": [[2160, 2400]],
+        "subtitle": sub.name,
+    }
+
+
+def test_someone_elses_forced_subtitles_are_left_alone(dub_env, tmp_path, monkeypatch):
+    radarr, files = dub_env
+    radarr.original = "French"
+    files["streams"] = _streams(("eng", True))
+    files["heard"] = {1: "en"}
+    files["gaps"] = ([(2160, 2400)], [{"start": 2161, "end": 2164, "text": "Kneel."}])
+    film = tmp_path / "Film.mkv"
+    film.write_bytes(b"")
+    sub = tmp_path / "Film.en.forced.srt"
+    sub.write_text("theirs")
+    monkeypatch.setattr(enrichment, "local_path", lambda p, mappings=None: str(film))
+    _movie(PATH)
+    dub_jobs.sweep()
+    assert sub.read_text() == "theirs"
+    assert db.session.query(ChapterState).one().dub_result["gaps"]["kept_theirs"]
+
+
+def test_films_checked_before_are_listened_to_for_gaps(dub_env):
+    radarr, files = dub_env
+    radarr.original = "French"
+    files["streams"] = _streams(("eng", True))
+    files["heard"] = {1: "en"}
+    _library, _media, _part = _movie(PATH)
+    dub_jobs.sweep()
+    state = db.session.query(ChapterState).one()
+    state.dub_result = {k: v for k, v in state.dub_result.items() if k != "gaps"}
+    db.session.commit()
+    files["scanned"].clear()
+    assert dub_jobs.sweep()["gaps"] == 1
+    assert files["scanned"] == [(1, "fr")]
+    assert "gaps" in db.session.query(ChapterState).one().dub_result
+    assert dub_jobs.sweep()["gaps"] == 0  # once

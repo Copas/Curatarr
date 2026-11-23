@@ -15,7 +15,7 @@ from datetime import timedelta
 from flask import current_app
 from sqlalchemy import case, or_
 
-from . import db, dubs, throttle
+from . import db, dub_gaps, dubs, throttle
 from .chapters import GENERATED_STATUSES, ChapterConfigError
 from .integrations import IntegrationError
 from .mediafile import (
@@ -31,6 +31,7 @@ from .services import audit, client, setting
 
 FOREIGN_PER_RUN = 3  # films listened to per run; each takes ~30 s of GPU
 ENGLISH_PER_RUN = 500  # films made in English, only marked as checked
+GAPS_PER_RUN = 2  # films checked before gap-finding, listened to for gaps
 
 _thread = None
 _lock = threading.Lock()
@@ -119,7 +120,7 @@ def start(app=None):
     with _lock:
         if _thread and _thread.is_alive():
             return False
-        if not _due().first():
+        if not _due().first() and not _gaps_due(1):
             return False
         app = app or current_app._get_current_object()
         _thread = threading.Thread(
@@ -174,6 +175,7 @@ def sweep(foreign_limit=FOREIGN_PER_RUN) -> dict:
     parts = _due().limit(ENGLISH_PER_RUN + foreign_limit).all()
     counts = {"english": 0, "foreign": 0}
     if not parts:
+        counts["gaps"] = _gaps_backlog(GAPS_PER_RUN)
         return counts
     films = _films()
     e = _enrichment()
@@ -211,7 +213,143 @@ def sweep(foreign_limit=FOREIGN_PER_RUN) -> dict:
             state.dub_result = {"original": original, "error": str(exc)[:300]}
             db.session.commit()
         counts["foreign"] += 1
+    counts["gaps"] = _gaps_backlog(GAPS_PER_RUN)
     return counts
+
+
+def _gaps_due(limit) -> list:
+    """Films checked before gaps in the dub were looked for: an English
+    track was found, the film is in another language, and it's unchanged."""
+    found = []
+    rows = (
+        db.session.query(ChapterState, MediaPart)
+        .join(MediaPart, ChapterState.media_part_id == MediaPart.id)
+        .filter(
+            MediaPart.kind == "movie_file",
+            MediaPart.has_file.is_(True),
+            ChapterState.dub_checked_at.isnot(None),
+            ChapterState.dub_file_size == MediaPart.size_bytes,
+        )
+        .order_by(_up_next_rank(MediaPart.id))
+    )
+    for state, part in rows:
+        result = state.dub_result or {}
+        if (
+            result.get("verdict") == "english"
+            and "gaps" not in result
+            and _gap_language(result.get("original"))
+        ):
+            found.append((state, part))
+            if len(found) >= limit:
+                break
+    return found
+
+
+def _gaps_backlog(limit) -> int:
+    done = 0
+    if not limit:
+        return done
+    for state, part in _gaps_due(limit):
+        if setting("chapters_paused_since") or throttle.stopping():
+            break
+        e = _enrichment()
+        path = e.local_path(part.file_path)
+        if not path or not e.file_exists(path):
+            continue
+        result = dict(state.dub_result)
+        try:
+            info = probe(path)
+            fill_gaps(state, part, path, info, result)
+        except (MediaToolError, ValueError, OSError) as exc:
+            db.session.rollback()
+            result["gaps"] = {"error": str(exc)[:300]}
+        state.dub_result = _jsonable(result)
+        db.session.commit()
+        done += 1
+    return done
+
+
+def _gap_language(original) -> str | None:
+    """The film's language as Whisper names it, when gaps can be looked for."""
+    if original and original != "en" and original in dubs.LANGUAGES:
+        return original
+    return None
+
+
+def _english_default(result, info) -> int | None:
+    """The track players start with, when it's a real English one."""
+    default = next(
+        (a[1] for a in reversed(result.get("applied") or []) if a[0] == "default"),
+        None,
+    )
+    if default is None:
+        default = next(
+            (
+                s["index"]
+                for s in info.streams
+                if s.get("codec_type") == "audio" and s.get("default")
+            ),
+            None,
+        )
+    track = next((t for t in result.get("tracks") or [] if t["index"] == default), None)
+    if track and track.get("heard") == "en" and not track.get("commentary"):
+        return default
+    return None
+
+
+def fill_gaps(state, part, path, info, result) -> None:
+    """Look for stretches of the English default track left in the film's
+    own language, and write forced English subtitles for them (dub_gaps.py).
+    Sets ``result["gaps"]``."""
+    e = _enrichment()
+    original = _gap_language(result.get("original"))
+    track = _english_default(result, info)
+    previous = ((state.dub_result or {}).get("gaps") or {}).get("subtitle")
+    sub = dub_gaps.subtitle_path(path)
+    if original is None or track is None:
+        result["gaps"] = {"skipped": True}
+        return
+    config, opts = e.config_for(part.media.library_id), e.options()
+    model = e._language_model(config, opts)
+    found, segments = dub_gaps.scan(
+        info,
+        track,
+        original,
+        opts["whisper_device"],
+        config["semantic"]["model"],
+        make_room=getattr(model, "unload", None),
+    )
+    ours = previous == sub.name
+    gaps = {"found": [list(g) for g in found]}
+    if found and segments:
+        if sub.exists() and not ours:
+            gaps["kept_theirs"] = sub.name
+        else:
+            sub.write_text(dub_gaps.srt(segments), encoding="utf-8")
+            gaps["subtitle"] = sub.name
+            spans = ", ".join(f"{_clock(a)}–{_clock(b)}" for a, b in found)
+            audit(
+                "dub_gaps_subtitled",
+                part.media.id,
+                f"{e.file_label(state)}: the English dub falls back to "
+                f"{dubs.name(original)} at {spans}; added English subtitles for it.",
+                f"dub-gaps:{state.id}:{utcnow().isoformat()}",
+                payload={"file": path, "subtitle": str(sub), "gaps": gaps["found"]},
+            )
+            e._refresh_jellyfin(part, part.media)
+    elif ours and sub.exists():
+        sub.unlink()  # the file was replaced and the new one has no gaps
+    result["gaps"] = gaps
+
+
+def _clock(seconds) -> str:
+    seconds = int(seconds)
+    hours, rest = divmod(seconds, 3600)
+    return (
+        f"{hours}:{rest // 60:02}:{rest % 60:02}"
+        if hours
+        else f"{rest // 60}:{rest % 60:02}"
+    )
 
 
 def _audio_tracks(info):
@@ -260,6 +398,11 @@ def check(state, part, original) -> dict:
         if removed:
             result["removed"] = removed
             state.dub_file_size = removed["size"]  # what Radarr will now report
+    if result["verdict"] == "english":
+        try:
+            fill_gaps(state, part, path, probe(path), result)
+        except (MediaToolError, ValueError, OSError) as exc:
+            result["gaps"] = {"error": str(exc)[:300]}
     state.dub_result = _jsonable(result)
     db.session.commit()
     if result.get("removed"):

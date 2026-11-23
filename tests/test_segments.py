@@ -191,3 +191,25 @@ def test_a_rewrite_runs_jellyfins_segment_scan_once_things_settle(app, monkeypat
     assert not segments.rescan_due(now + timedelta(seconds=500))  # too soon again
     assert segments.rescan_due(now + timedelta(seconds=900))
     assert len(started) == 2
+
+
+class _Plugins:
+    def __init__(self, names):
+        self.names = names
+
+    def plugins(self):
+        return [{"Name": n} for n in self.names]
+
+
+def test_the_store_stops_forwarding_once_intro_skipper_is_uninstalled(app, monkeypatch):
+    monkeypatch.setattr(segments, "_installed", {"at": None, "value": True})
+    with_it = segments.store(_Plugins(["Intro Skipper", "Curatarr"]))
+    assert with_it.plugin is not None
+    monkeypatch.setattr(segments, "_installed", {"at": None, "value": True})
+    without = segments.store(_Plugins(["Curatarr"]))
+    assert without.plugin is None
+    sid = without.add("item-1", "Introduction", 10, 40)
+    assert without.segments("item-1") == [
+        {"Id": sid, "Type": "Introduction", "Start": 10, "End": 40}
+    ]
+    assert segments.import_sweep() == 0  # nothing to import from

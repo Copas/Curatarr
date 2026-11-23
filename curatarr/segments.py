@@ -9,7 +9,9 @@ Jellyfin as a segment provider.
 hide, restore). While Intro Skipper is in use each goes to it as before and is
 recorded here too: reading an item's segments takes in whatever the plugin's
 own analysis changed. ``import_sweep`` reads every episode once, so the store
-starts complete, including the intros only Intro Skipper found.
+starts complete, including the intros only Intro Skipper found. Once Intro
+Skipper is uninstalled from Jellyfin, ``store()`` notices and uses only the
+store, and Curatarr's plugin is the only provider.
 
 Every change takes the next ``version``; ``changed_since`` lists what the
 plugin hasn't fetched yet.
@@ -150,11 +152,37 @@ class SegmentStore:
             self.segments(item_id)  # not recorded yet: take the plugin's list
 
 
-def store():
-    """The segment store as Curatarr uses it now: through Intro Skipper."""
+INTRO_SKIPPER_NAMES = ("intro skipper", "intro-skipper", "introskipper")
+PLUGIN_CHECK_SECONDS = 600
+_installed = {"at": None, "value": True}
+
+
+def intro_skipper_installed(jellyfin) -> bool:
+    """Whether Jellyfin has Intro Skipper, looked up at most every ten minutes.
+    When Jellyfin can't be asked, the last answer stands (at first: yes, so
+    nothing is lost while it's still there)."""
+    now = time.monotonic()
+    if _installed["at"] is not None and now - _installed["at"] < PLUGIN_CHECK_SECONDS:
+        return _installed["value"]
+    try:
+        names = [str(p.get("Name") or "").lower() for p in jellyfin.plugins()]
+    except (IntegrationError, AttributeError, TypeError):
+        return _installed["value"]
+    _installed.update(at=now, value=any(n in INTRO_SKIPPER_NAMES for n in names))
+    return _installed["value"]
+
+
+_ASK = object()
+
+
+def store(jellyfin=_ASK):
+    """The segment store as Curatarr uses it now: through Intro Skipper while
+    it's installed, Curatarr's own store alone once it's gone."""
     from .services import client
 
-    return SegmentStore(client("jellyfin"))
+    if jellyfin is _ASK:
+        jellyfin = client("jellyfin")
+    return SegmentStore(jellyfin, forward=intro_skipper_installed(jellyfin))
 
 
 def changed_since(after: int, limit: int = 500) -> dict:
@@ -212,6 +240,8 @@ def import_sweep(now=None) -> int:
         segments = store()
     except IntegrationError:
         return 0
+    if segments.plugin is None:
+        return 0  # Intro Skipper is gone: nothing to read from
     rows = (
         db.session.query(MediaPart, MediaIdentity)
         .join(MediaIdentity, MediaPart.media_identity_id == MediaIdentity.id)

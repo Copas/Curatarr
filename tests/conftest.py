@@ -104,3 +104,12 @@ def database_free(app) -> bool:
         return False
     finally:
         other.close()
+
+
+@pytest.fixture(autouse=True)
+def _intro_skipper_looked_up_afresh(monkeypatch):
+    """Whether Intro Skipper is installed is remembered for ten minutes; each
+    test starts not knowing (taken as installed)."""
+    from curatarr import segments
+
+    monkeypatch.setattr(segments, "_installed", {"at": None, "value": True})
