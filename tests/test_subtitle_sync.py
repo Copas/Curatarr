@@ -1,3 +1,5 @@
+import os
+
 """Whether subtitles beside a video line up with the speech: the measuring
 (pure) and the subtitle job that re-times or sets them aside."""
 
@@ -426,6 +428,7 @@ def test_files_retimed_before_the_time_fix_are_retimed_again(sync_env):
     right = sidecar.read_text()
     # As an older version wrote it, nobody having changed it since.
     sidecar.write_text(right.replace(",0", ",9"), encoding="utf-8")
+    os.utime(sidecar, (1_000_000, 1_000_000))  # written long ago
     record = dict(state.subtitle_sync)
     record["files"] = {
         "Film.en.srt": record["files"]["Film.en.srt"] | {"key": _sidecar_key(sidecar)}

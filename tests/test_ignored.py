@@ -72,3 +72,13 @@ def test_plays_in_an_ignored_library_arent_recorded(app, monkeypatch):
     session["NowPlayingItem"]["Id"] = "cccc"
     playback_trouble.record([session], utcnow() + timedelta(seconds=1))
     assert db.session.query(PlaybackTry).count() == 1
+
+
+def test_a_collections_library_cant_be_ignored(app, client):
+    from curatarr.services import _library_type
+
+    assert _library_type("boxsets") == "collections"
+    boxes = _library("Collections", "collections")
+    assert "Its titles are in the other libraries" in client.get("/setup").text
+    response = client.post(f"/libraries/{boxes.id}/ignore", data={"ignore": "1"})
+    assert response.status_code == 400

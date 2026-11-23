@@ -18,8 +18,8 @@
   <ul class="list-group">
   {% for library in libraries %}
     <li class="list-group-item d-flex justify-content-between align-items-center gap-2">
-      <span>{{ library.name }} <span class="text-secondary small">{{ {'tv': 'TV', 'movies': 'Movies'}.get(library.media_type, 'Other') }}</span>{% if not library.enabled %} <span class="badge text-bg-secondary">Ignored</span>{% endif %}</span>
-      {% if not library.managed or not library.enabled %}<form method="post" action="{{ url_for('main.library_ignore', library_id=library.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="ignore" value="{{ '1' if library.enabled else '0' }}"><button class="btn btn-sm btn-outline-secondary">{{ 'Ignore' if library.enabled else 'Include' }}</button></form>{% else %}<span class="text-secondary small">Managed through {{ 'Sonarr' if library.media_type == 'tv' else 'Radarr' }}</span>{% endif %}
+      <span>{{ library.name }} <span class="text-secondary small">{{ {'tv': 'TV', 'movies': 'Movies', 'collections': 'Collections'}.get(library.media_type, 'Other') }}</span>{% if not library.enabled %} <span class="badge text-bg-secondary">Ignored</span>{% endif %}</span>
+      {% if (not library.managed and library.media_type != 'collections') or not library.enabled %}<form method="post" action="{{ url_for('main.library_ignore', library_id=library.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="ignore" value="{{ '1' if library.enabled else '0' }}"><button class="btn btn-sm btn-outline-secondary">{{ 'Ignore' if library.enabled else 'Include' }}</button></form>{% elif library.media_type == 'collections' %}<span class="text-secondary small">Its titles are in the other libraries</span>{% else %}<span class="text-secondary small">Managed through {{ 'Sonarr' if library.media_type == 'tv' else 'Radarr' }}</span>{% endif %}
     </li>
   {% else %}
     <li class="list-group-item text-secondary">No libraries yet: they appear after the first reconcile.</li>

@@ -1272,7 +1272,7 @@ def library_ignore(library_id):
     library = db.session.get(Library, library_id)
     if not library:
         abort(404)
-    if library.managed and library.enabled:
+    if (library.managed or library.media_type == "collections") and library.enabled:
         abort(400)  # a Sonarr or Radarr library's titles are Curatarr's to keep
     library.enabled = request.form.get("ignore") != "1"
     db.session.commit()

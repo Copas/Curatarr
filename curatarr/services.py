@@ -397,7 +397,8 @@ def _discover_sonarr_only(sonarr_series, sonarr, curation, from_lists):
 
 
 def _library_type(collection_type):
-    return {"tvshows": "tv", "movies": "movies"}.get(
+    # A collections library (box sets) holds titles from the other libraries.
+    return {"tvshows": "tv", "movies": "movies", "boxsets": "collections"}.get(
         (collection_type or "").lower(), "other"
     )
 

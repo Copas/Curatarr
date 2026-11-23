@@ -130,6 +130,9 @@ def revisit() -> int:
         files = dict(record.get("files") or {})
         video = Path(state.part.file_path)
         for name, entry in files.items():
+            # A copy: changed in place, the saved record would compare equal
+            # to itself and never be written.
+            entry = files[name] = dict(entry)
             outcome = entry.get("outcome")
             if outcome == "resynced" and _retime_again(video, name, entry):
                 count += 1

@@ -160,7 +160,7 @@ Policy resolves **title override → library → global → built-in default**. 
 
 ## Ignored libraries
 
-A Jellyfin library Curatarr doesn't manage (one that isn't a Sonarr or Radarr library: home videos, a mixed or private library) can be ignored, on **Setup → Libraries**. Curatarr then leaves it alone entirely: it isn't read in, its films get no skip-marker clean-up, and what's played from it is left out of Recently watched, Finished at the credits and playback trouble, and its titles out of poster languages. Which items are in it is asked of Jellyfin at most every half hour. **Include** takes it back. History records each switch.
+A Jellyfin library Curatarr doesn't manage (one that isn't a Sonarr or Radarr library: home videos, a mixed or private library) can be ignored, on **Setup → Libraries**. Curatarr then leaves it alone entirely: it isn't read in, its films get no skip-marker clean-up, and what's played from it is left out of Recently watched, Finished at the credits and playback trouble, and its titles out of poster languages. Which items are in it is asked of Jellyfin at most every half hour. **Include** takes it back. A collections library (box sets) can't be ignored: its titles are the other libraries' own, so ignoring it would ignore them too. History records each switch.
 
 ## Chapters and subtitles
 
