@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- The "Deletion is on for every library" notice no longer sits at the top of every page: deleting is the normal state, so only a dry run (nothing removed) is still announced there.
 - Fix: subtitles re-timed again after the timing rules changed weren't recorded as Curatarr's own, so the next pass took them for a file someone had edited and checked them all over again.
 - Ignored libraries: a Jellyfin library Curatarr doesn't manage (a private or home-video library) can now be ignored entirely, on Setup → Libraries (not a collections library: its titles are the other libraries' own, and ignoring it would ignore them too). Curatarr used to reach into such libraries anyway: their films' skip markers were cleaned up, and what was played from them showed in Recently watched, could be marked finished at the credits, and was watched for playback trouble.
 - English dubs: a dub that falls back to the film's own language for a few scenes (dubs are often made from a shorter cut, and the release fills the missing scenes with the original audio) now gets English subtitles for just those scenes. The dub check used to sample five points, so it missed them. The whole English track is now listened to, in 30-second pieces, and each stretch in the original language is translated and written beside the film as forced subtitles (`Film.en.forced.srt`), which players show on their own. Films checked before are listened to in the background, two a run, what's up next first. A subtitle file Curatarr didn't write is never replaced.

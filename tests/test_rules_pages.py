@@ -91,7 +91,7 @@ def test_global_defaults_cover_size_space_and_dry_run(app, client, tmp_path):
     }
     library_page = client.get(f"/rules/retention?scope={shows.id}").text
     assert "Currently in effect: No (global default)" in library_page
-    assert "Deletion is on for every library." in client.get("/review").text
+    assert "dry-run-banner" not in client.get("/review").text
     assert "status-pill-warning" not in client.get("/").text
     # A library can still keep itself in dry run.
     client.post(f"/rules/retention?scope={shows.id}", data={"dry_run": "true"})
