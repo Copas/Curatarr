@@ -248,12 +248,19 @@ def sync_requests():
     # Requests are read once a reconcile, but where a title came from is
     # recorded minutes after it arrives: one requested since the last read
     # was recorded "Added by hand". Recorded again now its request is known.
-    # Titles recorded while Seerr wasn't connected are recorded again too.
+    # Titles recorded while Seerr wasn't connected are recorded again too, and
+    # so are those called "by hand" only because they were looked at long
+    # after being added (now "Can't tell").
     for media in db.session.query(MediaIdentity).filter(
         MediaIdentity.origin.isnot(None)
     ):
-        short = (media.origin or {}).get("short")
-        if short == origin.UNKNOWN or (short == origin.HAND and media.id in found):
+        kept = media.origin or {}
+        short = kept.get("short")
+        if (
+            short == origin.UNKNOWN
+            or (short in (origin.HAND, origin.LATE) and media.id in found)
+            or (short == origin.HAND and not kept.get("on_arrival"))
+        ):
             media.origin = None
     db.session.commit()
     forget()

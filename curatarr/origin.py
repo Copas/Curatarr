@@ -37,6 +37,10 @@ RECORD_SECONDS = 20
 ON_ARRIVAL = timedelta(days=1)
 HAND = "Added by hand"
 UNKNOWN = "Requested or added by hand"  # Seerr not connected: can't tell
+# Looked at long after it was added: an import list that brought it may have
+# dropped it since (trending and upcoming lists turn over), so "by hand"
+# would be a guess.
+LATE = "Can't tell"
 
 
 def describe(media) -> dict:
@@ -89,6 +93,14 @@ def describe(media) -> dict:
             f"there can't be told; otherwise it was added in {app_name} by hand."
         )
         result["unknown"] = True
+    elif not reasons and _late(media, result["added"]):
+        result["guess"] = (
+            f"Added to {app_name} more than a day before Curatarr looked. It isn't "
+            f"requested in Seerr or on any of {app_name}'s import lists now, but "
+            "lists change: one may have brought it and dropped it since, or it "
+            "was added by hand."
+        )
+        result["late"] = True
     elif not reasons:
         result["guess"] = (
             f"Not requested in Seerr, not on any of {app_name}'s import lists, and "
@@ -132,6 +144,8 @@ def short(info) -> str | None:
         return text if len(text) <= 60 else text[:57].rstrip() + "…"
     if info.get("unknown"):
         return UNKNOWN
+    if info.get("late"):
+        return LATE
     if info["guess"]:
         return HAND
     return None
@@ -260,6 +274,16 @@ def _lists(media, film, arr, arr_item) -> list[str] | None:
         for lst in entry["lists"]
         if lst.get("name") and tags & set(lst.get("tags") or [])
     )
+
+
+def _late(media, added) -> bool:
+    """Added more than a day before now, with nothing recorded on arrival
+    that already said "by hand" (that answer was made while the lists still
+    showed what brought it)."""
+    kept = media.origin or {}
+    if kept.get("on_arrival") and kept.get("short") == HAND:
+        return False
+    return bool(added) and _now() - added > ON_ARRIVAL
 
 
 def _listed_at_last_sync(media) -> bool:

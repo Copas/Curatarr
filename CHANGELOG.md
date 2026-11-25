@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- Fix: a film or show added to Radarr or Sonarr long before Curatarr looked at it was said to be "Added by hand" whenever no import list had it any more, though lists like trending or upcoming turn over and may have brought it. It now says Curatarr can't tell, and titles already marked that way are looked at again.
 - The "Deletion is on for every library" notice no longer sits at the top of every page: deleting is the normal state, so only a dry run (nothing removed) is still announced there.
 - Fix: subtitles re-timed again after the timing rules changed weren't recorded as Curatarr's own, so the next pass took them for a file someone had edited and checked them all over again.
 - Ignored libraries: a Jellyfin library Curatarr doesn't manage (a private or home-video library) can now be ignored entirely, on Setup → Libraries (not a collections library: its titles are the other libraries' own, and ignoring it would ignore them too). Curatarr used to reach into such libraries anyway: their films' skip markers were cleaned up, and what was played from them showed in Recently watched, could be marked finished at the credits, and was watched for playback trouble.

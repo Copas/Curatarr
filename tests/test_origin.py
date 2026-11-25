@@ -202,7 +202,8 @@ def test_an_upgrade_is_a_later_copy_and_radarr_down_leaves_its_parts_out(app, ra
 
 def test_the_title_page_shows_it(app, client, radarr):
     media = _film(utcnow() - timedelta(days=1))
-    radarr(FakeRadarr({"id": 7, "tmdbId": 949, "added": "2026-09-05T17:21:13Z"}))
+    added = (utcnow() - timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    radarr(FakeRadarr({"id": 7, "tmdbId": 949, "added": added}))
     page = client.get(f"/titles/{media.id}").text
     assert "Where it came from</h2>" in page and "Added to Radarr" in page
     assert "most likely added in Radarr by hand" in page
@@ -249,7 +250,22 @@ def test_with_radarr_down_nothing_is_recorded_and_older_titles_say_afterwards(
     radarr(FakeRadarr({"id": 7, "tmdbId": 949, "added": "2026-01-05T17:21:13Z"}))
     assert origin.sweep(now=now) == 1
     kept = db.session.get(MediaIdentity, media.id).origin
-    assert kept["short"] == "Added by hand" and kept["on_arrival"] is False
+    # Looked at long after it was added: a list may have dropped it since.
+    assert kept["short"] == origin.LATE and kept["on_arrival"] is False
+    assert "lists change" in kept["guess"]
+
+
+def test_added_long_before_curatarr_looked_isnt_called_by_hand(app, radarr):
+    """An import list that brought it may have dropped it since; but a "by
+    hand" made on arrival, while the lists still showed, stands."""
+    now = utcnow()
+    media = _film(now - timedelta(days=1))
+    radarr(FakeRadarr({"id": 7, "tmdbId": 949, "added": "2026-01-05T17:21:13Z"}))
+    info = origin.describe(media)
+    assert info.get("late") and "by hand" not in origin.short(info)
+    media.origin = {"short": origin.HAND, "on_arrival": True}
+    info = origin.describe(media)
+    assert origin.short(info) == origin.HAND
 
 
 def test_without_seerr_it_doesnt_claim_nobody_requested_it(app, radarr, monkeypatch):
