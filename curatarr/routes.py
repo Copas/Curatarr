@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import secrets
+from datetime import timedelta
 from io import BytesIO
 
 from flask import (
@@ -19,7 +20,7 @@ from flask import (
     url_for,
 )
 from markupsafe import Markup
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from . import better_copy, db, flags, icons, jellyfin_links, recent
 from .auth import (
@@ -493,22 +494,45 @@ def alternate_poster(media_id):
                 .order_by(CustomPoster.created_at)
             )
             for poster in rows:
-                if poster.jellyfin_user_id is None:
-                    if not poster.original_path:
-                        continue
-                    url = url_for(
+                flips.setdefault(poster.media_identity_id, []).append(poster)
+    found, urls, shown = flips.get(media_id) or [], [], set()
+    for poster in found:
+        if poster.jellyfin_user_id is None:
+            if poster.original_path:
+                urls.append(
+                    url_for(
                         "main.custom_poster_original",
-                        media_id=poster.media_identity_id,
+                        media_id=media_id,
                         kind="Primary",
                         w=240,
                     )
-                else:
-                    url = url_for(
-                        "main.custom_poster_image", poster_id=poster.id, w=240
-                    )
-                flips.setdefault(poster.media_identity_id, []).append(url)
-    found = flips.get(media_id)
-    return " ".join(found) if found else None
+                )
+            continue
+        # Accounts given the very same picture: shown once. (Only this
+        # title's files are read, and each only once while unchanged.)
+        same = _file_digest(poster.image_path)
+        if same not in shown:
+            shown.add(same)
+            urls.append(url_for("main.custom_poster_image", poster_id=poster.id, w=240))
+    return " ".join(urls) if urls else None
+
+
+_digests: dict = {}
+
+
+def _file_digest(path):
+    """A picture file's content, as a short digest, kept while it's unchanged."""
+    import os
+
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return path
+    key = (path, stat.st_mtime_ns, stat.st_size)
+    if key not in _digests:
+        with open(path, "rb") as handle:
+            _digests[key] = hashlib.blake2b(handle.read(), digest_size=12).hexdigest()
+    return _digests[key]
 
 
 @bp.app_template_global("sized")
@@ -2412,12 +2436,36 @@ def more():
     return render_template("more.html")
 
 
+TITLE_SHOWS = {
+    "": "Everything",
+    "watched": "Recently watched",
+    "favorites": "Favorites",
+    "unwatched": "Never watched",
+    "added": "Recently added",
+    "posters": "Custom posters",
+}
+RECENTLY_WATCHED = timedelta(days=90)
+
+
 @bp.get("/titles")
 def titles():
+    from .models import CustomPoster, UserMediaState
+    from .services import favorited_by, left_out_user_ids
+
     query = request.args.get("q", "").strip()
     media_type = request.args.get("type", "")
-    if media_type not in {"", "series", "movie"}:
+    show = request.args.get("show", "")
+    if media_type not in {"", "series", "movie"} or show not in TITLE_SHOWS:
         abort(400)
+    names = setting("jellyfin_user_names", {}) or {}
+    left_out = left_out_user_ids()
+    people = sorted(
+        ((uid, name) for uid, name in names.items() if uid not in left_out),
+        key=lambda p: p[1].lower(),
+    )
+    who = request.args.get("who", "")
+    if who and who not in dict(people):
+        who = ""
     page = max(request.args.get("page", 1, type=int), 1)
     rows_query = (
         db.session.query(MediaIdentity)
@@ -2430,19 +2478,76 @@ def titles():
         rows_query = rows_query.filter(MediaIdentity.title.ilike(f"%{query}%"))
     if media_type:
         rows_query = rows_query.filter(MediaIdentity.media_type == media_type)
+    # Whose plays and favourites count: one person's, or anyone's shown here.
+    states = db.session.query(UserMediaState.media_identity_id)
+    if who:
+        states = states.filter(UserMediaState.jellyfin_user_id == who)
+    elif left_out:
+        states = states.filter(UserMediaState.jellyfin_user_id.notin_(left_out))
+    order = [MediaIdentity.title]
+    if show == "watched":
+        last = (
+            db.session.query(
+                UserMediaState.media_identity_id.label("media_id"),
+                func.max(UserMediaState.last_played_at).label("at"),
+            )
+            .filter(
+                UserMediaState.last_played_at >= utcnow() - RECENTLY_WATCHED,
+                *([UserMediaState.jellyfin_user_id == who] if who else []),
+                *(
+                    [UserMediaState.jellyfin_user_id.notin_(left_out)]
+                    if left_out and not who
+                    else []
+                ),
+            )
+            .group_by(UserMediaState.media_identity_id)
+            .subquery()
+        )
+        rows_query = rows_query.join(last, last.c.media_id == MediaIdentity.id)
+        order = [last.c.at.desc(), MediaIdentity.title]
+    elif show == "favorites":
+        rows_query = rows_query.filter(
+            MediaIdentity.id.in_(
+                states.filter(UserMediaState.favorite.is_(True)).subquery().select()
+            )
+        )
+    elif show == "unwatched":
+        rows_query = rows_query.filter(
+            MediaIdentity.id.notin_(
+                states.filter(UserMediaState.last_played_at.isnot(None))
+                .subquery()
+                .select()
+            )
+        )
+    elif show == "added":
+        order = [MediaIdentity.added_at.desc().nulls_last(), MediaIdentity.title]
+    elif show == "posters":
+        posters = db.session.query(CustomPoster.media_identity_id).filter(
+            CustomPoster.active.is_(True)
+        )
+        if who:
+            posters = posters.filter(
+                or_(
+                    CustomPoster.jellyfin_user_id == who,
+                    CustomPoster.jellyfin_user_id.is_(None),
+                )
+            )
+        rows_query = rows_query.filter(
+            MediaIdentity.id.in_(posters.subquery().select())
+        )
     total = rows_query.count()
     page = min(page, max((total + 47) // 48, 1))
-    rows = (
-        rows_query.order_by(MediaIdentity.title).offset((page - 1) * 48).limit(48).all()
-    )
-    from .services import favorited_by
-
+    rows = rows_query.order_by(*order).offset((page - 1) * 48).limit(48).all()
     return render_template(
         "titles.html",
         rows=rows,
         favorites=favorited_by(m.id for m in rows),
         query=query,
         media_type=media_type,
+        show=show,
+        shows=TITLE_SHOWS,
+        who=who,
+        people=people,
         page=page,
         has_next=page * 48 < total,
         total=total,

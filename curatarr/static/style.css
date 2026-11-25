@@ -899,10 +899,6 @@
   }
   .cast-name { font-weight: 600; font-size: .9rem; }
   .cast-count { color: var(--app-muted); font-size: .75rem; }
-  /* poster-flip.js: a made poster and its original, taking turns. */
+  /* poster-flip.js: a title's posters, taking turns (turned over in script). */
   poster-flip { display: contents; }
-  poster-flip img {
-    @media (prefers-reduced-motion: no-preference) { transition: opacity .4s ease; }
-  }
-  poster-flip img.flip-out { opacity: 0; }
 }

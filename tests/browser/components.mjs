@@ -24,21 +24,22 @@ export default {
     })()`);
     return /^in [45] min$/.test(later) ? true : { later };
   },
-  async "a made poster and its original take turns, put on the page by a redraw"({ go, js }) {
+  async "a title's posters take turns in order, put on the page by a redraw"({ go, js }) {
     await go("/");
     const r = await js(`(async () => {
-      const flip = curatarrSwap.element('<poster-flip data-others="/static/wordmark.svg"><img class="poster" alt="" src="/static/logo.svg"></poster-flip>');
+      const flip = curatarrSwap.element('<poster-flip data-others="/static/wordmark.svg /static/logo.svg?b"><img class="poster" alt="" src="/static/logo.svg"></poster-flip>');
       document.querySelector('main').prepend(flip);
-      const img = flip.querySelector('img'), seen = new Set([img.src]);
-      for (let i = 0; i < 16 && seen.size < 2; i++) {
-        await new Promise(r => setTimeout(r, 500));
-        seen.add(img.src);
+      const img = flip.querySelector('img'), order = [img.src.split('/').pop()];
+      for (let i = 0; i < 60 && order.length < 4; i++) {
+        await new Promise(r => setTimeout(r, 250));
+        const now = img.src.split('/').pop();
+        if (now !== order[order.length - 1]) order.push(now);
       }
-      await new Promise(r => setTimeout(r, 800));
-      return { defined: flip.matches(':defined'), seen: [...seen], faded: img.classList.contains('flip-out'),
-               shown: getComputedStyle(img).display };
+      await new Promise(r => setTimeout(r, 700));
+      return { defined: flip.matches(':defined'), order, turned: getComputedStyle(img).transform };
     })()`);
-    return r.defined && r.seen.length === 2 && !r.faded && r.shown !== "none" ? true : r;
+    const want = ["logo.svg", "wordmark.svg", "logo.svg?b", "logo.svg"];
+    return r.defined && JSON.stringify(r.order) === JSON.stringify(want) && r.turned === "none" ? true : r;
   },
   async "a reel of posters sets itself up once, even when moved"({ go, js, sleep }) {
     await go("/");

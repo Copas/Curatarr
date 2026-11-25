@@ -1013,6 +1013,16 @@ def test_each_accounts_poster_takes_turns_with_jellyfins(app, client, monkeypatc
     others = f"/library/posters/{sam.id}.jpg?w=240 /library/posters/{alex.id}.jpg?w=240"
     assert f'<poster-flip data-others="{others}">' in page
     assert client.get(f"/library/posters/{sam.id}.jpg?w=240").status_code == 200
+    # A third account given Sam's very picture isn't shown twice.
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex", "u3": "Pat"})
+    db.session.commit()
+    client.post(
+        f"/titles/{media.id}/poster",
+        data={"poster": (BytesIO(_picture("#cc2222")), "mine.jpg"), "for": "u3"},
+        content_type="multipart/form-data",
+    )
+    assert custom_posters.active(media.id, "u3")
+    assert f'<poster-flip data-others="{others}">' in client.get("/titles").text
 
 
 def test_titles_gone_from_jellyfin_arent_listed(app, client, monkeypatch):
@@ -1023,3 +1033,52 @@ def test_titles_gone_from_jellyfin_arent_listed(app, client, monkeypatch):
     media.missing_since = utcnow()
     db.session.commit()
     assert media.title not in client.get("/titles").text
+
+
+def test_browse_titles_filters_by_watching_and_favourites(app, client, monkeypatch):
+    from datetime import timedelta
+
+    from curatarr.models import Library, UserMediaState, utcnow
+    from curatarr.services import set_setting
+
+    library = Library(jellyfin_library_id="lib-m", name="Movies", media_type="movies")
+    db.session.add(library)
+    db.session.flush()
+    films = {}
+    for title in ("Seen Lately", "Long Ago", "Loved", "Untouched"):
+        films[title] = MediaIdentity(
+            library_id=library.id, media_type="movie", title=title
+        )
+        db.session.add(films[title])
+    db.session.flush()
+    now = utcnow()
+    for title, user, played, favourite in (
+        ("Seen Lately", "u1", now - timedelta(days=2), False),
+        ("Long Ago", "u1", now - timedelta(days=400), False),
+        ("Loved", "u2", None, True),
+    ):
+        db.session.add(
+            UserMediaState(
+                media_identity_id=films[title].id,
+                jellyfin_user_id=user,
+                last_played_at=played,
+                favorite=favourite,
+            )
+        )
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex"})
+    db.session.commit()
+
+    def listed(**args):
+        page = client.get("/titles", query_string=args).text
+        return {t for t in films if f">{t}</a>" in page}
+
+    assert listed() == set(films)
+    assert listed(show="watched") == {"Seen Lately"}
+    assert listed(show="favorites") == {"Loved"}
+    assert listed(show="favorites", who="u1") == set()
+    assert listed(show="favorites", who="u2") == {"Loved"}
+    assert listed(show="unwatched") == {"Loved", "Untouched"}
+    assert listed(show="unwatched", who="u2") == set(films)
+    page = client.get("/titles?show=favorites").text
+    assert '<option value="u2">Alex</option>' in page
+    assert client.get("/titles?show=nonsense").status_code == 400
