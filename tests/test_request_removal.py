@@ -141,6 +141,22 @@ def test_the_title_page_offers_it(app, client, radarr, monkeypatch):
     assert "Remove this film" not in response.text
     with app.app_context():
         assert db.session.query(PurgeCandidate).one().state == "LEAVING_SOON"
+    # Its page says how it got there.
+    page = client.get(f"/titles/{media_id}").text
+    assert (
+        'id="leaving-why"' in page and "Marked Leaving Soon from its title page" in page
+    )
+    from curatarr.lifecycle import how_it_got_there
+
+    rule = PurgeCandidate(
+        state="LEAVING_SOON",
+        reason_code="inactivity",
+        reason_text="No playback within 365 days.",
+    )
+    with app.app_context():
+        how = how_it_got_there(rule)
+    assert how["lead"] == "A cleanup rule: nobody has played it lately."
+    assert how["detail"] == "No playback within 365 days." and how["straight"]
 
 
 def _old_unwatched_film(title="Never Watched", days=900, size=500):

@@ -535,6 +535,13 @@ def _file_digest(path):
     return _digests[key]
 
 
+@bp.app_template_global("how_it_got_there")
+def how_it_got_there_global(candidate):
+    from .lifecycle import how_it_got_there
+
+    return how_it_got_there(candidate)
+
+
 @bp.app_template_global("sized")
 def sized_picture(url, sizes, width=480):
     """src, srcset and sizes for one of Curatarr's own pictures shown small
@@ -1964,8 +1971,11 @@ def title_remove(media_id):
     media = db.session.get(MediaIdentity, media_id)
     if not media:
         abort(404)
+    who = (current_user() or {}).get("name")
     try:
-        candidate = request_removal(media)
+        candidate = request_removal(
+            media, where=f"its title page by {who}" if who else "its title page"
+        )
     except ValueError as exc:
         flash(str(exc), "danger")
     else:

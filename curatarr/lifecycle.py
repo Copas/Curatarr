@@ -1056,6 +1056,36 @@ def request_episode_removal(media, parts, *, where="Leave after watched"):
     return candidate
 
 
+RULE_LEADS = {
+    "inactivity": "A cleanup rule: nobody has played it lately.",
+    "quota": "A cleanup rule: the library is over its size limit.",
+    "disk_pressure": "A cleanup rule: free space on the disk is low.",
+}
+
+
+def how_it_got_there(candidate) -> dict:
+    """Why a title is up for removal, for its page: {"lead", "detail", "at",
+    "straight"}. ``straight``: a rule put it on Leaving Soon without asking
+    in Review first (the library's review setting)."""
+    lead = RULE_LEADS.get(candidate.reason_code)
+    detail = (candidate.reason_text or "").strip()
+    reviewed = (
+        db.session.query(LifecycleAction.id)
+        .filter(
+            LifecycleAction.candidate_id == candidate.id,
+            LifecycleAction.action_type.like("review_%"),
+        )
+        .first()
+        is not None
+    )
+    return {
+        "lead": lead,
+        "detail": detail,
+        "at": candidate.eligible_at,
+        "straight": bool(lead) and candidate.state == "LEAVING_SOON" and not reviewed,
+    }
+
+
 def request_removal(media, *, where="its title page"):
     """Mark a title Leaving Soon on request (title page, Free up space page),
     then the usual path: its poster is badged, playing any of it or Keep
