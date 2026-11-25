@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- Browse titles keeps loading as you scroll, rather than 48 titles a page with Next.
 - A film with no English audio, when no English copy can be found, is now deleted through Radarr straight away rather than given a Leaving Soon notice (Settings → Automatic, renamed to match). Films already marked Leaving Soon that way are deleted too.
 - A title that's Leaving Soon now says on its page how it got there: the cleanup rule that chose it and why, or where it was marked (the title page now records who), with the date.
 - Browse titles has filters: Show (recently watched, favourites, never watched, recently added, custom posters) and Whose (one person, or anyone).

@@ -901,4 +901,5 @@
   .cast-count { color: var(--app-muted); font-size: .75rem; }
   /* poster-flip.js: a title's posters, taking turns (turned over in script). */
   poster-flip { display: contents; }
+  title-more { display: block; }
 }

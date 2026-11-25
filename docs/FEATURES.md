@@ -113,7 +113,7 @@ Overview's **Recently watched** has a box per person, whoever watched most recen
 
 ### Browse titles
 
-Library → Browse titles lists the shows and films in Jellyfin (titles gone from it aren't listed), 48 to a page, and follows its filters as you change them: a search by title, the type, and **Show**: everything, recently watched (played in the last 90 days, most recent first), favourites, never watched, recently added (newest first) or those with custom posters. **Whose** narrows watching, favourites and custom posters to one person (anyone's by default; hidden accounts are left out).
+Library → Browse titles lists the shows and films in Jellyfin (titles gone from it aren't listed), loading more as you scroll (48 at a time; without script, Previous and Next pages), and follows its filters as you change them: a search by title, the type, and **Show**: everything, recently watched (played in the last 90 days, most recent first), favourites, never watched, recently added (newest first) or those with custom posters. **Whose** narrows watching, favourites and custom posters to one person (anyone's by default; hidden accounts are left out).
 
 ### Titles with their year
 

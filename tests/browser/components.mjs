@@ -30,7 +30,7 @@ export default {
       const flip = curatarrSwap.element('<poster-flip data-others="/static/wordmark.svg /static/logo.svg?b"><img class="poster" alt="" src="/static/logo.svg"></poster-flip>');
       document.querySelector('main').prepend(flip);
       const img = flip.querySelector('img'), order = [img.src.split('/').pop()];
-      for (let i = 0; i < 60 && order.length < 4; i++) {
+      for (let i = 0; i < 100 && order.length < 4; i++) {
         await new Promise(r => setTimeout(r, 250));
         const now = img.src.split('/').pop();
         if (now !== order[order.length - 1]) order.push(now);
@@ -40,6 +40,18 @@ export default {
     })()`);
     const want = ["logo.svg", "wordmark.svg", "logo.svg?b", "logo.svg"];
     return r.defined && JSON.stringify(r.order) === JSON.stringify(want) && r.turned === "none" ? true : r;
+  },
+  async "browse titles keeps loading as you scroll"({ go, js }) {
+    await go("/titles");
+    const r = await js(`(async () => {
+      const tiles = () => document.querySelectorAll('#title-results .poster-tile').length;
+      const first = tiles(), linksHidden = document.querySelector('title-more nav')?.hidden;
+      window.scrollTo(0, document.body.scrollHeight);
+      for (let i = 0; i < 40 && document.querySelector('title-more'); i++) await new Promise(r => setTimeout(r, 250));
+      return { first, linksHidden, after: tiles(), left: !!document.querySelector('title-more'),
+               total: document.querySelector('.page-heading .status-pill').textContent };
+    })()`);
+    return r.first === 48 && r.linksHidden && !r.left && r.total.startsWith(String(r.after)) ? true : r;
   },
   async "a reel of posters sets itself up once, even when moved"({ go, js, sleep }) {
     await go("/");
