@@ -36,7 +36,7 @@ ON_BY_DEFAULT = False
 KINDS = {
     "files": "Replace problem files (cut short, broken, burned-in subtitles)",
     "dubs": "Replace films with no English audio",
-    "no_english": "Mark Leaving Soon films with no English audio when no English "
+    "no_english": "Delete films with no English audio when no English "
     "copy can be found, and keep Radarr's import lists from adding them again "
     "(not on quality profiles that allow other languages, nor once someone has "
     "watched or favourited them)",

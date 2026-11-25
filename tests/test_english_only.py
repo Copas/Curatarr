@@ -80,7 +80,7 @@ def _film(library, title, radarr_id, *, auto=True, watched=False):
     return media
 
 
-def test_films_with_no_english_copy_go_leaving_soon_and_stay_off_the_lists(
+def test_films_with_no_english_copy_are_deleted_and_stay_off_the_lists(
     app, monkeypatch
 ):
     library = Library(jellyfin_library_id="films", name="Films", media_type="movies")
@@ -93,28 +93,59 @@ def test_films_with_no_english_copy_go_leaving_soon_and_stay_off_the_lists(
     db.session.commit()
     radarr = FakeRadarr()
     monkeypatch.setattr("curatarr.services.client", lambda _kind: radarr)
-    marked = []
-    monkeypatch.setattr(
-        "curatarr.lifecycle.request_removal",
-        lambda media, where: marked.append((media.title, where)),
-    )
+    deleted = []
+
+    def delete(media, candidate=None):
+        deleted.append(media.title)
+        return "deleted"
+
+    monkeypatch.setattr(english_only, "_delete", delete)
     assert english_only.sweep() == 0  # off by default
     set_setting("auto_fixes", {"no_english": True})
     db.session.commit()
     assert english_only.sweep() == 1
-    assert marked == [("Leaving", "no English audio, and no English copy")]
+    assert deleted == ["Leaving"]
     assert radarr.excluded == [1]
     assert english_only.sweep() == 0  # each looked at once
-    # already Leaving Soon: still kept off the lists
-    already = _film(library, "Already leaving", 4)
+    # Never Purge (or the like) refuses: still kept off the lists
+    refused = _film(library, "Never purge", 4)
     db.session.commit()
 
-    def refuse(media, where):
-        raise ValueError(f"{media.title} is already on its way out.")
+    def refuse(media, candidate=None):
+        raise ValueError(f"Never Purge is on for {media.title}.")
 
-    monkeypatch.setattr("curatarr.lifecycle.request_removal", refuse)
+    monkeypatch.setattr(english_only, "_delete", refuse)
     assert english_only.sweep() == 0
-    assert radarr.excluded == [1, 4] and already.id
+    assert radarr.excluded == [1, 4] and refused.id
     state = db.session.query(ChapterState).filter_by(media_identity_id=leaving.id).one()
-    assert state.dub_result["english_only"]["outcome"] == "leaving"
+    assert state.dub_result["english_only"]["outcome"] == "deleted"
     assert setting("auto_fixes")["no_english"]
+
+
+def test_films_it_marked_leaving_soon_before_are_deleted_now(app, monkeypatch):
+    from curatarr.models import PurgeCandidate
+
+    library = Library(jellyfin_library_id="films", name="Films", media_type="movies")
+    db.session.add(library)
+    db.session.flush()
+    media = _film(library, "Marked earlier", 1)
+    other = _film(library, "Left by a rule", 2)
+    for film, text in (
+        (media, f"Marked Leaving Soon from {english_only.WHERE}."),
+        (other, "No playback within 365 days."),
+    ):
+        db.session.add(
+            PurgeCandidate(
+                media_identity_id=film.id,
+                state="LEAVING_SOON",
+                reason_code="requested" if film is media else "inactivity",
+                reason_text=text,
+                reclaimable_bytes=1,
+            )
+        )
+    set_setting("auto_fixes", {"no_english": True})
+    db.session.commit()
+    monkeypatch.setattr(english_only, "due", list)
+    assert english_only.sweep() == 1
+    states = {c.media.title: c.state for c in db.session.query(PurgeCandidate).all()}
+    assert states == {"Marked earlier": "APPROVED", "Left by a rule": "LEAVING_SOON"}

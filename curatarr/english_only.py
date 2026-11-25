@@ -5,9 +5,10 @@ language, and a quality profile's "not English" rule only judges release
 names: a release that doesn't name its language counts as English. So a film
 in another language can arrive with no English audio. Curatarr's dub check
 hears that, and (with Replace films with no English audio on) looks for an
-English copy. When none can be found, this marks the film Leaving Soon, like
-Remove on its page, and adds a Radarr import-list exclusion so no list adds it
-back.
+English copy. When none can be found, this deletes the film through Radarr
+straight away (approved like Delete in Review, so Never Purge and dry run
+still apply), and adds a Radarr import-list exclusion so no list adds it
+back. Films it used to mark Leaving Soon instead are deleted too.
 
 Left alone: films on a quality profile that doesn't reject other languages
 (a profile kept for foreign films on purpose), films someone has watched or
@@ -81,14 +82,67 @@ def due() -> list:
     return found
 
 
+WHERE = "no English audio, and no English copy"
+
+
+def _delete(media, candidate=None) -> str:
+    """Approve the film's deletion now (the worker carries it out within a
+    minute); its Leaving Soon entry is made first if it hasn't one."""
+    from .lifecycle import _active_candidate, request_removal, review_candidate
+
+    candidate = candidate or _active_candidate(media.id)
+    if candidate and candidate.state in {"APPROVED", "EXECUTING"}:
+        return "already being deleted"
+    if not (candidate and candidate.state == "LEAVING_SOON"):
+        candidate = request_removal(media, where=WHERE)
+    review_candidate(candidate.id, "delete")
+    return "deleted"
+
+
+def _earlier() -> int:
+    """Films this marked Leaving Soon before it deleted them outright: deleted
+    now. Returns how many."""
+    from .models import PurgeCandidate
+    from .services import audit
+
+    done = 0
+    for candidate in (
+        db.session.query(PurgeCandidate)
+        .filter(
+            PurgeCandidate.state == "LEAVING_SOON",
+            PurgeCandidate.reason_code == "requested",
+            PurgeCandidate.reason_text == f"Marked Leaving Soon from {WHERE}.",
+        )
+        .all()
+    ):
+        media = candidate.media
+        if media is None:
+            continue
+        try:
+            _delete(media, candidate)
+        except ValueError:
+            continue
+        audit(
+            "no_english_deleted",
+            media.id,
+            f"{media.title} has no English audio and no English copy could be "
+            "found: deleted through Radarr.",
+            f"no-english-delete:{candidate.id}",
+            candidate_id=candidate.id,
+        )
+        done += 1
+    db.session.commit()
+    return done
+
+
 def sweep() -> int:
-    """Worker cycle: mark such films Leaving Soon. Returns how many."""
+    """Worker cycle: delete such films. Returns how many."""
     if not enabled():
         return 0
+    done = _earlier()
     states = due()
     if not states:
-        return 0
-    from .lifecycle import request_removal
+        return done
     from .services import audit, client
 
     try:
@@ -122,16 +176,15 @@ def sweep() -> int:
                         )
                     except IntegrationError:
                         pass  # already excluded, or Radarr refused: still leaving
-                request_removal(media, where="no English audio, and no English copy")
+                outcome = _delete(media)
                 audit(
-                    "no_english_leaving",
+                    "no_english_deleted",
                     media.id,
                     f"{media.title} has no English audio and no English copy "
-                    "could be found: marked Leaving Soon, and Radarr's import "
+                    "could be found: deleted through Radarr, and Radarr's import "
                     "lists won't add it again.",
                     f"no-english:{media.id}",
                 )
-                outcome = "leaving"
                 marked += 1
         except IntegrationError as exc:
             if exc.status_code != 404:
@@ -144,4 +197,4 @@ def sweep() -> int:
             "english_only": {"at": utcnow().isoformat(), "outcome": outcome},
         }
         db.session.commit()
-    return marked
+    return marked + done
