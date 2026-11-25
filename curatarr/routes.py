@@ -469,31 +469,46 @@ def when(value, style="datetime"):
 
 @bp.app_template_global("alternate_poster")
 def alternate_poster(media_id):
-    """The original poster's address, for a film whose poster in Jellyfin is a
-    custom one with its original kept, so pages can alternate the two
-    (<poster-flip>); else None. One query a page."""
+    """The other posters a title has, for pages to show in turn with the one
+    Jellyfin has (<poster-flip>), as addresses separated by spaces; None when
+    it has none. Those are each account's own poster and, when a custom
+    poster for everyone replaced it, the original. One query a page; not
+    for household accounts, which can't open the pictures."""
     from .models import CustomPoster
 
     flips = request.environ.get("curatarr.poster_flips")
     if flips is None:
-        flips = request.environ["curatarr.poster_flips"] = {
-            media_id
-            for (media_id,) in db.session.query(CustomPoster.media_identity_id)
-            .join(MediaIdentity, MediaIdentity.id == CustomPoster.media_identity_id)
-            .filter(
-                CustomPoster.active.is_(True),
-                CustomPoster.jellyfin_user_id.is_(None),
-                CustomPoster.image_type == "Primary",
-                CustomPoster.original_path.isnot(None),
-                CustomPoster.original_path != "",
-                MediaIdentity.media_type == "movie",
+        flips = request.environ["curatarr.poster_flips"] = {}
+        user = current_user() or {}
+        if (
+            current_app.config["ALLOW_UNAUTHENTICATED"]
+            or user.get("role") != "household"
+        ):
+            rows = (
+                db.session.query(CustomPoster)
+                .filter(
+                    CustomPoster.active.is_(True),
+                    CustomPoster.image_type == "Primary",
+                )
+                .order_by(CustomPoster.created_at)
             )
-        }
-    if media_id not in flips:
-        return None
-    return url_for(
-        "main.custom_poster_original", media_id=media_id, kind="Primary", w=240
-    )
+            for poster in rows:
+                if poster.jellyfin_user_id is None:
+                    if not poster.original_path:
+                        continue
+                    url = url_for(
+                        "main.custom_poster_original",
+                        media_id=poster.media_identity_id,
+                        kind="Primary",
+                        w=240,
+                    )
+                else:
+                    url = url_for(
+                        "main.custom_poster_image", poster_id=poster.id, w=240
+                    )
+                flips.setdefault(poster.media_identity_id, []).append(url)
+    found = flips.get(media_id)
+    return " ".join(found) if found else None
 
 
 @bp.app_template_global("sized")
@@ -2408,6 +2423,8 @@ def titles():
         db.session.query(MediaIdentity)
         .join(Library)
         .filter(Library.media_type.in_(("tv", "movies")))
+        # Gone from Jellyfin (deleted): nothing to show or watch.
+        .filter(MediaIdentity.missing_since.is_(None))
     )
     if query:
         rows_query = rows_query.filter(MediaIdentity.title.ilike(f"%{query}%"))

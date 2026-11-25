@@ -983,10 +983,43 @@ def test_a_made_poster_and_its_original_take_turns_on_pages(app, client, monkeyp
     other = f"/library/posters/original/{media.id}/Primary?w=240"
     page = client.get("/titles").text
     assert (
-        f'<poster-flip data-other="{other}"><img' in page and "poster-flip.js" in page
+        f'<poster-flip data-others="{other}"><img' in page and "poster-flip.js" in page
     )
     assert client.get(other).status_code == 200
     # Without a kept original there's nothing to alternate with.
     custom_posters.active(media.id).original_path = ""
     db.session.commit()
     assert "<poster-flip" not in client.get("/titles").text
+
+
+def test_each_accounts_poster_takes_turns_with_jellyfins(app, client, monkeypatch):
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie()
+    _fake(monkeypatch, _picture("#223344"))
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex"})
+    db.session.commit()
+    for user, colour in (("u1", "#cc2222"), ("u2", "#22cc22")):
+        client.post(
+            f"/titles/{media.id}/poster",
+            data={"poster": (BytesIO(_picture(colour)), "mine.jpg"), "for": user},
+            content_type="multipart/form-data",
+        )
+    sam, alex = (
+        custom_posters.active(media.id, "u1"),
+        custom_posters.active(media.id, "u2"),
+    )
+    page = client.get("/titles").text
+    others = f"/library/posters/{sam.id}.jpg?w=240 /library/posters/{alex.id}.jpg?w=240"
+    assert f'<poster-flip data-others="{others}">' in page
+    assert client.get(f"/library/posters/{sam.id}.jpg?w=240").status_code == 200
+
+
+def test_titles_gone_from_jellyfin_arent_listed(app, client, monkeypatch):
+    from curatarr.models import utcnow
+
+    _library, media, _part = _movie()
+    assert media.title in client.get("/titles").text
+    media.missing_since = utcnow()
+    db.session.commit()
+    assert media.title not in client.get("/titles").text

@@ -9,4 +9,4 @@
 {% if signals.playlists %}<span class="chip chip-on" title="In {{ signals.playlists|join(', ') }}">{{ icon('list', 12) }} In a playlist: kept from automatic cleanup</span>{% endif %}
 {% if signals.from_list %}<span class="chip" title="Added by a Sonarr or Radarr import list, and nobody has played it">{{ icon('list', 12) }} From an import list, not played yet</span>{% endif %}
 {% endmacro %}
-{% macro flip(media_id) %}{% set other = alternate_poster(media_id) %}{% if other %}<poster-flip data-other="{{ other }}">{{ caller() }}</poster-flip>{% else %}{{ caller() }}{% endif %}{% endmacro %}
+{% macro flip(media_id) %}{% set other = alternate_poster(media_id) %}{% if other %}<poster-flip data-others="{{ other }}">{{ caller() }}</poster-flip>{% else %}{{ caller() }}{% endif %}{% endmacro %}

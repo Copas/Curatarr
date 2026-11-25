@@ -27,7 +27,7 @@ export default {
   async "a made poster and its original take turns, put on the page by a redraw"({ go, js }) {
     await go("/");
     const r = await js(`(async () => {
-      const flip = curatarrSwap.element('<poster-flip data-other="/static/wordmark.svg"><img class="poster" alt="" src="/static/logo.svg"></poster-flip>');
+      const flip = curatarrSwap.element('<poster-flip data-others="/static/wordmark.svg"><img class="poster" alt="" src="/static/logo.svg"></poster-flip>');
       document.querySelector('main').prepend(flip);
       const img = flip.querySelector('img'), seen = new Set([img.src]);
       for (let i = 0; i < 16 && seen.size < 2; i++) {
