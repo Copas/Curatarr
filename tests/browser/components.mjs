@@ -24,6 +24,22 @@ export default {
     })()`);
     return /^in [45] min$/.test(later) ? true : { later };
   },
+  async "a made poster and its original take turns, put on the page by a redraw"({ go, js }) {
+    await go("/");
+    const r = await js(`(async () => {
+      const flip = curatarrSwap.element('<poster-flip data-other="/static/wordmark.svg"><img class="poster" alt="" src="/static/logo.svg"></poster-flip>');
+      document.querySelector('main').prepend(flip);
+      const img = flip.querySelector('img'), seen = new Set([img.src]);
+      for (let i = 0; i < 16 && seen.size < 2; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        seen.add(img.src);
+      }
+      await new Promise(r => setTimeout(r, 800));
+      return { defined: flip.matches(':defined'), seen: [...seen], faded: img.classList.contains('flip-out'),
+               shown: getComputedStyle(img).display };
+    })()`);
+    return r.defined && r.seen.length === 2 && !r.faded && r.shown !== "none" ? true : r;
+  },
   async "a reel of posters sets itself up once, even when moved"({ go, js, sleep }) {
     await go("/");
     const r = await js(`(async () => {

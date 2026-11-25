@@ -467,6 +467,35 @@ def when(value, style="datetime"):
     )
 
 
+@bp.app_template_global("alternate_poster")
+def alternate_poster(media_id):
+    """The original poster's address, for a film whose poster in Jellyfin is a
+    custom one with its original kept, so pages can alternate the two
+    (<poster-flip>); else None. One query a page."""
+    from .models import CustomPoster
+
+    flips = request.environ.get("curatarr.poster_flips")
+    if flips is None:
+        flips = request.environ["curatarr.poster_flips"] = {
+            media_id
+            for (media_id,) in db.session.query(CustomPoster.media_identity_id)
+            .join(MediaIdentity, MediaIdentity.id == CustomPoster.media_identity_id)
+            .filter(
+                CustomPoster.active.is_(True),
+                CustomPoster.jellyfin_user_id.is_(None),
+                CustomPoster.image_type == "Primary",
+                CustomPoster.original_path.isnot(None),
+                CustomPoster.original_path != "",
+                MediaIdentity.media_type == "movie",
+            )
+        }
+    if media_id not in flips:
+        return None
+    return url_for(
+        "main.custom_poster_original", media_id=media_id, kind="Primary", w=240
+    )
+
+
 @bp.app_template_global("sized")
 def sized_picture(url, sizes, width=480):
     """src, srcset and sizes for one of Curatarr's own pictures shown small

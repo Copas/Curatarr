@@ -973,3 +973,20 @@ def test_a_logo_keeps_its_transparency_when_made_small(app, client, monkeypatch)
     small = Image.open(copy)
     assert small.size == (240, 120) and small.mode == "RGBA"
     assert small.getpixel((10, 10))[3] == 0
+
+
+def test_a_made_poster_and_its_original_take_turns_on_pages(app, client, monkeypatch):
+    _library, media, _part = _movie()
+    _fake(monkeypatch, _picture("#223344"))
+    assert "<poster-flip" not in client.get("/titles").text
+    custom_posters.apply(media, _picture("#cc2222"), "Uploaded")
+    other = f"/library/posters/original/{media.id}/Primary?w=240"
+    page = client.get("/titles").text
+    assert (
+        f'<poster-flip data-other="{other}"><img' in page and "poster-flip.js" in page
+    )
+    assert client.get(other).status_code == 200
+    # Without a kept original there's nothing to alternate with.
+    custom_posters.active(media.id).original_path = ""
+    db.session.commit()
+    assert "<poster-flip" not in client.get("/titles").text
