@@ -474,7 +474,7 @@ def test_the_gallery_shows_each_titles_set_once(app, client, monkeypatch):
     show = f"/library/posters/gallery/{media.id}"
     assert f'href="{show}"' in page  # a card opens the title's own page
     one = client.get(show).text
-    assert "1 of 1" in one and "<h1>The Big Lebowski</h1>" in one
+    assert "1 of 1" in one and "The Big Lebowski</h1>" in one
     # Its poster first, beside the original; its other types as tabs.
     own = f"/library/posters/original/{media.id}/Primary"
     assert 'class="gallery-strip gallery-strip-primary"' in one
@@ -547,3 +547,54 @@ def test_each_accounts_version_is_set_beside_the_original(app, client, monkeypat
     assert "2 versions" in posters and "data-original=" in posters
     assert "up to 2 versions" in client.get("/library/posters/gallery").text
     assert same.jellyfin_user_id == "u3"
+
+
+def test_the_worker_makes_the_gallerys_copies_ahead(app, client, monkeypatch, tmp_path):
+    """Flipping through the Gallery waited on each picture's smaller copy (and
+    its original from Jellyfin) being made as it was first shown."""
+    from curatarr import artwork_jobs, sized
+
+    _library, media, _part = _movie("/movies/Heat (1995)/Film.mkv")
+    db.session.commit()
+    _fake(monkeypatch, Primary=_picture("#223344"))
+    poster = custom_posters.apply(media, _picture("#cc2222"), "Uploaded", user_id="u1")
+    original = tmp_path / "original.jpg"
+    original.write_bytes(_picture("#2222cc"))
+    monkeypatch.setattr(artwork_jobs, "original_art", lambda m, k: original)
+    assert sized.warm() == 1
+    made = {p.name.rsplit("-", 1)[0] for p in sized.folder().glob("*.webp")}
+    assert made == {
+        f"{key}-{w}" for key in (poster.id, f"o-{media.id}-Primary") for w in sized.WARM
+    }
+    stamps = {p: p.stat().st_mtime_ns for p in sized.folder().glob("*.webp")}
+    sized.warm()  # all made already: none made again
+    assert {p: p.stat().st_mtime_ns for p in sized.folder().glob("*.webp")} == stamps
+    # Full screen asks for one of them, and gets it from what was made.
+    shown = client.get(f"/library/posters/{poster.id}.jpg?w=1440")
+    assert shown.status_code == 200 and shown.mimetype == "image/webp"
+
+
+def test_an_unchanged_original_isnt_rewritten(app, monkeypatch, tmp_path):
+    """Checked against Jellyfin's once a day; rewritten each time, its
+    smaller copies were made again each day as well."""
+    from curatarr import artwork_jobs
+
+    _library, media, _part = _movie("/movies/Heat (1995)/Film.mkv")
+    db.session.commit()
+    monkeypatch.setattr(artwork_jobs, "staging", lambda: tmp_path / "staging")
+    monkeypatch.setattr(custom_posters, "originals", lambda m: {})
+    monkeypatch.setattr(custom_posters, "active", lambda *a, **k: None)
+    sent = {"data": _picture("#2222cc")}
+    monkeypatch.setattr(custom_posters, "_original", lambda m, j, k: sent["data"])
+    monkeypatch.setattr("curatarr.services.client", lambda kind: object())
+    first = artwork_jobs.original_art(media, "Primary")
+    old = time.time() - 2 * artwork_jobs.ORIGINALS_FOR_A_DAY
+    os.utime(first, (old, old))
+    assert artwork_jobs.original_art(media, "Primary") == first
+    assert first.stat().st_mtime == old  # the same picture: left as it was
+    assert first.with_name(first.name + ".checked").exists()
+    assert artwork_jobs.original_art(media, "Primary") == first  # checked: fresh
+    sent["data"] = _picture("#22cc22")
+    os.utime(first.with_name(first.name + ".checked"), (old, old))
+    artwork_jobs.original_art(media, "Primary")
+    assert first.stat().st_mtime > old  # a new picture: written

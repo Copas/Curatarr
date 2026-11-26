@@ -148,6 +148,16 @@
   let mode = "single";
   try { mode = MODES.includes(localStorage.getItem(MODE_KEY)) ? localStorage.getItem(MODE_KEY) : "single"; } catch { /* no storage */ }
 
+  // Full screen, the copy that fills the screen (sized.py), not the file
+  // itself: a poster is kept at up to 2000 × 3000, a megabyte or more.
+  const WIDTHS = [240, 480, 960, 1440, 2560];
+  function fit(url, tall) {
+    if (!url || !url.startsWith("/library/posters/") || url.includes("?")) return url;
+    const across = (tall ? Math.min(innerWidth, innerHeight * 0.67) : innerWidth) * (devicePixelRatio || 1);
+    return `${url}?w=${WIDTHS.find((w) => w >= across * 0.75) || 2560}`;
+  }
+  const tall = (picture) =>
+    picture.dataset.shape === "tall" || Boolean(picture.closest(".gallery-strip-primary, .picture-wall-primary, .compare-wall-primary"));
   const current = () => pictures[index];
   const originalOf = (picture) => {
     const url = picture?.dataset.original;
@@ -175,20 +185,24 @@
   function show(at) {
     index = (at + pictures.length) % pictures.length;
     const picture = current();
-    madeImg.src = picture.dataset.full;
+    madeImg.src = fit(picture.dataset.full, tall(picture));
     madeImg.alt = picture.dataset.alt || "";
     const original = originalOf(picture);
     if (original) {
-      originalImg.src = original;
+      originalImg.src = fit(original, tall(picture));
       originalImg.alt = (picture.dataset.alt || "").replace(/, its .*/, ", its original");
     } else {
       originalImg.removeAttribute("src");
     }
     render();
-    // Load the next one ahead, so the slideshow doesn't wait on it.
-    const next = pictures[(index + 1) % pictures.length];
-    new Image().src = next.dataset.full;
-    if (originalOf(next) && mode !== "single") new Image().src = originalOf(next);
+    // The pictures either side (and their originals, for comparing) loaded
+    // ahead, so stepping to them doesn't wait.
+    for (const step of [1, -1, 2]) {
+      const near = pictures[(index + step + pictures.length) % pictures.length];
+      if (!near || near === picture) continue;
+      new Image().src = fit(near.dataset.full, tall(near));
+      if (originalOf(near)) new Image().src = fit(originalOf(near), tall(near));
+    }
   }
   madeImg.addEventListener("load", () => {
     if (madeImg.naturalHeight) stage.style.setProperty("--ratio", madeImg.naturalWidth / madeImg.naturalHeight);
@@ -282,12 +296,85 @@
     follow(event);
   });
 
+  // --- A title's page: the titles either side loaded ahead -------------------
+  // Their pages and pictures are fetched while this one is looked at, and
+  // put in place of it when you move on, so flipping through doesn't wait
+  // for a page (or its pictures) to load.
+  const ahead = new Map(); // address -> Promise of its page, or null
+  function warmPictures(doc) {
+    for (const img of doc.querySelectorAll(".gallery-strip img, .title-show-next img")) {
+      const copy = new Image();
+      if (img.getAttribute("sizes")) copy.sizes = img.getAttribute("sizes");
+      if (img.getAttribute("srcset")) copy.srcset = img.getAttribute("srcset");
+      copy.src = img.getAttribute("src");
+    }
+  }
+  function load(url) {
+    if (!url) return null;
+    if (!ahead.has(url)) {
+      ahead.set(url, fetch(url, { credentials: "same-origin" })
+        .then((response) => (response.ok ? response.text() : null))
+        .then((html) => {
+          const doc = html ? window.curatarrSwap.page(html) : null;
+          if (doc?.querySelector(".gallery-title")) { warmPictures(doc); return doc; }
+          return null;
+        })
+        .catch(() => null));
+      while (ahead.size > 8) ahead.delete(ahead.keys().next().value);
+    }
+    return ahead.get(url);
+  }
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 150));
+  function lookAhead() {
+    const page = document.querySelector(".gallery-title");
+    if (!page) return;
+    idle(() => {
+      // Two ahead going forward (the usual way through), one back.
+      load(page.dataset.after)?.then((doc) => load(doc?.querySelector(".gallery-title")?.dataset.after));
+      load(page.dataset.before);
+    });
+  }
+  async function goTo(url, push = true) {
+    const doc = await load(url);
+    ahead.delete(url); // its page is about to be taken out of it
+    const fresh = doc?.querySelector(".gallery-title");
+    const page = document.querySelector(".gallery-title");
+    if (!fresh || !page) { window.location.href = url; return; }
+    if (viewer.open) viewer.close();
+    page.replaceWith(document.adoptNode(fresh));
+    document.title = doc.title;
+    if (push) history.pushState({ galleryTitle: true }, "", url);
+    window.scrollTo({ top: 0 });
+    fresh.querySelector("h1")?.focus({ preventScroll: true });
+    lookAhead();
+  }
+  if (document.querySelector(".gallery-title")) {
+    lookAhead();
+    window.addEventListener("popstate", () => {
+      if (document.querySelector(".gallery-title")) goTo(window.location.href, false);
+    });
+  }
+  const STEPS = ".gallery-title a[rel=next], .gallery-title a[rel=prev], .gallery-title .title-show-next, .gallery-title [data-kind-link]";
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest(STEPS);
+    if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    goTo(link.href);
+  });
+  // Another type of picture: loaded when the pointer or focus reaches its tab.
+  for (const type of ["pointerover", "focusin"]) {
+    document.addEventListener(type, (event) => {
+      const link = event.target.closest?.(".gallery-title [data-kind-link]");
+      if (link && link.getAttribute("aria-current") !== "page") load(link.href);
+    });
+  }
+
   // --- Keys ------------------------------------------------------------------
   function stepType(by) {
     const links = [...document.querySelectorAll("[data-kind-link]")];
     const at = links.findIndex((link) => link.getAttribute("aria-current") === "page");
     const to = links[at + by];
-    if (to) window.location.href = to.href;
+    if (to) goTo(to.href);
     return Boolean(to);
   }
   document.addEventListener("keydown", (event) => {
@@ -324,8 +411,8 @@
     const strip = [...page.querySelectorAll(".gallery-strip [data-full]")];
     // A title's own page: the titles before and after it, its other types
     // of picture, and its pictures by number.
-    if (event.key === "ArrowRight" && page.dataset.after) window.location.href = page.dataset.after;
-    else if (event.key === "ArrowLeft" && page.dataset.before) window.location.href = page.dataset.before;
+    if (event.key === "ArrowRight" && page.dataset.after) goTo(page.dataset.after);
+    else if (event.key === "ArrowLeft" && page.dataset.before) goTo(page.dataset.before);
     else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       if (stepType(event.key === "ArrowDown" ? 1 : -1)) event.preventDefault();
     } else if (/^[1-9]$/.test(event.key) && strip[Number(event.key) - 1]?.dataset.full) {

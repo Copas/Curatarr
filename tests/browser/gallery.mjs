@@ -68,6 +68,31 @@ const check = {
     return !closed.open && kept === "wipe" ? true : { closed, kept };
   },
 };
+// A title's page: the next title's page is fetched ahead and put in place
+// when you move on (here, made-up pages answer fetch).
+check["flipping to the next title puts its page in place, loaded ahead"] = async ({ go, js, send, sleep }) => {
+  await go("/library/posters/gallery");
+  await js(`(() => {
+    const article = (n) => '<article class="gallery-title" data-before="/library/posters/gallery/t' + (n - 1) +
+      '" data-after="/library/posters/gallery/t' + (n + 1) + '" data-back="/library/posters/gallery"><h1 tabindex="-1">Title ' + n +
+      '</h1><div class="gallery-strip gallery-strip-primary"><button type="button" data-full="/static/logo.svg">p</button></div></article>';
+    window.fetched = [];
+    window.fetch = async (url) => {
+      window.fetched.push(String(url));
+      const n = Number(String(url).match(/t(\\d+)$/)[1]);
+      return new Response('<!doctype html><title>Title ' + n + '</title><main>' + article(n) + '</main>', { status: 200 });
+    };
+    document.querySelector('main').prepend(curatarrSwap.element(article(1)));
+  })()`);
+  await key(send, "ArrowRight");
+  await sleep(600);
+  const r = await js(`({ heading: document.querySelector('.gallery-title h1').textContent, title: document.title,
+    path: location.pathname, pages: document.querySelectorAll('.gallery-title').length, fetched: window.fetched,
+    focused: document.activeElement.tagName })`);
+  const ahead = r.fetched.includes("/library/posters/gallery/t3");  // the one after, fetched ahead
+  return r.heading === "Title 2" && r.title === "Title 2" && r.path === "/library/posters/gallery/t2" &&
+    r.pages === 1 && r.focused === "H1" && ahead ? true : r;
+};
 // The third picture's original is missing on purpose.
 check["the gallery compares each picture with its original, by keyboard"].expect = /no-such-picture/;
 export default check;

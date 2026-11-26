@@ -288,6 +288,7 @@
   .jf-link { display: inline-flex; align-items: center; vertical-align: -.1em; margin-left: .35rem; color: var(--app-muted); position: relative; z-index: 2; }
   .jf-link:hover, .jf-link:focus-visible { color: var(--app-link-hover); }
   /* Gallery → a title: its original beside each version made for it. */
+  .gallery-title h1:focus { outline: none; } /* focused on moving to it, for screen readers */
   .gallery-title-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
   .gallery-strip { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); align-items: start; }
   .gallery-strip-primary { grid-template-columns: repeat(auto-fill, minmax(min(46%, 220px), 1fr)); }

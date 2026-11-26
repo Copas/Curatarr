@@ -1296,12 +1296,13 @@ def gallery_groups(sort: str = "newest") -> list[dict]:
             },
         )
         group["posters"].append(poster)
+    names = _names()
     for group in groups.values():
         # Everyone's first, then accounts by name.
         group["posters"].sort(
             key=lambda p: (
                 p.jellyfin_user_id is not None,
-                account_name(p.jellyfin_user_id) if p.jellyfin_user_id else "",
+                names(p.jellyfin_user_id) if p.jellyfin_user_id else "",
             )
         )
         group["applied_at"] = max(
@@ -1355,11 +1356,12 @@ def versions(groups) -> dict[str, dict[str, list[dict]]]:
     set side by side: {media id: {type: [{"image", "who"}]}}, the one
     everyone sees first. Accounts given the same picture are one version."""
     found: dict[str, dict[str, list[dict]]] = {}
+    names = _names()
     for tile in groups:
         for group in [tile, *tile["extras"]]:
             kinds = found.setdefault(group["media"].id, {})
             kinds.setdefault(group["kind"], []).append(
-                {"image": group["image"], "who": _who_sees(group["posters"])}
+                {"image": group["image"], "who": _who_sees(group["posters"], names)}
             )
     for kinds in found.values():
         for listed in kinds.values():
@@ -1367,10 +1369,19 @@ def versions(groups) -> dict[str, dict[str, list[dict]]]:
     return found
 
 
-def _who_sees(posters) -> str:
+def _who_sees(posters, names) -> str:
     if any(p.jellyfin_user_id is None for p in posters):
         return "Everyone"
-    return ", ".join(account_name(p.jellyfin_user_id) for p in posters)
+    return ", ".join(names(p.jellyfin_user_id) for p in posters)
+
+
+def _names():
+    """account_name, with the names read once: asked for each of hundreds of
+    pictures, each asking the database made the Gallery slow to open."""
+    from .services import setting
+
+    known = setting("jellyfin_user_names", {}) or {}
+    return lambda user_id: known.get(user_id) or "one account"
 
 
 def leaving_label(media_id) -> str | None:

@@ -27,9 +27,9 @@
       {% if pics.Logo %}<span class="showcase-logo"><img {{ sized(url_for('main.custom_poster_image', poster_id=pics.Logo.id), '220px', 240) }} alt="" loading="lazy"></span>{% endif %}
     </div>
     <figcaption class="showcase-caption">{{ title }}<span class="showcase-count">{{ pics|length }} picture{{ '' if pics|length == 1 else 's' }}{% if many > 1 %} · up to {{ many }} versions{% endif %}</span></figcaption></a>
-    {% for kind, noun in [('Backdrop', 'background'), ('Primary', 'poster'), ('Thumb', 'wide tile'), ('Logo', 'logo'), ('Banner', 'banner')] %}{% if pics[kind] %}<span hidden data-full="{{ url_for('main.custom_poster_image', poster_id=pics[kind].id) }}" data-original="{{ url_for('main.custom_poster_original', media_id=c.media.id, kind=kind) }}" data-alt="{{ title }}, its {{ noun }}"></span>{% endif %}{% endfor %}
+    {% for kind, noun in [('Backdrop', 'background'), ('Primary', 'poster'), ('Thumb', 'wide tile'), ('Logo', 'logo'), ('Banner', 'banner')] %}{% if pics[kind] %}<span hidden{% if kind == 'Primary' %} data-shape="tall"{% endif %} data-full="{{ url_for('main.custom_poster_image', poster_id=pics[kind].id) }}" data-original="{{ url_for('main.custom_poster_original', media_id=c.media.id, kind=kind) }}" data-alt="{{ title }}, its {{ noun }}"></span>{% endif %}{% endfor %}
   </figure>{% endfor %}</div>
 {% else %}<div class="empty-state"><h2 class="h6">Nothing to show yet</h2><p class="mb-0">Pictures made for titles show here once they're put on, from a title's page or the import folder (see <a href="{{ url_for('main.custom_posters_page') }}">Posters</a>).</p></div>{% endif %}
 {% if cards %}<p class="gallery-none text-secondary" hidden>No title here matches.</p>{% set where = 'index' %}{% include '_gallery_keys.html' %}{% endif %}
-<script src="{{ url_for('static', filename='gallery-show.js', v='6') }}"></script>
+<script src="{{ url_for('static', filename='gallery-show.js', v='7') }}"></script>
 {% endblock %}

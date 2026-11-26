@@ -947,8 +947,16 @@ def original_art(media: MediaIdentity, kind: str) -> Path | None:
     folder = staging().parent / "artwork_originals"
     folder.mkdir(parents=True, exist_ok=True)
     cached = folder / f"{media.id}-{kind}{custom_posters._extension(kind)}"
+    # When it was last checked against Jellyfin's: kept apart from the file,
+    # which is rewritten only when the picture changed (its smaller copies,
+    # sized.py, are made again whenever the file is).
+    checked = cached.with_name(cached.name + ".checked")
     try:
-        if time.time() - cached.stat().st_mtime < ORIGINALS_FOR_A_DAY:
+        last = max(
+            cached.stat().st_mtime,
+            checked.stat().st_mtime if checked.exists() else 0,
+        )
+        if time.time() - last < ORIGINALS_FOR_A_DAY:
             return cached
     except OSError:
         pass
@@ -960,7 +968,15 @@ def original_art(media: MediaIdentity, kind: str) -> Path | None:
         return cached if cached.is_file() else None
     if not data:
         return None
-    cached.write_bytes(data)
+    try:
+        same = cached.read_bytes() == data
+    except OSError:
+        same = False
+    if same:
+        checked.touch()
+    else:
+        cached.write_bytes(data)
+        checked.unlink(missing_ok=True)
     return cached
 
 

@@ -6,7 +6,7 @@
 <article class="gallery-title" data-before="{{ before_url or '' }}" data-after="{{ after_url or '' }}" data-back="{{ url_for('main.custom_posters_gallery') }}">
 <header class="page-heading">
   <div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_gallery') }}">Gallery</a> · {{ place }} of {{ count }}</div>
-    <h1>{{ title }}</h1>
+    <h1 tabindex="-1">{{ title }}</h1>
     <p class="text-secondary mb-0">Its own {{ noun }} beside {{ 'the one' if made|length == 1 else 'all ' ~ made|length }} made for it{{ ', and who sees which' if made|length > 1 }}. Open any full screen to compare them.</p></div>
   <div class="gallery-title-actions">
     {% if before %}<a class="btn btn-outline-secondary" href="{{ before_url }}" rel="prev" aria-label="Before: {{ before.media|labelled }}">‹ Before</a>{% endif %}
@@ -24,5 +24,5 @@
 {% set where = 'title' %}{% include '_gallery_keys.html' %}
 {% if after %}<a class="title-show-next" href="{{ after_url }}"><span class="title-show-next-label">Next</span>{% if after.pictures.Logo %}<img {{ sized(url_for('main.custom_poster_image', poster_id=after.pictures.Logo.id), '200px', 240) }} alt="{{ after.media|labelled }}" loading="lazy">{% else %}<span class="title-show-next-name">{{ after.media|labelled }}</span>{% endif %}</a>{% endif %}
 </article>
-<script src="{{ url_for('static', filename='gallery-show.js', v='6') }}"></script>
+<script src="{{ url_for('static', filename='gallery-show.js', v='7') }}"></script>
 {% endblock %}

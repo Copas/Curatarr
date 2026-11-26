@@ -7,8 +7,10 @@ wide. A page asks for ``?w=`` one of WIDTHS (with srcset, so the browser
 picks the one that fits the tile and the screen), and gets a WebP copy that
 size, made once and kept on disk next to the database (keyed by the
 picture's id and its file's modification time, so a changed file gets a new
-copy). Transparency is kept (logos). Without ``?w=`` the picture is sent as
-it is: the full-screen viewer, downloads and Jellyfin use that.
+copy). Transparency is kept (logos). The Gallery's full-screen viewer asks
+for the width that fills the screen. Without ``?w=`` the picture is sent as
+it is: downloads and Jellyfin use that. The worker makes the Gallery's
+copies ahead of time (warm), so flipping through it doesn't wait on them.
 """
 
 import os
@@ -18,7 +20,7 @@ from pathlib import Path
 from flask import abort, current_app, request, send_file
 from markupsafe import Markup, escape
 
-WIDTHS = (240, 480, 960, 1440)
+WIDTHS = (240, 480, 960, 1440, 2560)
 QUALITY = 80  # WebP: no visible loss at these sizes, about 1/40 of the original
 KEPT_FOR = 3600  # s, as the originals
 
@@ -78,3 +80,44 @@ def attrs(url: str, sizes: str, width: int = 480) -> Markup:
     return Markup(
         f'src="{escape(url)}{joiner}w={width}" srcset="{escape(srcset)}" sizes="{escape(sizes)}"'
     )
+
+
+# The Gallery's copies the worker makes ahead: its tiles, and full screen.
+WARM = (480, 960, 1440)
+WARM_SECONDS = 30
+
+
+def warm(seconds: float = WARM_SECONDS) -> int:
+    """Make the Gallery's pictures' copies (and their originals') that
+    aren't made yet, newest first, for up to ``seconds``. Returns how many
+    pictures were looked at."""
+    import time
+
+    from . import custom_posters, db
+    from .artwork_jobs import original_art
+    from .integrations import IntegrationError
+    from .models import MediaIdentity
+
+    started, done, originals = time.monotonic(), 0, set()
+    for poster in custom_posters.gallery():
+        if time.monotonic() - started > seconds:
+            break
+        jobs = [(poster.image_path, poster.id)]
+        pair = (poster.media_identity_id, poster.image_type)
+        if pair not in originals:
+            originals.add(pair)
+            media = db.session.get(MediaIdentity, poster.media_identity_id)
+            try:
+                found = original_art(media, poster.image_type) if media else None
+            except (IntegrationError, OSError):
+                found = None
+            if found is not None:
+                jobs.append((str(found), f"o-{pair[0]}-{pair[1]}"))
+        for path, key in jobs:
+            for width in WARM:
+                try:
+                    copy(path, key, width)
+                except (OSError, ValueError):
+                    break  # not a picture Pillow reads, or gone
+        done += 1
+    return done

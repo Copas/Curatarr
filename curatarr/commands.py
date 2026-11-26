@@ -421,6 +421,13 @@ def _dispatch_chapters():
         db.session.rollback()
         current_app.logger.exception("Recording where titles came from failed")
     try:
+        from . import sized
+
+        sized.warm()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Making the Gallery's pictures ahead failed")
+    try:
         from . import playlist_keep
 
         playlist_keep.sweep()
