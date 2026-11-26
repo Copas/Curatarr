@@ -25,7 +25,7 @@ from pathlib import Path
 
 from flask import current_app
 from sqlalchemy import and_, case, func, or_, update
-from sqlalchemy.exc import OperationalError, PendingRollbackError
+from sqlalchemy.exc import IntegrityError, OperationalError, PendingRollbackError
 
 from . import db, leases, subtitle_sync, throttle
 from .chapters import (
@@ -676,8 +676,15 @@ def state_for(part: MediaPart) -> ChapterState:
             job_state="idle",
             attempts=0,
         )
-        db.session.add(state)
-        db.session.flush()
+        # Two background jobs (seek repair, a subtitle sweep) can meet a new
+        # file at once: the one that loses takes the row the other made.
+        try:
+            with db.session.begin_nested():
+                db.session.add(state)
+        except IntegrityError:
+            state = (
+                db.session.query(ChapterState).filter_by(media_part_id=part.id).one()
+            )
     return state
 
 
@@ -4491,6 +4498,7 @@ def _place_credits(ep, plugin, item_id, credits, hidden) -> str | None:
             _log("credits_redo_failed", state_id=ep.state.id, error=str(exc))
             ep.redo_failed = True  # not counted as checked: tried again
             return None
+        _keep(plugin)
     elif any(h.get("type") == "Credits" and h.get("replaced_by") for h in hidden):
         # Trimmed by the talking check: Curatarr's own credits marker is
         # there, and the plugin's list leaves it out, so this would add another.
@@ -4606,6 +4614,16 @@ def skip_lead(start: float) -> float:
 # 3: the shared stretch overlapping Intro Skipper's intro, not the longest
 
 
+def _keep(plugin):
+    """Commit the segment store's changes now, as Jellyfin already has them:
+    what follows (reading the credits' pictures, the intro's sound) takes a
+    minute or more, and every other job waited on the database meanwhile."""
+    from .segments import SegmentStore
+
+    if isinstance(plugin, SegmentStore):
+        db.session.commit()
+
+
 def _restored(plugin, item_id, h) -> bool:
     """Swap Curatarr's marker back for Intro Skipper's original before the
     intro is placed again. False when Intro Skipper no longer has the
@@ -4660,6 +4678,7 @@ def _place_intro(ep, plugin, item_id, intros, hidden) -> str | None:
             _log("intro_redo_failed", state_id=ep.state.id, error=str(exc))
             ep.redo_failed = True  # not counted as checked: tried again
             return None
+        _keep(plugin)
     own = _record_own_intro(ep, intros)
     if not intros:
         added = _add_intro(ep, plugin, item_id, own, hidden) if own else None

@@ -3042,3 +3042,30 @@ def test_skip_buttons_show_a_moment_early(app):
     assert enrichment.skip_lead(100.0) == 100.0
     with pytest.raises(ChapterConfigError):
         validate_global_options({"skip_lead_seconds": 30})
+
+
+def test_two_jobs_meeting_a_new_file_share_its_state(app, monkeypatch):
+    """Seek repair and a subtitle sweep both made a new file's row at once:
+    the second insert broke the unique rule and its whole sweep failed."""
+    _library, media, part = _movie()
+    real = db.session.begin_nested
+
+    def other_job_first():
+        db.session.execute(
+            ChapterState.__table__.insert().values(
+                id="made-by-the-other-job",
+                media_part_id=part.id,
+                media_identity_id=media.id,
+                chapter_status="not_processed",
+                job_state="idle",
+                attempts=0,
+            )
+        )
+        monkeypatch.setattr(db.session, "begin_nested", real)
+        return real()
+
+    monkeypatch.setattr(db.session, "begin_nested", other_job_first)
+    state = enrichment.state_for(part)
+    assert state.id == "made-by-the-other-job"
+    db.session.commit()
+    assert db.session.query(ChapterState).count() == 1

@@ -475,3 +475,44 @@ def test_an_episode_about_to_be_watched_isnt_left_resting(app, monkeypatch):
     )
     assert enrichment.recheck_credits() == 1  # up next: not left resting
     assert states[1].requested_action == "recap" and states[0].requested_action is None
+
+
+def test_redoing_credits_frees_the_database_before_reading_the_pictures(
+    app, monkeypatch
+):
+    """Hiding the old marker started a write that was held while the credits'
+    pictures were read (a minute or more): every other job waited on it."""
+    from conftest import database_free
+
+    from curatarr import db
+    from curatarr.models import MediaSegment
+    from curatarr.segments import SegmentStore
+
+    for sid, start, hidden_now in (("ours-1", 2550.0, False), ("theirs", 2553.0, True)):
+        db.session.add(
+            MediaSegment(
+                id=sid,
+                item_id="item",
+                kind="Credits",
+                start=start,
+                end=2600.0,
+                hidden=hidden_now,
+            )
+        )
+    db.session.commit()
+    free = []
+
+    def reading(_p, _d, guess):
+        free.append(database_free(app))
+        return credits.Found(guess - 3, "moved to a black")
+
+    monkeypatch.setattr(credits, "credits_start", reading)
+    hidden = [
+        {"id": "theirs", "type": "Credits", "start": 2553.0, "end": 2600.0}
+        | {"replaced_by": "ours-1", "placed": True}
+    ]
+    store = SegmentStore(forward=False)
+    assert _place_credits(_ep(rule=1), store, "item", [], hidden) == "credits moved"
+    assert free == [True]
+    db.session.commit()
+    assert db.session.get(MediaSegment, "ours-1").hidden

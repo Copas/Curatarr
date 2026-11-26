@@ -336,3 +336,48 @@ def test_notes_are_dropped_after_a_year_and_unreadable_lists_wait(app, radarr):
     assert origin.note_new([], [movie], None, fake, now=now) == 1
     origin.note_new([], [], None, fake, now=now + timedelta(days=400))
     assert setting(origin.EARLY_KEY) == {}
+
+
+def test_titles_gone_from_radarr_dont_hold_up_the_rest(app, radarr):
+    """Deleted films (no file) and films Radarr no longer has filled every
+    batch, asked about every cycle, so older titles never had their turn."""
+    now = utcnow()
+    older = _film(now - timedelta(days=30), title="Ronin")
+
+    def another(title, radarr_id, has_file):
+        media = MediaIdentity(
+            library_id=older.library_id,
+            media_type="movie",
+            title=title,
+            radarr_id=radarr_id,
+            added_at=now - timedelta(days=2),
+        )
+        db.session.add(media)
+        db.session.flush()
+        db.session.add(
+            MediaPart(media_identity_id=media.id, kind="movie_file", has_file=has_file)
+        )
+        db.session.commit()
+        return media
+
+    gone = another("Heat", 9, has_file=False)  # deleted
+    another("Thief", 8, has_file=True)  # Radarr no longer has it
+    asked = []
+
+    class Radarr(FakeRadarr):
+        def request(self, method, path, **kwargs):
+            asked.append(path)
+            if path.endswith("/8"):
+                raise IntegrationError("Not found", status_code=404)
+            return self.movie
+
+    radarr(Radarr({"id": 7, "tmdbId": 949, "added": "2026-01-05T17:21:13Z"}))
+    assert origin.sweep(now=now) == 1
+    assert db.session.get(MediaIdentity, older.id).origin
+    assert db.session.get(MediaIdentity, gone.id).origin is None
+    assert "/api/v3/movie/9" not in asked  # no file: not asked
+    assert asked.count("/api/v3/movie/8") == 1
+    assert origin.sweep(now=now + timedelta(hours=1)) == 0
+    assert asked.count("/api/v3/movie/8") == 1  # not again the same day
+    origin.sweep(now=now + timedelta(days=1, minutes=1))
+    assert asked.count("/api/v3/movie/8") == 2

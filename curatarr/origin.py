@@ -46,6 +46,13 @@ LATE = "Can't tell"
 # dropped it by then): {"movie:<tmdb>"|"series:<tvdb>": {"lists", "added", "at"}}.
 EARLY_KEY = "origin_noted_on_add"
 EARLY_KEPT = timedelta(days=365)
+# Titles Radarr or Sonarr no longer have (deleted there, or matched to an id
+# that's gone): asked again a day later, not every cycle, where they filled
+# the whole batch and kept every older title from its turn.
+# {media id: when Radarr or Sonarr last said it isn't there}.
+GONE_KEY = "origin_gone"
+GONE_RETRY = timedelta(days=1)
+GONE = object()  # _arr_item: Radarr or Sonarr answered, and doesn't have it
 
 
 def describe(media) -> dict:
@@ -62,6 +69,8 @@ def describe(media) -> dict:
         "this_copy": None,
     }
     arr_item, arr = _arr_item(media, film)
+    if arr_item is GONE:
+        arr_item, result["gone"] = None, True
     if arr_item:
         result["added"] = _as_datetime(arr_item.get("added"))
     reasons = result["reasons"]
@@ -163,10 +172,13 @@ def short(info) -> str | None:
 def record(media, now=None) -> bool:
     """Work out where a title came from and keep it. False (nothing kept,
     tried again later) when Radarr or Sonarr couldn't be asked: without them
-    "added by hand" would be a guess."""
+    "added by hand" would be a guess. LookupError when they answered and
+    don't have it (sweep asks again a day later)."""
     now = now or _now()
     info = describe(media)
     if info["added"] is None:
+        if info.get("gone"):
+            raise LookupError(media.id)
         return False
     media.origin = {
         "short": short(info),
@@ -243,11 +255,23 @@ def sweep(now=None) -> int:
     import time
 
     from .models import MediaIdentity
+    from .services import set_setting, setting
 
+    now = now or _now()
     started, done = time.monotonic(), 0
+    gone = {
+        media_id: at
+        for media_id, at in (setting(GONE_KEY, {}) or {}).items()
+        if (when := _as_datetime(at)) and now - when < GONE_RETRY
+    }
     rows = (
         db.session.query(MediaIdentity)
-        .filter(MediaIdentity.origin.is_(None))
+        .filter(
+            MediaIdentity.origin.is_(None),
+            MediaIdentity.id.notin_(list(gone)),
+            # Recorded once its file is here: a deleted title has nothing to say.
+            MediaIdentity.parts.any(MediaPart.has_file.is_(True)),
+        )
         .order_by(MediaIdentity.added_at.desc())
         .limit(RECORD_BATCH)
         .all()
@@ -257,8 +281,12 @@ def sweep(now=None) -> int:
             break
         try:
             done += record(media, now)
+        except LookupError:
+            gone[media.id] = now.isoformat()
         except (IntegrationError, OSError, ValueError, TypeError):
             continue
+    if gone != (setting(GONE_KEY, {}) or {}):
+        set_setting(GONE_KEY, gone)
     db.session.commit()
     return done
 
@@ -272,8 +300,8 @@ def _arr_item(media, film):
         path = f"/api/v3/{'movie' if film else 'series'}/{arr_id}"
         item = arr.request("GET", path)
         return (item if isinstance(item, dict) else None), arr
-    except IntegrationError:
-        return None, None
+    except IntegrationError as exc:
+        return (GONE if exc.status_code == 404 else None), None
 
 
 def _requests(media):
