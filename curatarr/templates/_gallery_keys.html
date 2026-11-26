@@ -1,0 +1,20 @@
+{# The Gallery's keyboard shortcuts. Needs `where`: 'title' (a title's page) or 'index'. #}
+<details class="gallery-keys" data-gallery-keys><summary>Keyboard shortcuts <kbd>?</kbd></summary>
+<div class="gallery-keys-groups">
+<section><h2 class="h6">On this page</h2><dl class="gallery-keys-list">
+{% if where == 'title' %}<div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>The title before or after</dd></div>
+<div><dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Another type of picture</dd></div>
+<div><dt><kbd>1</kbd>–<kbd>9</kbd></dt><dd>That picture, full screen</dd></div>
+<div><dt><kbd>Esc</kbd></dt><dd>Back to the Gallery</dd></div>
+{% else %}<div><dt><kbd>/</kbd></dt><dd>Find a title</dd></div>
+<div><dt><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></dt><dd>Move between pictures</dd></div>
+<div><dt><kbd>Enter</kbd></dt><dd>Open it</dd></div>
+{% endif %}</dl></section>
+<section><h2 class="h6">Full screen</h2><dl class="gallery-keys-list">
+<div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Previous or next picture</dd></div>
+<div><dt><kbd>C</kbd></dt><dd>Compare with the original: side by side, then wipe, then off</dd></div>
+<div><dt>Hold <kbd>O</kbd></dt><dd>Peek at the original</dd></div>
+<div><dt><kbd>Space</kbd></dt><dd>Slideshow</dd></div>
+<div><dt><kbd>Esc</kbd></dt><dd>Close</dd></div>
+</dl></section>
+</div></details>

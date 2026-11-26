@@ -1,24 +1,28 @@
 {% extends 'base.html' %}
 {% block title %}{{ card.media|labelled }} · Gallery · Curatarr{% endblock %}
-{% block content %}{% set pics = card.pictures %}{% set title = card.media.title %}
-{% macro picture_url(p) %}{{ url_for('main.custom_poster_image', poster_id=p.id) }}{% endmacro %}
-<article class="title-show" data-before="{{ url_for('main.custom_posters_gallery_title', media_id=before.media.id) if before }}" data-after="{{ url_for('main.custom_posters_gallery_title', media_id=after.media.id) if after }}">
-  <header class="title-show-hero{{ ' title-show-hero-plain' if hero not in ('Backdrop', 'Thumb') }}">
-    {% if hero %}<button type="button" class="title-show-backdrop" data-full="{{ picture_url(pics[hero]) }}" data-alt="{{ title }}, its {{ hero_name }}" aria-label="Show the {{ hero_name }} full screen"><img {{ sized(picture_url(pics[hero])|trim, '100vw', 1440) }} alt="" fetchpriority="high"></button>{% endif %}
-    <nav class="title-show-nav" aria-label="Gallery">
-      <a class="title-show-pill" href="{{ url_for('main.custom_posters_gallery') }}">← Gallery</a>
-      <span class="title-show-steps">{% if before %}<a class="title-show-pill" href="{{ url_for('main.custom_posters_gallery_title', media_id=before.media.id) }}" aria-label="Before: {{ before.media|labelled }}">‹</a>{% endif %}<span class="title-show-count">{{ place }} / {{ count }}</span>{% if after %}<a class="title-show-pill" href="{{ url_for('main.custom_posters_gallery_title', media_id=after.media.id) }}" aria-label="Next: {{ after.media|labelled }}">›</a>{% endif %}</span>
-    </nav>
-    <div class="title-show-heading">
-      {% if pics.Logo %}<button type="button" class="title-show-logo" data-full="{{ picture_url(pics.Logo) }}" data-alt="{{ title }}, its logo" aria-label="Show the logo full screen"><img {{ sized(picture_url(pics.Logo)|trim, '(max-width: 640px) 70vw, 420px', 480) }} alt="{{ title }}"></button>
-      {% else %}<h1 class="title-show-name">{{ title }}</h1>{% endif %}
-      <div class="title-show-actions"><button type="button" class="btn btn-light" data-slideshow>▶ Slideshow</button><a class="btn btn-outline-secondary" href="{{ url_for('main.title', media_id=card.media.id) }}">Title page</a></div>
-    </div>
-  </header>
-  {% if rest %}<section class="title-show-art{{ ' title-show-art-poster' if rest|map(attribute=0)|select('in', ['Primary', 'Thumb'])|list|length == 2 }}" aria-label="{{ title }}'s other pictures">
-    {% for kind, label in rest %}<figure class="title-show-piece piece-{{ kind|lower }}"><button type="button" data-full="{{ picture_url(pics[kind]) }}" data-alt="{{ title }}, its {{ label|lower }}" aria-label="Show the {{ label|lower }} full screen"><img {{ sized(picture_url(pics[kind])|trim, '(max-width: 640px) 100vw, 50vw', 960) }} alt="" loading="lazy"></button><figcaption>{{ label }}</figcaption></figure>{% endfor %}
-  </section>{% endif %}
-  {% if after %}<a class="title-show-next" href="{{ url_for('main.custom_posters_gallery_title', media_id=after.media.id) }}"><span class="title-show-next-label">Next</span>{% if after.pictures.Logo %}<img {{ sized(picture_url(after.pictures.Logo)|trim, '200px', 240) }} alt="{{ after.media|labelled }}" loading="lazy">{% else %}<span class="title-show-next-name">{{ after.media|labelled }}</span>{% endif %}</a>{% endif %}
+{% block content %}{% set title = card.media|labelled %}
+{% set own = url_for('main.custom_poster_original', media_id=card.media.id, kind=kind) %}
+{% set tall = kind == 'Primary' %}{% set side = '(max-width: 575px) 50vw, 300px' if tall else '(max-width: 575px) 100vw, (max-width: 1199px) 50vw, 640px' %}{% set width = 480 if tall else 960 %}
+<article class="gallery-title" data-before="{{ before_url or '' }}" data-after="{{ after_url or '' }}" data-back="{{ url_for('main.custom_posters_gallery') }}">
+<header class="page-heading">
+  <div><div class="eyebrow"><a href="{{ url_for('main.custom_posters_gallery') }}">Gallery</a> · {{ place }} of {{ count }}</div>
+    <h1>{{ title }}</h1>
+    <p class="text-secondary mb-0">Its own {{ noun }} beside {{ 'the one' if made|length == 1 else 'all ' ~ made|length }} made for it{{ ', and who sees which' if made|length > 1 }}. Open any full screen to compare them.</p></div>
+  <div class="gallery-title-actions">
+    {% if before %}<a class="btn btn-outline-secondary" href="{{ before_url }}" rel="prev" aria-label="Before: {{ before.media|labelled }}">‹ Before</a>{% endif %}
+    {% if after %}<a class="btn btn-outline-secondary" href="{{ after_url }}" rel="next" aria-label="Next: {{ after.media|labelled }}">Next ›</a>{% endif %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.title', media_id=card.media.id) }}">Title page</a>
+    <button type="button" class="btn btn-primary" data-slideshow>Slideshow</button>
+  </div>
+</header>
+{% if kinds|length > 1 %}<nav aria-label="Which pictures"><ul class="nav nav-pills gap-2 mb-3 gallery-kinds">{% for k in kinds %}<li class="nav-item"><a class="nav-link{{ ' active' if k == kind }}" href="{{ url_for('main.custom_posters_gallery_title', media_id=card.media.id, kind=k) }}"{% if k == kind %} aria-current="page"{% endif %} data-kind-link>{{ names[k] }}</a></li>{% endfor %}</ul></nav>{% endif %}
+<div class="gallery-strip gallery-strip-{{ kind|lower }}">
+  <figure class="gallery-version gallery-version-original"><button type="button" class="picture-wall-open compare-original" data-full="{{ own }}" data-alt="{{ title }}, its original {{ noun }}" data-who="Original" aria-label="Show the original {{ noun }} full screen"><img {{ sized(own, side, width) }} alt=""></button><figcaption><kbd>1</kbd> Original</figcaption></figure>
+  {% for v in made %}{% set src = url_for('main.custom_poster_image', poster_id=v.image.id) %}{% set who = 'Made for everyone' if v.who == 'Everyone' else 'Made for ' ~ v.who %}{% set lower_who = 'm' ~ who[1:] %}
+  <figure class="gallery-version"><button type="button" class="picture-wall-open" data-full="{{ src }}" data-original="{{ own }}" data-alt="{{ title }}, its {{ noun }} {{ lower_who }}" data-who="{{ who }}" aria-label="Show the {{ noun }} {{ lower_who }} full screen"><img {{ sized(src, side, width) }} alt=""{% if loop.index > 3 %} loading="lazy"{% endif %}></button><figcaption>{% if loop.index < 9 %}<kbd>{{ loop.index + 1 }}</kbd> {% endif %}{{ who }}</figcaption></figure>{% endfor %}
+</div>
+{% set where = 'title' %}{% include '_gallery_keys.html' %}
+{% if after %}<a class="title-show-next" href="{{ after_url }}"><span class="title-show-next-label">Next</span>{% if after.pictures.Logo %}<img {{ sized(url_for('main.custom_poster_image', poster_id=after.pictures.Logo.id), '200px', 240) }} alt="{{ after.media|labelled }}" loading="lazy">{% else %}<span class="title-show-next-name">{{ after.media|labelled }}</span>{% endif %}</a>{% endif %}
 </article>
-<script src="{{ url_for('static', filename='gallery-show.js', v='5') }}"></script>
+<script src="{{ url_for('static', filename='gallery-show.js', v='6') }}"></script>
 {% endblock %}

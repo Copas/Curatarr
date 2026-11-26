@@ -97,7 +97,6 @@
   dialog:modal { overscroll-behavior: contain; }
   dialog::backdrop { overflow: hidden; overscroll-behavior: contain; }
   /* A title's own Gallery page: background and logo as a full-width hero, then the rest. */
-  body:has(.title-show) { overflow-x: clip; }
 
   /* Section tabs and badges */
   .section-nav a { padding: .55rem .8rem; color: var(--app-muted); text-decoration: none; border-bottom: 2px solid transparent; }
@@ -288,62 +287,43 @@
   /* Link to the same item in Jellyfin, shown beside a title. */
   .jf-link { display: inline-flex; align-items: center; vertical-align: -.1em; margin-left: .35rem; color: var(--app-muted); position: relative; z-index: 2; }
   .jf-link:hover, .jf-link:focus-visible { color: var(--app-link-hover); }
-  .title-show { margin-top: -1.25rem; }
-  .title-show-hero { position: relative; width: 100vw; margin-left: calc(50% - 50vw); min-height: min(86vh, 62vw); display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; background: #000; color: #fff; }
-  .title-show-backdrop {
-    position: absolute; inset: 0; padding: 0; border: 0; background: none; cursor: zoom-in;
-    img { width: 100%; height: 100%; object-fit: cover; animation: title-show-drift 24s ease-in-out infinite alternate; }
+  /* Gallery → a title: its original beside each version made for it. */
+  .gallery-title-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .gallery-strip { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); align-items: start; }
+  .gallery-strip-primary { grid-template-columns: repeat(auto-fill, minmax(min(46%, 220px), 1fr)); }
+  .gallery-strip-banner { grid-template-columns: 1fr; }
+  .gallery-strip-logo { grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+  .gallery-version {
+    margin: 0;
+    figcaption { display: flex; align-items: center; gap: .45rem; padding: .5rem .2rem 0; font-weight: 600; }
+    kbd { font-size: .75rem; padding: .05rem .4rem; }
   }
-  .title-show-hero-plain .title-show-backdrop img { filter: blur(28px) brightness(.5); transform: scale(1.2); animation: none; }
-  .title-show-hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, var(--app-bg, #0b0f17) 0%, rgba(0, 0, 0, .55) 28%, rgba(0, 0, 0, 0) 60%), linear-gradient(to right, rgba(0, 0, 0, .65), rgba(0, 0, 0, 0) 55%); }
-  @keyframes title-show-drift { from { transform: scale(1.02); } to { transform: scale(1.08) translateX(-1.5%); } }
-  .title-show-nav { position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: 1rem max(1rem, 4vw); }
-  .title-show-steps { display: flex; align-items: center; gap: .5rem; }
-  .title-show-pill {
-    display: inline-flex; align-items: center; justify-content: center; min-width: 2.4rem; height: 2.4rem; padding: 0 .9rem; border-radius: 999px; background: rgba(0, 0, 0, .45); backdrop-filter: blur(8px); color: #fff; text-decoration: none; font-weight: 600; border: 1px solid rgba(255, 255, 255, .18);
-    &:hover { background: rgba(255, 255, 255, .2); color: #fff; }
-  }
-  .title-show-count { font-size: .85rem; color: rgba(255, 255, 255, .8); padding: 0 .3rem; }
-  .title-show-heading {
-    position: relative; z-index: 2; padding: 0 max(1rem, 4vw) max(1.5rem, 4vw); max-width: 760px; pointer-events: none;
-    > * { pointer-events: auto; }
-  }
-  .title-show-logo {
-    display: block; padding: 0; border: 0; background: none; cursor: zoom-in; margin-bottom: 1.25rem;
-    img { display: block; max-width: min(620px, 80vw); max-height: 30vh; object-fit: contain; filter: drop-shadow(0 6px 22px rgba(0, 0, 0, .85)); }
-  }
-  .title-show-name { font-size: clamp(2.2rem, 6vw, 4.5rem); font-weight: 800; margin-bottom: 1rem; text-shadow: 0 4px 20px rgba(0, 0, 0, .8); }
-  .title-show-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
-  .title-show-art { display: grid; gap: clamp(1rem, 2vw, 1.75rem); margin-top: clamp(1.5rem, 3vw, 2.5rem); grid-template-columns: 1fr; }
-  /* A 2:3 poster beside a 16:9 wide tile is the same height at widths of 3 to 8. */
-  .title-show-art-poster { grid-template-columns: minmax(0, 3fr) minmax(0, 8fr); }
-  .title-show-art .piece-banner, .title-show-art .piece-backdrop { grid-column: 1 / -1; }
-  .title-show-piece {
-    margin: 0; display: flex; flex-direction: column;
-    button { padding: 0; border: 0; background: #000; border-radius: 1rem; overflow: hidden; cursor: zoom-in; box-shadow: 0 18px 50px rgba(0, 0, 0, .45); flex: 1; }
-    img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .6s ease; }
-    button:hover img { transform: scale(1.03); }
-  }
-  .piece-primary img { aspect-ratio: 2 / 3; }
-  .piece-thumb img, .piece-backdrop img { aspect-ratio: 16 / 9; }
-  .piece-banner img { aspect-ratio: 1000 / 185; }
-  .title-show-piece figcaption { margin-top: .6rem; font-size: .75rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: var(--app-muted); }
+  .gallery-strip-primary .picture-wall-open img { aspect-ratio: 2 / 3; }
+  .gallery-strip-banner .picture-wall-open img { aspect-ratio: 1000 / 185; }
+  .gallery-strip-logo .picture-wall-open { background: repeating-conic-gradient(#2a2f38 0% 25%, #1d2128 0% 50%) 50% / 24px 24px; }
+  .gallery-strip-logo .picture-wall-open img { aspect-ratio: 16 / 9; object-fit: contain; padding: 1rem; }
+  .gallery-version-original .picture-wall-open { outline: 2px dashed var(--app-border); outline-offset: 3px; }
+  .gallery-strip .compare-missing { aspect-ratio: 16 / 9; }
+  .gallery-strip-primary .compare-missing { aspect-ratio: 2 / 3; }
   .title-show-next {
-    display: flex; flex-direction: column; align-items: center; gap: .75rem; margin: clamp(2.5rem, 5vw, 4rem) 0 1rem; padding: 2rem 1rem; border-radius: 1rem; border: 1px solid var(--app-border); text-decoration: none; color: inherit; background: var(--app-surface);
+    display: flex; flex-direction: column; align-items: center; gap: .75rem; margin: clamp(2rem, 4vw, 3rem) 0 1rem; padding: 1.5rem 1rem; border-radius: 1rem; border: 1px solid var(--app-border); text-decoration: none; color: inherit; background: var(--app-surface);
     &:hover { border-color: var(--app-accent); }
   }
   .title-show-next-label { font-size: .75rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: var(--app-muted); }
   .title-show-next img { max-width: min(360px, 70vw); max-height: 120px; object-fit: contain; }
   .title-show-next-name { font-size: 1.6rem; font-weight: 700; }
-  .title-show-art:not(.title-show-art-poster) .piece-primary { max-width: 520px; }
-  @media (prefers-reduced-motion: reduce) {
-    .title-show-backdrop img { animation: none; }
+  /* The Gallery's shortcuts, under the pictures. */
+  .gallery-keys {
+    margin-top: 1.5rem; padding: .6rem .9rem; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface);
+    summary { cursor: pointer; font-weight: 600; }
+    summary kbd { margin-left: .35rem; }
   }
-  @media (max-width: 640px) {
-    .title-show-art-poster { grid-template-columns: 1fr; }
-    .title-show-hero { min-height: 74vh; }
-    .title-show-backdrop img { object-position: 68% center; }
-    .title-show-logo img { max-height: 22vh; }
+  .gallery-keys-groups { display: grid; gap: 1rem 2rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); margin-top: .75rem; }
+  .gallery-keys-list {
+    margin: 0;
+    div { display: grid; grid-template-columns: minmax(7.5rem, auto) 1fr; gap: .75rem; padding: .2rem 0; }
+    dt { font-weight: 500; white-space: nowrap; }
+    dd { margin: 0; }
   }
 
   /* Chips and favourite stars */
@@ -742,6 +722,16 @@
   }
   .showcase-more { display: flex; gap: .4rem; }
 
+  .gallery-controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; }
+  .gallery-find {
+    display: flex; align-items: center; gap: .5rem; margin-left: auto;
+    input { inline-size: min(16rem, 60vw); }
+  }
+  .gallery-found { font-size: .875rem; white-space: nowrap; }
+  .compare-sides-many { grid-template-columns: repeat(auto-fill, minmax(min(46%, 150px), 1fr)); }
+  .compare-wall:not(.compare-wall-primary) .compare-sides-many { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+  .compare-pair:has(.compare-sides-many) { grid-column: 1 / -1; }
+
   /* Gallery viewer */
   .gallery-viewer {
     cursor: default; flex-direction: column;
@@ -754,7 +744,55 @@
   }
   .gallery-viewer-prev { left: max(.75rem, env(safe-area-inset-left)); }
   .gallery-viewer-next { right: max(.75rem, env(safe-area-inset-right)); }
-  .gallery-viewer-bar { position: fixed; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); display: flex; gap: .5rem; }
+  .gallery-viewer-bar { position: fixed; z-index: 2; top: max(.75rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); left: max(.75rem, env(safe-area-inset-left)); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+  .gallery-viewer-btn {
+    --btn-fg: #f2f4f7; --btn-line: rgba(255, 255, 255, .35); --btn-hover-bg: rgba(255, 255, 255, .18);
+    &[aria-pressed="true"] { --btn-bg: #f2f4f7; --btn-fg: #111; --btn-hover-bg: #fff; --btn-hover-fg: #111; }
+  }
+  /* The picture, and the original beside it, over it as a wipe, or in its
+     place while O is held. */
+  .gallery-stage {
+    --wipe: 50%;
+    display: grid; place-items: center; gap: 1rem; inline-size: 100%; block-size: calc(100vh - 8.5rem); padding-inline: 4rem; margin-top: 2.5rem;
+    &[data-mode="single"] .gallery-pane-original { display: none; }
+    &[data-mode="single"].peeking .gallery-pane-original { display: flex; }
+    &[data-mode="single"].peeking .gallery-pane-made { display: none; }
+    &[data-mode="side"] { grid-template-columns: 1fr 1fr; }
+    /* The two on top of each other, the size of the new picture (its
+       --ratio): laid out by the stage alone, so a big picture can't grow it. */
+    &[data-mode="wipe"] {
+      display: block; position: relative; padding: 0; cursor: ew-resize; touch-action: none;
+      inline-size: min(100vw - 8rem, (100vh - 11rem) * var(--ratio, 1)); block-size: auto; aspect-ratio: var(--ratio, 1);
+      .gallery-pane { position: absolute; inset: 0; block-size: auto; }
+      .gallery-pane img { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; max-inline-size: none; max-block-size: none; object-fit: contain; }
+      .gallery-pane figcaption { position: absolute; top: .5rem; margin: 0; padding: .15rem .5rem; border-radius: .3rem; background: rgba(0, 0, 0, .7); }
+      .gallery-pane-original figcaption { left: .5rem; }
+      .gallery-pane-made { clip-path: inset(0 0 0 var(--wipe)); }
+      .gallery-pane-made figcaption { right: .5rem; }
+      .gallery-wipe-line { display: block; }
+    }
+  }
+  @media (max-aspect-ratio: 1 / 1) {
+    .gallery-stage[data-mode="side"] { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; padding-inline: 1rem; }
+  }
+  .gallery-pane {
+    margin: 0; min-inline-size: 0; min-block-size: 0; block-size: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    img { max-inline-size: 100%; max-block-size: calc(100% - 2rem); object-fit: contain; user-select: none; -webkit-user-drag: none; }
+    figcaption { color: #e6e8eb; font-size: .875rem; font-weight: 600; margin-top: .4rem; }
+  }
+  .gallery-wipe-line { display: none; position: absolute; top: 0; bottom: 0; left: var(--wipe); inline-size: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 6px rgba(0, 0, 0, .8); pointer-events: none; }
+  .gallery-wipe {
+    display: block; inline-size: min(28rem, 80vw); margin: .5rem auto 0;
+    &[hidden] { display: none; }
+    input { inline-size: 100%; accent-color: #f2f4f7; }
+  }
+  .gallery-viewer-keys {
+    position: fixed; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%); inline-size: min(40rem, calc(100vw - 2rem)); max-block-size: calc(100vh - 6rem); overflow: auto;
+    padding: 1rem 1.25rem; border-radius: .75rem; background: #161a20; color: #e6e8eb; box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+    &[hidden] { display: none; }
+    .gallery-keys-groups { margin-top: 0; }
+    kbd { color: #111; background: #e6e8eb; }
+  }
 
   /* Before & after */
   .compare-wall { display: grid; gap: 1.75rem 1.5rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 760px), 1fr)); }

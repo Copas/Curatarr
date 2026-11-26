@@ -466,18 +466,25 @@ def test_the_gallery_shows_each_titles_set_once(app, client, monkeypatch):
     assert 'href="/library/posters/gallery"' in posters
     page = client.get("/library/posters/gallery").text
     assert "1 title with pictures made for them" in page and "gallery-show.js" in page
-    assert page.count('class="showcase-card"') == 1
+    assert page.count('class="showcase-card gallery-item"') == 1
     assert 'class="showcase-poster"' in page and 'class="showcase-logo"' in page
     assert "The Big Lebowski, its background" in page and "data-slideshow" in page
+    assert "data-gallery-find" not in page  # one title: nothing to find
+    assert "Keyboard shortcuts" in page
     show = f"/library/posters/gallery/{media.id}"
     assert f'href="{show}"' in page  # a card opens the title's own page
     one = client.get(show).text
-    assert 'class="title-show-logo"' in one and "1 / 1" in one
-    assert (
-        "The Big Lebowski, its background" in one
-        and "The Big Lebowski, its poster" in one
-    )
-    assert 'class="title-show-piece piece-primary"' in one
+    assert "1 of 1" in one and "<h1>The Big Lebowski</h1>" in one
+    # Its poster first, beside the original; its other types as tabs.
+    own = f"/library/posters/original/{media.id}/Primary"
+    assert 'class="gallery-strip gallery-strip-primary"' in one
+    assert f'data-full="{own}"' in one and f'data-original="{own}"' in one
+    assert "<kbd>1</kbd> Original" in one and "<kbd>2</kbd> Made for everyone" in one
+    assert all(k in one for k in ("Poster</a>", "Background</a>", "Logo</a>"))
+    backdrop = client.get(f"{show}?kind=Backdrop").text
+    assert 'class="gallery-strip gallery-strip-backdrop"' in backdrop
+    assert "The Big Lebowski, its background made for everyone" in backdrop
+    assert client.get(f"{show}?kind=Banner").text.count("gallery-strip-primary") == 1
     assert client.get("/library/posters/gallery/not-a-title").status_code == 404
     backgrounds = client.get("/library/posters/gallery?view=backgrounds").text
     assert "1 title with backgrounds made for them" in backgrounds
@@ -498,7 +505,7 @@ def test_the_gallery_puts_each_original_beside_what_was_made(app, client, monkey
     _fake(monkeypatch, Primary=_picture("#223344"))
     custom_posters.apply(media, _picture("#cc2222"), "Uploaded")
     page = client.get("/library/posters/gallery?view=compare").text
-    assert "Before &amp; after" in page and 'class="compare-pair"' in page
+    assert "Before &amp; after" in page and 'class="compare-pair gallery-item"' in page
     assert "1 title with posters made for them" in page
     own = f"/library/posters/original/{media.id}/Primary"
     assert own in page and "its original poster" in page
@@ -509,5 +516,34 @@ def test_the_gallery_puts_each_original_beside_what_was_made(app, client, monkey
     none = client.get("/library/posters/gallery?view=compare&kind=Backdrop").text
     assert "0 titles with backgrounds" in none
     odd = client.get("/library/posters/gallery?view=compare&kind=Nope").text
+    assert "compare-sides-many" not in page
     assert "with posters made for them" in odd
     assert client.get(f"/library/posters/original/{media.id}/Nope").status_code == 404
+
+
+def test_each_accounts_version_is_set_beside_the_original(app, client, monkeypatch):
+    """Most custom pictures are one account's own: the Gallery showed only
+    the first, so the versions couldn't be compared."""
+    from curatarr.services import set_setting
+
+    _library, media, _part = _movie("/movies/Heat (1995)/Film.mkv")
+    media.title = "Heat"
+    db.session.commit()
+    set_setting("jellyfin_user_names", {"u1": "Sam", "u2": "Alex", "u3": "Pat"})
+    _fake(monkeypatch, Primary=_picture("#223344"))
+    custom_posters.apply(media, _picture("#cc2222"), "Uploaded", user_id="u1")
+    custom_posters.apply(media, _picture("#22cc22"), "Uploaded", user_id="u2")
+    same = custom_posters.apply(media, _picture("#22cc22"), "Uploaded", user_id="u3")
+    found = custom_posters.versions(custom_posters.gallery_groups())
+    assert sorted(v["who"] for v in found[media.id]["Primary"]) == ["Alex, Pat", "Sam"]
+    one = client.get(f"/library/posters/gallery/{media.id}").text
+    assert "Made for Sam" in one and "Made for Alex, Pat" in one
+    assert (
+        one.count(f'data-original="/library/posters/original/{media.id}/Primary"') == 2
+    )
+    wall = client.get("/library/posters/gallery?view=compare").text
+    assert "compare-sides-many" in wall and "2 versions" in wall
+    posters = client.get("/library/posters/gallery?view=posters").text
+    assert "2 versions" in posters and "data-original=" in posters
+    assert "up to 2 versions" in client.get("/library/posters/gallery").text
+    assert same.jellyfin_user_id == "u3"

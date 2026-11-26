@@ -47,17 +47,18 @@ def _accounts():
 @bp.get("/library/posters/gallery")
 def custom_posters_gallery():
     """Every title's custom pictures, laid out to show people: each title's
-    set, or every picture of one type on its own."""
+    set, every picture of one type on its own, or each beside the original."""
     view = request.args.get("view", "sets")
     if view not in GALLERY_VIEWS:
         view = "sets"
     sort = _sort()
-    cards = custom_posters.showcase(sort)
+    groups = custom_posters.gallery_groups(sort)
+    cards = custom_posters.showcase(sort, groups)
     kind = GALLERY_VIEWS[view][1]
     compare = view == "compare"
     if compare:
         # Before & after, one type at a time: each title's own art beside
-        # the picture made for it.
+        # every picture made for it.
         kind = request.args.get("kind", "Primary")
         if kind not in PIECE_NAMES:
             kind = "Primary"
@@ -66,6 +67,7 @@ def custom_posters_gallery():
     return render_template(
         "poster_gallery.html",
         cards=cards,
+        versions=custom_posters.versions(groups),
         view=view,
         views=GALLERY_VIEWS,
         kind=kind,
@@ -97,30 +99,45 @@ def custom_poster_original(media_id, kind):
 
 @bp.get("/library/posters/gallery/<media_id>")
 def custom_posters_gallery_title(media_id):
-    """One title's pictures, the whole page: its background and logo as a hero,
-    then the rest, with the titles before and after it in the Gallery."""
-    cards = custom_posters.showcase(_sort())
+    """One title's pictures of one type side by side: the original, then
+    each version made for it (who sees which), with its other types and the
+    titles before and after it in the Gallery."""
+    sort = _sort()
+    groups = custom_posters.gallery_groups(sort)
+    cards = custom_posters.showcase(sort, groups)
     at = next((i for i, c in enumerate(cards) if c["media"].id == media_id), None)
     if at is None:
         abort(404)
     pictures = cards[at]["pictures"]
-    # The hero: its background, or else the widest picture it has.
-    hero = next(
-        (k for k in ("Backdrop", "Thumb", "Primary", "Banner") if k in pictures), None
-    )
-    rest = [
-        (kind, PIECE_NAMES[kind])
-        for kind in ("Primary", "Thumb", "Banner", "Backdrop")
-        if kind in pictures and kind != hero
-    ]
+    kinds = [k for k in GALLERY_KINDS if k in pictures]
+    kind = request.args.get("kind")
+    if kind not in kinds:
+        kind = kinds[0]
+    here = custom_posters.versions(groups).get(media_id, {})
+
+    def step(card):
+        if card is None:
+            return None
+        # Stay on the same type of picture when the next title has one.
+        keep = kind if kind in card["pictures"] else None
+        return url_for(
+            "main.custom_posters_gallery_title", media_id=card["media"].id, kind=keep
+        )
+
+    before = cards[at - 1] if at > 0 else None
+    after = cards[at + 1] if at + 1 < len(cards) else None
     return render_template(
         "poster_gallery_title.html",
         card=cards[at],
-        hero=hero,
-        hero_name=PIECE_NAMES.get(hero, "picture").lower(),
-        rest=rest,
-        before=cards[at - 1] if at > 0 else None,
-        after=cards[at + 1] if at + 1 < len(cards) else None,
+        kind=kind,
+        kinds=kinds,
+        noun=custom_posters.KIND_NAMES[kind],
+        names=TYPE_NAMES,
+        made=here.get(kind, []),
+        before=before,
+        after=after,
+        before_url=step(before),
+        after_url=step(after),
         place=at + 1,
         count=len(cards),
     )
@@ -132,6 +149,9 @@ PIECE_NAMES = {
     "Banner": "Banner",
     "Backdrop": "Background",
 }
+# A title's page: its types of picture, in this order (its logo too).
+GALLERY_KINDS = ("Primary", "Backdrop", "Thumb", "Logo", "Banner")
+TYPE_NAMES = PIECE_NAMES | {"Logo": "Logo"}
 # view -> (tab, the picture type shown alone (None: each title's set), its noun)
 GALLERY_VIEWS = {
     "sets": ("Sets", None, "picture"),

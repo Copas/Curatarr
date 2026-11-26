@@ -1334,12 +1334,13 @@ def gallery_groups(sort: str = "newest") -> list[dict]:
     return _sorted(shown, sort)
 
 
-def showcase(sort: str = "newest") -> list[dict]:
+def showcase(sort: str = "newest", groups=None) -> list[dict]:
     """The Gallery: one card per title with each of its pictures once (the
     one everyone sees, or else the first account's), in ``sort`` order:
-    {"media", "pictures": {type: poster}, "latest"}."""
+    {"media", "pictures": {type: poster}, "latest"}. ``groups``: from
+    gallery_groups, when already read."""
     cards: dict[str, dict] = {}
-    for tile in gallery_groups(sort):
+    for tile in gallery_groups(sort) if groups is None else groups:
         card = cards.setdefault(
             tile["media"].id,
             {"media": tile["media"], "pictures": {}, "latest": tile["latest"]},
@@ -1347,6 +1348,29 @@ def showcase(sort: str = "newest") -> list[dict]:
         for group in [tile, *tile["extras"]]:
             card["pictures"].setdefault(group["kind"], group["image"])
     return list(cards.values())
+
+
+def versions(groups) -> dict[str, dict[str, list[dict]]]:
+    """Each title's different pictures of each type, from gallery_groups, to
+    set side by side: {media id: {type: [{"image", "who"}]}}, the one
+    everyone sees first. Accounts given the same picture are one version."""
+    found: dict[str, dict[str, list[dict]]] = {}
+    for tile in groups:
+        for group in [tile, *tile["extras"]]:
+            kinds = found.setdefault(group["media"].id, {})
+            kinds.setdefault(group["kind"], []).append(
+                {"image": group["image"], "who": _who_sees(group["posters"])}
+            )
+    for kinds in found.values():
+        for listed in kinds.values():
+            listed.sort(key=lambda v: v["who"] != "Everyone")
+    return found
+
+
+def _who_sees(posters) -> str:
+    if any(p.jellyfin_user_id is None for p in posters):
+        return "Everyone"
+    return ", ".join(account_name(p.jellyfin_user_id) for p in posters)
 
 
 def leaving_label(media_id) -> str | None:

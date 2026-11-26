@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- The Gallery, rethought for comparing. A title's page now sets its original beside every version made for it, one type of picture at a time, each captioned with who sees it: it used to show only one account's picture, so the others couldn't be compared. Full screen, any picture can be compared with its original side by side, as a wipe, or by holding O, and the way you compare is remembered. Keyboard shortcuts throughout (? lists them): arrows between pictures and titles, ↑ ↓ for a title's other pictures, 1–9 to open one, / to find a title. Before & after and the one-type views show every version too, with a count.
 - Where a title came from: the import lists that have a film or show are now noted when it's added to Radarr or Sonarr, not only once its file is in Jellyfin. A film can wait weeks for a file, and by then a trending or upcoming list had often dropped it, so it was called "Can't tell" (or, before that, "Added by hand").
 - Browse titles keeps loading as you scroll, rather than 48 titles a page with Next.
 - A film with no English audio, when no English copy can be found, is now deleted through Radarr straight away rather than given a Leaving Soon notice (Settings → Automatic, renamed to match). Films already marked Leaving Soon that way are deleted too.
