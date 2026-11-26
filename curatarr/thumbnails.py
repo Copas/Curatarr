@@ -96,14 +96,19 @@ def before_rebuild(path):
 
     try:
         name = path.replace("\\", "/").rsplit("/", 1)[-1]
-        part = (
-            db.session.query(MediaPart)
-            .filter(MediaPart.has_file.is_(True), MediaPart.file_path.like(f"%/{name}"))
-            .first()
-        )
-        if part is None:
-            return None
-        return part, has_thumbnails(part, part.media)
+        # Only reading: the job's changes so far wait until after the
+        # rebuild (half a minute or more) rather than holding the database.
+        with db.session.no_autoflush:
+            part = (
+                db.session.query(MediaPart)
+                .filter(
+                    MediaPart.has_file.is_(True), MediaPart.file_path.like(f"%/{name}")
+                )
+                .first()
+            )
+            if part is None:
+                return None
+            return part, has_thumbnails(part, part.media)
     except Exception:  # noqa: BLE001  outside the app (tools, tests): nothing to note
         return None
 

@@ -153,3 +153,31 @@ def test_a_file_jellyfin_no_longer_has_stops_waiting(app, monkeypatch):
     assert thumbnails.room()
     assert [w["item"] for w in setting(thumbnails.KEY)] == ["item1", "item2"]
     assert not thumbnails.has_thumbnails(Part("item0"), None)
+
+
+def test_the_database_is_free_while_a_file_is_rebuilt(app, monkeypatch):
+    """Looking up the file flushed the job's changes so far, so the database
+    stayed locked through the rebuild (half a minute or more)."""
+    from conftest import database_free
+    from test_enrichment import _movie
+
+    from curatarr import mediafile
+
+    _library, media, _part = _movie("/movies/Loud (2020)/Loud.mkv")
+    _jellyfin(monkeypatch)
+    free = []
+    monkeypatch.setattr(mediafile, "seek_index_hidden", lambda path: True)
+    monkeypatch.setattr(
+        mediafile, "rebuild_layout", lambda path: free.append(database_free(app))
+    )
+
+    class Done:
+        returncode = 0
+        stdout = ""
+
+    monkeypatch.setattr(mediafile, "_run", lambda args, timeout: Done())
+    media.title = "Louder"  # a change the job made before the edit
+    mediafile._mkvpropedit(["mkvpropedit", "/local/Loud.mkv"])
+    assert free == [True]
+    db.session.commit()
+    assert db.session.get(type(media), media.id).title == "Louder"
