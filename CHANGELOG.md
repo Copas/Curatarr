@@ -40,6 +40,7 @@
 
 ## Unreleased
 
+- Where a title came from: the import lists that have a film or show are now noted when it's added to Radarr or Sonarr, not only once its file is in Jellyfin. A film can wait weeks for a file, and by then a trending or upcoming list had often dropped it, so it was called "Can't tell" (or, before that, "Added by hand").
 - Browse titles keeps loading as you scroll, rather than 48 titles a page with Next.
 - A film with no English audio, when no English copy can be found, is now deleted through Radarr straight away rather than given a Leaving Soon notice (Settings → Automatic, renamed to match). Films already marked Leaving Soon that way are deleted too.
 - A title that's Leaving Soon now says on its page how it got there: the cleanup rule that chose it and why, or where it was marked (the title page now records who), with the date.

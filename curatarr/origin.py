@@ -41,6 +41,11 @@ UNKNOWN = "Requested or added by hand"  # Seerr not connected: can't tell
 # dropped it since (trending and upcoming lists turn over), so "by hand"
 # would be a guess.
 LATE = "Can't tell"
+# Import lists noted for titles added to Radarr or Sonarr lately, before any
+# file arrives (a film can wait weeks for one, and a trending list has
+# dropped it by then): {"movie:<tmdb>"|"series:<tvdb>": {"lists", "added", "at"}}.
+EARLY_KEY = "origin_noted_on_add"
+EARLY_KEPT = timedelta(days=365)
 
 
 def describe(media) -> dict:
@@ -73,12 +78,16 @@ def describe(media) -> dict:
             {"text": action.reason_text, "at": _as_datetime(action.created_at)}
         )
     lists = _lists(media, film, arr, arr_item)
+    early = _early(media)
+    listed_at = None
+    if not lists and early and early.get("lists"):
+        lists, listed_at = early["lists"], _as_datetime(early.get("at"))
     if lists:
         reasons.append(
             {
                 "text": f"On {app_name}'s import list{'s' if len(lists) > 1 else ''}: "
                 + ", ".join(lists),
-                "at": None,
+                "at": listed_at,
             }
         )
     elif lists is None and _listed_at_last_sync(media):
@@ -168,9 +177,64 @@ def record(media, now=None) -> bool:
         "guess": info["guess"],
         "added": info["added"].isoformat(),
         "recorded_at": now.isoformat(),
-        "on_arrival": now - info["added"] <= ON_ARRIVAL,
+        "on_arrival": now - info["added"] <= ON_ARRIVAL or _early(media) is not None,
     }
     return True
+
+
+def note_new(sonarr_series, radarr_movies, sonarr, radarr, now=None) -> int:
+    """Note which import lists have the titles added to Sonarr or Radarr in
+    the last day, while they still do: Curatarr records where a title came
+    from once its file is in Jellyfin, and a film can wait weeks for one.
+    Returns how many were noted."""
+    from .services import set_setting, setting
+
+    now = now or _now()
+    notes = dict(setting(EARLY_KEY, {}) or {})
+    for key, note in list(notes.items()):
+        at = _as_datetime(note.get("at"))
+        if at is None or now - at > EARLY_KEPT:
+            del notes[key]
+    done = 0
+    for film, items, arr in (
+        (True, radarr_movies, radarr),
+        (False, sonarr_series, sonarr),
+    ):
+        if arr is None:
+            continue
+        for item in items or []:
+            key = _early_key(film, item.get("tmdbId") if film else item.get("tvdbId"))
+            added = _as_datetime(item.get("added"))
+            if not key or key in notes or not added or now - added > ON_ARRIVAL:
+                continue
+            lists = _lists(None, film, arr, item)
+            if lists is None:
+                continue  # the lists can't be read: try again next time
+            notes[key] = {
+                "lists": lists,
+                "added": added.isoformat(),
+                "at": now.isoformat(),
+            }
+            done += 1
+    set_setting(EARLY_KEY, notes)
+    db.session.commit()
+    return done
+
+
+def _early_key(film, external_id):
+    try:
+        return f"{'movie' if film else 'series'}:{int(external_id)}"
+    except (TypeError, ValueError):
+        return None
+
+
+def _early(media):
+    """What was noted when the title was added to Radarr or Sonarr, if it was."""
+    from .services import setting
+
+    film = media.media_type == "movie"
+    key = _early_key(film, media.tmdb_id if film else media.tvdb_id)
+    return (setting(EARLY_KEY, {}) or {}).get(key) if key else None
 
 
 def sweep(now=None) -> int:
@@ -260,7 +324,7 @@ def _lists(media, film, arr, arr_item) -> list[str] | None:
                             movie.get("lists") or []
                         )
             entry = cache[kind] = {"at": now, "lists": lists, "listed": listed}
-    except (IntegrationError, TypeError, ValueError):
+    except (IntegrationError, AttributeError, TypeError, ValueError):
         return None
     names = {
         entry_["id"]: entry_.get("name") for entry_ in entry["lists"] if "id" in entry_
@@ -283,6 +347,8 @@ def _late(media, added) -> bool:
     kept = media.origin or {}
     if kept.get("on_arrival") and kept.get("short") == HAND:
         return False
+    if _early(media) is not None:
+        return False  # its lists were read when it was added
     return bool(added) and _now() - added > ON_ARRIVAL
 
 

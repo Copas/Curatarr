@@ -419,6 +419,13 @@ def discover():
     from . import curation
 
     from_lists = curation.ListArrivals(sonarr, radarr)
+    from . import origin
+
+    try:
+        origin.note_new(sonarr_series, radarr_movies, sonarr, radarr)
+    except (IntegrationError, OSError, ValueError, TypeError):
+        db.session.rollback()
+        current_app.logger.exception("Noting where new titles came from failed")
     seen = set()
     for source in libraries:
         external_id = str(source.get("ItemId") or source.get("Id"))

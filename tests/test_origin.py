@@ -277,3 +277,62 @@ def test_without_seerr_it_doesnt_claim_nobody_requested_it(app, radarr, monkeypa
     assert "Not requested in Seerr" not in info["guess"]
     assert "Seerr isn't connected" in info["guess"]
     assert origin.short(info) == origin.UNKNOWN
+
+
+def test_import_lists_are_noted_when_a_film_is_added_before_its_file_arrives(
+    app, radarr
+):
+    """A film waited a month for a file; by then the trending list that
+    brought it had dropped it, and it was called "Can't tell"."""
+    now = utcnow()
+    added = now - timedelta(hours=2)
+    movie = {
+        "id": 7,
+        "tmdbId": 949,
+        "added": added.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    old = {"id": 8, "tmdbId": 5, "added": "2026-01-05T17:21:13Z"}
+    fake = radarr(
+        FakeRadarr(
+            movie,
+            lists=[{"id": 1, "name": "Horror - TMDb Popular"}],
+            listed=[{"tmdbId": 949, "lists": [1]}, {"tmdbId": 5, "lists": [1]}],
+        )
+    )
+    assert origin.note_new([], [movie, old], None, fake, now=now) == 1
+    assert origin.note_new([], [movie, old], None, fake, now=now) == 0  # once
+    # A month on, the file arrives and the list has moved on.
+    later = now + timedelta(days=30)
+    app.extensions.pop("curatarr_origin_lists", None)
+    fake.listed = []
+    media = _film(later - timedelta(hours=1))
+    origin.record(media, now=later)
+    kept = media.origin
+    assert kept["short"] == "Horror - TMDb Popular" and kept["on_arrival"] is True
+    assert kept["reasons"][0]["at"] is not None
+
+
+def test_a_film_noted_on_no_list_when_added_is_by_hand_not_cant_tell(app, radarr):
+    now = utcnow()
+    movie = {"id": 7, "tmdbId": 949, "added": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    fake = radarr(FakeRadarr(movie))
+    origin.note_new([], [movie], None, fake, now=now)
+    later = now + timedelta(days=30)
+    media = _film(later - timedelta(hours=1))
+    origin.record(media, now=later)
+    assert media.origin["short"] == origin.HAND
+    assert media.origin["on_arrival"] is True
+
+
+def test_notes_are_dropped_after_a_year_and_unreadable_lists_wait(app, radarr):
+    from curatarr.services import setting
+
+    now = utcnow()
+    movie = {"id": 7, "tmdbId": 949, "added": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    fake = radarr(FakeRadarr(movie, fail=True))
+    fake.import_lists = lambda: (_ for _ in ()).throw(IntegrationError("down"))
+    assert origin.note_new([], [movie], None, fake, now=now) == 0
+    fake = radarr(FakeRadarr(movie))
+    assert origin.note_new([], [movie], None, fake, now=now) == 1
+    origin.note_new([], [], None, fake, now=now + timedelta(days=400))
+    assert setting(origin.EARLY_KEY) == {}
