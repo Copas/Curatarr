@@ -950,16 +950,21 @@ def original_art(media: MediaIdentity, kind: str) -> Path | None:
     # When it was last checked against Jellyfin's: kept apart from the file,
     # which is rewritten only when the picture changed (its smaller copies,
     # sized.py, are made again whenever the file is).
+    # A title with none of this type (most have no banner or logo) is noted
+    # the same way: asked again every pass, the Gallery's worker made
+    # hundreds of thousands of requests a day.
     checked = cached.with_name(cached.name + ".checked")
-    try:
-        last = max(
-            cached.stat().st_mtime,
-            checked.stat().st_mtime if checked.exists() else 0,
-        )
-        if time.time() - last < ORIGINALS_FOR_A_DAY:
-            return cached
-    except OSError:
-        pass
+
+    def mtime(path):
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return None
+
+    have = mtime(cached)
+    last = max(have or 0, mtime(checked) or 0)
+    if time.time() - last < ORIGINALS_FOR_A_DAY:
+        return cached if have is not None else None
     from .services import client
 
     try:
@@ -967,6 +972,8 @@ def original_art(media: MediaIdentity, kind: str) -> Path | None:
     except IntegrationError:
         return cached if cached.is_file() else None
     if not data:
+        cached.unlink(missing_ok=True)
+        checked.touch()
         return None
     try:
         same = cached.read_bytes() == data

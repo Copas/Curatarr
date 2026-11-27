@@ -5,7 +5,7 @@ import json
 
 from test_recap_recheck import _series
 
-from curatarr import enrichment, subtitle_text, transcribe
+from curatarr import db, enrichment, subtitle_text, transcribe
 from curatarr.chapters import Segment
 from curatarr.mediafile import MediaInfo
 
@@ -144,3 +144,25 @@ def test_reading_a_track_goes_through_the_pause_while_watching(tmp_path, monkeyp
     found = subtitle_text.transcript(str(episode), tmp_path / "cache")
     assert found[0].text == "We have to find the way out."
     assert ran == ["/usr/bin/ffprobe", "/usr/bin/ffmpeg"] and len(waited) == 2
+
+
+def test_reading_earlier_episodes_leaves_the_database_free(app, monkeypatch):
+    """The first lookup wrote the job's changes so far, and the write was
+    held while dozens of transcripts were read (38 s on a long series)."""
+    from conftest import database_free
+
+    english = [Segment(10.0, 12.0, "Something happened out there tonight.")]
+    states, _ = _series({1: (None, None), 2: (None, english)})
+    free = []
+
+    def subtitles(part):
+        free.append(database_free(app))
+        return []
+
+    monkeypatch.setattr(enrichment, "_transcript_and_details", lambda key: None)
+    monkeypatch.setattr(enrichment, "_subtitle_transcript", subtitles)
+    state = states[2]
+    db.session.expire(state.part)  # as after a commit: the next look reloads it
+    state.attempts = 5  # a change the job made before
+    enrichment._sibling_transcripts(state, state.part)
+    assert free == [True]

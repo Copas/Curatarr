@@ -40,6 +40,8 @@
 
 ## Unreleased
 
+- Fix: making the Gallery's smaller copies ahead of time asked Jellyfin, on every pass, for each title's original banner, wide tile and background, and most titles have no banner: over half a million failed requests a day. A title found to have none of a type is now asked again a day later.
+- Fix: checking an episode for a "previously on" recap kept the database locked while the series' other transcripts were read (half a minute on a long series), so other jobs waited or failed meanwhile.
 - Fix: where a title came from stopped being recorded for older titles. Each worker cycle took the 40 newest titles without a record, and deleted titles (or ones Radarr or Sonarr no longer had) never got one, so once there were 40 of them the same titles were asked about every half minute (well over 100,000 failed requests to Radarr a day) and no other title had its turn. Deleted titles are now skipped, and one Radarr or Sonarr doesn't have is asked about again a day later.
 - Fix: re-placing an episode's skip markers under newer rules kept the database locked while the credits' pictures were read (a minute or more), so other jobs failed with "database is locked" meanwhile. The change is saved first now. The same happened while a file was rebuilt after its chapters or audio were changed in place (half a minute or more); the database is no longer held through that either.
 - Fix: two background jobs meeting a new file at the same moment could both try to create its record, and the second one's whole run failed. It now uses the record the other made.

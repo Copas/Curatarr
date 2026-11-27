@@ -598,3 +598,33 @@ def test_an_unchanged_original_isnt_rewritten(app, monkeypatch, tmp_path):
     os.utime(first.with_name(first.name + ".checked"), (old, old))
     artwork_jobs.original_art(media, "Primary")
     assert first.stat().st_mtime > old  # a new picture: written
+
+
+def test_a_title_without_that_picture_is_asked_once_a_day(app, monkeypatch, tmp_path):
+    """Most titles have no banner: asked about on every pass, the worker
+    made over half a million requests to Jellyfin a day."""
+    from curatarr import artwork_jobs
+
+    _library, media, _part = _movie("/movies/Heat (1995)/Film.mkv")
+    db.session.commit()
+    monkeypatch.setattr(artwork_jobs, "staging", lambda: tmp_path / "staging")
+    monkeypatch.setattr(custom_posters, "originals", lambda m: {})
+    monkeypatch.setattr(custom_posters, "active", lambda *a, **k: None)
+    asked = []
+    sent = {"data": None}
+
+    def original(m, j, k):
+        asked.append(k)
+        return sent["data"]
+
+    monkeypatch.setattr(custom_posters, "_original", original)
+    monkeypatch.setattr("curatarr.services.client", lambda kind: object())
+    assert artwork_jobs.original_art(media, "Banner") is None
+    assert artwork_jobs.original_art(media, "Banner") is None
+    assert asked == ["Banner"]
+    checked = tmp_path / "artwork_originals" / f"{media.id}-Banner.jpg.checked"
+    old = time.time() - 2 * artwork_jobs.ORIGINALS_FOR_A_DAY
+    os.utime(checked, (old, old))
+    sent["data"] = _picture("#2222cc")  # a banner since
+    assert artwork_jobs.original_art(media, "Banner").is_file()
+    assert asked == ["Banner", "Banner"]

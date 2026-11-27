@@ -3683,7 +3683,15 @@ def _language_of(key) -> str | None:
 
 
 def _sibling_transcripts(state, part):
-    """(openings of other episodes, full transcripts of the nearest earlier ones)."""
+    """(openings of other episodes, full transcripts of the nearest earlier ones).
+
+    Only reads: the job's changes so far wait rather than being written by
+    the first query and held through reading up to 60 transcripts."""
+    with db.session.no_autoflush:
+        return _read_siblings(state, part)
+
+
+def _read_siblings(state, part):
     from . import recaps
 
     here = _episode_order(part)
